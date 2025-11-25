@@ -14,7 +14,7 @@ A modern Next.js application for managing collecting society operations, built w
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 (App Router), React, TypeScript
+- **Frontend**: Next.js 15.3.4 (App Router), React, TypeScript
 - **Styling**: Tailwind CSS, Shadcn UI
 - **Database**: PostgreSQL (Supabase)
 - **Authentication**: Supabase Auth
@@ -74,12 +74,22 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 
 ## Project Structure
 
+This project follows a feature-based architecture to promote scalability and maintainability.
+
 ```
 .
-├── src/                    # Next.js app source
-│   ├── app/                # App Router pages and layouts
-│   ├── components/         # Shared React components
-│   └── lib/                # Core utilities (Supabase client)
+├── src/
+│   ├── app/                # Next.js App Router (routing and layouts)
+│   ├── features/           # Business logic and UI for specific features
+│   │   ├── auth/
+│   │   │   ├── components/   # React components for the auth feature
+│   │   │   └── services/     # Business logic (e.g., Supabase calls)
+│   │   └── ...             # Other features (e.g., artisti, opere)
+│   ├── shared/             # Code shared across multiple features
+│   │   ├── components/     # Generic, reusable UI components (e.g., Button, Input)
+│   │   ├── lib/            # Shared libraries and utilities (e.g., Supabase client)
+│   │   └── contexts/       # React contexts for global state
+│   └── ...
 ├── scripts/                # Stand-alone scripts
 │   ├── checks/             # Data validation and checking scripts
 │   ├── migrations/         # Data migration scripts
@@ -88,7 +98,17 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 │   └── init/               # Initialization scripts (schema, RLS, seed)
 ├── docs/                   # Project documentation
 └── public/                 # Static assets
+
+### Creating a New Feature
+
+For detailed instructions on how to create a new feature, please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file.
 ```
+
+### Key Directories
+
+- **`src/app`**: Contains all routes and layouts, as defined by the Next.js App Router. This directory should only contain routing logic and page structure, not business logic.
+- **`src/features`**: Each sub-directory in `features` represents a distinct feature of the application (e.g., `auth`, `artisti`). Each feature folder contains its own `components` and `services`.
+- **`src/shared`**: Contains code that is reused across multiple features. This includes UI components, utility functions, and global state management.
 
 ## Database Schema
 

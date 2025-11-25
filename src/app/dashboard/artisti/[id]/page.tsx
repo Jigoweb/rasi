@@ -1,15 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { Database } from '@/lib/supabase'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Separator } from '@/components/ui/separator'
-import { ArrowLeft, Edit, Film, Hash, FileText, Calendar, Clock, User, Badge as BadgeIcon } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useRouter } from 'next/navigation';
+import { getArtistaById, getPartecipazioniByArtistaId } from '@/features/artisti/services/artisti.service';
+import { Database } from '@/shared/lib/supabase'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Button } from '@/shared/components/ui/button'
+import { Badge } from '@/shared/components/ui/badge'
+
+
+import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User } from 'lucide-react'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 type Opera = Database['public']['Tables']['opere']['Row']
@@ -43,23 +43,13 @@ export default function ArtistaProfiloPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (artistaId) {
-      fetchArtistaData()
-    }
-  }, [artistaId])
-
-  const fetchArtistaData = async () => {
+  const fetchArtistaData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
       // Fetch artista details
-      const { data: artistaData, error: artistaError } = await supabase
-        .from('artisti')
-        .select('*')
-        .eq('id', artistaId)
-        .single()
+      const { data: artistaData, error: artistaError } = await getArtistaById(artistaId);
 
       if (artistaError) {
         if (artistaError.code === 'PGRST116') {
@@ -72,39 +62,7 @@ export default function ArtistaProfiloPage() {
       setArtista(artistaData)
 
       // Fetch partecipazioni with related data
-      const { data: partecipazioniData, error: partecipazioniError } = await supabase
-        .from('partecipazioni')
-        .select(`
-          id,
-          personaggio,
-          note,
-          stato_validazione,
-          created_at,
-          opere (
-            id,
-            codice_opera,
-            titolo,
-            titolo_originale,
-            tipo,
-            anno_produzione,
-            durata_minuti,
-            generi,
-            paese_produzione,
-            casa_produzione
-          ),
-          ruoli_tipologie (
-            id,
-            nome,
-            descrizione
-          ),
-          episodi (
-            id,
-            titolo_episodio,
-            numero_episodio
-          )
-        `)
-        .eq('artista_id', artistaId)
-        .order('created_at', { ascending: false })
+      const { data: partecipazioniData, error: partecipazioniError } = await getPartecipazioniByArtistaId(artistaId);
 
       if (partecipazioniError) throw partecipazioniError
 
@@ -115,7 +73,13 @@ export default function ArtistaProfiloPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [artistaId])
+
+  useEffect(() => {
+    if (artistaId) {
+      fetchArtistaData()
+    }
+  }, [artistaId, fetchArtistaData])
 
   const getStatusBadge = (stato: string) => {
     switch (stato) {
@@ -284,7 +248,7 @@ export default function ArtistaProfiloPage() {
             </Badge>
           </CardTitle>
           <CardDescription>
-            Elenco delle opere a cui l'artista ha partecipato
+            Elenco delle opere a cui l&apos;artista ha partecipato
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 lg:p-6">

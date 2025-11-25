@@ -1,14 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
+import { Input } from '@/shared/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { FileText, Download, Eye, MoreHorizontal, Calendar, Filter, Search, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react'
 
 interface Report {
@@ -107,7 +107,7 @@ const reportPlaceholder: Report[] = [
 ]
 
 export default function ReportPage() {
-  const [reports, setReports] = useState<Report[]>(reportPlaceholder)
+  const reports = reportPlaceholder
   const [filteredReports, setFilteredReports] = useState<Report[]>(reportPlaceholder)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('tutti')
@@ -445,7 +445,7 @@ export default function ReportPage() {
                     
                     {report.importo_totale > 0 && (
                       <div className="pt-2 border-t">
-                        <span className="text-sm text-muted-foreground">Importo Totale:</span>
+                        <span className="text-sm text-muted-foreground">Dettagli dell&apos;importo:</span>
                         <div className="text-lg font-bold text-green-600">
                           €{report.importo_totale.toLocaleString()}
                         </div>

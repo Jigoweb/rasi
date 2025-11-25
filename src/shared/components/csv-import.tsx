@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { Input } from '@/shared/components/ui/input'
+import { Label } from '@/shared/components/ui/label'
+import { Badge } from '@/shared/components/ui/badge'
 import { Upload, FileText, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '@/shared/lib/supabase'
 
 interface CSVImportProps {
   onImportComplete: () => void
@@ -35,17 +35,21 @@ export default function CSVImport({ onImportComplete }: CSVImportProps) {
     }
   }
 
-  const parseCSV = (csvText: string): any[] => {
+  interface CSVRow {
+  [key: string]: string;
+}
+
+const parseCSV = (csvText: string): CSVRow[] => {
     const lines = csvText.split('\n').filter(line => line.trim())
     if (lines.length === 0) return []
 
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-    const data = []
+    const data: CSVRow[] = []
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
       if (values.length === headers.length) {
-        const row: any = {}
+        const row: CSVRow = {}
         headers.forEach((header, index) => {
           row[header] = values[index]
         })
@@ -56,7 +60,7 @@ export default function CSVImport({ onImportComplete }: CSVImportProps) {
     return data
   }
 
-  const validateRow = (row: any): { isValid: boolean; errors: string[] } => {
+  const validateRow = (row: CSVRow): { isValid: boolean; errors: string[] } => {
     const errors: string[] = []
 
     // Campi obbligatori
@@ -106,7 +110,7 @@ export default function CSVImport({ onImportComplete }: CSVImportProps) {
     return dateStr
   }
 
-  const mapRowToDatabase = (row: any): any => {
+  const mapRowToDatabase = (row: CSVRow): any => {
     return {
       data_trasmissione: formatDate(row['Data'] || row['data_trasmissione']),
       ora_inizio: row['Ora Inizio'] || row['ora_inizio'],
@@ -155,7 +159,7 @@ export default function CSVImport({ onImportComplete }: CSVImportProps) {
       if (validRows.length > 0) {
         const { data, error } = await supabase
           .from('programmazioni')
-          .insert(validRows)
+          .insert(validRows as never)
           .select()
 
         if (error) {

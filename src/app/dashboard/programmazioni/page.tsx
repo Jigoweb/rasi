@@ -1,18 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Database } from '@/lib/supabase'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/shared/lib/supabase'
+import { Database } from '@/shared/lib/supabase'
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Input } from '@/shared/components/ui/input'
+import { Button } from '@/shared/components/ui/button'
+import { Badge } from '@/shared/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Clock, Tv } from 'lucide-react'
-import CSVImport from '@/components/csv-import'
+import CSVImport from '@/shared/components/csv-import'
 
 type Programmazione = Database['public']['Tables']['programmazioni']['Row']
 
@@ -26,32 +26,7 @@ export default function ProgrammazioniPage() {
   const [showDetails, setShowDetails] = useState(false)
   
 
-  useEffect(() => {
-    fetchProgrammazioni()
-  }, [])
-
-  useEffect(() => {
-    filterProgrammazioni()
-  }, [programmazioni, searchQuery, fasciaFilter])
-
-  const fetchProgrammazioni = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('programmazioni')
-        .select('*')
-        .order('data_trasmissione', { ascending: false })
-        .limit(100) // Limit for performance
-
-      if (error) throw error
-      setProgrammazioni(data || [])
-    } catch (error) {
-      console.error('Error fetching programmazioni:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filterProgrammazioni = () => {
+  const filterProgrammazioni = useCallback(() => {
     let filtered = programmazioni
 
     // Filter by search query
@@ -68,6 +43,31 @@ export default function ProgrammazioniPage() {
     }
 
     setFilteredProgrammazioni(filtered)
+  }, [programmazioni, searchQuery, fasciaFilter])
+
+  useEffect(() => {
+    fetchProgrammazioni()
+  }, [])
+
+  useEffect(() => {
+    filterProgrammazioni()
+  }, [filterProgrammazioni])
+
+  const fetchProgrammazioni = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('programmazioni')
+        .select('*')
+        .order('data_trasmissione', { ascending: false })
+        .limit(100) // Limit for performance
+
+      if (error) throw error
+      setProgrammazioni(data || [])
+    } catch (error) {
+      console.error('Error fetching programmazioni:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const getFasciaBadge = (fascia: string | null) => {
@@ -316,7 +316,7 @@ export default function ProgrammazioniPage() {
           <DialogHeader>
             <DialogTitle>Dettagli Programmazione</DialogTitle>
             <DialogDescription>
-              Informazioni complete per "{selectedProgrammazione?.titolo_programmazione}"
+              Informazioni complete per &quot;{selectedProgrammazione?.titolo_programmazione}&quot;
             </DialogDescription>
           </DialogHeader>
           

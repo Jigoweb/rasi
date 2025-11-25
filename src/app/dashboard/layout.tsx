@@ -1,8 +1,8 @@
 'use client'
 
-import { useAuth } from '@/contexts/auth-context'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { useAuth } from '@/shared/contexts/auth-context'
+import { Button } from '@/shared/components/ui/button'
+import { Separator } from '@/shared/components/ui/separator'
 import { 
   Users, 
   FileText, 

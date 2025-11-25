@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Database } from '@/lib/supabase'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/shared/lib/supabase'
+import { Database } from '@/shared/lib/supabase'
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Input } from '@/shared/components/ui/input'
+import { Button } from '@/shared/components/ui/button'
+import { Badge } from '@/shared/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText } from 'lucide-react'
 
 type Opera = Database['public']['Tables']['opere']['Row']
@@ -25,31 +25,7 @@ export default function OperePage() {
   const [showDetails, setShowDetails] = useState(false)
   
 
-  useEffect(() => {
-    fetchOpere()
-  }, [])
-
-  useEffect(() => {
-    filterOpere()
-  }, [opere, searchQuery, typeFilter])
-
-  const fetchOpere = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('opere')
-        .select('*')
-        .order('anno_produzione', { ascending: false })
-
-      if (error) throw error
-      setOpere(data || [])
-    } catch (error) {
-      console.error('Error fetching opere:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filterOpere = () => {
+  const filterOpere = useCallback(() => {
     let filtered = opere
 
     // Filter by search query
@@ -68,6 +44,30 @@ export default function OperePage() {
     }
 
     setFilteredOpere(filtered)
+  }, [opere, searchQuery, typeFilter])
+
+  useEffect(() => {
+    fetchOpere()
+  }, [])
+
+  useEffect(() => {
+    filterOpere()
+  }, [filterOpere])
+
+  const fetchOpere = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('opere')
+        .select('*')
+        .order('anno_produzione', { ascending: false })
+
+      if (error) throw error
+      setOpere(data || [])
+    } catch (error) {
+      console.error('Error fetching opere:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const getTypeBadge = (tipo: string) => {
@@ -319,7 +319,7 @@ export default function OperePage() {
           <DialogHeader>
             <DialogTitle>Dettagli Opera</DialogTitle>
             <DialogDescription>
-              Informazioni complete per "{selectedOpera?.titolo}"
+              Informazioni complete per &quot;{selectedOpera?.titolo}&quot;
             </DialogDescription>
           </DialogHeader>
           

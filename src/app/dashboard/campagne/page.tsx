@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-import { Database } from '@/lib/supabase'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/shared/lib/supabase'
+import { Database } from '@/shared/lib/supabase'
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Input } from '@/shared/components/ui/input'
+import { Button } from '@/shared/components/ui/button'
+import { Badge } from '@/shared/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Play, Pause, CheckCircle, Clock, AlertCircle } from 'lucide-react'
 
 type CampagnaIndividuazione = Database['public']['Tables']['campagne_individuazione']['Row']
@@ -31,50 +31,7 @@ export default function CampagnePage() {
   const [showDetails, setShowDetails] = useState(false)
   
 
-  useEffect(() => {
-    fetchCampagne()
-  }, [])
-
-  useEffect(() => {
-    filterCampagne()
-  }, [campagne, searchQuery, statusFilter, tipoFilter])
-
-  const fetchCampagne = async () => {
-    try {
-      // Fetch individuazione campaigns
-      const { data: individuazioneData, error: individuazioneError } = await supabase
-        .from('campagne_individuazione')
-        .select('*')
-        .order('data_inizio', { ascending: false })
-
-      if (individuazioneError) throw individuazioneError
-
-      // Fetch ripartizione campaigns
-      const { data: ripartizioneData, error: ripartizioneError } = await supabase
-        .from('campagne_ripartizione')
-        .select('*')
-        .order('data_inizio', { ascending: false })
-
-      if (ripartizioneError) throw ripartizioneError
-
-      // Combine and mark campaign types
-      const allCampagne: Campagna[] = [
-        ...(individuazioneData || []).map(c => ({ ...c, tipo_campagna: 'individuazione' as const })),
-        ...(ripartizioneData || []).map(c => ({ ...c, tipo_campagna: 'ripartizione' as const }))
-      ]
-
-      // Sort by date
-      allCampagne.sort((a, b) => new Date(b.data_inizio).getTime() - new Date(a.data_inizio).getTime())
-
-      setCampagne(allCampagne)
-    } catch (error) {
-      console.error('Error fetching campagne:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filterCampagne = () => {
+  const filterCampagne = useCallback(() => {
     let filtered = campagne
 
     // Filter by search query
@@ -96,7 +53,52 @@ export default function CampagnePage() {
     }
 
     setFilteredCampagne(filtered)
+  }, [campagne, searchQuery, statusFilter, tipoFilter])
+
+  useEffect(() => {
+    fetchCampagne()
+  }, [])
+
+  useEffect(() => {
+    filterCampagne()
+  }, [filterCampagne])
+
+  const fetchCampagne = async () => {
+    try {
+      // Fetch individuazione campaigns
+      const { data: individuazioneData, error: individuazioneError } = await supabase
+        .from('campagne_individuazione')
+        .select('*')
+        .order('data_inizio', { ascending: false })
+
+      if (individuazioneError) throw individuazioneError
+
+      // Fetch ripartizione campaigns
+      const { data: ripartizioneData, error: ripartizioneError } = await supabase
+        .from('campagne_ripartizione')
+        .select('*')
+        .order('data_inizio', { ascending: false })
+
+      if (ripartizioneError) throw ripartizioneError
+
+      // Combine and mark campaign types
+      const individuazioneCampagne = (individuazioneData || []).map((c: any) => ({ ...c, tipo_campagna: 'individuazione' as const }));
+      const ripartizioneCampagne = (ripartizioneData || []).map((c: any) => ({ ...c, tipo_campagna: 'ripartizione' as const }));
+
+      const allCampagne: Campagna[] = [...individuazioneCampagne, ...ripartizioneCampagne];
+
+      // Sort by date
+      allCampagne.sort((a, b) => new Date(b.data_inizio).getTime() - new Date(a.data_inizio).getTime())
+
+      setCampagne(allCampagne)
+    } catch (error) {
+      console.error('Error fetching campagne:', error)
+    } finally {
+      setLoading(false)
+    }
   }
+
+
 
   const getStatusBadge = (stato: string) => {
     switch (stato) {
@@ -374,7 +376,7 @@ export default function CampagnePage() {
           <DialogHeader>
             <DialogTitle>Dettagli Campagna</DialogTitle>
             <DialogDescription>
-              Informazioni complete per "{selectedCampagna?.nome}"
+              Informazioni complete per &quot;{selectedCampagna?.nome}&quot;
             </DialogDescription>
           </DialogHeader>
           

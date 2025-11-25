@@ -1,15 +1,24 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Button } from '@/shared/components/ui/button'
+import { Badge } from '@/shared/components/ui/badge'
 import { Database, FileText, Users, Calendar, Search, Play, Download } from 'lucide-react'
+
+type PredefinedQuery = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  icon: React.ElementType;
+  sql: string;
+};
 
 export default function QueryPage() {
   const [activeQuery, setActiveQuery] = useState<string | null>(null)
 
-  const predefinedQueries = [
+  const predefinedQueries: PredefinedQuery[] = [
     {
       id: 'artisti-attivi',
       title: 'Artisti Attivi',
@@ -130,7 +139,7 @@ ORDER BY anno DESC, mese DESC;`
     console.log('Executing query:', queryId)
   }
 
-  const exportQuery = (query: any) => {
+  const exportQuery = (query: PredefinedQuery) => {
     const sqlContent = `-- ${query.title}\n-- ${query.description}\n\n${query.sql}`
     const blob = new Blob([sqlContent], { type: 'text/sql' })
     const url = window.URL.createObjectURL(blob)
@@ -240,7 +249,7 @@ ORDER BY anno DESC, mese DESC;`
               <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="font-medium text-gray-900 mb-2">Funzionalità in Sviluppo</h3>
               <p className="text-sm text-gray-600">
-                L'esecuzione delle query e la visualizzazione dei risultati saranno implementate nella prossima versione.
+                L&apos;esecuzione delle query e la visualizzazione dei risultati saranno implementate nella prossima versione.
                 Per ora è possibile esportare le query SQL e eseguirle manualmente nel database.
               </p>
             </div>

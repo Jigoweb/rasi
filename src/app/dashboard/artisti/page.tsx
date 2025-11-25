@@ -1,18 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { Database } from '@/lib/supabase'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, User } from 'lucide-react'
+import { getArtisti } from '@/features/artisti/services/artisti.service'
+import { Database } from '@/shared/lib/supabase'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Input } from '@/shared/components/ui/input'
+import { Button } from '@/shared/components/ui/button'
+import { Badge } from '@/shared/components/ui/badge'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, User } from 'lucide-react'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -26,32 +26,7 @@ export default function ArtistiPage() {
   const [selectedArtist, setSelectedArtist] = useState<Artista | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   
-
-  useEffect(() => {
-    fetchArtisti()
-  }, [])
-
-  useEffect(() => {
-    filterArtisti()
-  }, [artisti, searchQuery, statusFilter])
-
-  const fetchArtisti = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('artisti')
-        .select('*')
-        .order('cognome', { ascending: true })
-
-      if (error) throw error
-      setArtisti(data || [])
-    } catch (error) {
-      console.error('Error fetching artisti:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filterArtisti = () => {
+  const filterArtisti = useCallback(() => {
     let filtered = artisti
 
     // Filter by search query
@@ -70,6 +45,27 @@ export default function ArtistiPage() {
     }
 
     setFilteredArtisti(filtered)
+  }, [artisti, searchQuery, statusFilter])
+  
+  useEffect(() => {
+    fetchArtisti()
+  }, [])
+
+  useEffect(() => {
+    filterArtisti()
+  }, [filterArtisti])
+
+  const fetchArtisti = async () => {
+    try {
+      const { data, error } = await getArtisti()
+
+      if (error) throw error
+      setArtisti(data || [])
+    } catch (error) {
+      console.error('Error fetching artisti:', error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const getStatusBadge = (stato: string) => {
@@ -163,7 +159,7 @@ export default function ArtistiPage() {
               <Input
                 placeholder="Cerca per nome, cognome o codice artista..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                 className="w-full"
               />
             </div>
@@ -238,7 +234,7 @@ export default function ArtistiPage() {
                           </div>
                           {artista.nome_arte && (
                             <div className="text-sm text-gray-500 italic">
-                              "{artista.nome_arte}"
+                              &quot;{artista.nome_arte}&quot;
                             </div>
                           )}
                         </div>
@@ -321,7 +317,7 @@ export default function ArtistiPage() {
                       </h3>
                       {artista.nome_arte && (
                         <p className="text-sm text-gray-500 italic mb-2">
-                          "{artista.nome_arte}"
+                          &quot;{artista.nome_arte}&quot;
                         </p>
                       )}
                       <div className="space-y-1 text-sm text-gray-600">
@@ -405,8 +401,8 @@ export default function ArtistiPage() {
                 </div>
                 {selectedArtist.nome_arte && (
                   <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-gray-500">Nome d'Arte</label>
-                    <p className="italic">"{selectedArtist.nome_arte}"</p>
+                    <label className="text-sm font-medium text-gray-500">Nome d&apos;Arte</label>
+                    <p className="italic">&quot;{selectedArtist.nome_arte}&quot;</p>
                   </div>
                 )}
                 {selectedArtist.codice_fiscale && (
