@@ -1,11 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getArtisti } from '@/features/artisti/services/artisti.service'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
@@ -13,51 +12,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, User } from 'lucide-react'
+import { SearchInput } from './components/search-input'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
 export default function ArtistiPage() {
   const router = useRouter()
   const [artisti, setArtisti] = useState<Artista[]>([])
-  const [filteredArtisti, setFilteredArtisti] = useState<Artista[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedArtist, setSelectedArtist] = useState<Artista | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   
-  const filterArtisti = useCallback(() => {
-    let filtered = artisti
-
-    // Filter by search query
-    if (searchQuery) {
-      filtered = filtered.filter(artista =>
-        artista.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        artista.cognome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        artista.codice_ipn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (artista.nome_arte && artista.nome_arte.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    }
-
-    // Filter by status
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(artista => artista.stato === statusFilter)
-    }
-
-    setFilteredArtisti(filtered)
-  }, [artisti, searchQuery, statusFilter])
-  
+  // Fetch when search query or status changes (debounce is now handled in SearchInput)
   useEffect(() => {
     fetchArtisti()
-  }, [])
-
-  useEffect(() => {
-    filterArtisti()
-  }, [filterArtisti])
+  }, [searchQuery, statusFilter])
 
   const fetchArtisti = async () => {
+    // Only show loading on initial load or if explicitly needed
+    // Avoiding full page loading state for search updates to keep UI responsive
+    if (artisti.length === 0) setLoading(true)
+    
     try {
-      const { data, error } = await getArtisti()
+      const { data, error } = await getArtisti({
+        search: searchQuery,
+        stato: statusFilter
+      })
 
       if (error) throw error
       setArtisti(data || [])
@@ -88,7 +70,7 @@ export default function ArtistiPage() {
   const exportData = () => {
     const csvContent = [
       ['Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Codice Fiscale', 'Stato', 'Data Nascita', 'Data Inizio Mandato'].join(','),
-      ...filteredArtisti.map(artista => [
+      ...artisti.map(artista => [
         artista.codice_ipn,
         artista.nome,
         artista.cognome,
@@ -107,28 +89,6 @@ export default function ArtistiPage() {
     a.download = `artisti_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
-  }
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Artisti</h1>
-            <p className="text-gray-600">Gestione degli artisti registrati</p>
-          </div>
-        </div>
-        <Card>
-          <CardContent className="p-6">
-            <div className="animate-pulse space-y-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-12 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   return (
@@ -156,11 +116,9 @@ export default function ArtistiPage() {
         <CardContent className="p-4 lg:p-6">
           <div className="flex flex-col gap-4">
             <div className="flex-1">
-              <Input
-                placeholder="Cerca per nome, cognome o codice artista..."
-                value={searchQuery}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                className="w-full"
+              <SearchInput 
+                onSearch={setSearchQuery}
+                initialValue={searchQuery}
               />
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
@@ -201,60 +159,151 @@ export default function ArtistiPage() {
         <CardContent>
           {/* Desktop Table */}
           <div className="hidden lg:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Codice IPN</TableHead>
-                  <TableHead>Nome Completo</TableHead>
-                  <TableHead>Nome Arte</TableHead>
-                  <TableHead>Codice Fiscale</TableHead>
-                  <TableHead>Stato</TableHead>
-                  <TableHead>Data Nascita</TableHead>
-                  <TableHead>Data Inizio Mandato</TableHead>
-                  <TableHead className="text-right">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredArtisti.length === 0 ? (
+            {loading ? (
+              <div className="animate-pulse space-y-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-12 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                      Nessun artista trovato
-                    </TableCell>
+                    <TableHead>Codice IPN</TableHead>
+                    <TableHead>Nome Completo</TableHead>
+                    <TableHead>Nome Arte</TableHead>
+                    <TableHead>Codice Fiscale</TableHead>
+                    <TableHead>Stato</TableHead>
+                    <TableHead>Data Nascita</TableHead>
+                    <TableHead>Data Inizio Mandato</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
                   </TableRow>
-                ) : (
-                  filteredArtisti.map((artista) => (
-                    <TableRow key={artista.id}>
-                      <TableCell className="font-mono text-sm">
-                        {artista.codice_ipn}
+                </TableHeader>
+                <TableBody>
+                  {artisti.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                        Nessun artista trovato
                       </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">
-                            {artista.nome} {artista.cognome}
-                          </div>
-                          {artista.nome_arte && (
-                            <div className="text-sm text-gray-500 italic">
-                              &quot;{artista.nome_arte}&quot;
+                    </TableRow>
+                  ) : (
+                    artisti.map((artista) => (
+                      <TableRow key={artista.id}>
+                        <TableCell className="font-mono text-sm">
+                          {artista.codice_ipn}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium">
+                              {artista.nome} {artista.cognome}
                             </div>
+                            {artista.nome_arte && (
+                              <div className="text-sm text-gray-500 italic">
+                                &quot;{artista.nome_arte}&quot;
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {artista.nome_arte || '-'}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {artista.codice_fiscale || '-'}
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(artista.stato)}
+                        </TableCell>
+                        <TableCell>
+                          {artista.data_nascita ? formatDate(artista.data_nascita) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          {formatDate(artista.data_inizio_mandato)}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem 
+                                onClick={() => router.push(`/dashboard/artisti/${artista.id}`)}
+                              >
+                                <User className="h-4 w-4 mr-2" />
+                                Profilo
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  setSelectedArtist(artista)
+                                  setShowDetails(true)
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Visualizza
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Modifica
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600">
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Elimina
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          {/* Mobile Cards */}
+          <div className="lg:hidden space-y-4">
+            {loading ? (
+              <div className="animate-pulse space-y-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-32 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+            ) : (
+              <>
+                {artisti.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    Nessun artista trovato
+                  </div>
+                ) : (
+                  artisti.map((artista) => (
+                    <Card key={artista.id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                              {artista.codice_ipn}
+                            </span>
+                            {getStatusBadge(artista.stato)}
+                          </div>
+                          <h3 className="font-medium text-lg">
+                            {artista.nome} {artista.cognome}
+                          </h3>
+                          {artista.nome_arte && (
+                            <p className="text-sm text-gray-500 italic mb-2">
+                              &quot;{artista.nome_arte}&quot;
+                            </p>
                           )}
+                          <div className="space-y-1 text-sm text-gray-600">
+                            {artista.codice_fiscale && (
+                              <p className="font-mono">{artista.codice_fiscale}</p>
+                            )}
+                            {artista.data_nascita && (
+                              <p>Nato il {formatDate(artista.data_nascita)}</p>
+                            )}
+                            <p>Mandato iniziato il {formatDate(artista.data_inizio_mandato)}</p>
+                          </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {artista.nome_arte || '-'}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {artista.codice_fiscale || '-'}
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(artista.stato)}
-                      </TableCell>
-                      <TableCell>
-                        {artista.data_nascita ? formatDate(artista.data_nascita) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        {formatDate(artista.data_inizio_mandato)}
-                      </TableCell>
-                      <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="sm">
@@ -287,84 +336,11 @@ export default function ArtistiPage() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                      </div>
+                    </Card>
                   ))
                 )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Mobile Cards */}
-          <div className="lg:hidden space-y-4">
-            {filteredArtisti.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                Nessun artista trovato
-              </div>
-            ) : (
-              filteredArtisti.map((artista) => (
-                <Card key={artista.id} className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                          {artista.codice_ipn}
-                        </span>
-                        {getStatusBadge(artista.stato)}
-                      </div>
-                      <h3 className="font-medium text-lg">
-                        {artista.nome} {artista.cognome}
-                      </h3>
-                      {artista.nome_arte && (
-                        <p className="text-sm text-gray-500 italic mb-2">
-                          &quot;{artista.nome_arte}&quot;
-                        </p>
-                      )}
-                      <div className="space-y-1 text-sm text-gray-600">
-                        {artista.codice_fiscale && (
-                          <p className="font-mono">{artista.codice_fiscale}</p>
-                        )}
-                        {artista.data_nascita && (
-                          <p>Nato il {formatDate(artista.data_nascita)}</p>
-                        )}
-                        <p>Mandato iniziato il {formatDate(artista.data_inizio_mandato)}</p>
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem 
-                          onClick={() => router.push(`/dashboard/artisti/${artista.id}`)}
-                        >
-                          <User className="h-4 w-4 mr-2" />
-                          Profilo
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => {
-                            setSelectedArtist(artista)
-                            setShowDetails(true)
-                          }}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          Visualizza
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Modifica
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Elimina
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </Card>
-              ))
+              </>
             )}
           </div>
         </CardContent>
