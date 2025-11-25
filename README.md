@@ -75,21 +75,19 @@ Open [http://localhost:3000](http://localhost:3000) to view the application.
 ## Project Structure
 
 ```
-src/
-├── app/                    # Next.js app directory
-│   ├── auth/              # Authentication pages
-│   ├── dashboard/         # Protected dashboard pages
-│   │   ├── artisti/       # Artists management
-│   │   ├── opere/         # Works catalog
-│   │   ├── programmazioni/# Programming schedule
-│   │   └── campagne/      # Campaign management
-│   ├── globals.css        # Global styles
-│   ├── layout.tsx         # Root layout
-│   └── page.tsx           # Home page (redirects to auth)
-├── components/ui/         # Shadcn UI components
-└── lib/                   # Utilities and configurations
-    ├── supabase.ts        # Supabase client and types
-    └── utils.ts           # Utility functions
+.
+├── src/                    # Next.js app source
+│   ├── app/                # App Router pages and layouts
+│   ├── components/         # Shared React components
+│   └── lib/                # Core utilities (Supabase client)
+├── scripts/                # Stand-alone scripts
+│   ├── checks/             # Data validation and checking scripts
+│   ├── migrations/         # Data migration scripts
+│   └── utils/              # Miscellaneous utility scripts
+├── db/                     # Database schema and setup
+│   └── init/               # Initialization scripts (schema, RLS, seed)
+├── docs/                   # Project documentation
+└── public/                 # Static assets
 ```
 
 ## Database Schema
