@@ -33,8 +33,7 @@ export default function OperePage() {
       filtered = filtered.filter(opera =>
         opera.titolo.toLowerCase().includes(searchQuery.toLowerCase()) ||
         opera.codice_opera.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (opera.titolo_originale && opera.titolo_originale.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (opera.casa_produzione && opera.casa_produzione.toLowerCase().includes(searchQuery.toLowerCase()))
+        (opera.titolo_originale && opera.titolo_originale.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     }
 
@@ -104,17 +103,13 @@ export default function OperePage() {
 
   const exportData = () => {
     const csvContent = [
-      ['Codice', 'Titolo', 'Titolo Originale', 'Tipo', 'Anno', 'Durata', 'Generi', 'Paese', 'Casa Produzione'].join(','),
+      ['Codice', 'Titolo', 'Titolo Originale', 'Tipo', 'Anno'].join(','),
       ...filteredOpere.map(opera => [
         opera.codice_opera,
         `"${opera.titolo}"`,
         `"${opera.titolo_originale || ''}"`,
         opera.tipo,
-        opera.anno_produzione,
-        opera.durata_minuti || '',
-        `"${opera.generi?.join(', ') || ''}"`,
-        `"${opera.paese_produzione?.join(', ') || ''}"`,
-        `"${opera.casa_produzione || ''}"`
+        opera.anno_produzione
       ].join(','))
     ].join('\n')
 
@@ -218,9 +213,6 @@ export default function OperePage() {
                 <TableHead>Titolo Originale</TableHead>
                 <TableHead className="w-32">Tipo</TableHead>
                 <TableHead className="w-20">Anno</TableHead>
-                <TableHead className="w-24">Durata</TableHead>
-                <TableHead>Generi</TableHead>
-                <TableHead>Casa Produzione</TableHead>
                 <TableHead className="w-16">Azioni</TableHead>
               </TableRow>
             </TableHeader>
@@ -252,30 +244,6 @@ export default function OperePage() {
                     </TableCell>
                     <TableCell className="text-center">
                       {opera.anno_produzione}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {opera.durata_minuti ? `${opera.durata_minuti}m` : <span className="text-gray-400">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {opera.generi?.slice(0, 2).map((genere, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {genere}
-                          </Badge>
-                        ))}
-                        {(opera.generi?.length || 0) > 2 && (
-                          <Badge variant="secondary" className="text-xs">
-                            +{(opera.generi?.length || 0) - 2}
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {opera.casa_produzione ? (
-                        <span className="text-sm">{opera.casa_produzione}</span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -348,36 +316,6 @@ export default function OperePage() {
                   <label className="text-sm font-medium text-gray-500">Anno Produzione</label>
                   <p>{selectedOpera.anno_produzione}</p>
                 </div>
-                {selectedOpera.durata_minuti && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Durata</label>
-                    <p>{selectedOpera.durata_minuti} minuti</p>
-                  </div>
-                )}
-                {selectedOpera.casa_produzione && (
-                  <div className="col-span-2">
-                    <label className="text-sm font-medium text-gray-500">Casa di Produzione</label>
-                    <p>{selectedOpera.casa_produzione}</p>
-                  </div>
-                )}
-                {selectedOpera.generi && selectedOpera.generi.length > 0 && (
-                  <div className="col-span-2">
-                    <label className="text-sm font-medium text-gray-500">Generi</label>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {selectedOpera.generi.map((genere, index) => (
-                        <Badge key={index} variant="secondary">
-                          {genere}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {selectedOpera.paese_produzione && selectedOpera.paese_produzione.length > 0 && (
-                  <div className="col-span-2">
-                    <label className="text-sm font-medium text-gray-500">Paesi di Produzione</label>
-                    <p>{selectedOpera.paese_produzione.join(', ')}</p>
-                  </div>
-                )}
               </div>
 
               <div className="flex justify-end gap-2">

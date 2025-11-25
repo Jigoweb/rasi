@@ -4,40 +4,79 @@ export type Database = {
       artisti: {
         Row: {
           id: string
-          codice_artista: string
+          codice_ipn: string
           nome: string
           cognome: string
           nome_arte: string | null
           codice_fiscale: string | null
           data_nascita: string | null
+          luogo_nascita: string | null
+          territorio: string | null
+          data_inizio_mandato: string
           stato: string
-          data_iscrizione: string
+          contatti: any | null
+          imdb_nconst: string | null
+          codici_esterni: any | null
+          search_vector: string | null
+          tipologia: string | null
+          componente_stabile_gruppo_orchestra: string | null
+          ragione_sociale: string | null
+          forma_giuridica: string | null
+          partita_iva: number | null
+          codice_paese: string | null
+          diritti_attivi: any | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          codice_artista: string
+          codice_ipn: string
           nome: string
           cognome: string
           nome_arte?: string | null
           codice_fiscale?: string | null
           data_nascita?: string | null
+          luogo_nascita?: string | null
+          territorio?: string | null
+          data_inizio_mandato?: string
           stato?: string
-          data_iscrizione?: string
+          contatti?: any | null
+          imdb_nconst?: string | null
+          codici_esterni?: any | null
+          search_vector?: string | null
+          tipologia?: string | null
+          componente_stabile_gruppo_orchestra?: string | null
+          ragione_sociale?: string | null
+          forma_giuridica?: string | null
+          partita_iva?: number | null
+          codice_paese?: string | null
+          diritti_attivi?: any | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          codice_artista?: string
+          codice_ipn?: string
           nome?: string
           cognome?: string
           nome_arte?: string | null
           codice_fiscale?: string | null
           data_nascita?: string | null
+          luogo_nascita?: string | null
+          territorio?: string | null
+          data_inizio_mandato?: string
           stato?: string
-          data_iscrizione?: string
+          contatti?: any | null
+          imdb_nconst?: string | null
+          codici_esterni?: any | null
+          search_vector?: string | null
+          tipologia?: string | null
+          componente_stabile_gruppo_orchestra?: string | null
+          ragione_sociale?: string | null
+          forma_giuridica?: string | null
+          partita_iva?: number | null
+          codice_paese?: string | null
+          diritti_attivi?: any | null
           created_at?: string
           updated_at?: string
         }
@@ -48,12 +87,16 @@ export type Database = {
           codice_opera: string
           titolo: string
           titolo_originale: string | null
+          alias_titoli: string[] | null
           tipo: string
-          anno_produzione: number
-          durata_minuti: number | null
-          generi: string[] | null
-          paese_produzione: string[] | null
-          casa_produzione: string | null
+          anno_produzione: number | null
+          regista: string[] | null
+          dettagli_serie: any | null
+          codice_isan: string | null
+          imdb_tconst: string | null
+          codici_esterni: any | null
+          metadati: any | null
+          search_vector: string | null
           created_at: string
           updated_at: string
         }
@@ -62,12 +105,16 @@ export type Database = {
           codice_opera: string
           titolo: string
           titolo_originale?: string | null
+          alias_titoli?: string[] | null
           tipo: string
-          anno_produzione: number
-          durata_minuti?: number | null
-          generi?: string[] | null
-          paese_produzione?: string[] | null
-          casa_produzione?: string | null
+          anno_produzione?: number | null
+          regista?: string[] | null
+          dettagli_serie?: any | null
+          codice_isan?: string | null
+          imdb_tconst?: string | null
+          codici_esterni?: any | null
+          metadati?: any | null
+          search_vector?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -76,12 +123,16 @@ export type Database = {
           codice_opera?: string
           titolo?: string
           titolo_originale?: string | null
+          alias_titoli?: string[] | null
           tipo?: string
-          anno_produzione?: number
-          durata_minuti?: number | null
-          generi?: string[] | null
-          paese_produzione?: string[] | null
-          casa_produzione?: string | null
+          anno_produzione?: number | null
+          regista?: string[] | null
+          dettagli_serie?: any | null
+          codice_isan?: string | null
+          imdb_tconst?: string | null
+          codici_esterni?: any | null
+          metadati?: any | null
+          search_vector?: string | null
           created_at?: string
           updated_at?: string
         }

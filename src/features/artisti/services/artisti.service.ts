@@ -48,11 +48,7 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         titolo,
         titolo_originale,
         tipo,
-        anno_produzione,
-        durata_minuti,
-        generi,
-        paese_produzione,
-        casa_produzione
+        anno_produzione
       ),
       ruoli_tipologie (
         id,
@@ -65,7 +61,7 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         numero_episodio
       )
     `)
-    .eq('artist-id', artistaId)
+    .eq('artista_id', artistaId)
     .order('created_at', { ascending: false })
 
   return { data, error }

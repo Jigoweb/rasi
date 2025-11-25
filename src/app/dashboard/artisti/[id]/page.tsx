@@ -68,7 +68,7 @@ export default function ArtistaProfiloPage() {
 
       setPartecipazioni(partecipazioniData || [])
     } catch (error) {
-      console.error('Error fetching artista data:', error)
+      console.error('Error fetching artista data:', JSON.stringify(error, null, 2))
       setError('Errore nel caricamento dei dati')
     } finally {
       setLoading(false)
@@ -109,16 +109,6 @@ export default function ArtistaProfiloPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT')
-  }
-
-  const formatGenres = (generi: string[] | null) => {
-    if (!generi || generi.length === 0) return 'N/A'
-    return generi.join(', ')
-  }
-
-  const formatCountries = (paesi: string[] | null) => {
-    if (!paesi || paesi.length === 0) return 'N/A'
-    return paesi.join(', ')
   }
 
   if (loading) {
@@ -191,9 +181,9 @@ export default function ArtistaProfiloPage() {
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground">
                 <Hash className="mr-2 h-4 w-4" />
-                Codice Artista
+                Codice IPN
               </div>
-              <div className="font-medium break-all">{artista.codice_artista}</div>
+              <div className="font-medium break-all">{artista.codice_ipn}</div>
             </div>
 
             {artista.codice_fiscale && (
@@ -219,9 +209,9 @@ export default function ArtistaProfiloPage() {
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground">
                 <Calendar className="mr-2 h-4 w-4" />
-                Data Iscrizione
+                Data Inizio Mandato
               </div>
-              <div className="font-medium">{formatDate(artista.data_iscrizione)}</div>
+              <div className="font-medium">{formatDate(artista.data_inizio_mandato)}</div>
             </div>
 
             <div className="space-y-2 sm:col-span-2 lg:col-span-1">
@@ -286,34 +276,7 @@ export default function ArtistaProfiloPage() {
                             <span className="text-muted-foreground">Anno:</span>
                             <div className="font-medium">{partecipazione.opere?.anno_produzione}</div>
                           </div>
-                          {partecipazione.opere?.durata_minuti && (
-                            <div>
-                              <span className="text-muted-foreground">Durata:</span>
-                              <div className="font-medium">{partecipazione.opere.durata_minuti} min</div>
-                            </div>
-                          )}
                         </div>
-
-                        {partecipazione.opere?.generi && (
-                          <div>
-                            <span className="text-sm text-muted-foreground">Generi:</span>
-                            <div className="text-sm font-medium">{formatGenres(partecipazione.opere.generi)}</div>
-                          </div>
-                        )}
-
-                        {partecipazione.opere?.paese_produzione && (
-                          <div>
-                            <span className="text-sm text-muted-foreground">Paesi:</span>
-                            <div className="text-sm font-medium">{formatCountries(partecipazione.opere.paese_produzione)}</div>
-                          </div>
-                        )}
-
-                        {partecipazione.opere?.casa_produzione && (
-                          <div>
-                            <span className="text-sm text-muted-foreground">Casa di Produzione:</span>
-                            <div className="text-sm font-medium">{partecipazione.opere.casa_produzione}</div>
-                          </div>
-                        )}
                       </div>
 
                       {/* Dettagli Partecipazione */}

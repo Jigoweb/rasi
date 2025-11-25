@@ -34,7 +34,7 @@ export default function ArtistiPage() {
       filtered = filtered.filter(artista =>
         artista.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
         artista.cognome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        artista.codice_artista.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        artista.codice_ipn.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (artista.nome_arte && artista.nome_arte.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     }
@@ -87,16 +87,16 @@ export default function ArtistiPage() {
 
   const exportData = () => {
     const csvContent = [
-      ['Codice', 'Nome', 'Cognome', 'Nome Arte', 'Codice Fiscale', 'Stato', 'Data Nascita', 'Data Iscrizione'].join(','),
+      ['Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Codice Fiscale', 'Stato', 'Data Nascita', 'Data Inizio Mandato'].join(','),
       ...filteredArtisti.map(artista => [
-        artista.codice_artista,
+        artista.codice_ipn,
         artista.nome,
         artista.cognome,
         artista.nome_arte || '',
         artista.codice_fiscale || '',
         artista.stato,
         artista.data_nascita || '',
-        formatDate(artista.data_iscrizione)
+        formatDate(artista.data_inizio_mandato)
       ].join(','))
     ].join('\n')
 
@@ -204,13 +204,13 @@ export default function ArtistiPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Codice</TableHead>
+                  <TableHead>Codice IPN</TableHead>
                   <TableHead>Nome Completo</TableHead>
                   <TableHead>Nome Arte</TableHead>
                   <TableHead>Codice Fiscale</TableHead>
                   <TableHead>Stato</TableHead>
                   <TableHead>Data Nascita</TableHead>
-                  <TableHead>Data Iscrizione</TableHead>
+                  <TableHead>Data Inizio Mandato</TableHead>
                   <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
@@ -225,7 +225,7 @@ export default function ArtistiPage() {
                   filteredArtisti.map((artista) => (
                     <TableRow key={artista.id}>
                       <TableCell className="font-mono text-sm">
-                        {artista.codice_artista}
+                        {artista.codice_ipn}
                       </TableCell>
                       <TableCell>
                         <div>
@@ -252,7 +252,7 @@ export default function ArtistiPage() {
                         {artista.data_nascita ? formatDate(artista.data_nascita) : '-'}
                       </TableCell>
                       <TableCell>
-                        {formatDate(artista.data_iscrizione)}
+                        {formatDate(artista.data_inizio_mandato)}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -308,7 +308,7 @@ export default function ArtistiPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                          {artista.codice_artista}
+                          {artista.codice_ipn}
                         </span>
                         {getStatusBadge(artista.stato)}
                       </div>
@@ -327,7 +327,7 @@ export default function ArtistiPage() {
                         {artista.data_nascita && (
                           <p>Nato il {formatDate(artista.data_nascita)}</p>
                         )}
-                        <p>Iscritto il {formatDate(artista.data_iscrizione)}</p>
+                        <p>Mandato iniziato il {formatDate(artista.data_inizio_mandato)}</p>
                       </div>
                     </div>
                     <DropdownMenu>
@@ -384,8 +384,8 @@ export default function ArtistiPage() {
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Codice Artista</label>
-                  <p className="font-mono">{selectedArtist.codice_artista}</p>
+                  <label className="text-sm font-medium text-gray-500">Codice IPN</label>
+                  <p className="font-mono">{selectedArtist.codice_ipn}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Stato</label>
@@ -418,8 +418,8 @@ export default function ArtistiPage() {
                   </div>
                 )}
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Data Iscrizione</label>
-                  <p>{formatDate(selectedArtist.data_iscrizione)}</p>
+                  <label className="text-sm font-medium text-gray-500">Data Inizio Mandato</label>
+                  <p>{formatDate(selectedArtist.data_inizio_mandato)}</p>
                 </div>
               </div>
 
