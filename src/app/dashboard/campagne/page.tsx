@@ -233,9 +233,6 @@ export default function CampagnePage() {
 
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filtri e Ricerca</CardTitle>
-        </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">

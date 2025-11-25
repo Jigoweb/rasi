@@ -257,9 +257,6 @@ export default function ReportPage() {
 
       {/* Filters and Search */}
       <Card>
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg">Filtri e Ricerca</CardTitle>
-        </CardHeader>
         <CardContent className="p-4 lg:p-6">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">

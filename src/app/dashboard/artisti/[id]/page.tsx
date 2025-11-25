@@ -12,15 +12,21 @@ import { Badge } from '@/shared/components/ui/badge'
 import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User } from 'lucide-react'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
-type Opera = Database['public']['Tables']['opere']['Row']
 
 interface Partecipazione {
   id: string
   personaggio: string | null
   note: string | null
-  stato_validazione: string
-  created_at: string
-  opere: Opera | null
+  stato_validazione: string | null
+  created_at: string | null
+  opere: {
+    id: string
+    codice_opera: string
+    titolo: string
+    titolo_originale: string | null
+    tipo: string
+    anno_produzione: number | null
+  } | null
   ruoli_tipologie: {
     id: string
     nome: string
@@ -94,20 +100,22 @@ export default function ArtistaProfiloPage() {
     }
   }
 
-  const getValidationBadge = (stato: string) => {
+  const getValidationBadge = (stato: string | null) => {
+    if (!stato) return <Badge variant="outline">Non specificato</Badge>
     switch (stato) {
       case 'validato':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Validato</Badge>
       case 'da_validare':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Da Validare</Badge>
-      case 'rifiutato':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Rifiutato</Badge>
+      case 'respinto':
+        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Respinto</Badge>
       default:
         return <Badge variant="outline">Sconosciuto</Badge>
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-'
     return new Date(dateString).toLocaleDateString('it-IT')
   }
 

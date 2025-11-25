@@ -11,12 +11,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Clock, Tv } from 'lucide-react'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Clock, Tv, Radio, CheckCircle, XCircle } from 'lucide-react'
 import CSVImport from '@/shared/components/csv-import'
 
 type Programmazione = Database['public']['Tables']['programmazioni']['Row']
+type Emittente = Database['public']['Tables']['emittenti']['Row']
 
 export default function ProgrammazioniPage() {
+  const [currentTab, setCurrentTab] = useState<'programmazioni' | 'emittenti'>('programmazioni')
+  
+  // Programmazioni State
   const [programmazioni, setProgrammazioni] = useState<Programmazione[]>([])
   const [filteredProgrammazioni, setFilteredProgrammazioni] = useState<Programmazione[]>([])
   const [loading, setLoading] = useState(true)
@@ -24,8 +28,15 @@ export default function ProgrammazioniPage() {
   const [fasciaFilter, setFasciaFilter] = useState<string>('all')
   const [selectedProgrammazione, setSelectedProgrammazione] = useState<Programmazione | null>(null)
   const [showDetails, setShowDetails] = useState(false)
-  
 
+  // Emittenti State
+  const [emittenti, setEmittenti] = useState<Emittente[]>([])
+  const [loadingEmittenti, setLoadingEmittenti] = useState(false)
+  const [searchEmittentiQuery, setSearchEmittentiQuery] = useState('')
+  const [filteredEmittenti, setFilteredEmittenti] = useState<Emittente[]>([])
+  const [selectedEmittente, setSelectedEmittente] = useState<Emittente | null>(null)
+  const [showEmittenteDetails, setShowEmittenteDetails] = useState(false)
+  
   const filterProgrammazioni = useCallback(() => {
     let filtered = programmazioni
 
@@ -45,15 +56,41 @@ export default function ProgrammazioniPage() {
     setFilteredProgrammazioni(filtered)
   }, [programmazioni, searchQuery, fasciaFilter])
 
+  const filterEmittenti = useCallback(() => {
+    let filtered = emittenti
+
+    if (searchEmittentiQuery) {
+      filtered = filtered.filter(emittente =>
+        emittente.nome.toLowerCase().includes(searchEmittentiQuery.toLowerCase()) ||
+        emittente.codice.toLowerCase().includes(searchEmittentiQuery.toLowerCase())
+      )
+    }
+
+    setFilteredEmittenti(filtered)
+  }, [emittenti, searchEmittentiQuery])
+
   useEffect(() => {
-    fetchProgrammazioni()
-  }, [])
+    if (currentTab === 'programmazioni') {
+      fetchProgrammazioni()
+    } else {
+      fetchEmittenti()
+    }
+  }, [currentTab])
 
   useEffect(() => {
     filterProgrammazioni()
   }, [filterProgrammazioni])
 
+  useEffect(() => {
+    filterEmittenti()
+  }, [filterEmittenti])
+
   const fetchProgrammazioni = async () => {
+    // Programmazioni table is deprecated/missing, skipping fetch to prevent errors
+    setLoading(false)
+    return
+
+    /*
     try {
       const { data, error } = await supabase
         .from('programmazioni')
@@ -67,6 +104,24 @@ export default function ProgrammazioniPage() {
       console.error('Error fetching programmazioni:', error)
     } finally {
       setLoading(false)
+    }
+    */
+  }
+
+  const fetchEmittenti = async () => {
+    try {
+      setLoadingEmittenti(true)
+      const { data, error } = await supabase
+        .from('emittenti')
+        .select('*')
+        .order('nome', { ascending: true })
+
+      if (error) throw error
+      setEmittenti(data || [])
+    } catch (error) {
+      console.error('Error fetching emittenti:', error)
+    } finally {
+      setLoadingEmittenti(false)
     }
   }
 
@@ -100,6 +155,12 @@ export default function ProgrammazioniPage() {
       default:
         return <Badge variant="secondary">{tipo}</Badge>
     }
+  }
+
+  const getAttivaBadge = (attiva: boolean | null) => {
+    if (attiva === true) return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" /> Attiva</Badge>
+    if (attiva === false) return <Badge variant="outline" className="bg-gray-50 text-gray-700"><XCircle className="w-3 h-3 mr-1" /> Inattiva</Badge>
+    return <Badge variant="outline" className="bg-gray-50 text-gray-700">Non specificato</Badge>
   }
 
   const formatDate = (dateString: string) => {
@@ -160,155 +221,256 @@ export default function ProgrammazioniPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Programmazioni</h1>
-          <p className="text-gray-600">Gestione delle programmazioni televisive</p>
+          <h1 className="text-3xl font-bold tracking-tight">Programmazioni & Emittenti</h1>
+          <p className="text-gray-600">Gestione delle programmazioni televisive e delle emittenti</p>
         </div>
-        <div className="flex gap-2">
-          <CSVImport onImportComplete={fetchProgrammazioni} />
-          <Button variant="outline" onClick={exportData}>
-            <Download className="h-4 w-4 mr-2" />
-            Esporta CSV
-          </Button>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuova Programmazione
-          </Button>
-        </div>
+
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filtri e Ricerca</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Cerca per titolo programmazione..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <Select value={fasciaFilter} onValueChange={setFasciaFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filtra per fascia" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutte le fasce</SelectItem>
-                <SelectItem value="prima_serata">Prima Serata</SelectItem>
-                <SelectItem value="seconda_serata">Seconda Serata</SelectItem>
-                <SelectItem value="access">Access Prime</SelectItem>
-                <SelectItem value="daytime">Daytime</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-4 text-sm text-gray-600">
-            Mostrando {filteredProgrammazioni.length} di {programmazioni.length} programmazioni
-          </div>
-        </CardContent>
-      </Card>
+      {/* Tab Switcher */}
+      <div className="flex gap-2">
+        <Button
+          variant={currentTab === 'programmazioni' ? 'default' : 'outline'}
+          onClick={() => setCurrentTab('programmazioni')}
+        >
+          <Tv className="h-4 w-4 mr-2" />
+          Programmazioni
+        </Button>
+        <Button
+          variant={currentTab === 'emittenti' ? 'default' : 'outline'}
+          onClick={() => setCurrentTab('emittenti')}
+        >
+          <Radio className="h-4 w-4 mr-2" />
+          Emittenti
+        </Button>
+      </div>
 
-      {/* Programming Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-32">Data</TableHead>
-                <TableHead className="w-24">Ora Inizio</TableHead>
-                <TableHead className="w-24">Ora Fine</TableHead>
-                <TableHead>Titolo Programmazione</TableHead>
-                <TableHead className="w-32">Fascia Oraria</TableHead>
-                <TableHead className="w-32">Tipo</TableHead>
-                <TableHead className="w-20">Durata</TableHead>
-                <TableHead className="w-16">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProgrammazioni.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                    Nessuna programmazione trovata con i criteri di ricerca attuali
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredProgrammazioni.map((prog) => (
-                  <TableRow key={prog.id} className="hover:bg-gray-50">
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium">{formatDate(prog.data_trasmissione)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-gray-400" />
-                        <span className="font-mono">{formatTime(prog.ora_inizio)}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {prog.ora_fine ? (
-                        <span className="font-mono">{formatTime(prog.ora_fine)}</span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Tv className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium">{prog.titolo_programmazione}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {getFasciaBadge(prog.fascia_oraria)}
-                    </TableCell>
-                    <TableCell>
-                      {getTipoTrasmissioneBadge(prog.tipo_trasmissione)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {prog.durata_minuti ? `${prog.durata_minuti}m` : <span className="text-gray-400">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem 
-                            onClick={() => {
-                              setSelectedProgrammazione(prog)
-                              setShowDetails(true)
-                            }}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            Visualizza
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Modifica
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Elimina
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+      {/* Programmazioni Content */}
+      {currentTab === 'programmazioni' && (
+        <>
+          <div className="flex justify-end gap-2 mb-4">
+            <CSVImport onImportComplete={fetchProgrammazioni} />
+            <Button variant="outline" onClick={exportData}>
+              <Download className="h-4 w-4 mr-2" />
+              Esporta CSV
+            </Button>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuova Programmazione
+            </Button>
+          </div>
+          {/* Filters */}
+          <Card>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Cerca per titolo programmazione..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <Select value={fasciaFilter} onValueChange={setFasciaFilter}>
+                  <SelectTrigger className="w-full sm:w-48">
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Filtra per fascia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutte le fasce</SelectItem>
+                    <SelectItem value="prima_serata">Prima Serata</SelectItem>
+                    <SelectItem value="seconda_serata">Seconda Serata</SelectItem>
+                    <SelectItem value="access">Access Prime</SelectItem>
+                    <SelectItem value="daytime">Daytime</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="mt-4 text-sm text-gray-600">
+                Mostrando {filteredProgrammazioni.length} di {programmazioni.length} programmazioni
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Programming Table */}
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-32">Data</TableHead>
+                    <TableHead className="w-24">Ora Inizio</TableHead>
+                    <TableHead className="w-24">Ora Fine</TableHead>
+                    <TableHead>Titolo Programmazione</TableHead>
+                    <TableHead className="w-32">Fascia Oraria</TableHead>
+                    <TableHead className="w-32">Tipo</TableHead>
+                    <TableHead className="w-20">Durata</TableHead>
+                    <TableHead className="w-16">Azioni</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {filteredProgrammazioni.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                        Nessuna programmazione trovata con i criteri di ricerca attuali
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredProgrammazioni.map((prog) => (
+                      <TableRow key={prog.id} className="hover:bg-gray-50">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span className="font-medium">{formatDate(prog.data_trasmissione)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span className="font-mono">{formatTime(prog.ora_inizio)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {prog.ora_fine ? (
+                            <span className="font-mono">{formatTime(prog.ora_fine)}</span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Tv className="h-4 w-4 text-gray-400" />
+                            <span className="font-medium">{prog.titolo_programmazione}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getFasciaBadge(prog.fascia_oraria)}
+                        </TableCell>
+                        <TableCell>
+                          {getTipoTrasmissioneBadge(prog.tipo_trasmissione)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {prog.durata_minuti ? `${prog.durata_minuti}m` : <span className="text-gray-400">—</span>}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  setSelectedProgrammazione(prog)
+                                  setShowDetails(true)
+                                }}
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Visualizza
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Modifica
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600">
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Elimina
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Emittenti Content */}
+      {currentTab === 'emittenti' && (
+        <>
+          <Card>
+            <CardContent>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Cerca per nome o codice emittente..."
+                      value={searchEmittentiQuery}
+                      onChange={(e) => setSearchEmittentiQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 text-sm text-gray-600">
+                Mostrando {filteredEmittenti.length} di {emittenti.length} emittenti
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Codice</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Paese</TableHead>
+                    <TableHead>Attiva</TableHead>
+                    <TableHead className="w-16">Azioni</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loadingEmittenti ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        <div className="flex justify-center items-center">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredEmittenti.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        Nessuna emittente trovata
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredEmittenti.map((emittente) => (
+                      <TableRow key={emittente.id} className="hover:bg-gray-50">
+                        <TableCell className="font-mono text-xs">{emittente.codice}</TableCell>
+                        <TableCell className="font-medium">{emittente.nome}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{emittente.tipo}</Badge>
+                        </TableCell>
+                        <TableCell>{emittente.paese || '-'}</TableCell>
+                        <TableCell>{getAttivaBadge(emittente.attiva)}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => {
+                            setSelectedEmittente(emittente)
+                            setShowEmittenteDetails(true)
+                          }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Programming Details Dialog */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
@@ -354,7 +516,7 @@ export default function ProgrammazioniPage() {
                 )}
                 <div>
                   <label className="text-sm font-medium text-gray-500">Data Inserimento</label>
-                  <p>{new Date(selectedProgrammazione.created_at).toLocaleString('it-IT')}</p>
+                  <p>{selectedProgrammazione.created_at ? new Date(selectedProgrammazione.created_at).toLocaleString('it-IT') : '-'}</p>
                 </div>
               </div>
 
@@ -365,6 +527,54 @@ export default function ProgrammazioniPage() {
                 <Button>
                   <Edit className="h-4 w-4 mr-2" />
                   Modifica
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Emittenti Details Dialog */}
+      <Dialog open={showEmittenteDetails} onOpenChange={setShowEmittenteDetails}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Dettagli Emittente</DialogTitle>
+            <DialogDescription>
+              Informazioni per &quot;{selectedEmittente?.nome}&quot;
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedEmittente && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Codice</label>
+                  <p className="font-mono">{selectedEmittente.codice}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Nome</label>
+                  <p className="font-medium">{selectedEmittente.nome}</p>
+                </div>
+                 <div>
+                  <label className="text-sm font-medium text-gray-500">Tipo</label>
+                  <p><Badge variant="outline">{selectedEmittente.tipo}</Badge></p>
+                </div>
+                 <div>
+                  <label className="text-sm font-medium text-gray-500">Paese</label>
+                  <p>{selectedEmittente.paese || '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Stato</label>
+                  <div className="mt-1">{getAttivaBadge(selectedEmittente.attiva)}</div>
+                </div>
+                 <div>
+                  <label className="text-sm font-medium text-gray-500">Data Creazione</label>
+                  <p>{selectedEmittente.created_at ? new Date(selectedEmittente.created_at).toLocaleString('it-IT') : '-'}</p>
+                </div>
+              </div>
+               <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowEmittenteDetails(false)}>
+                  Chiudi
                 </Button>
               </div>
             </div>

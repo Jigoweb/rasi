@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -17,7 +17,6 @@ type Opera = Database['public']['Tables']['opere']['Row']
 
 export default function OperePage() {
   const [opere, setOpere] = useState<Opera[]>([])
-  const [filteredOpere, setFilteredOpere] = useState<Opera[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
@@ -25,40 +24,33 @@ export default function OperePage() {
   const [showDetails, setShowDetails] = useState(false)
   
 
-  const filterOpere = useCallback(() => {
-    let filtered = opere
-
-    // Filter by search query
-    if (searchQuery) {
-      filtered = filtered.filter(opera =>
-        opera.titolo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        opera.codice_opera.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (opera.titolo_originale && opera.titolo_originale.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    }
-
-    // Filter by type
-    if (typeFilter !== 'all') {
-      filtered = filtered.filter(opera => opera.tipo === typeFilter)
-    }
-
-    setFilteredOpere(filtered)
-  }, [opere, searchQuery, typeFilter])
-
+  // Server-side filtering with debounce
   useEffect(() => {
-    fetchOpere()
-  }, [])
+    const timer = setTimeout(() => {
+      fetchOpere()
+    }, 500)
 
-  useEffect(() => {
-    filterOpere()
-  }, [filterOpere])
+    return () => clearTimeout(timer)
+  }, [searchQuery, typeFilter])
 
   const fetchOpere = async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true)
+      let query = supabase
         .from('opere')
         .select('*')
         .order('anno_produzione', { ascending: false })
+        .limit(100) // Limit results for performance, rely on search to find specific items
+
+      if (searchQuery) {
+        query = query.or(`titolo.ilike.%${searchQuery}%,codice_opera.ilike.%${searchQuery}%,titolo_originale.ilike.%${searchQuery}%`)
+      }
+
+      if (typeFilter !== 'all') {
+        query = query.eq('tipo', typeFilter)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       setOpere(data || [])
@@ -104,7 +96,7 @@ export default function OperePage() {
   const exportData = () => {
     const csvContent = [
       ['Codice', 'Titolo', 'Titolo Originale', 'Tipo', 'Anno'].join(','),
-      ...filteredOpere.map(opera => [
+      ...opere.map(opera => [
         opera.codice_opera,
         `"${opera.titolo}"`,
         `"${opera.titolo_originale || ''}"`,
@@ -166,9 +158,6 @@ export default function OperePage() {
 
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filtri e Ricerca</CardTitle>
-        </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -197,7 +186,7 @@ export default function OperePage() {
             </Select>
           </div>
           <div className="mt-4 text-sm text-gray-600">
-            Mostrando {filteredOpere.length} di {opere.length} opere
+            Mostrando {opere.length} risultati
           </div>
         </CardContent>
       </Card>
@@ -217,14 +206,14 @@ export default function OperePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredOpere.length === 0 ? (
+              {opere.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="text-center py-8 text-gray-500">
                     Nessuna opera trovata con i criteri di ricerca attuali
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredOpere.map((opera) => (
+                opere.map((opera) => (
                   <TableRow key={opera.id} className="hover:bg-gray-50">
                     <TableCell className="font-mono text-sm">
                       {opera.codice_opera}

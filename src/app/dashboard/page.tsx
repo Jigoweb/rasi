@@ -31,10 +31,14 @@ export default function DashboardPage() {
           supabase
             .from('opere')
             .select('id', { count: 'exact', head: true }),
+          // Mock programmazioni result as table is deprecated
+          Promise.resolve({ count: 0, error: null }),
+          /*
           supabase
             .from('programmazioni')
             .select('id', { count: 'exact', head: true })
             .gte('data_trasmissione', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+          */
           supabase
             .from('campagne_individuazione')
             .select('id', { count: 'exact', head: true })

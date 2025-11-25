@@ -147,8 +147,7 @@ export type Database = {
           fascia_oraria: string | null
           tipo_trasmissione: string | null
           durata_minuti: number | null
-          created_at: string
-          updated_at: string
+          created_at: string | null
         }
         Insert: {
           id?: string
@@ -159,8 +158,7 @@ export type Database = {
           fascia_oraria?: string | null
           tipo_trasmissione?: string | null
           durata_minuti?: number | null
-          created_at?: string
-          updated_at?: string
+          created_at?: string | null
         }
         Update: {
           id?: string
@@ -171,8 +169,7 @@ export type Database = {
           fascia_oraria?: string | null
           tipo_trasmissione?: string | null
           durata_minuti?: number | null
-          created_at?: string
-          updated_at?: string
+          created_at?: string | null
         }
       }
       campagne_individuazione: {
@@ -243,6 +240,47 @@ export type Database = {
           parametri_ripartizione?: any | null
           created_at?: string
           updated_at?: string
+        }
+      }
+      emittenti: {
+        Row: {
+          id: string
+          codice: string
+          nome: string
+          tipo: string
+          paese: string | null
+          configurazione: any
+          contatti: any | null
+          metadati: any | null
+          attiva: boolean | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          codice: string
+          nome: string
+          tipo: string
+          paese?: string | null
+          configurazione?: any
+          contatti?: any | null
+          metadati?: any | null
+          attiva?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          codice?: string
+          nome?: string
+          tipo?: string
+          paese?: string | null
+          configurazione?: any
+          contatti?: any | null
+          metadati?: any | null
+          attiva?: boolean | null
+          created_at?: string | null
+          updated_at?: string | null
         }
       }
       episodi: {
@@ -331,13 +369,13 @@ export type Database = {
           personaggio: string | null
           note: string | null
           parametri_personalizzati: any | null
-          stato_validazione: string
+          stato_validazione: string | null
           validato_da: string | null
           validato_il: string | null
           note_validazione: string | null
           metadati: any | null
-          created_at: string
-          updated_at: string
+          created_at: string | null
+          updated_at: string | null
           created_by: string | null
         }
         Insert: {
@@ -349,13 +387,13 @@ export type Database = {
           personaggio?: string | null
           note?: string | null
           parametri_personalizzati?: any | null
-          stato_validazione?: string
+          stato_validazione?: string | null
           validato_da?: string | null
           validato_il?: string | null
           note_validazione?: string | null
           metadati?: any | null
-          created_at?: string
-          updated_at?: string
+          created_at?: string | null
+          updated_at?: string | null
           created_by?: string | null
         }
         Update: {
@@ -367,13 +405,13 @@ export type Database = {
           personaggio?: string | null
           note?: string | null
           parametri_personalizzati?: any | null
-          stato_validazione?: string
+          stato_validazione?: string | null
           validato_da?: string | null
           validato_il?: string | null
           note_validazione?: string | null
           metadati?: any | null
-          created_at?: string
-          updated_at?: string
+          created_at?: string | null
+          updated_at?: string | null
           created_by?: string | null
         }
       }
