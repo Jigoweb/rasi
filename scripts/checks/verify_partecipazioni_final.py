@@ -88,7 +88,12 @@ def verify_final_partecipazioni():
         )
         
         if response.status_code == 200:
-            orphaned = len(response.json())
+            data = response.json()
+            # Handle list of dicts like [{'count': 0}]
+            if isinstance(data, list) and len(data) > 0 and 'count' in data[0]:
+                orphaned = data[0]['count']
+            else:
+                orphaned = len(data) # Fallback if behavior changes
             print(f"  • Partecipazioni senza artista: {orphaned}")
         
         # Partecipazioni senza opera
@@ -102,7 +107,11 @@ def verify_final_partecipazioni():
         )
         
         if response.status_code == 200:
-            orphaned = len(response.json())
+            data = response.json()
+            if isinstance(data, list) and len(data) > 0 and 'count' in data[0]:
+                orphaned = data[0]['count']
+            else:
+                orphaned = len(data)
             print(f"  • Partecipazioni senza opera: {orphaned}")
         
         # Statistiche per opera più popolare
