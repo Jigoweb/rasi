@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useRouter } from 'next/navigation'
 import { getArtisti } from '@/features/artisti/services/artisti.service'
 import { Database } from '@/shared/lib/supabase'
@@ -13,6 +16,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, User } from 'lucide-react'
 import { SearchInput } from './components/search-input'
+import { Input } from '@/shared/components/ui/input'
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
+import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -24,6 +30,8 @@ export default function ArtistiPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedArtist, setSelectedArtist] = useState<Artista | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   
   // Fetch when search query or status changes (debounce is now handled in SearchInput)
   useEffect(() => {
@@ -91,6 +99,92 @@ export default function ArtistiPage() {
     window.URL.revokeObjectURL(url)
   }
 
+  const schema = z.object({
+    codice_ipn: z.string().min(1, 'Codice IPN obbligatorio'),
+    nome: z.string().min(1, 'Nome obbligatorio'),
+    cognome: z.string().min(1, 'Cognome obbligatorio'),
+    nome_arte: z.string().optional().or(z.literal('')),
+    codice_fiscale: z.string().max(16, 'Max 16 caratteri').optional().or(z.literal('')),
+    data_nascita: z.string().optional().or(z.literal('')),
+    data_inizio_mandato: z.string().min(1, 'Data inizio mandato obbligatoria')
+  })
+
+  const form = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      codice_ipn: '',
+      nome: '',
+      cognome: '',
+      nome_arte: '',
+      codice_fiscale: '',
+      data_nascita: '',
+      data_inizio_mandato: new Date().toISOString().split('T')[0]
+    }
+  })
+
+  const openCreateForm = () => {
+    setFormMode('create')
+    setSelectedArtist(null)
+    form.reset({
+      codice_ipn: '',
+      nome: '',
+      cognome: '',
+      nome_arte: '',
+      codice_fiscale: '',
+      data_nascita: '',
+      data_inizio_mandato: new Date().toISOString().split('T')[0]
+    })
+    setShowForm(true)
+  }
+
+  const toDateInput = (s?: string | null) => {
+    if (!s) return ''
+    const d = new Date(s)
+    if (Number.isNaN(d.getTime())) return ''
+    return d.toISOString().split('T')[0]
+  }
+
+  const openEditForm = (artista: Artista) => {
+    setFormMode('edit')
+    setSelectedArtist(artista)
+    form.reset({
+      codice_ipn: artista.codice_ipn,
+      nome: artista.nome,
+      cognome: artista.cognome,
+      nome_arte: artista.nome_arte || '',
+      codice_fiscale: artista.codice_fiscale || '',
+      data_nascita: toDateInput(artista.data_nascita),
+      data_inizio_mandato: toDateInput(artista.data_inizio_mandato)
+    })
+    setShowForm(true)
+  }
+
+  const onSubmit = async (values: z.infer<typeof schema>) => {
+    try {
+      const payload = {
+        codice_ipn: values.codice_ipn,
+        nome: values.nome,
+        cognome: values.cognome,
+        nome_arte: values.nome_arte || null,
+        codice_fiscale: values.codice_fiscale || null,
+        data_nascita: values.data_nascita || null,
+        data_inizio_mandato: values.data_inizio_mandato,
+      } as any
+
+      if (formMode === 'create') {
+        const { error } = await createArtista(payload)
+        if (error) throw error
+      } else if (selectedArtist) {
+        const { error } = await updateArtista(selectedArtist.id, payload)
+        if (error) throw error
+      }
+      setShowForm(false)
+      await fetchArtisti()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -104,7 +198,7 @@ export default function ArtistiPage() {
             <Download className="h-4 w-4 mr-2" />
             Esporta CSV
           </Button>
-          <Button>
+          <Button onClick={openCreateForm}>
             <Plus className="h-4 w-4 mr-2" />
             Nuovo Artista
           </Button>
@@ -171,18 +265,18 @@ export default function ArtistiPage() {
                   <TableRow>
                     <TableHead>Codice IPN</TableHead>
                     <TableHead>Nome Completo</TableHead>
-                    <TableHead>Nome Arte</TableHead>
+                    
                     <TableHead>Codice Fiscale</TableHead>
                     <TableHead>Stato</TableHead>
                     <TableHead>Data Nascita</TableHead>
                     <TableHead>Data Inizio Mandato</TableHead>
-                    <TableHead className="text-right">Azioni</TableHead>
+                    <TableHead className="text-right sticky right-0 bg-background z-10 w-[1%]">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {artisti.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                         Nessun artista trovato
                       </TableCell>
                     </TableRow>
@@ -193,19 +287,16 @@ export default function ArtistiPage() {
                           {artista.codice_ipn}
                         </TableCell>
                         <TableCell>
-                          <div>
-                            <div className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium truncate max-w-[180px]">
                               {artista.nome} {artista.cognome}
                             </div>
                             {artista.nome_arte && (
-                              <div className="text-sm text-gray-500 italic">
+                              <span className="text-sm text-gray-500 italic truncate max-w-[160px]">
                                 &quot;{artista.nome_arte}&quot;
-                              </div>
+                              </span>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          {artista.nome_arte || '-'}
                         </TableCell>
                         <TableCell className="font-mono text-sm">
                           {artista.codice_fiscale || '-'}
@@ -219,7 +310,7 @@ export default function ArtistiPage() {
                         <TableCell>
                           {formatDate(artista.data_inizio_mandato)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="sticky right-0 bg-background z-10 w-[1%]">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="sm">
@@ -242,7 +333,9 @@ export default function ArtistiPage() {
                                 <Eye className="h-4 w-4 mr-2" />
                                 Visualizza
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => openEditForm(artista)}
+                              >
                                 <Edit className="h-4 w-4 mr-2" />
                                 Modifica
                               </DropdownMenuItem>
@@ -403,13 +496,127 @@ export default function ArtistiPage() {
                 <Button variant="outline" onClick={() => setShowDetails(false)}>
                   Chiudi
                 </Button>
-                <Button>
+                <Button onClick={() => selectedArtist && openEditForm(selectedArtist)}>
                   <Edit className="h-4 w-4 mr-2" />
                   Modifica
                 </Button>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{formMode === 'create' ? 'Nuovo Artista' : 'Modifica Artista'}</DialogTitle>
+            <DialogDescription>
+              {formMode === 'create' ? 'Inserisci i dati obbligatori' : 'Aggiorna i dati dell’artista'}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="codice_ipn"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Codice IPN</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="IPN0001" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="nome"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="cognome"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cognome</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="nome_arte"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome d’Arte</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="codice_fiscale"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Codice Fiscale</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="data_nascita"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data di Nascita</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="data_inizio_mandato"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data Inizio Mandato</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Annulla</Button>
+                <Button type="submit">{formMode === 'create' ? 'Crea' : 'Salva'}</Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

@@ -24,19 +24,27 @@ export function AuthForm() {
     setMessage('')
 
     try {
-      const credentials = { email, password };
+      const credentials = { email, password }
       if (isSignUp) {
-        const { error } = await signUpWithPassword(credentials);
-        if (error) throw error
-        setMessage('Controlla la tua email per il link di conferma!')
+        const { error } = await signUpWithPassword(credentials)
+        if (error) {
+          setMessage(error.message ?? 'Errore durante la registrazione')
+        } else {
+          setMessage('Controlla la tua email per il link di conferma!')
+        }
       } else {
-        const { error } = await signInWithPassword(credentials);
-        if (error) throw error
-        router.push('/dashboard')
+        const { error } = await signInWithPassword(credentials)
+        if (error) {
+          setMessage(error.message ?? 'Credenziali non valide')
+        } else {
+          router.push('/dashboard')
+        }
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
         setMessage(error.message)
+      } else {
+        setMessage('Si è verificato un errore')
       }
     } finally {
       setLoading(false)
@@ -46,11 +54,16 @@ export function AuthForm() {
   const handleGoogleAuth = async () => {
     setLoading(true)
     try {
-      const { error } = await signInWithGoogle();
-      if (error) throw error
+      const { error } = await signInWithGoogle()
+      if (error) {
+        setMessage(error.message ?? 'Errore OAuth')
+        setLoading(false)
+      }
     } catch (error: unknown) {
       if (error instanceof Error) {
         setMessage(error.message)
+      } else {
+        setMessage('Si è verificato un errore')
       }
       setLoading(false)
     }

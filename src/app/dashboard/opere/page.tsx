@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -12,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText } from 'lucide-react'
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
+import { createOpera, updateOpera } from '@/features/opere/services/opere.service'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -22,6 +27,8 @@ export default function OperePage() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [selectedOpera, setSelectedOpera] = useState<Opera | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   
 
   // Server-side filtering with debounce
@@ -114,6 +121,84 @@ export default function OperePage() {
     window.URL.revokeObjectURL(url)
   }
 
+  const schema = z.object({
+    codice_opera: z.string().min(1, 'Codice opera obbligatorio'),
+    titolo: z.string().min(1, 'Titolo obbligatorio'),
+    tipo: z.enum(['film', 'serie_tv', 'documentario', 'cartoon', 'altro'], {
+      required_error: 'Tipo obbligatorio'
+    }),
+    titolo_originale: z.string().optional().or(z.literal('')),
+    anno_produzione: z
+      .union([z.string(), z.number()])
+      .optional()
+      .transform((val) => {
+        if (val === undefined || val === '') return undefined
+        const n = typeof val === 'string' ? Number(val) : val
+        return Number.isNaN(n) ? undefined : n
+      }),
+  })
+
+  const form = useForm<z.infer<typeof schema>>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      codice_opera: '',
+      titolo: '',
+      tipo: undefined as any,
+      titolo_originale: '',
+      anno_produzione: undefined,
+    }
+  })
+
+  const openCreateForm = () => {
+    setFormMode('create')
+    setSelectedOpera(null)
+    form.reset({
+      codice_opera: '',
+      titolo: '',
+      tipo: undefined as any,
+      titolo_originale: '',
+      anno_produzione: undefined,
+    })
+    setShowForm(true)
+  }
+
+  const openEditForm = (opera: Opera) => {
+    setFormMode('edit')
+    setSelectedOpera(opera)
+    form.reset({
+      codice_opera: opera.codice_opera,
+      titolo: opera.titolo,
+      tipo: opera.tipo as any,
+      titolo_originale: opera.titolo_originale || '',
+      anno_produzione: opera.anno_produzione ?? undefined,
+    })
+    setShowForm(true)
+  }
+
+  const onSubmit = async (values: z.infer<typeof schema>) => {
+    try {
+      const payload = {
+        codice_opera: values.codice_opera,
+        titolo: values.titolo,
+        tipo: values.tipo,
+        titolo_originale: values.titolo_originale || null,
+        anno_produzione: values.anno_produzione ?? null,
+      } as any
+
+      if (formMode === 'create') {
+        const { error } = await createOpera(payload)
+        if (error) throw error
+      } else if (selectedOpera) {
+        const { error } = await updateOpera(selectedOpera.id, payload)
+        if (error) throw error
+      }
+      setShowForm(false)
+      fetchOpere()
+    } catch (e) {
+      console.error('Errore salvataggio opera', e)
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -149,7 +234,7 @@ export default function OperePage() {
             <Download className="h-4 w-4 mr-2" />
             Esporta CSV
           </Button>
-          <Button>
+          <Button onClick={openCreateForm}>
             <Plus className="h-4 w-4 mr-2" />
             Nuova Opera
           </Button>
@@ -202,7 +287,7 @@ export default function OperePage() {
                 <TableHead>Titolo Originale</TableHead>
                 <TableHead className="w-32">Tipo</TableHead>
                 <TableHead className="w-20">Anno</TableHead>
-                <TableHead className="w-16">Azioni</TableHead>
+                <TableHead className="text-right sticky right-0 bg-background z-10 w-[1%]">Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -234,7 +319,7 @@ export default function OperePage() {
                     <TableCell className="text-center">
                       {opera.anno_produzione}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="sticky right-0 bg-background z-10 w-[1%]">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="sm">
@@ -251,7 +336,7 @@ export default function OperePage() {
                             <Eye className="h-4 w-4 mr-2" />
                             Visualizza
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEditForm(opera)}>
                             <Edit className="h-4 w-4 mr-2" />
                             Modifica
                           </DropdownMenuItem>
@@ -311,13 +396,108 @@ export default function OperePage() {
                 <Button variant="outline" onClick={() => setShowDetails(false)}>
                   Chiudi
                 </Button>
-                <Button>
+                <Button onClick={() => selectedOpera && openEditForm(selectedOpera)}>
                   <Edit className="h-4 w-4 mr-2" />
                   Modifica
                 </Button>
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{formMode === 'create' ? 'Nuova Opera' : 'Modifica Opera'}</DialogTitle>
+            <DialogDescription>
+              {formMode === 'create' ? 'Inserisci i dati obbligatori' : 'Aggiorna i dati dell’opera'}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="codice_opera"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Codice Opera</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="OP0001" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="titolo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Titolo</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tipo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleziona tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="film">Film</SelectItem>
+                        <SelectItem value="serie_tv">Serie TV</SelectItem>
+                        <SelectItem value="documentario">Documentario</SelectItem>
+                        <SelectItem value="cartoon">Cartoon</SelectItem>
+                        <SelectItem value="altro">Altro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="titolo_originale"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Titolo Originale</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="anno_produzione"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Anno Produzione</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Annulla</Button>
+                <Button type="submit">{formMode === 'create' ? 'Crea' : 'Salva'}</Button>
+              </div>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
     </div>

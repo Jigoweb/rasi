@@ -92,3 +92,29 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
 
   return { data, error }
 }
+
+export const createArtista = async (
+  payload: import('@/shared/lib/supabase').Database['public']['Tables']['artisti']['Insert']
+) => {
+  const { data, error } = await supabase
+    .from('artisti')
+    .insert(payload)
+    .select('*')
+    .single()
+
+  return { data, error }
+}
+
+export const updateArtista = async (
+  id: string,
+  payload: import('@/shared/lib/supabase').Database['public']['Tables']['artisti']['Update']
+) => {
+  const { data, error } = await supabase
+    .from('artisti')
+    .update(payload)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  return { data, error }
+}
