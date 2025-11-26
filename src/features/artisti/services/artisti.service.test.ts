@@ -1,30 +1,18 @@
-import { supabase } from '@/shared/lib/supabase'
+import { supabase } from '@/shared/lib/supabase-client'
 import { getArtisti, getArtistaById, getPartecipazioniByArtistaId, createArtista, updateArtista } from './artisti.service'
+import type { TablesInsert, TablesUpdate } from '@/shared/lib/supabase'
 
-const mockSingle = jest.fn()
-const mockOrder = jest.fn()
-const mockEq = jest.fn(() => ({
-  single: mockSingle,
-  order: mockOrder,
-  select: mockSelect,
-}))
-const mockSelect = jest.fn(() => ({
-  order: mockOrder,
-  eq: mockEq,
-  single: mockSingle,
-}))
-const mockInsert = jest.fn(() => ({
-  select: mockSelect,
-}))
-const mockUpdate = jest.fn(() => ({
-  eq: mockEq,
-  select: mockSelect,
-}))
+const mockSingle: jest.Mock = jest.fn()
+const mockOrder: jest.Mock = jest.fn()
+const mockSelect: jest.Mock = jest.fn()
+const mockEq: jest.Mock = jest.fn()
+const mockInsert: jest.Mock = jest.fn()
+const mockUpdate: jest.Mock = jest.fn()
 
 // Mock Supabase client
-jest.mock('@/shared/lib/supabase', () => ({
+jest.mock('@/shared/lib/supabase-client', () => ({
   supabase: {
-    from: jest.fn((table: string) => ({
+    from: jest.fn(() => ({
       select: mockSelect,
       insert: mockInsert,
       update: mockUpdate,
@@ -40,6 +28,13 @@ describe('Artisti Service', () => {
     mockEq.mockClear()
     mockSelect.mockClear()
     ;(supabase.from as jest.Mock).mockClear()
+  })
+
+  beforeEach(() => {
+    mockEq.mockReturnValue({ single: mockSingle, order: mockOrder, select: mockSelect })
+    mockSelect.mockReturnValue({ order: mockOrder, eq: mockEq, single: mockSingle })
+    mockInsert.mockReturnValue({ select: mockSelect })
+    mockUpdate.mockReturnValue({ eq: mockEq, select: mockSelect })
   })
 
   describe('getArtisti', () => {
@@ -90,11 +85,11 @@ describe('Artisti Service', () => {
 
   describe('createArtista', () => {
     it('should insert into artisti and return inserted row', async () => {
-      const payload = { codice_ipn: 'IPN001', nome: 'Mario', cognome: 'Rossi' }
+      const payload: TablesInsert<'artisti'> = { codice_ipn: 'IPN001', nome: 'Mario', cognome: 'Rossi' }
       const mockData = { id: 'uuid-1', ...payload }
       mockSingle.mockResolvedValue({ data: mockData, error: null })
 
-      const { data } = await createArtista(payload as any)
+      const { data } = await createArtista(payload)
 
       expect(supabase.from).toHaveBeenCalledWith('artisti')
       expect(mockInsert).toHaveBeenCalledWith(payload)
@@ -107,11 +102,11 @@ describe('Artisti Service', () => {
   describe('updateArtista', () => {
     it('should update artisti by id and return updated row', async () => {
       const id = 'uuid-1'
-      const payload = { nome_arte: 'M. Rossi' }
+      const payload: TablesUpdate<'artisti'> = { nome_arte: 'M. Rossi' }
       const mockData = { id, codice_ipn: 'IPN001', nome: 'Mario', cognome: 'Rossi', nome_arte: 'M. Rossi' }
       mockSingle.mockResolvedValue({ data: mockData, error: null })
 
-      const { data } = await updateArtista(id, payload as any)
+      const { data } = await updateArtista(id, payload)
 
       expect(supabase.from).toHaveBeenCalledWith('artisti')
       expect(mockUpdate).toHaveBeenCalledWith(payload)

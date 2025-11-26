@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/lib/supabase'
+import { supabase } from '@/shared/lib/supabase-client'
 
 /**
  * Fetches a list of artists with optional filtering.
@@ -98,7 +98,7 @@ export const createArtista = async (
 ) => {
   const { data, error } = await supabase
     .from('artisti')
-    .insert(payload)
+    .insert<import('@/shared/lib/supabase').Database['public']['Tables']['artisti']['Insert']>(payload)
     .select('*')
     .single()
 
@@ -111,7 +111,7 @@ export const updateArtista = async (
 ) => {
   const { data, error } = await supabase
     .from('artisti')
-    .update(payload)
+    .update<import('@/shared/lib/supabase').Database['public']['Tables']['artisti']['Update']>(payload)
     .eq('id', id)
     .select('*')
     .single()

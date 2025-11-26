@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { supabase } from '@/shared/lib/supabase'
+import { supabase } from '@/shared/lib/supabase-client'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { createOpera, updateOpera } from '@/features/opere/services/opere.service'
+import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -29,6 +30,7 @@ export default function OperePage() {
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
+  
   
 
   // Server-side filtering with debounce
@@ -136,16 +138,18 @@ export default function OperePage() {
         const n = typeof val === 'string' ? Number(val) : val
         return Number.isNaN(n) ? undefined : n
       }),
+    imdb_tconst: z.string().optional(),
   })
 
   const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       codice_opera: '',
       titolo: '',
       tipo: undefined as any,
       titolo_originale: '',
       anno_produzione: undefined,
+      imdb_tconst: '',
     }
   })
 
@@ -158,6 +162,7 @@ export default function OperePage() {
       tipo: undefined as any,
       titolo_originale: '',
       anno_produzione: undefined,
+      imdb_tconst: '',
     })
     setShowForm(true)
   }
@@ -171,6 +176,7 @@ export default function OperePage() {
       tipo: opera.tipo as any,
       titolo_originale: opera.titolo_originale || '',
       anno_produzione: opera.anno_produzione ?? undefined,
+      imdb_tconst: opera.imdb_tconst || '',
     })
     setShowForm(true)
   }
@@ -183,6 +189,8 @@ export default function OperePage() {
         tipo: values.tipo,
         titolo_originale: values.titolo_originale || null,
         anno_produzione: values.anno_produzione ?? null,
+        imdb_tconst: values.imdb_tconst || null,
+        codici_esterni: values.imdb_tconst ? { imdb: values.imdb_tconst } : undefined,
       } as any
 
       if (formMode === 'create') {
@@ -196,6 +204,22 @@ export default function OperePage() {
       fetchOpere()
     } catch (e) {
       console.error('Errore salvataggio opera', e)
+    }
+  }
+
+  
+
+  const fetchImdbById = async () => {
+    const id = (form.getValues().imdb_tconst || '').trim()
+    if (!id) return
+    const { ok, result } = await getTitleById(id)
+    if (ok && result) {
+      const mapped = mapImdbToOpera({ title: result.title, originalTitle: result.originalTitle, year: result.year, type: result.type, id: result.id })
+      form.setValue('titolo', mapped.titolo)
+      form.setValue('titolo_originale', mapped.titolo_originale || '')
+      form.setValue('tipo', mapped.tipo as any)
+      form.setValue('anno_produzione', mapped.anno_produzione ?? undefined)
+      form.setValue('imdb_tconst', mapped.imdb_tconst || '')
     }
   }
 
@@ -400,6 +424,28 @@ export default function OperePage() {
                   <Edit className="h-4 w-4 mr-2" />
                   Modifica
                 </Button>
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    if (!selectedOpera?.imdb_tconst) return
+                    const { ok, result } = await getTitleById(selectedOpera.imdb_tconst)
+                    if (ok && result) {
+                      const mapped = mapImdbToOpera({ title: result.title, originalTitle: result.originalTitle, year: result.year, type: result.type, id: result.id })
+                      await updateOpera(selectedOpera.id, {
+                        titolo: mapped.titolo,
+                        titolo_originale: mapped.titolo_originale || null,
+                        tipo: mapped.tipo,
+                        anno_produzione: mapped.anno_produzione ?? null,
+                        imdb_tconst: mapped.imdb_tconst,
+                        codici_esterni: mapped.codici_esterni,
+                      } as any)
+                      await fetchOpere()
+                      setShowDetails(false)
+                    }
+                  }}
+                >
+                  Importa da IMDB
+                </Button>
               </div>
             </div>
           )}
@@ -491,7 +537,24 @@ export default function OperePage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="imdb_tconst"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>IMDB ID (tt...)</FormLabel>
+                      <FormControl>
+                        <div className="flex gap-2">
+                          <Input {...field} placeholder="tt1234567" />
+                          <Button type="button" variant="secondary" onClick={fetchImdbById}>Carica da IMDB</Button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
+              
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Annulla</Button>
                 <Button type="submit">{formMode === 'create' ? 'Crea' : 'Salva'}</Button>

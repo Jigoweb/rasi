@@ -1,31 +1,16 @@
-import { supabase } from '@/shared/lib/supabase'
+import { supabase } from '@/shared/lib/supabase-client'
 import { getOpere, getOperaById, createOpera, updateOpera } from './opere.service'
+import type { TablesInsert, TablesUpdate } from '@/shared/lib/supabase'
 
-const mockSingle = jest.fn()
-const mockOrder = jest.fn()
-const mockEq = jest.fn(() => ({
-  single: mockSingle,
-  order: mockOrder,
-  select: mockSelect,
-}))
-const mockSelect = jest.fn(() => ({
-  order: mockOrder,
-  eq: mockEq,
-  single: mockSingle,
-}))
-const mockInsert = jest.fn(() => ({
-  select: mockSelect,
-}))
-const mockUpdate = jest.fn(() => ({
-  eq: mockEq,
-  select: mockSelect,
-}))
-const mockOr = jest.fn(() => ({
-  order: mockOrder,
-  eq: mockEq,
-}))
+const mockSingle: jest.Mock = jest.fn()
+const mockOrder: jest.Mock = jest.fn()
+const mockSelect: jest.Mock = jest.fn()
+const mockEq: jest.Mock = jest.fn()
+const mockInsert: jest.Mock = jest.fn()
+const mockUpdate: jest.Mock = jest.fn()
+const mockOr: jest.Mock = jest.fn()
 
-jest.mock('@/shared/lib/supabase', () => ({
+jest.mock('@/shared/lib/supabase-client', () => ({
   supabase: {
     from: jest.fn(() => ({
       select: mockSelect,
@@ -47,6 +32,14 @@ describe('Opere Service', () => {
     mockUpdate.mockClear()
     mockOr.mockClear()
     ;(supabase.from as jest.Mock).mockClear()
+  })
+
+  beforeEach(() => {
+    mockEq.mockReturnValue({ single: mockSingle, order: mockOrder, select: mockSelect })
+    mockSelect.mockReturnValue({ order: mockOrder, eq: mockEq, single: mockSingle })
+    mockInsert.mockReturnValue({ select: mockSelect })
+    mockUpdate.mockReturnValue({ eq: mockEq, select: mockSelect })
+    mockOr.mockReturnValue({ order: mockOrder, eq: mockEq })
   })
 
   describe('getOpere', () => {
@@ -81,11 +74,11 @@ describe('Opere Service', () => {
 
   describe('createOpera', () => {
     it('should insert and return inserted row', async () => {
-      const payload = { codice_opera: 'OP001', titolo: 'Titolo', tipo: 'film' }
+      const payload: TablesInsert<'opere'> = { codice_opera: 'OP001', titolo: 'Titolo', tipo: 'film' }
       const mockData = { id: 'uuid-1', ...payload }
       mockSingle.mockResolvedValue({ data: mockData, error: null })
 
-      const { data } = await createOpera(payload as any)
+      const { data } = await createOpera(payload)
 
       expect(supabase.from).toHaveBeenCalledWith('opere')
       expect(mockInsert).toHaveBeenCalledWith(payload)
@@ -98,11 +91,11 @@ describe('Opere Service', () => {
   describe('updateOpera', () => {
     it('should update by id and return updated row', async () => {
       const id = 'uuid-1'
-      const payload = { titolo_originale: 'Originale' }
+      const payload: TablesUpdate<'opere'> = { titolo_originale: 'Originale' }
       const mockData = { id, codice_opera: 'OP001', titolo: 'Titolo', tipo: 'film', titolo_originale: 'Originale' }
       mockSingle.mockResolvedValue({ data: mockData, error: null })
 
-      const { data } = await updateOpera(id, payload as any)
+      const { data } = await updateOpera(id, payload)
 
       expect(supabase.from).toHaveBeenCalledWith('opere')
       expect(mockUpdate).toHaveBeenCalledWith(payload)

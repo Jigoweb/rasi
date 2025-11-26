@@ -80,6 +80,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       opere: {
         Row: {
@@ -136,6 +137,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       programmazioni: {
         Row: {
@@ -171,6 +173,7 @@ export type Database = {
           durata_minuti?: number | null
           created_at?: string | null
         }
+        Relationships: []
       }
       campagne_individuazione: {
         Row: {
@@ -206,6 +209,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       campagne_ripartizione: {
         Row: {
@@ -241,6 +245,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       emittenti: {
         Row: {
@@ -282,6 +287,7 @@ export type Database = {
           created_at?: string | null
           updated_at?: string | null
         }
+        Relationships: []
       }
       episodi: {
         Row: {
@@ -320,6 +326,7 @@ export type Database = {
           metadati?: any | null
           created_at?: string
         }
+        Relationships: []
       }
       ruoli_tipologie: {
         Row: {
@@ -358,6 +365,7 @@ export type Database = {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       partecipazioni: {
         Row: {
@@ -414,19 +422,18 @@ export type Database = {
           updated_at?: string | null
           created_by?: string | null
         }
+        Relationships: []
       }
     }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
-    }
+    Views: {}
+    Functions: {}
+    Enums: {}
+    CompositeTypes: {}
   }
 }
 
 // Re-export the singleton client
 export { supabase } from './supabase-client'
+
+export type TablesInsert<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Insert']
+export type TablesUpdate<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Update']

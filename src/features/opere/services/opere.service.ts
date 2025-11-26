@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/lib/supabase'
+import { supabase } from '@/shared/lib/supabase-client'
 
 export const getOpere = async (filters?: { search?: string; tipo?: string }) => {
   let query = supabase
@@ -36,7 +36,7 @@ export const createOpera = async (
 ) => {
   const { data, error } = await supabase
     .from('opere')
-    .insert(payload)
+    .insert<import('@/shared/lib/supabase').Database['public']['Tables']['opere']['Insert']>(payload)
     .select('*')
     .single()
 
@@ -49,7 +49,7 @@ export const updateOpera = async (
 ) => {
   const { data, error } = await supabase
     .from('opere')
-    .update(payload)
+    .update<import('@/shared/lib/supabase').Database['public']['Tables']['opere']['Update']>(payload)
     .eq('id', id)
     .select('*')
     .single()
