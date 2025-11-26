@@ -131,6 +131,11 @@ export interface ProgrammazioneRow {
   descrizione?: string | null
   fascia_oraria?: string | null
   tipo_trasmissione?: string | null
+  tipo?: string | null
+  canale?: string | null
+  emittente?: string | null
+  processato: boolean
+  errori_processamento?: any | null
   created_at: string
 }
 
@@ -184,4 +189,73 @@ export const listProgrammazioniByCampagnaKeyset = async (
   const rows = (data as unknown) as ProgrammazioneRow[]
   const nextCursor = rows && rows.length > 0 ? { created_at: rows[rows.length - 1].created_at, id: rows[rows.length - 1].id } : undefined
   return { data: rows, nextCursor, error }
+}
+
+export interface ProgrammazioniHealth {
+  total: number
+  processed: number
+  unprocessed: number
+  missing_title: number
+  missing_duration: number
+  errors_count: number
+  date_min?: string
+  date_max?: string
+}
+
+export const getProgrammazioniHealth = async (campagnaId: string) => {
+  const totalRes = await supabase
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
+
+  const processedRes = await supabase
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
+    .eq('processato', true)
+
+  const unprocessedRes = await supabase
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
+    .eq('processato', false)
+
+  const missingTitleRes = await supabase
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
+    .is('titolo', null)
+
+  const missingDurationRes = await supabase
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
+    .is('durata_minuti', null)
+
+  const errorsRes = await supabase
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
+    .not('errori_processamento', 'is', null)
+
+  const rangeRes = await supabase
+    .from('programmazioni' as any)
+    .select('min:data_trasmissione.min,max:data_trasmissione.max')
+    .eq('campagna_programmazione_id', campagnaId)
+    .limit(1)
+
+  const rangeRow = (rangeRes.data as any)?.[0] || {}
+
+  const health: ProgrammazioniHealth = {
+    total: totalRes.count || 0,
+    processed: processedRes.count || 0,
+    unprocessed: unprocessedRes.count || 0,
+    missing_title: missingTitleRes.count || 0,
+    missing_duration: missingDurationRes.count || 0,
+    errors_count: errorsRes.count || 0,
+    date_min: rangeRow?.min || undefined,
+    date_max: rangeRow?.max || undefined,
+  }
+
+  return { data: health, error: totalRes.error || processedRes.error || unprocessedRes.error || missingTitleRes.error || missingDurationRes.error || errorsRes.error || rangeRes.error }
 }
