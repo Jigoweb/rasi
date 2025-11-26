@@ -195,11 +195,25 @@ export default function ReportPage() {
 
   return (
     <div className="space-y-6 lg:space-y-8 p-4 lg:p-0">
-      <div>
-        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Report</h1>
-        <p className="text-muted-foreground text-sm lg:text-base">
-          Gestione e visualizzazione dei report di distribuzione
-        </p>
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Report</h1>
+          <p className="text-muted-foreground text-sm lg:text-base">
+            Gestione e visualizzazione dei report di distribuzione
+          </p>
+          <div className="mt-2 flex gap-2 lg:hidden">
+            <Button>
+              <Filter className="mr-2 h-4 w-4" />
+              Nuovo Report
+            </Button>
+          </div>
+        </div>
+        <div className="hidden lg:flex gap-2">
+          <Button>
+            <Filter className="mr-2 h-4 w-4" />
+            Nuovo Report
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

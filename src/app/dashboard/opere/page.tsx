@@ -248,12 +248,22 @@ export default function OperePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Opere</h1>
           <p className="text-gray-600">Gestione del catalogo opere</p>
+          <div className="mt-2 flex gap-2 lg:hidden">
+            <Button variant="outline" onClick={exportData}>
+              <Download className="h-4 w-4 mr-2" />
+              Esporta CSV
+            </Button>
+            <Button onClick={openCreateForm}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuova Opera
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="hidden lg:flex gap-2">
           <Button variant="outline" onClick={exportData}>
             <Download className="h-4 w-4 mr-2" />
             Esporta CSV
