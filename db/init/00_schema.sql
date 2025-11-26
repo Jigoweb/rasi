@@ -317,9 +317,34 @@ CREATE TABLE emittenti (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Campagne programmazione
+CREATE TABLE campagne_programmazione (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    emittente_id UUID NOT NULL REFERENCES emittenti(id),
+    
+    nome VARCHAR(200) NOT NULL,
+    anno INTEGER NOT NULL,
+    stato VARCHAR(50) DEFAULT 'aperta',
+    
+    -- Metadati
+    note TEXT,
+    metadati JSONB DEFAULT '{}',
+    
+    -- Audit
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID REFERENCES auth.users(id),
+    updated_by UUID REFERENCES auth.users(id)
+);
+
+CREATE TRIGGER update_campagne_programmazione_updated_at 
+    BEFORE UPDATE ON campagne_programmazione 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Programmazioni (senza partizionamento per ora)
 CREATE TABLE programmazioni (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    campagna_id UUID NOT NULL REFERENCES campagne_programmazione(id) ON DELETE CASCADE,
     emittente_id UUID NOT NULL REFERENCES emittenti(id),
     
     -- Temporizzazione

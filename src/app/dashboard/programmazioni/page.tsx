@@ -1,32 +1,59 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import Papa from 'papaparse'
+import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
+import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Clock, Tv, Radio, CheckCircle, XCircle } from 'lucide-react'
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp } from 'lucide-react'
 import CSVImport from '@/shared/components/csv-import'
 
-type Programmazione = Database['public']['Tables']['programmazioni']['Row']
 type Emittente = Database['public']['Tables']['emittenti']['Row']
+
+const formSchema = z.object({
+  emittente_id: z.string().min(1, "Seleziona un'emittente"),
+  anno: z.coerce.number().min(1900, "Anno non valido").max(2100, "Anno non valido"),
+  nome: z.string().min(1, "Il nome è obbligatorio"),
+})
 
 export default function ProgrammazioniPage() {
   const [currentTab, setCurrentTab] = useState<'programmazioni' | 'emittenti'>('programmazioni')
   
-  // Programmazioni State
-  const [programmazioni, setProgrammazioni] = useState<Programmazione[]>([])
-  const [filteredProgrammazioni, setFilteredProgrammazioni] = useState<Programmazione[]>([])
+  // New Programmazione Modal State
+  const [isNewModalOpen, setIsNewModalOpen] = useState(false)
+  const [newProgrammazioneStep, setNewProgrammazioneStep] = useState(1)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isResumingUpload, setIsResumingUpload] = useState(false)
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      emittente_id: '',
+      anno: new Date().getFullYear(),
+      nome: '',
+    },
+  })
+
+  // Campagne State
+  const [campagne, setCampagne] = useState<CampagnaProgrammazione[]>([])
+  const [filteredCampagne, setFilteredCampagne] = useState<CampagnaProgrammazione[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [fasciaFilter, setFasciaFilter] = useState<string>('all')
-  const [selectedProgrammazione, setSelectedProgrammazione] = useState<Programmazione | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [selectedCampagna, setSelectedCampagna] = useState<CampagnaProgrammazione | null>(null)
   const [showDetails, setShowDetails] = useState(false)
 
   // Emittenti State
@@ -37,24 +64,130 @@ export default function ProgrammazioniPage() {
   const [selectedEmittente, setSelectedEmittente] = useState<Emittente | null>(null)
   const [showEmittenteDetails, setShowEmittenteDetails] = useState(false)
   
-  const filterProgrammazioni = useCallback(() => {
-    let filtered = programmazioni
+  // Watch values to auto-generate name
+  const watchedEmittenteId = form.watch('emittente_id')
+  const watchedAnno = form.watch('anno')
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !selectedCampagna) return
+
+    setIsSubmitting(true)
+
+    try {
+      let rows: any[] = []
+
+      if (file.name.endsWith('.csv')) {
+        await new Promise<void>((resolve, reject) => {
+          Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+              if (results.errors.length > 0) {
+                console.error('CSV Parsing Errors:', results.errors)
+              }
+              rows = results.data
+              resolve()
+            },
+            error: (error) => reject(error)
+          })
+        })
+      } else if (file.name.match(/\.xlsx?$/)) {
+        const data = await file.arrayBuffer()
+        const workbook = XLSX.read(data)
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+        rows = XLSX.utils.sheet_to_json(worksheet, { raw: false }) // raw: false ensures dates are formatted as strings
+      } else {
+        throw new Error('Formato file non supportato. Usa CSV o Excel.')
+      }
+
+      const programmazioni: ProgrammazionePayload[] = rows
+        .filter((row: any) => row.data && row.ora)
+        .map((row: any) => ({
+          campagna_id: selectedCampagna.id,
+          emittente_id: selectedCampagna.emittente_id,
+          data_trasmissione: row.data, 
+          ora_inizio: row.ora,
+          titolo_programmazione: row.titolo || 'Titolo Sconosciuto',
+          durata_minuti: row.durata ? parseInt(row.durata) : undefined,
+          descrizione: row.descrizione
+        }))
+
+      if (programmazioni.length === 0) {
+        throw new Error("Nessuna riga valida trovata. Verifica le intestazioni: data, ora, titolo, durata")
+      }
+
+      const { error } = await uploadProgrammazioni(programmazioni)
+      if (error) throw error
+
+      // Update campaign status to 'aperta' after successful upload
+      await updateCampagnaStatus(selectedCampagna.id, 'aperta')
+
+      handleCloseModal()
+      await fetchCampagne()
+    } catch (error) {
+      console.error('Error uploading file:', error)
+      alert(error instanceof Error ? error.message : 'Errore durante il caricamento del file.')
+    } finally {
+      setIsSubmitting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  useEffect(() => {
+    if (watchedEmittenteId && watchedAnno) {
+      const emittente = emittenti.find(e => e.id === watchedEmittenteId)
+      if (emittente) {
+        form.setValue('nome', `${emittente.nome} ${watchedAnno}`)
+      }
+    }
+  }, [watchedEmittenteId, watchedAnno, emittenti, form])
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setIsSubmitting(true)
+    try {
+      const { data, error } = await createCampagnaProgrammazione(values)
+      if (error) throw error
+      
+      await fetchCampagne()
+      setSelectedCampagna((data as unknown) as CampagnaProgrammazione)
+      setNewProgrammazioneStep(2)
+    } catch (error) {
+      console.error('Error creating campagna:', error)
+      // In a real app we would show a toast here
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleCloseModal = () => {
+    setIsNewModalOpen(false)
+    setNewProgrammazioneStep(1)
+    setIsResumingUpload(false)
+    setSelectedCampagna(null)
+    form.reset()
+  }
+
+  const filterCampagne = useCallback(() => {
+    let filtered = campagne
 
     // Filter by search query
     if (searchQuery) {
-      filtered = filtered.filter(prog =>
-        prog.titolo_programmazione.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (prog.tipo_trasmissione && prog.tipo_trasmissione.toLowerCase().includes(searchQuery.toLowerCase()))
+      filtered = filtered.filter(campagna =>
+        campagna.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (campagna.emittenti?.nome && campagna.emittenti.nome.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     }
 
-    // Filter by fascia oraria
-    if (fasciaFilter !== 'all') {
-      filtered = filtered.filter(prog => prog.fascia_oraria === fasciaFilter)
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(campagna => campagna.stato === statusFilter)
     }
 
-    setFilteredProgrammazioni(filtered)
-  }, [programmazioni, searchQuery, fasciaFilter])
+    setFilteredCampagne(filtered)
+  }, [campagne, searchQuery, statusFilter])
 
   const filterEmittenti = useCallback(() => {
     let filtered = emittenti
@@ -70,42 +203,39 @@ export default function ProgrammazioniPage() {
   }, [emittenti, searchEmittentiQuery])
 
   useEffect(() => {
+    if (isNewModalOpen && emittenti.length === 0) {
+      fetchEmittenti()
+    }
+  }, [isNewModalOpen, emittenti.length])
+
+  useEffect(() => {
     if (currentTab === 'programmazioni') {
-      fetchProgrammazioni()
+      fetchCampagne()
     } else {
       fetchEmittenti()
     }
   }, [currentTab])
 
   useEffect(() => {
-    filterProgrammazioni()
-  }, [filterProgrammazioni])
+    filterCampagne()
+  }, [filterCampagne])
 
   useEffect(() => {
     filterEmittenti()
   }, [filterEmittenti])
 
-  const fetchProgrammazioni = async () => {
-    // Programmazioni table is deprecated/missing, skipping fetch to prevent errors
-    setLoading(false)
-    return
-
-    /*
+  const fetchCampagne = async () => {
+    setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('programmazioni')
-        .select('*')
-        .order('data_trasmissione', { ascending: false })
-        .limit(100) // Limit for performance
+      const { data, error } = await getCampagneProgrammazione()
 
       if (error) throw error
-      setProgrammazioni(data || [])
+      setCampagne(data || [])
     } catch (error) {
-      console.error('Error fetching programmazioni:', error)
+      console.error('Error fetching campagne:', error)
     } finally {
       setLoading(false)
     }
-    */
   }
 
   const fetchEmittenti = async () => {
@@ -125,38 +255,6 @@ export default function ProgrammazioniPage() {
     }
   }
 
-  const getFasciaBadge = (fascia: string | null) => {
-    if (!fascia) return <Badge variant="outline" className="bg-gray-50 text-gray-700">Non specificata</Badge>
-    
-    switch (fascia) {
-      case 'prima_serata':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Prima Serata</Badge>
-      case 'seconda_serata':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Seconda Serata</Badge>
-      case 'access':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Access Prime</Badge>
-      case 'daytime':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Daytime</Badge>
-      default:
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700">{fascia}</Badge>
-    }
-  }
-
-  const getTipoTrasmissioneBadge = (tipo: string | null) => {
-    if (!tipo) return <Badge variant="secondary">Non specificato</Badge>
-    
-    switch (tipo) {
-      case 'prima_visione':
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Prima Visione</Badge>
-      case 'replica':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Replica</Badge>
-      case 'live':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Live</Badge>
-      default:
-        return <Badge variant="secondary">{tipo}</Badge>
-    }
-  }
-
   const getAttivaBadge = (attiva: boolean | null) => {
     if (attiva === true) return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" /> Attiva</Badge>
     if (attiva === false) return <Badge variant="outline" className="bg-gray-50 text-gray-700"><XCircle className="w-3 h-3 mr-1" /> Inattiva</Badge>
@@ -167,21 +265,15 @@ export default function ProgrammazioniPage() {
     return new Date(dateString).toLocaleDateString('it-IT')
   }
 
-  const formatTime = (timeString: string) => {
-    return timeString.substring(0, 5) // HH:MM format
-  }
-
   const exportData = () => {
     const csvContent = [
-      ['Data', 'Ora Inizio', 'Ora Fine', 'Titolo', 'Fascia Oraria', 'Tipo Trasmissione', 'Durata'].join(','),
-      ...filteredProgrammazioni.map(prog => [
-        formatDate(prog.data_trasmissione),
-        formatTime(prog.ora_inizio),
-        prog.ora_fine ? formatTime(prog.ora_fine) : '',
-        `"${prog.titolo_programmazione}"`,
-        prog.fascia_oraria || '',
-        prog.tipo_trasmissione || '',
-        prog.durata_minuti || ''
+      ['Nome', 'Emittente', 'Anno', 'Stato', 'Creato il'].join(','),
+      ...filteredCampagne.map(campagna => [
+        `"${campagna.nome}"`,
+        `"${campagna.emittenti?.nome || ''}"`,
+        campagna.anno,
+        campagna.stato,
+        formatDate(campagna.created_at)
       ].join(','))
     ].join('\n')
 
@@ -189,7 +281,7 @@ export default function ProgrammazioniPage() {
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `programmazioni_${new Date().toISOString().split('T')[0]}.csv`
+    a.download = `campagne_${new Date().toISOString().split('T')[0]}.csv`
     a.click()
     window.URL.revokeObjectURL(url)
   }
@@ -234,7 +326,7 @@ export default function ProgrammazioniPage() {
           onClick={() => setCurrentTab('programmazioni')}
         >
           <Tv className="h-4 w-4 mr-2" />
-          Programmazioni
+          Campagne Programmazione
         </Button>
         <Button
           variant={currentTab === 'emittenti' ? 'default' : 'outline'}
@@ -249,12 +341,12 @@ export default function ProgrammazioniPage() {
       {currentTab === 'programmazioni' && (
         <>
           <div className="flex justify-end gap-2 mb-4">
-            <CSVImport onImportComplete={fetchProgrammazioni} />
+            <CSVImport onImportComplete={fetchCampagne} />
             <Button variant="outline" onClick={exportData}>
               <Download className="h-4 w-4 mr-2" />
               Esporta CSV
             </Button>
-            <Button>
+            <Button onClick={() => setIsNewModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Nuova Programmazione
             </Button>
@@ -267,29 +359,28 @@ export default function ProgrammazioniPage() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <Input
-                      placeholder="Cerca per titolo programmazione..."
+                      placeholder="Cerca per nome o emittente..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
                     />
                   </div>
                 </div>
-                <Select value={fasciaFilter} onValueChange={setFasciaFilter}>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-full sm:w-48">
                     <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Filtra per fascia" />
+                    <SelectValue placeholder="Filtra per stato" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tutte le fasce</SelectItem>
-                    <SelectItem value="prima_serata">Prima Serata</SelectItem>
-                    <SelectItem value="seconda_serata">Seconda Serata</SelectItem>
-                    <SelectItem value="access">Access Prime</SelectItem>
-                    <SelectItem value="daytime">Daytime</SelectItem>
+                    <SelectItem value="all">Tutti gli stati</SelectItem>
+                    <SelectItem value="bozza">Bozza</SelectItem>
+                    <SelectItem value="aperta">Aperta</SelectItem>
+                    <SelectItem value="chiusa">Chiusa</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="mt-4 text-sm text-gray-600">
-                Mostrando {filteredProgrammazioni.length} di {programmazioni.length} programmazioni
+                Mostrando {filteredCampagne.length} di {campagne.length} campagne
               </div>
             </CardContent>
           </Card>
@@ -300,59 +391,46 @@ export default function ProgrammazioniPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-32">Data</TableHead>
-                    <TableHead className="w-24">Ora Inizio</TableHead>
-                    <TableHead className="w-24">Ora Fine</TableHead>
-                    <TableHead>Titolo Programmazione</TableHead>
-                    <TableHead className="w-32">Fascia Oraria</TableHead>
-                    <TableHead className="w-32">Tipo</TableHead>
-                    <TableHead className="w-20">Durata</TableHead>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Emittente</TableHead>
+                    <TableHead className="w-32">Anno</TableHead>
+                    <TableHead className="w-32">Stato</TableHead>
+                    <TableHead className="w-48">Creato il</TableHead>
                     <TableHead className="w-16">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProgrammazioni.length === 0 ? (
+                  {filteredCampagne.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                        Nessuna programmazione trovata con i criteri di ricerca attuali
+                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        Nessuna campagna trovata con i criteri di ricerca attuali
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredProgrammazioni.map((prog) => (
-                      <TableRow key={prog.id} className="hover:bg-gray-50">
+                    filteredCampagne.map((campagna) => (
+                      <TableRow key={campagna.id} className="hover:bg-gray-50">
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium">{formatDate(prog.data_trasmissione)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-gray-400" />
-                            <span className="font-mono">{formatTime(prog.ora_inizio)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {prog.ora_fine ? (
-                            <span className="font-mono">{formatTime(prog.ora_fine)}</span>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
+                          <div className="font-medium">{campagna.nome}</div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Tv className="h-4 w-4 text-gray-400" />
-                            <span className="font-medium">{prog.titolo_programmazione}</span>
+                            <span>{campagna.emittenti?.nome || '—'}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          {getFasciaBadge(prog.fascia_oraria)}
+                          <span className="font-mono">{campagna.anno}</span>
                         </TableCell>
                         <TableCell>
-                          {getTipoTrasmissioneBadge(prog.tipo_trasmissione)}
+                          <Badge variant={campagna.stato === 'aperta' ? 'default' : campagna.stato === 'bozza' ? 'outline' : 'secondary'}>
+                            {campagna.stato}
+                          </Badge>
                         </TableCell>
-                        <TableCell className="text-center">
-                          {prog.durata_minuti ? `${prog.durata_minuti}m` : <span className="text-gray-400">—</span>}
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span>{formatDate(campagna.created_at)}</span>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -362,9 +440,22 @@ export default function ProgrammazioniPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              {campagna.stato === 'bozza' && (
+                                <DropdownMenuItem 
+                                  onClick={() => {
+                                    setSelectedCampagna(campagna)
+                                    setNewProgrammazioneStep(2)
+                                    setIsResumingUpload(true)
+                                    setIsNewModalOpen(true)
+                                  }}
+                                >
+                                  <FileUp className="h-4 w-4 mr-2" />
+                                  Carica Dati
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem 
                                 onClick={() => {
-                                  setSelectedProgrammazione(prog)
+                                  setSelectedCampagna(campagna)
                                   setShowDetails(true)
                                 }}
                               >
@@ -472,51 +563,46 @@ export default function ProgrammazioniPage() {
         </>
       )}
 
-      {/* Programming Details Dialog */}
+      {/* Campagna Details Dialog */}
       <Dialog open={showDetails} onOpenChange={setShowDetails}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Dettagli Programmazione</DialogTitle>
+            <DialogTitle>Dettagli Campagna</DialogTitle>
             <DialogDescription>
-              Informazioni complete per &quot;{selectedProgrammazione?.titolo_programmazione}&quot;
+              Informazioni complete per &quot;{selectedCampagna?.nome}&quot;
             </DialogDescription>
           </DialogHeader>
           
-          {selectedProgrammazione && (
+          {selectedCampagna && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Data Trasmissione</label>
-                  <p className="font-medium">{formatDate(selectedProgrammazione.data_trasmissione)}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Orario</label>
-                  <p className="font-mono">
-                    {formatTime(selectedProgrammazione.ora_inizio)}
-                    {selectedProgrammazione.ora_fine && ` - ${formatTime(selectedProgrammazione.ora_fine)}`}
-                  </p>
-                </div>
                 <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-500">Titolo Programmazione</label>
-                  <p className="text-lg font-medium">{selectedProgrammazione.titolo_programmazione}</p>
+                  <label className="text-sm font-medium text-gray-500">Nome Campagna</label>
+                  <p className="text-lg font-medium">{selectedCampagna.nome}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Fascia Oraria</label>
-                  <div className="mt-1">{getFasciaBadge(selectedProgrammazione.fascia_oraria)}</div>
+                  <label className="text-sm font-medium text-gray-500">Emittente</label>
+                  <p className="font-medium">{selectedCampagna.emittenti?.nome || '-'}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Tipo Trasmissione</label>
-                  <div className="mt-1">{getTipoTrasmissioneBadge(selectedProgrammazione.tipo_trasmissione)}</div>
+                  <label className="text-sm font-medium text-gray-500">Anno</label>
+                  <p className="font-mono">{selectedCampagna.anno}</p>
                 </div>
-                {selectedProgrammazione.durata_minuti && (
-                  <div>
-                    <label className="text-sm font-medium text-gray-500">Durata</label>
-                    <p>{selectedProgrammazione.durata_minuti} minuti</p>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Stato</label>
+                  <div className="mt-1">
+                    <Badge variant={selectedCampagna.stato === 'aperta' ? 'default' : selectedCampagna.stato === 'bozza' ? 'outline' : 'secondary'}>
+                      {selectedCampagna.stato}
+                    </Badge>
                   </div>
-                )}
+                </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Data Inserimento</label>
-                  <p>{selectedProgrammazione.created_at ? new Date(selectedProgrammazione.created_at).toLocaleString('it-IT') : '-'}</p>
+                  <label className="text-sm font-medium text-gray-500">Data Creazione</label>
+                  <p>{selectedCampagna.created_at ? new Date(selectedCampagna.created_at).toLocaleString('it-IT') : '-'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Creato Da</label>
+                  <p className="font-mono text-xs">{selectedCampagna.created_by || 'Sistema'}</p>
                 </div>
               </div>
 
@@ -577,6 +663,152 @@ export default function ProgrammazioniPage() {
                   Chiudi
                 </Button>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      {/* New Programmazione Modal */}
+      <Dialog open={isNewModalOpen} onOpenChange={handleCloseModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {newProgrammazioneStep === 1 ? 'Nuova Programmazione' : 'Caricamento Dati'}
+            </DialogTitle>
+            <DialogDescription>
+              {newProgrammazioneStep === 1 
+                ? 'Inserisci i dettagli per creare una nuova campagna di programmazione.' 
+                : 'Carica il file con i dati della programmazione.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {newProgrammazioneStep === 1 && (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="emittente_id"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Emittente</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleziona emittente" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {emittenti.map((e) => (
+                            <SelectItem key={e.id} value={e.id}>
+                              {e.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="anno"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Anno</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nome"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome Campagna</FormLabel>
+                      <FormControl>
+                        <Input {...field} readOnly className="bg-gray-50" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={handleCloseModal}>
+                    Annulla
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Aggiungi Programmazione
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          )}
+
+          {newProgrammazioneStep === 2 && (
+            <div className="space-y-6 py-4">
+              {!isResumingUpload ? (
+                <div className="flex flex-col items-center justify-center space-y-2 text-center">
+                  <div className="rounded-full bg-green-100 p-3">
+                    <CheckCircle className="h-8 w-8 text-green-600" />
+                  </div>
+                  <h3 className="font-semibold text-lg">Campagna creata con successo!</h3>
+                  <p className="text-sm text-gray-500">
+                    Ora puoi procedere con il caricamento del file Excel o CSV contenente i dati della programmazione.
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center space-y-2 mb-6">
+                  <h3 className="font-semibold text-lg">Caricamento Dati</h3>
+                  <p className="text-sm text-gray-500">
+                    Carica il file per la campagna <span className="font-medium text-gray-900">{selectedCampagna?.nome}</span>
+                  </p>
+                </div>
+              )}
+
+              <div 
+              className="border-2 border-dashed border-gray-200 rounded-lg p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept=".csv,.xlsx,.xls"
+                onChange={handleFileUpload}
+              />
+              <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-4" />
+              <p className="text-sm font-medium">
+                Clicca per selezionare il file
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Formati supportati: CSV, Excel (.xlsx, .xls)
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Colonne richieste: data, ora, titolo, durata
+              </p>
+              <Button variant="outline" className="mt-4" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Caricamento...
+                  </>
+                ) : (
+                  'Seleziona File'
+                )}
+              </Button>
+            </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={handleCloseModal}>
+                  {isResumingUpload ? 'Annulla' : 'Chiudi e completa dopo'}
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>

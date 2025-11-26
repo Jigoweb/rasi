@@ -137,6 +137,22 @@ CREATE POLICY "programmazioni_write_policy" ON programmazioni
     USING (get_user_role() IN ('admin', 'operatore'));
 
 -- ====================================
+-- POLICIES PER CAMPAGNE PROGRAMMAZIONE
+-- ====================================
+
+ALTER TABLE campagne_programmazione ENABLE ROW LEVEL SECURITY;
+
+-- Lettura: Admin e operatori
+CREATE POLICY "campagne_programmazione_select_policy" ON campagne_programmazione
+    FOR SELECT
+    USING (get_user_role() IN ('admin', 'operatore'));
+
+-- Scrittura: Admin e operatori
+CREATE POLICY "campagne_programmazione_write_policy" ON campagne_programmazione
+    FOR ALL
+    USING (get_user_role() IN ('admin', 'operatore'));
+
+-- ====================================
 -- POLICIES PER CAMPAGNE INDIVIDUAZIONE
 -- ====================================
 
