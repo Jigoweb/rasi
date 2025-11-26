@@ -15,9 +15,30 @@ interface DashboardStats {
   tasso_matching: number
 }
 
+type Metric = { label: string; missing: number; total: number }
+
+function percentComplete(m: Metric): number {
+  if (!m.total) return 0
+  const v = Math.max(0, m.total - m.missing)
+  return Math.floor((v / m.total) * 100)
+}
+
+function missingPercentLabel(m: Metric): string {
+  if (!m.total) return '0%'
+  const p = (m.missing / m.total) * 100
+  if (p > 0 && p < 1) return `${p.toFixed(1)}%`
+  return `${Math.round(p)}%`
+}
+
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [totalArtisti, setTotalArtisti] = useState(0)
+  const [totalOpere, setTotalOpere] = useState(0)
+  const [artistiMetrics, setArtistiMetrics] = useState<Metric[]>([])
+  const [opereMetrics, setOpereMetrics] = useState<Metric[]>([])
+  const [artistiIncompleti, setArtistiIncompleti] = useState(0)
+  const [opereIncomplete, setOpereIncomplete] = useState(0)
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -54,6 +75,75 @@ export default function DashboardPage() {
           importo_distribuito: 125000,
           tasso_matching: 94.2
         })
+
+        const ta = artistiResult.count || 0
+        const to = opereResult.count || 0
+        setTotalArtisti(ta)
+        setTotalOpere(to)
+
+        const [aCodiceIpn, aNome, aCognome, aStato, aNconst, aNascita, aCf] = await Promise.all([
+          supabase.from('artisti').select('id').or('codice_ipn.is.null,codice_ipn.eq.'),
+          supabase.from('artisti').select('id').or('nome.is.null,nome.eq.'),
+          supabase.from('artisti').select('id').or('cognome.is.null,cognome.eq.'),
+          supabase.from('artisti').select('id').or('stato.is.null,stato.eq.'),
+          supabase.from('artisti').select('id').or('imdb_nconst.is.null,imdb_nconst.eq.'),
+          supabase.from('artisti').select('id').is('data_nascita', null),
+          supabase.from('artisti').select('id').or('codice_fiscale.is.null,codice_fiscale.eq.'),
+        ])
+        const artistiSet = new Set<string>()
+        ;[aCodiceIpn, aNome, aCognome, aStato, aNconst, aNascita, aCf].forEach((r) => {
+          (r.data || []).forEach((row: any) => artistiSet.add(row.id))
+        })
+        setArtistiIncompleti(artistiSet.size)
+
+        const [oTitolo, oTipo, oAnno, oTconst, oOrig] = await Promise.all([
+          supabase.from('opere').select('id').or('titolo.is.null,titolo.eq.'),
+          supabase.from('opere').select('id').or('tipo.is.null,tipo.eq.'),
+          supabase.from('opere').select('id').is('anno_produzione', null),
+          supabase.from('opere').select('id').or('imdb_tconst.is.null,imdb_tconst.eq.'),
+          supabase.from('opere').select('id').or('titolo_originale.is.null,titolo_originale.eq.'),
+        ])
+        const opereSet = new Set<string>()
+        ;[oTitolo, oTipo, oAnno, oTconst, oOrig].forEach((r) => {
+          (r.data || []).forEach((row: any) => opereSet.add(row.id))
+        })
+        setOpereIncomplete(opereSet.size)
+
+        const artistsMissing = await Promise.all([
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_ipn.is.null,codice_ipn.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('nome.is.null,nome.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('cognome.is.null,cognome.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('stato.is.null,stato.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('imdb_nconst.is.null,imdb_nconst.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('data_nascita', null).then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_fiscale.is.null,codice_fiscale.eq.').then(r => r.count || 0),
+        ])
+
+        const opereMissing = await Promise.all([
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo.is.null,titolo.eq.').then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or('tipo.is.null,tipo.eq.').then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).is('anno_produzione', null).then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or('imdb_tconst.is.null,imdb_tconst.eq.').then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo_originale.is.null,titolo_originale.eq.').then(r => r.count || 0),
+        ])
+
+        setArtistiMetrics([
+          { label: 'Codice IPN', missing: artistsMissing[0], total: ta },
+          { label: 'Nome', missing: artistsMissing[1], total: ta },
+          { label: 'Cognome', missing: artistsMissing[2], total: ta },
+          { label: 'Stato', missing: artistsMissing[3], total: ta },
+          { label: 'IMDB nconst', missing: artistsMissing[4], total: ta },
+          { label: 'Data nascita', missing: artistsMissing[5], total: ta },
+          { label: 'Codice fiscale', missing: artistsMissing[6], total: ta },
+        ])
+
+        setOpereMetrics([
+          { label: 'Titolo', missing: opereMissing[0], total: to },
+          { label: 'Tipo', missing: opereMissing[1], total: to },
+          { label: 'Anno produzione', missing: opereMissing[2], total: to },
+          { label: 'IMDB tconst', missing: opereMissing[3], total: to },
+          { label: 'Titolo originale', missing: opereMissing[4], total: to },
+        ])
       } catch (error) {
         console.error('Error fetching stats:', error)
       } finally {
@@ -246,6 +336,81 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Data Health */}
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg">Data Health</CardTitle>
+          <CardDescription className="text-sm">Completamento complessivo e campi mancanti</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 lg:p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 border rounded-lg bg-white">
+              <p className="text-sm font-medium text-gray-600">Artisti incompleti</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold">{artistiIncompleti}</p>
+                <span className="text-xs text-gray-500">di {totalArtisti}</span>
+              </div>
+            </div>
+            <div className="p-4 border rounded-lg bg-white">
+              <p className="text-sm font-medium text-gray-600">Opere incomplete</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-2xl font-bold">{opereIncomplete}</p>
+                <span className="text-xs text-gray-500">di {totalOpere}</span>
+              </div>
+            </div>
+            <div className="p-4 border rounded-lg bg-white">
+              <p className="text-sm font-medium text-gray-600">Completamento complessivo</p>
+              <p className="text-2xl font-bold">
+                {(() => {
+                  const all = [...artistiMetrics, ...opereMetrics]
+                  const totals = all.reduce((acc, m) => acc + m.total, 0)
+                  const miss = all.reduce((acc, m) => acc + m.missing, 0)
+                  if (!totals) return 0
+                  return Math.round(((totals - miss) / totals) * 100)
+                })()}%
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Artisti</h3>
+              <div className="space-y-3">
+                {artistiMetrics.map((m, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700">{m.label}</span>
+                      <Badge variant="outline" className="mb-1">{percentComplete(m)}%</Badge>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded">
+                      <div className="h-2 bg-blue-600 rounded" style={{ width: `${percentComplete(m)}%` }} />
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">Coperti: {Math.max(0, m.total - m.missing)} / {m.total}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold mb-3">Opere</h3>
+              <div className="space-y-3">
+                {opereMetrics.map((m, i) => (
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-700">{m.label}</span>
+                      <Badge variant="outline" className="mb-1">{percentComplete(m)}%</Badge>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded">
+                      <div className="h-2 bg-purple-600 rounded" style={{ width: `${percentComplete(m)}%` }} />
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">Coperti: {Math.max(0, m.total - m.missing)} / {m.total}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
