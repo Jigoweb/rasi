@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -16,12 +17,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
-import { createOpera, updateOpera } from '@/features/opere/services/opere.service'
+import { createOpera, updateOpera, getOperaById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
 export default function OperePage() {
+  const searchParams = useSearchParams()
   const [opere, setOpere] = useState<Opera[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -41,6 +43,18 @@ export default function OperePage() {
 
     return () => clearTimeout(timer)
   }, [searchQuery, typeFilter])
+
+  useEffect(() => {
+    const editId = searchParams?.get('edit')
+    if (editId && !showForm) {
+      ;(async () => {
+        const { data } = await getOperaById(editId)
+        if (data) {
+          openEditForm(data as Opera)
+        }
+      })()
+    }
+  }, [searchParams, showForm])
 
   const fetchOpere = async () => {
     try {
@@ -363,8 +377,7 @@ export default function OperePage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem 
                             onClick={() => {
-                              setSelectedOpera(opera)
-                              setShowDetails(true)
+                              window.location.href = `/dashboard/opere/${opera.id}`
                             }}
                           >
                             <Eye className="h-4 w-4 mr-2" />

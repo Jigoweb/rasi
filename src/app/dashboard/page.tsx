@@ -9,6 +9,9 @@ import { Users, FileText, Calendar, TrendingUp, Euro, Activity, Search } from 'l
 interface DashboardStats {
   artisti_attivi: number
   opere_totali: number
+  episodi_totali: number
+  opere_film: number
+  opere_serie_tv: number
   programmazioni_mese: number
   campagne_attive: number
   importo_distribuito: number
@@ -44,7 +47,7 @@ export default function DashboardPage() {
     const fetchStats = async () => {
       try {
         // Fetch dashboard statistics in parallel for better performance
-        const [artistiResult, opereResult, programmazioniResult, campangeResult] = await Promise.all([
+        const [artistiResult, opereResult, episodiResult, filmResult, serieResult, programmazioniResult, campangeResult] = await Promise.all([
           supabase
             .from('artisti')
             .select('id', { count: 'exact', head: true })
@@ -52,6 +55,17 @@ export default function DashboardPage() {
           supabase
             .from('opere')
             .select('id', { count: 'exact', head: true }),
+          supabase
+            .from('episodi')
+            .select('id', { count: 'exact', head: true }),
+          supabase
+            .from('opere')
+            .select('id', { count: 'exact', head: true })
+            .eq('tipo', 'film'),
+          supabase
+            .from('opere')
+            .select('id', { count: 'exact', head: true })
+            .eq('tipo', 'serie_tv'),
           // Mock programmazioni result as table is deprecated
           Promise.resolve({ count: 0, error: null }),
           /*
@@ -70,6 +84,9 @@ export default function DashboardPage() {
         setStats({
           artisti_attivi: artistiResult.count || 0,
           opere_totali: opereResult.count || 0,
+          episodi_totali: episodiResult.count || 0,
+          opere_film: filmResult.count || 0,
+          opere_serie_tv: serieResult.count || 0,
           programmazioni_mese: programmazioniResult.count || 0,
           campagne_attive: campangeResult.count || 0,
           importo_distribuito: 125000,
@@ -165,9 +182,9 @@ export default function DashboardPage() {
     },
     {
       title: 'Opere Catalogate',
-      value: stats?.opere_totali || 0,
+      value: ((stats?.opere_totali || 0) + (stats?.episodi_totali || 0)).toLocaleString(),
       icon: FileText,
-      description: 'Opere nel database',
+      description: `di cui ${(stats?.opere_film || 0).toLocaleString()} film, ${(stats?.opere_serie_tv || 0).toLocaleString()} serie-tv, ${(stats?.episodi_totali || 0).toLocaleString()} episodi`,
       color: 'text-green-600',
       bgColor: 'bg-green-50'
     },

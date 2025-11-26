@@ -56,3 +56,33 @@ export const updateOpera = async (
 
   return { data, error }
 }
+
+export const getPartecipazioniByOperaId = async (operaId: string) => {
+  const { data, error } = await supabase
+    .from('partecipazioni')
+    .select(`
+      id,
+      personaggio,
+      note,
+      stato_validazione,
+      created_at,
+      artisti ( id, nome, cognome, nome_arte ),
+      ruoli_tipologie ( id, nome, descrizione ),
+      episodi ( id, numero_stagione, numero_episodio, titolo_episodio )
+    `)
+    .eq('opera_id', operaId)
+    .order('created_at', { ascending: false })
+
+  return { data, error }
+}
+
+export const getEpisodiByOperaId = async (operaId: string) => {
+  const { data, error } = await supabase
+    .from('episodi')
+    .select('id, numero_stagione, numero_episodio, titolo_episodio, data_prima_messa_in_onda, durata_minuti')
+    .eq('opera_id', operaId)
+    .order('numero_stagione', { ascending: true })
+    .order('numero_episodio', { ascending: true })
+
+  return { data, error }
+}
