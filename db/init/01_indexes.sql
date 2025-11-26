@@ -27,7 +27,7 @@ END $$;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_programmazioni_trgm_titolo') THEN
-        CREATE INDEX idx_programmazioni_trgm_titolo ON programmazioni USING GIN(titolo_programmazione gin_trgm_ops);
+        CREATE INDEX idx_programmazioni_trgm_titolo ON programmazioni USING GIN(titolo gin_trgm_ops);
     END IF;
 END $$;
 
@@ -148,6 +148,13 @@ BEGIN
     
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_individuazioni_programmazione_id') THEN
         CREATE INDEX idx_individuazioni_programmazione_id ON individuazioni(programmazione_id);
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_programmazioni_campagna_created') THEN
+        CREATE INDEX idx_programmazioni_campagna_created ON programmazioni(campagna_programmazione_id, created_at DESC, id DESC);
     END IF;
 END $$;
 

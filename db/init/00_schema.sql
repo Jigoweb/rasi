@@ -68,7 +68,7 @@ BEGIN
         );
     ELSIF TG_TABLE_NAME = 'programmazioni' THEN
         NEW.search_vector := to_tsvector('italian', 
-            COALESCE(NEW.titolo_programmazione, '') || ' ' || 
+            COALESCE(NEW.titolo, '') || ' ' || 
             COALESCE(NEW.descrizione, '')
         );
     END IF;
@@ -344,32 +344,26 @@ CREATE TRIGGER update_campagne_programmazione_updated_at
 -- Programmazioni (senza partizionamento per ora)
 CREATE TABLE programmazioni (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    campagna_id UUID NOT NULL REFERENCES campagne_programmazione(id) ON DELETE CASCADE,
+    campagna_programmazione_id UUID NOT NULL REFERENCES campagne_programmazione(id) ON DELETE CASCADE,
     emittente_id UUID NOT NULL REFERENCES emittenti(id),
     
-    -- Temporizzazione
     data_trasmissione DATE NOT NULL,
     ora_inizio TIME NOT NULL,
     ora_fine TIME,
     durata_minuti INTEGER,
     
-    -- Contenuto
-    titolo_programmazione VARCHAR(500),
+    titolo VARCHAR(500),
     descrizione TEXT,
     
-    -- Classificazione
     fascia_oraria fascia_oraria,
     tipo_trasmissione tipo_trasmissione,
     
-    -- Metadati
     metadati_trasmissione JSONB DEFAULT '{}',
     
-    -- Processamento
     processato BOOLEAN DEFAULT false,
     processato_il TIMESTAMPTZ,
     errori_processamento TEXT[],
     
-    -- Full-text search (senza GENERATED)
     search_vector tsvector,
     
     created_at TIMESTAMPTZ DEFAULT NOW()

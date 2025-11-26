@@ -50,19 +50,39 @@ export const createCampagnaProgrammazione = async (payload: CampagnaProgrammazio
 }
 
 export interface ProgrammazionePayload {
-  campagna_id: string
+  campagna_programmazione_id: string
   emittente_id: string
-  data_trasmissione: string
-  ora_inizio: string
-  titolo_programmazione: string
+  titolo: string
+  tipo: string
+  data_trasmissione?: string
+  ora_inizio?: string
+  ora_fine?: string
   durata_minuti?: number
+  titolo_originale?: string
+  numero_episodio?: number
+  titolo_episodio?: string
+  titolo_episodio_originale?: string
+  numero_stagione?: number
+  anno?: number
+  production?: string
+  regia?: string
+  data_inizio?: string
+  data_fine?: string
+  retail_price?: number
+  sales_month?: number
+  track_price_local_currency?: number
+  views?: number
+  total_net_ad_revenue?: number
+  total_revenue?: number
+  canale?: string
+  emittente?: string
   descrizione?: string
 }
 
 export const uploadProgrammazioni = async (programmazioni: ProgrammazionePayload[]) => {
   const { data, error } = await supabase
     .from('programmazioni')
-    .insert(programmazioni)
+    .insert(programmazioni as any)
     .select()
 
   return { data, error }
@@ -77,4 +97,91 @@ export const updateCampagnaStatus = async (id: string, stato: string) => {
     .single()
 
   return { data, error }
+}
+
+export const deleteCampagnaProgrammazione = async (id: string) => {
+  const { data, error } = await supabase
+    .from('campagne_programmazione' as any)
+    .delete()
+    .eq('id', id)
+    .select()
+
+  return { data, error }
+}
+
+export const getCampagnaProgrammazioneById = async (id: string) => {
+  const { data, error } = await supabase
+    .from('campagne_programmazione' as any)
+    .select('*, emittenti(nome)')
+    .eq('id', id)
+    .single()
+
+  return { data: (data as unknown) as CampagnaProgrammazione, error }
+}
+
+export interface ProgrammazioneRow {
+  id: string
+  campagna_programmazione_id: string
+  emittente_id: string
+  data_trasmissione: string
+  ora_inizio: string
+  ora_fine?: string | null
+  durata_minuti?: number | null
+  titolo: string
+  descrizione?: string | null
+  fascia_oraria?: string | null
+  tipo_trasmissione?: string | null
+  created_at: string
+}
+
+export interface ListProgrammazioniOptions {
+  q?: string
+  processato?: boolean
+  fromDate?: string
+  toDate?: string
+}
+
+export interface ProgrammazioniCursor {
+  created_at: string
+  id: string
+}
+
+export const listProgrammazioniByCampagnaKeyset = async (
+  campagnaId: string,
+  limit = 200,
+  cursor?: ProgrammazioniCursor,
+  options?: ListProgrammazioniOptions
+) => {
+  let query = supabase
+    .from('programmazioni' as any)
+    .select('*')
+    .eq('campagna_programmazione_id', campagnaId)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit)
+
+  if (cursor?.created_at) {
+    query = query.lt('created_at', cursor.created_at)
+  }
+
+  if (options?.q) {
+    query = query.ilike('titolo', `%${options.q}%`)
+  }
+
+  if (typeof options?.processato === 'boolean') {
+    query = query.eq('processato', options.processato)
+  }
+
+  if (options?.fromDate) {
+    query = query.gte('data_trasmissione', options.fromDate)
+  }
+  if (options?.toDate) {
+    query = query.lte('data_trasmissione', options.toDate)
+  }
+
+  const { data, error } = await query
+
+  const rows = (data as unknown) as ProgrammazioneRow[]
+  const nextCursor = rows && rows.length > 0 ? { created_at: rows[rows.length - 1].created_at, id: rows[rows.length - 1].id } : undefined
+  return { data: rows, nextCursor, error }
 }

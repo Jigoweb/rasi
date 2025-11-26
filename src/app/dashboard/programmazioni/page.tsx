@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -8,7 +9,7 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
-import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
+import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -19,7 +20,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp } from 'lucide-react'
-import CSVImport from '@/shared/components/csv-import'
 
 type Emittente = Database['public']['Tables']['emittenti']['Row']
 
@@ -30,6 +30,7 @@ const formSchema = z.object({
 })
 
 export default function ProgrammazioniPage() {
+  const router = useRouter()
   const [currentTab, setCurrentTab] = useState<'programmazioni' | 'emittenti'>('programmazioni')
   
   // New Programmazione Modal State
@@ -69,12 +70,20 @@ export default function ProgrammazioniPage() {
   const watchedAnno = form.watch('anno')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [parsedRows, setParsedRows] = useState<any[]>([])
+  const [headerError, setHeaderError] = useState<string | null>(null)
+  const [isUploadReady, setIsUploadReady] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
+  const [deleteProgress, setDeleteProgress] = useState<Record<string, { done: number; total: number }>>({})
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file || !selectedCampagna) return
 
     setIsSubmitting(true)
+    setSelectedFile(file)
 
     try {
       let rows: any[] = []
@@ -103,36 +112,126 @@ export default function ProgrammazioniPage() {
         throw new Error('Formato file non supportato. Usa CSV o Excel.')
       }
 
-      const programmazioni: ProgrammazionePayload[] = rows
-        .filter((row: any) => row.data && row.ora)
-        .map((row: any) => ({
-          campagna_id: selectedCampagna.id,
-          emittente_id: selectedCampagna.emittente_id,
-          data_trasmissione: row.data, 
-          ora_inizio: row.ora,
-          titolo_programmazione: row.titolo || 'Titolo Sconosciuto',
-          durata_minuti: row.durata ? parseInt(row.durata) : undefined,
-          descrizione: row.descrizione
-        }))
+      const normalize = (s: string) => s.toLowerCase().trim()
+      const requiredHeaders = ['titolo', 'tipo']
+      const headers = rows.length > 0 ? Object.keys(rows[0]).map(normalize) : []
+      const hasRequired = requiredHeaders.every(h => headers.includes(h))
 
-      if (programmazioni.length === 0) {
-        throw new Error("Nessuna riga valida trovata. Verifica le intestazioni: data, ora, titolo, durata")
+      if (!hasRequired) {
+        setHeaderError('Header non valido: richiesti titolo e tipo')
+        setParsedRows([])
+        setIsUploadReady(false)
+      } else {
+        const validRows = rows.filter((r: any) => {
+          const titolo = r.titolo ?? r['Titolo']
+          const tipo = r.tipo ?? r['type'] ?? r['Type']
+          return titolo && tipo
+        })
+
+        if (validRows.length === 0) {
+          setHeaderError('Nessuna riga valida con titolo e tipo')
+          setParsedRows([])
+          setIsUploadReady(false)
+        } else {
+          setHeaderError(null)
+          setParsedRows(rows)
+          setIsUploadReady(true)
+        }
       }
-
-      const { error } = await uploadProgrammazioni(programmazioni)
-      if (error) throw error
-
-      // Update campaign status to 'aperta' after successful upload
-      await updateCampagnaStatus(selectedCampagna.id, 'aperta')
-
-      handleCloseModal()
-      await fetchCampagne()
     } catch (error) {
       console.error('Error uploading file:', error)
-      alert(error instanceof Error ? error.message : 'Errore durante il caricamento del file.')
+      alert(error instanceof Error ? error.message : 'Errore durante la lettura del file.')
     } finally {
       setIsSubmitting(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleUploadDatabase = async () => {
+    if (!selectedCampagna || parsedRows.length === 0) return
+    setIsUploading(true)
+    try {
+      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'uploading' } : c))
+      setUploadProgress(prev => ({ ...prev, [selectedCampagna.id]: { done: 0, total: parsedRows.length } }))
+      await updateCampagnaStatus(selectedCampagna.id, 'uploading')
+      const allowed = new Set([
+        'canale','emittente','tipo','titolo','titolo_originale','numero_episodio','titolo_episodio','titolo_episodio_originale','numero_stagione','anno','production','regia','data_trasmissione','ora_inizio','ora_fine','durata_minuti','data_inizio','data_fine','retail_price','sales_month','track_price_local_currency','views','total_net_ad_revenue','total_revenue','descrizione'
+      ])
+
+      const normalizeKey = (k: string) => k.toLowerCase().trim()
+      const coerce = (k: string, v: any) => {
+        if (v === undefined || v === null || v === '') return undefined
+        switch (k) {
+          case 'numero_episodio':
+          case 'numero_stagione':
+          case 'anno':
+          case 'sales_month':
+          case 'views':
+          case 'durata_minuti':
+            return parseInt(v as string)
+          case 'retail_price':
+          case 'track_price_local_currency':
+          case 'total_net_ad_revenue':
+          case 'total_revenue':
+            return parseFloat((v as string).toString().replace(',', '.'))
+          default:
+            return v
+        }
+      }
+
+      const buildPayload = (row: any): ProgrammazionePayload => {
+        const payload: any = {
+          campagna_programmazione_id: selectedCampagna.id,
+          emittente_id: selectedCampagna.emittente_id,
+        }
+        for (const key of Object.keys(row)) {
+          const nk = normalizeKey(key)
+          if (allowed.has(nk)) {
+            payload[nk] = coerce(nk, row[key])
+          }
+        }
+        // Obbligatori
+        payload.titolo = row.titolo ?? row['Titolo'] ?? ''
+        payload.tipo = row.tipo ?? row['type'] ?? row['Type'] ?? ''
+        return payload as ProgrammazionePayload
+      }
+
+      const CHUNK_SIZE = 2000
+      for (let i = 0; i < parsedRows.length; i += CHUNK_SIZE) {
+        const chunk = parsedRows.slice(i, i + CHUNK_SIZE)
+        const programmazioni = chunk.map(buildPayload)
+        const { error } = await uploadProgrammazioni(programmazioni)
+        if (error) throw error
+        setUploadProgress(prev => {
+          const curr = prev[selectedCampagna.id]
+          const done = (curr?.done || 0) + chunk.length
+          return { ...prev, [selectedCampagna.id]: { done, total: parsedRows.length } }
+        })
+      }
+
+      await updateCampagnaStatus(selectedCampagna.id, 'in_review')
+      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'in_review' } : c))
+      handleCloseModal()
+      setUploadProgress(prev => {
+        const next = { ...prev }
+        delete next[selectedCampagna.id]
+        return next
+      })
+      await fetchCampagne()
+    } catch (error) {
+      console.error('Error uploading database:', error)
+      alert('Errore durante l\'upload al database. Verifica il file e riprova.')
+      await updateCampagnaStatus(selectedCampagna.id, 'error')
+      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'error' } : c))
+      setUploadProgress(prev => {
+        const next = { ...prev }
+        delete next[selectedCampagna.id]
+        return next
+      })
+    } finally {
+      setIsUploading(false)
+      setParsedRows([])
+      setIsUploadReady(false)
     }
   }
 
@@ -168,6 +267,10 @@ export default function ProgrammazioniPage() {
     setIsResumingUpload(false)
     setSelectedCampagna(null)
     form.reset()
+    setSelectedFile(null)
+    setParsedRows([])
+    setIsUploadReady(false)
+    setHeaderError(null)
   }
 
   const filterCampagne = useCallback(() => {
@@ -341,7 +444,6 @@ export default function ProgrammazioniPage() {
       {currentTab === 'programmazioni' && (
         <>
           <div className="flex justify-end gap-2 mb-4">
-            <CSVImport onImportComplete={fetchCampagne} />
             <Button variant="outline" onClick={exportData}>
               <Download className="h-4 w-4 mr-2" />
               Esporta CSV
@@ -374,8 +476,10 @@ export default function ProgrammazioniPage() {
                   <SelectContent>
                     <SelectItem value="all">Tutti gli stati</SelectItem>
                     <SelectItem value="bozza">Bozza</SelectItem>
-                    <SelectItem value="aperta">Aperta</SelectItem>
-                    <SelectItem value="chiusa">Chiusa</SelectItem>
+                    <SelectItem value="uploading">Uploading</SelectItem>
+                    <SelectItem value="deleting">Deleting</SelectItem>
+                    <SelectItem value="in_review">In review</SelectItem>
+                    <SelectItem value="error">Error</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -408,7 +512,13 @@ export default function ProgrammazioniPage() {
                     </TableRow>
                   ) : (
                     filteredCampagne.map((campagna) => (
-                      <TableRow key={campagna.id} className="hover:bg-gray-50">
+                      <TableRow
+                        key={campagna.id}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        tabIndex={0}
+                        onClick={() => router.push(`/dashboard/programmazioni/${campagna.id}`)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/programmazioni/${campagna.id}`) }}
+                      >
                         <TableCell>
                           <div className="font-medium">{campagna.nome}</div>
                         </TableCell>
@@ -422,9 +532,51 @@ export default function ProgrammazioniPage() {
                           <span className="font-mono">{campagna.anno}</span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={campagna.stato === 'aperta' ? 'default' : campagna.stato === 'bozza' ? 'outline' : 'secondary'}>
-                            {campagna.stato}
-                          </Badge>
+                          {uploadProgress[campagna.id] ? (
+                            <div className="space-y-1">
+                              <Badge variant="secondary">
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading
+                              </Badge>
+                              <div className="h-2 w-32 bg-gray-200 rounded">
+                                <div
+                                  className="h-2 bg-blue-600 rounded"
+                                  style={{ width: `${Math.min(100, Math.round((uploadProgress[campagna.id].done / uploadProgress[campagna.id].total) * 100))}%` }}
+                                />
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                {uploadProgress[campagna.id].done} / {uploadProgress[campagna.id].total}
+                              </div>
+                            </div>
+                          ) : deleteProgress[campagna.id] ? (
+                            <div className="space-y-1">
+                              <Badge variant="outline">
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Deleting
+                              </Badge>
+                              <div className="h-2 w-32 bg-gray-200 rounded">
+                                <div
+                                  className="h-2 bg-red-600 rounded"
+                                  style={{ width: `${Math.min(100, Math.round((deleteProgress[campagna.id].done / deleteProgress[campagna.id].total) * 100))}%` }}
+                                />
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                {deleteProgress[campagna.id].done} / {deleteProgress[campagna.id].total}
+                              </div>
+                            </div>
+                          ) : (
+                            campagna.stato === 'uploading' ? (
+                              <Badge variant="secondary"><span className="flex items-center"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading</span></Badge>
+                            ) : campagna.stato === 'deleting' ? (
+                              <Badge variant="outline"><span className="flex items-center"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Deleting</span></Badge>
+                            ) : campagna.stato === 'error' ? (
+                              <Badge variant="outline" className="text-red-600 border-red-200">Error</Badge>
+                            ) : campagna.stato === 'in_review' ? (
+                              <Badge variant="default">In review</Badge>
+                            ) : campagna.stato === 'bozza' ? (
+                              <Badge variant="outline">Bozza</Badge>
+                            ) : (
+                              <Badge variant="secondary">{campagna.stato}</Badge>
+                            )
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -440,9 +592,11 @@ export default function ProgrammazioniPage() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {campagna.stato === 'bozza' && (
+                              {campagna.stato === 'bozza' || campagna.stato === 'uploading' || campagna.stato === 'error' ? (
                                 <DropdownMenuItem 
+                                  disabled={campagna.stato === 'uploading'}
                                   onClick={() => {
+                                    if (campagna.stato === 'uploading') return
                                     setSelectedCampagna(campagna)
                                     setNewProgrammazioneStep(2)
                                     setIsResumingUpload(true)
@@ -450,23 +604,33 @@ export default function ProgrammazioniPage() {
                                   }}
                                 >
                                   <FileUp className="h-4 w-4 mr-2" />
-                                  Carica Dati
+                                  {campagna.stato === 'uploading' ? 'Upload in corso' : 'Carica Dati'}
                                 </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem 
-                                onClick={() => {
-                                  setSelectedCampagna(campagna)
-                                  setShowDetails(true)
-                                }}
-                              >
+                              ) : null}
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/programmazioni/${campagna.id}`) }}>
                                 <Eye className="h-4 w-4 mr-2" />
-                                Visualizza
+                                Dettaglio
                               </DropdownMenuItem>
                               <DropdownMenuItem>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Modifica
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem 
+                                className="text-red-600"
+                                onClick={async () => {
+                                  const ok = window.confirm('Eliminare la campagna e tutte le programmazioni associate?')
+                                  if (!ok) return
+                                  try {
+                                    setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'deleting' } : c))
+                                    const { error } = await deleteCampagnaProgrammazione(campagna.id)
+                                    if (error) throw error
+                                    setCampagne(prev => prev.filter(c => c.id !== campagna.id))
+                                  } catch (e) {
+                                    alert('Errore durante l\'eliminazione della campagna')
+                                    setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'error' } : c))
+                                  }
+                                }}
+                              >
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Elimina
                               </DropdownMenuItem>
@@ -563,62 +727,7 @@ export default function ProgrammazioniPage() {
         </>
       )}
 
-      {/* Campagna Details Dialog */}
-      <Dialog open={showDetails} onOpenChange={setShowDetails}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Dettagli Campagna</DialogTitle>
-            <DialogDescription>
-              Informazioni complete per &quot;{selectedCampagna?.nome}&quot;
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedCampagna && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="text-sm font-medium text-gray-500">Nome Campagna</label>
-                  <p className="text-lg font-medium">{selectedCampagna.nome}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Emittente</label>
-                  <p className="font-medium">{selectedCampagna.emittenti?.nome || '-'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Anno</label>
-                  <p className="font-mono">{selectedCampagna.anno}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Stato</label>
-                  <div className="mt-1">
-                    <Badge variant={selectedCampagna.stato === 'aperta' ? 'default' : selectedCampagna.stato === 'bozza' ? 'outline' : 'secondary'}>
-                      {selectedCampagna.stato}
-                    </Badge>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Data Creazione</label>
-                  <p>{selectedCampagna.created_at ? new Date(selectedCampagna.created_at).toLocaleString('it-IT') : '-'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Creato Da</label>
-                  <p className="font-mono text-xs">{selectedCampagna.created_by || 'Sistema'}</p>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowDetails(false)}>
-                  Chiudi
-                </Button>
-                <Button>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Modifica
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Dettaglio campagna spostato su pagina dedicata */}
 
       {/* Emittenti Details Dialog */}
       <Dialog open={showEmittenteDetails} onOpenChange={setShowEmittenteDetails}>
@@ -771,10 +880,10 @@ export default function ProgrammazioniPage() {
                 </div>
               )}
 
-              <div 
-              className="border-2 border-dashed border-gray-200 rounded-lg p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-            >
+            <div 
+            className="border-2 border-dashed border-gray-200 rounded-lg p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer"
+            onClick={() => { if (!isUploading) fileInputRef.current?.click() }}
+          >
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -782,24 +891,49 @@ export default function ProgrammazioniPage() {
                 accept=".csv,.xlsx,.xls"
                 onChange={handleFileUpload}
               />
-              <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-4" />
-              <p className="text-sm font-medium">
-                Clicca per selezionare il file
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Formati supportati: CSV, Excel (.xlsx, .xls)
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                Colonne richieste: data, ora, titolo, durata
-              </p>
-              <Button variant="outline" className="mt-4" disabled={isSubmitting}>
-                {isSubmitting ? (
+              {!selectedFile ? (
+                <>
+                  <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-4" />
+                  <p className="text-sm font-medium">Clicca per selezionare il file</p>
+                  <p className="text-xs text-gray-500 mt-1">Formati supportati: CSV, Excel (.xlsx, .xls)</p>
+                  <p className="text-xs text-gray-400 mt-1">Colonne obbligatorie: titolo, tipo</p>
+                  <Button variant="outline" className="mt-4" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Caricamento...
+                      </>
+                    ) : (
+                      'Seleziona File'
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="h-8 w-8 text-gray-600" />
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
+                    <p className="text-xs text-gray-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="ml-4" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
+                    Cambia file
+                  </Button>
+                </div>
+              )}
+            </div>
+            {headerError && (
+              <div className="mt-3 text-sm text-red-600">{headerError}</div>
+            )}
+
+            <div className="flex justify-end">
+              <Button className="mt-4" disabled={!isUploadReady || isUploading} onClick={handleUploadDatabase}>
+                {isUploading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Caricamento...
+                    Upload in corso
                   </>
                 ) : (
-                  'Seleziona File'
+                  'Upload dati database'
                 )}
               </Button>
             </div>

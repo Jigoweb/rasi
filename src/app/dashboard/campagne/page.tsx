@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -21,6 +22,7 @@ type Campagna = (CampagnaIndividuazione | CampagnaRipartizione) & {
 }
 
 export default function CampagnePage() {
+  const router = useRouter()
   const [campagne, setCampagne] = useState<Campagna[]>([])
   const [filteredCampagne, setFilteredCampagne] = useState<Campagna[]>([])
   const [loading, setLoading] = useState(true)
@@ -312,7 +314,13 @@ export default function CampagnePage() {
                 </TableRow>
               ) : (
                 filteredCampagne.map((campagna) => (
-                  <TableRow key={`${campagna.tipo_campagna}-${campagna.id}`} className="hover:bg-gray-50">
+                  <TableRow
+                    key={`${campagna.tipo_campagna}-${campagna.id}`}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    tabIndex={0}
+                    onClick={() => router.push(`/dashboard/campagne/${campagna.id}`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/campagne/${campagna.id}`) }}
+                  >
                     <TableCell>
                       <div className="font-medium">{campagna.nome}</div>
                     </TableCell>
@@ -344,25 +352,20 @@ export default function CampagnePage() {
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem 
-                            onClick={() => {
-                              setSelectedCampagna(campagna)
-                              setShowDetails(true)
-                            }}
-                          >
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/campagne/${campagna.id}`) }}>
                             <Eye className="h-4 w-4 mr-2" />
-                            Visualizza
+                            Dettaglio
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Edit className="h-4 w-4 mr-2" />
                             Modifica
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem className="text-red-600" onClick={(e) => e.stopPropagation()}>
                             <Trash2 className="h-4 w-4 mr-2" />
                             Elimina
                           </DropdownMenuItem>

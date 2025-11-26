@@ -196,7 +196,7 @@ INSERT INTO partecipazioni (artista_id, opera_id, episodio_id, ruolo_id, persona
 -- 7. PROGRAMMAZIONI DI ESEMPIO
 -- ====================================
 
-INSERT INTO programmazioni (emittente_id, data_trasmissione, ora_inizio, ora_fine, durata_minuti, titolo_programmazione, fascia_oraria, tipo_trasmissione, metadati_trasmissione) VALUES
+INSERT INTO programmazioni (emittente_id, data_trasmissione, ora_inizio, ora_fine, durata_minuti, titolo, fascia_oraria, tipo_trasmissione, metadati_trasmissione) VALUES
 -- Programmazioni Netflix
 ((SELECT id FROM emittenti WHERE codice = 'NFLX'), '2024-12-15', '20:30:00', '22:00:00', 90, 
  'Il Commissario Montalbano - La forma dell''acqua', 'prima_serata', 'prima_visione',
@@ -248,7 +248,7 @@ INSERT INTO campagne_individuazione (nome, descrizione, data_inizio, data_fine, 
 INSERT INTO individuazioni (campagna_id, programmazione_id, opera_id, episodio_id, punteggio_matching, dettagli_matching, stato) VALUES
 -- Individuazione Montalbano su Netflix
 ((SELECT id FROM campagne_individuazione WHERE nome = 'Campagna Q4 2024'),
- (SELECT id FROM programmazioni WHERE titolo_programmazione LIKE '%Montalbano - La forma%'),
+ (SELECT id FROM programmazioni WHERE titolo LIKE '%Montalbano - La forma%'),
  (SELECT id FROM opere WHERE codice_opera = 'OP00000001'),
  (SELECT id FROM episodi WHERE numero_stagione = 1 AND numero_episodio = 1 AND opera_id = (SELECT id FROM opere WHERE codice_opera = 'OP00000001')),
  95.5,
@@ -257,7 +257,7 @@ INSERT INTO individuazioni (campagna_id, programmazione_id, opera_id, episodio_i
 
 -- Individuazione Gomorrah su Amazon
 ((SELECT id FROM campagne_individuazione WHERE nome = 'Campagna Q4 2024'),
- (SELECT id FROM programmazioni WHERE titolo_programmazione LIKE '%Gomorrah%'),
+ (SELECT id FROM programmazioni WHERE titolo LIKE '%Gomorrah%'),
  (SELECT id FROM opere WHERE codice_opera = 'OP00000002'),
  (SELECT id FROM episodi WHERE numero_stagione = 1 AND numero_episodio = 1 AND opera_id = (SELECT id FROM opere WHERE codice_opera = 'OP00000002')),
  88.0,
@@ -266,7 +266,7 @@ INSERT INTO individuazioni (campagna_id, programmazione_id, opera_id, episodio_i
 
 -- Individuazione La Grande Bellezza su Sky
 ((SELECT id FROM campagne_individuazione WHERE nome = 'Campagna Q4 2024'),
- (SELECT id FROM programmazioni WHERE titolo_programmazione LIKE '%Grande Bellezza%'),
+ (SELECT id FROM programmazioni WHERE titolo LIKE '%Grande Bellezza%'),
  (SELECT id FROM opere WHERE codice_opera = 'OP00000003'),
  NULL,
  92.0,

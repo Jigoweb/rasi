@@ -347,7 +347,13 @@ export default function OperePage() {
                 </TableRow>
               ) : (
                 opere.map((opera) => (
-                  <TableRow key={opera.id} className="hover:bg-gray-50">
+                  <TableRow
+                    key={opera.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    tabIndex={0}
+                    onClick={() => { window.location.href = `/dashboard/opere/${opera.id}` }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = `/dashboard/opere/${opera.id}` }}
+                  >
                     <TableCell className="font-mono text-sm">
                       {opera.codice_opera}
                     </TableCell>
@@ -370,24 +376,20 @@ export default function OperePage() {
                     <TableCell className="sticky right-0 bg-background z-10 w-[1%]">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem 
-                            onClick={() => {
-                              window.location.href = `/dashboard/opere/${opera.id}`
-                            }}
-                          >
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard/opere/${opera.id}` }}>
                             <Eye className="h-4 w-4 mr-2" />
-                            Visualizza
+                            Dettaglio
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEditForm(opera)}>
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(opera) }}>
                             <Edit className="h-4 w-4 mr-2" />
                             Modifica
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem className="text-red-600" onClick={(e) => e.stopPropagation()}>
                             <Trash2 className="h-4 w-4 mr-2" />
                             Elimina
                           </DropdownMenuItem>

@@ -145,7 +145,7 @@ export type Database = {
           data_trasmissione: string
           ora_inizio: string
           ora_fine: string | null
-          titolo_programmazione: string
+          titolo: string
           fascia_oraria: string | null
           tipo_trasmissione: string | null
           durata_minuti: number | null
@@ -156,7 +156,7 @@ export type Database = {
           data_trasmissione: string
           ora_inizio: string
           ora_fine?: string | null
-          titolo_programmazione: string
+          titolo: string
           fascia_oraria?: string | null
           tipo_trasmissione?: string | null
           durata_minuti?: number | null
@@ -167,7 +167,7 @@ export type Database = {
           data_trasmissione?: string
           ora_inizio?: string
           ora_fine?: string | null
-          titolo_programmazione?: string
+          titolo?: string
           fascia_oraria?: string | null
           tipo_trasmissione?: string | null
           durata_minuti?: number | null

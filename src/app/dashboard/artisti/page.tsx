@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, User } from 'lucide-react'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download } from 'lucide-react'
 import { SearchInput } from './components/search-input'
 import { Input } from '@/shared/components/ui/input'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
@@ -292,7 +292,13 @@ export default function ArtistiPage() {
                     </TableRow>
                   ) : (
                     artisti.map((artista) => (
-                      <TableRow key={artista.id}>
+                      <TableRow
+                        key={artista.id}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        tabIndex={0}
+                        onClick={() => router.push(`/dashboard/artisti/${artista.id}`)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/artisti/${artista.id}`) }}
+                      >
                         <TableCell className="font-mono text-sm">
                           {artista.codice_ipn}
                         </TableCell>
@@ -323,33 +329,22 @@ export default function ArtistiPage() {
                         <TableCell className="sticky right-0 bg-background z-10 w-[1%]">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
+                              <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem 
-                                onClick={() => router.push(`/dashboard/artisti/${artista.id}`)}
-                              >
-                                <User className="h-4 w-4 mr-2" />
-                                Profilo
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => {
-                                  setSelectedArtist(artista)
-                                  setShowDetails(true)
-                                }}
-                              >
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/artisti/${artista.id}`) }}>
                                 <Eye className="h-4 w-4 mr-2" />
-                                Visualizza
+                                Dettaglio
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                onClick={() => openEditForm(artista)}
+                                onClick={(e) => { e.stopPropagation(); openEditForm(artista) }}
                               >
                                 <Edit className="h-4 w-4 mr-2" />
                                 Modifica
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem className="text-red-600" onClick={(e) => e.stopPropagation()}>
                                 <Trash2 className="h-4 w-4 mr-2" />
                                 Elimina
                               </DropdownMenuItem>
@@ -380,7 +375,13 @@ export default function ArtistiPage() {
                   </div>
                 ) : (
                   artisti.map((artista) => (
-                    <Card key={artista.id} className="p-4">
+                    <Card
+                      key={artista.id}
+                      className="p-4 cursor-pointer"
+                      tabIndex={0}
+                      onClick={() => router.push(`/dashboard/artisti/${artista.id}`)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/artisti/${artista.id}`) }}
+                    >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
@@ -409,31 +410,20 @@ export default function ArtistiPage() {
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem 
-                              onClick={() => router.push(`/dashboard/artisti/${artista.id}`)}
-                            >
-                              <User className="h-4 w-4 mr-2" />
-                              Profilo
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => {
-                                setSelectedArtist(artista)
-                                setShowDetails(true)
-                              }}
-                            >
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/artisti/${artista.id}`) }}>
                               <Eye className="h-4 w-4 mr-2" />
-                              Visualizza
+                              Dettaglio
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(artista) }}>
                               <Edit className="h-4 w-4 mr-2" />
                               Modifica
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">
+                            <DropdownMenuItem className="text-red-600" onClick={(e) => e.stopPropagation()}>
                               <Trash2 className="h-4 w-4 mr-2" />
                               Elimina
                             </DropdownMenuItem>

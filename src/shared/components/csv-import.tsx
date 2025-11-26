@@ -64,14 +64,8 @@ const parseCSV = (csvText: string): CSVRow[] => {
     const errors: string[] = []
 
     // Campi obbligatori
-    if (!row['Data'] && !row['data_trasmissione']) {
-      errors.push('Data trasmissione mancante')
-    }
-    if (!row['Ora Inizio'] && !row['ora_inizio']) {
-      errors.push('Ora inizio mancante')
-    }
-    if (!row['Titolo'] && !row['titolo_programmazione']) {
-      errors.push('Titolo programmazione mancante')
+    if (!row['Titolo'] && !row['titolo']) {
+      errors.push('Titolo mancante')
     }
 
     // Validazione formato data
@@ -112,14 +106,13 @@ const parseCSV = (csvText: string): CSVRow[] => {
 
   const mapRowToDatabase = (row: CSVRow): any => {
     return {
-      data_trasmissione: formatDate(row['Data'] || row['data_trasmissione']),
-      ora_inizio: row['Ora Inizio'] || row['ora_inizio'],
+      data_trasmissione: (row['Data'] || row['data_trasmissione']) ? formatDate(row['Data'] || row['data_trasmissione']) : null,
+      ora_inizio: row['Ora Inizio'] || row['ora_inizio'] || null,
       ora_fine: row['Ora Fine'] || row['ora_fine'] || null,
-      titolo_programmazione: row['Titolo'] || row['titolo_programmazione'],
-      fascia_oraria: row['Fascia Oraria'] || row['fascia_oraria'] || null,
-      tipo_trasmissione: row['Tipo Trasmissione'] || row['tipo_trasmissione'] || null,
+      titolo: row['Titolo'] || row['titolo'] || null,
+      tipo: row['Tipo'] || row['tipo'] || row['Type'] || null,
       durata_minuti: row['Durata'] || row['durata_minuti'] ? parseInt(row['Durata'] || row['durata_minuti']) : null,
-      emittente_id: null, // Da gestire separatamente
+      emittente_id: null,
       descrizione: row['Descrizione'] || row['descrizione'] || null,
       processato: false
     }
@@ -243,7 +236,7 @@ const parseCSV = (csvText: string): CSVRow[] => {
                 <div className="text-sm text-blue-800">
                   <strong>Formato CSV richiesto:</strong>
                   <br />
-                  Le colonne devono essere: Data, Ora Inizio, Ora Fine, Titolo, Fascia Oraria, Tipo Trasmissione, Durata
+                  Colonne consigliate: Titolo (obbl.), Tipo (obbl.), Data, Ora Inizio, Ora Fine, Durata
                   <br />
                   <strong>Formati supportati:</strong> Data (DD/MM/YYYY o YYYY-MM-DD), Ora (HH:MM)
                 </div>
