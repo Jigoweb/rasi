@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp } from 'lucide-react'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X } from 'lucide-react'
 
 type Emittente = Database['public']['Tables']['emittenti']['Row']
 
@@ -53,6 +53,7 @@ export default function ProgrammazioniPage() {
   const [filteredCampagne, setFilteredCampagne] = useState<CampagnaProgrammazione[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [selectedCampagna, setSelectedCampagna] = useState<CampagnaProgrammazione | null>(null)
   const [showDetails, setShowDetails] = useState(false)
@@ -61,6 +62,7 @@ export default function ProgrammazioniPage() {
   const [emittenti, setEmittenti] = useState<Emittente[]>([])
   const [loadingEmittenti, setLoadingEmittenti] = useState(false)
   const [searchEmittentiQuery, setSearchEmittentiQuery] = useState('')
+  const [debouncedSearchEmittentiQuery, setDebouncedSearchEmittentiQuery] = useState('')
   const [filteredEmittenti, setFilteredEmittenti] = useState<Emittente[]>([])
   const [selectedEmittente, setSelectedEmittente] = useState<Emittente | null>(null)
   const [showEmittenteDetails, setShowEmittenteDetails] = useState(false)
@@ -277,10 +279,10 @@ export default function ProgrammazioniPage() {
     let filtered = campagne
 
     // Filter by search query
-    if (searchQuery) {
+    if (debouncedSearchQuery) {
       filtered = filtered.filter(campagna =>
-        campagna.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (campagna.emittenti?.nome && campagna.emittenti.nome.toLowerCase().includes(searchQuery.toLowerCase()))
+        campagna.nome.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+        (campagna.emittenti?.nome && campagna.emittenti.nome.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
       )
     }
 
@@ -290,20 +292,20 @@ export default function ProgrammazioniPage() {
     }
 
     setFilteredCampagne(filtered)
-  }, [campagne, searchQuery, statusFilter])
+  }, [campagne, debouncedSearchQuery, statusFilter])
 
   const filterEmittenti = useCallback(() => {
     let filtered = emittenti
 
-    if (searchEmittentiQuery) {
+    if (debouncedSearchEmittentiQuery) {
       filtered = filtered.filter(emittente =>
-        emittente.nome.toLowerCase().includes(searchEmittentiQuery.toLowerCase()) ||
-        emittente.codice.toLowerCase().includes(searchEmittentiQuery.toLowerCase())
+        emittente.nome.toLowerCase().includes(debouncedSearchEmittentiQuery.toLowerCase()) ||
+        emittente.codice.toLowerCase().includes(debouncedSearchEmittentiQuery.toLowerCase())
       )
     }
 
     setFilteredEmittenti(filtered)
-  }, [emittenti, searchEmittentiQuery])
+  }, [emittenti, debouncedSearchEmittentiQuery])
 
   useEffect(() => {
     if (isNewModalOpen && emittenti.length === 0) {
@@ -326,6 +328,17 @@ export default function ProgrammazioniPage() {
   useEffect(() => {
     filterEmittenti()
   }, [filterEmittenti])
+
+  // Debounce search inputs
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchQuery(searchQuery), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchEmittentiQuery(searchEmittentiQuery), 300)
+    return () => clearTimeout(t)
+  }, [searchEmittentiQuery])
 
   const fetchCampagne = async () => {
     setLoading(true)
@@ -482,6 +495,20 @@ export default function ProgrammazioniPage() {
                     <SelectItem value="error">Error</SelectItem>
                   </SelectContent>
                 </Select>
+                <Button variant="outline" onClick={() => { setSearchQuery(''); setStatusFilter('all') }}>Reset</Button>
+              </div>
+              {/* Filter Chips */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {debouncedSearchQuery && (
+                  <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
+                    <X className="h-3 w-3 mr-1" /> Ricerca: {debouncedSearchQuery}
+                  </Button>
+                )}
+                {statusFilter !== 'all' && (
+                  <Button variant="outline" size="sm" onClick={() => setStatusFilter('all')}>
+                    <X className="h-3 w-3 mr-1" /> Stato: {statusFilter}
+                  </Button>
+                )}
               </div>
               <div className="mt-4 text-sm text-gray-600">
                 Mostrando {filteredCampagne.length} di {campagne.length} campagne
@@ -492,8 +519,10 @@ export default function ProgrammazioniPage() {
           {/* Programming Table */}
           <Card>
             <CardContent className="p-0">
+              {/* Desktop */}
+              <div className="hidden lg:block relative overflow-x-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Emittente</TableHead>
@@ -585,12 +614,12 @@ export default function ProgrammazioniPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-label="Azioni" variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               {campagna.stato === 'bozza' || campagna.stato === 'uploading' || campagna.stato === 'error' ? (
                                 <DropdownMenuItem 
@@ -642,6 +671,51 @@ export default function ProgrammazioniPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-4 p-4">
+                {filteredCampagne.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">Nessuna campagna trovata</div>
+                ) : (
+                  filteredCampagne.map((campagna) => (
+                    <Card
+                      key={campagna.id}
+                      className="p-4 cursor-pointer"
+                      tabIndex={0}
+                      onClick={() => router.push(`/dashboard/programmazioni/${campagna.id}`)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/programmazioni/${campagna.id}`) }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h3 className="font-medium text-lg">{campagna.nome}</h3>
+                          <div className="mt-1 text-sm text-gray-600 flex items-center gap-2">
+                            <Tv className="h-4 w-4 text-gray-400" />
+                            <span>{campagna.emittenti?.nome || '—'}</span>
+                            <span className="font-mono">{campagna.anno}</span>
+                          </div>
+                          <div className="mt-1 text-sm text-gray-600 flex items-center gap-2">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            <span>{formatDate(campagna.created_at)}</span>
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/programmazioni/${campagna.id}`) }}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Dettaglio
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         </>
@@ -665,6 +739,14 @@ export default function ProgrammazioniPage() {
                   </div>
                 </div>
               </div>
+              {/* Filter Chips */}
+              <div className="mt-3 flex flex-wrap gap-2">
+                {debouncedSearchEmittentiQuery && (
+                  <Button variant="outline" size="sm" onClick={() => setSearchEmittentiQuery('')}>
+                    <X className="h-3 w-3 mr-1" /> Ricerca: {debouncedSearchEmittentiQuery}
+                  </Button>
+                )}
+              </div>
               <div className="mt-4 text-sm text-gray-600">
                 Mostrando {filteredEmittenti.length} di {emittenti.length} emittenti
               </div>
@@ -673,8 +755,10 @@ export default function ProgrammazioniPage() {
 
           <Card>
             <CardContent className="p-0">
+              {/* Desktop */}
+              <div className="hidden lg:block relative overflow-x-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead>Codice</TableHead>
                     <TableHead>Nome</TableHead>
@@ -722,6 +806,33 @@ export default function ProgrammazioniPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
+              {/* Mobile Cards */}
+              <div className="lg:hidden space-y-4 p-4">
+                {filteredEmittenti.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">Nessuna emittente trovata</div>
+                ) : (
+                  filteredEmittenti.map((emittente) => (
+                    <Card key={emittente.id} className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium">{emittente.nome}</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            Codice: <span className="font-mono">{emittente.codice}</span>
+                          </div>
+                          <div className="text-xs text-gray-600">{emittente.paese || '—'}</div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          setSelectedEmittente(emittente)
+                          setShowEmittenteDetails(true)
+                        }}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </Card>
+                  ))
+                )}
+              </div>
             </CardContent>
           </Card>
         </>

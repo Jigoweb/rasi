@@ -39,7 +39,7 @@ export default function OperePage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchOpere()
-    }, 500)
+    }, 300)
 
     return () => clearTimeout(timer)
   }, [searchQuery, typeFilter])
@@ -317,6 +317,20 @@ export default function OperePage() {
                 <SelectItem value="altro">Altro</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline" onClick={() => { setSearchQuery(''); setTypeFilter('all') }}>Reset</Button>
+          </div>
+          {/* Filter Chips */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {searchQuery && (
+              <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
+                Ricerca: {searchQuery}
+              </Button>
+            )}
+            {typeFilter !== 'all' && (
+              <Button variant="outline" size="sm" onClick={() => setTypeFilter('all')}>
+                Tipo: {typeFilter}
+              </Button>
+            )}
           </div>
           <div className="mt-4 text-sm text-gray-600">
             Mostrando {opere.length} risultati
@@ -327,8 +341,10 @@ export default function OperePage() {
       {/* Works Table */}
       <Card>
         <CardContent className="p-0">
+          {/* Desktop */}
+          <div className="hidden lg:block relative overflow-x-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
                 <TableHead className="w-32">Codice</TableHead>
                 <TableHead>Titolo</TableHead>
@@ -376,7 +392,7 @@ export default function OperePage() {
                     <TableCell className="sticky right-0 bg-background z-10 w-[1%]">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                          <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -401,6 +417,60 @@ export default function OperePage() {
               )}
             </TableBody>
           </Table>
+          </div>
+          {/* Mobile Cards */}
+          <div className="lg:hidden space-y-4 p-4">
+            {opere.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">Nessuna opera trovata</div>
+            ) : (
+              opere.map((opera) => (
+                <Card
+                  key={opera.id}
+                  className="p-4 cursor-pointer"
+                  tabIndex={0}
+                  onClick={() => { window.location.href = `/dashboard/opere/${opera.id}` }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = `/dashboard/opere/${opera.id}` }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="font-medium">{opera.titolo}</div>
+                      {opera.titolo_originale && (
+                        <div className="text-xs text-gray-600 italic">{opera.titolo_originale}</div>
+                      )}
+                      <div className="mt-1 flex items-center gap-2">
+                        {getTypeBadge(opera.tipo)}
+                        <span className="text-xs text-gray-600">{opera.anno_produzione || '—'}</span>
+                      </div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        Codice: <span className="font-mono">{opera.codice_opera}</span>
+                      </div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard/opere/${opera.id}` }}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Dettaglio
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(opera) }}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          Modifica
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-600" onClick={(e) => e.stopPropagation()}>
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Elimina
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
 

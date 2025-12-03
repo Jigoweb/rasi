@@ -270,8 +270,9 @@ export default function ArtistiPage() {
                 ))}
               </div>
             ) : (
+              <div className="relative overflow-x-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead>Codice IPN</TableHead>
                     <TableHead>Nome Completo</TableHead>
@@ -287,7 +288,7 @@ export default function ArtistiPage() {
                   {artisti.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                        Nessun artista trovato
+                        Nessun artista trovato con i criteri di ricerca attuali
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -329,7 +330,7 @@ export default function ArtistiPage() {
                         <TableCell className="sticky right-0 bg-background z-10 w-[1%]">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                              <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -356,6 +357,7 @@ export default function ArtistiPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             )}
           </div>
 
@@ -371,7 +373,7 @@ export default function ArtistiPage() {
               <>
                 {artisti.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    Nessun artista trovato
+                    Nessun artista trovato con i criteri di ricerca attuali
                   </div>
                 ) : (
                   artisti.map((artista) => (
@@ -410,7 +412,7 @@ export default function ArtistiPage() {
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                            <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>

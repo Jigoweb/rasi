@@ -283,6 +283,25 @@ export default function CampagnePage() {
                 <SelectItem value="ripartizione">Ripartizione</SelectItem>
               </SelectContent>
             </Select>
+            <Button variant="outline" onClick={() => { setSearchQuery(''); setStatusFilter('all'); setTipoFilter('all') }}>Reset</Button>
+          </div>
+          {/* Filter Chips */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {searchQuery && (
+              <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
+                Ricerca: {searchQuery}
+              </Button>
+            )}
+            {statusFilter !== 'all' && (
+              <Button variant="outline" size="sm" onClick={() => setStatusFilter('all')}>
+                Stato: {statusFilter}
+              </Button>
+            )}
+            {tipoFilter !== 'all' && (
+              <Button variant="outline" size="sm" onClick={() => setTipoFilter('all')}>
+                Tipo: {tipoFilter}
+              </Button>
+            )}
           </div>
           <div className="mt-4 text-sm text-gray-600">
             Mostrando {filteredCampagne.length} di {campagne.length} report
@@ -293,8 +312,10 @@ export default function CampagnePage() {
       {/* Campaigns Table */}
       <Card>
         <CardContent className="p-0">
+          {/* Desktop */}
+          <div className="hidden lg:block relative overflow-x-auto">
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
                 <TableHead>Nome Campagna</TableHead>
                 <TableHead className="w-32">Tipo</TableHead>
@@ -352,7 +373,7 @@ export default function CampagnePage() {
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                          <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -377,6 +398,52 @@ export default function CampagnePage() {
               )}
             </TableBody>
           </Table>
+          </div>
+          {/* Mobile Cards */}
+          <div className="lg:hidden space-y-4 p-4">
+            {filteredCampagne.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">Nessuna campagna trovata</div>
+            ) : (
+              filteredCampagne.map((campagna) => (
+                <Card
+                  key={`${campagna.tipo_campagna}-${campagna.id}`}
+                  className="p-4 cursor-pointer"
+                  tabIndex={0}
+                  onClick={() => router.push(`/dashboard/campagne/${campagna.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/campagne/${campagna.id}`) }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-medium text-lg">{campagna.nome}</h3>
+                      <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
+                        {getTipoBadge(campagna.tipo_campagna)}
+                        {getStatusBadge(campagna.stato)}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-600">
+                        Inizio {formatDate(campagna.data_inizio)}{campagna.data_fine ? ` · Fine ${formatDate(campagna.data_fine)}` : ''}
+                      </div>
+                      {campagna.descrizione && (
+                        <div className="text-sm text-gray-600 mt-1 truncate">{campagna.descrizione}</div>
+                      )}
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/campagne/${campagna.id}`) }}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Dettaglio
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
 
