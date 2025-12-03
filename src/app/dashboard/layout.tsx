@@ -14,7 +14,8 @@ import {
   BarChart3,
   Database,
   Menu,
-  X
+  X,
+  Sparkles
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -86,6 +87,7 @@ export default function DashboardLayout({
               { name: 'Artisti', href: '/dashboard/artisti', icon: Users },
               { name: 'Opere', href: '/dashboard/opere', icon: FileText },
               { name: 'Programmazioni', href: '/dashboard/programmazioni', icon: Calendar },
+              { name: 'Individuazioni', href: '/dashboard/individuazioni', icon: Sparkles },
               { name: 'Campagne', href: '/dashboard/campagne', icon: Search },
               { name: 'Query', href: '/dashboard/query', icon: Database },
               { name: 'Report', href: '/dashboard/report', icon: FileText },
