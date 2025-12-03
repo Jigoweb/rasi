@@ -155,7 +155,7 @@ export default function ProgrammazioniPage() {
       setUploadProgress(prev => ({ ...prev, [selectedCampagna.id]: { done: 0, total: parsedRows.length } }))
       await updateCampagnaStatus(selectedCampagna.id, 'uploading')
       const allowed = new Set([
-        'canale','emittente','tipo','titolo','titolo_originale','numero_episodio','titolo_episodio','titolo_episodio_originale','numero_stagione','anno','production','regia','data_trasmissione','ora_inizio','ora_fine','durata_minuti','data_inizio','data_fine','retail_price','sales_month','track_price_local_currency','views','total_net_ad_revenue','total_revenue','descrizione'
+        'canale','emittente','tipo','titolo','titolo_originale','numero_episodio','titolo_episodio','titolo_episodio_originale','numero_stagione','anno','production','regia','data_trasmissione','ora_inizio','ora_fine','durata_minuti','data_inizio','data_fine','retail_price','sales_month','track_price_local_currency','views','total_net_ad_revenue','total_revenue'
       ])
 
       const normalizeKey = (k: string) => k.toLowerCase().trim()

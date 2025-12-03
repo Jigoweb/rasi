@@ -76,7 +76,6 @@ export interface ProgrammazionePayload {
   total_revenue?: number
   canale?: string
   emittente?: string
-  descrizione?: string
 }
 
 export const uploadProgrammazioni = async (programmazioni: ProgrammazionePayload[]) => {
