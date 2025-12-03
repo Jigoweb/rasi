@@ -1159,7 +1159,7 @@ export default function ProgrammazioniPage() {
                   <strong className="text-foreground">Tempo stimato:</strong> {(() => {
                     const count = campagnaForIndividuazioni?.programmazioni_count || 0
                     const chunkSize = 25
-                    const secondsPerChunk = 1.5
+                    const secondsPerChunk = 2.5
                     const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
                     
                     if (totalSeconds < 60) {
@@ -1315,7 +1315,21 @@ export default function ProgrammazioniPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Tempo processamento:</span>
-                  <span>{((individuazioniResult.stats.tempo_processamento_ms || 0) / 1000).toFixed(1)}s</span>
+                  <span>{(() => {
+                    const totalSeconds = (individuazioniResult.stats.tempo_processamento_ms || 0) / 1000
+                    
+                    if (totalSeconds < 60) {
+                      return `${totalSeconds.toFixed(1)} secondi`
+                    } else if (totalSeconds < 3600) {
+                      const minutes = Math.floor(totalSeconds / 60)
+                      const seconds = Math.round(totalSeconds % 60)
+                      return `${minutes} min${seconds > 0 ? ` ${seconds}s` : ''}`
+                    } else {
+                      const hours = Math.floor(totalSeconds / 3600)
+                      const minutes = Math.round((totalSeconds % 3600) / 60)
+                      return `${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` ${minutes} min` : ''}`
+                    }
+                  })()}</span>
                 </div>
               </div>
             </div>
