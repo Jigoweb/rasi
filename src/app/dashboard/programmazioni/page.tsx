@@ -595,7 +595,8 @@ export default function ProgrammazioniPage() {
                               {campagna.stato === 'bozza' || campagna.stato === 'uploading' || campagna.stato === 'error' ? (
                                 <DropdownMenuItem 
                                   disabled={campagna.stato === 'uploading'}
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation()
                                     if (campagna.stato === 'uploading') return
                                     setSelectedCampagna(campagna)
                                     setNewProgrammazioneStep(2)
