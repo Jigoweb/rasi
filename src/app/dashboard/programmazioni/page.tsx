@@ -1151,9 +1151,28 @@ export default function ProgrammazioniPage() {
           {/* Stato: Prima del processamento */}
           {!isProcessingIndividuazioni && !individuazioniResult && (
             <div className="py-4 space-y-4">
-              <div className="bg-muted/50 border rounded-lg p-4">
+              <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">Nota:</strong> Il processo potrebbe richiedere alcuni minuti a seconda del numero di programmazioni ({(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} record).
+                  <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Tempo stimato:</strong> {(() => {
+                    const count = campagnaForIndividuazioni?.programmazioni_count || 0
+                    const chunkSize = 25
+                    const secondsPerChunk = 1.5
+                    const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
+                    
+                    if (totalSeconds < 60) {
+                      return `~${Math.ceil(totalSeconds)} secondi`
+                    } else if (totalSeconds < 3600) {
+                      const minutes = Math.ceil(totalSeconds / 60)
+                      return `~${minutes} minut${minutes === 1 ? 'o' : 'i'}`
+                    } else {
+                      const hours = Math.floor(totalSeconds / 3600)
+                      const minutes = Math.ceil((totalSeconds % 3600) / 60)
+                      return `~${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` e ${minutes} min` : ''}`
+                    }
+                  })()}
                 </p>
               </div>
               <div className="text-sm text-muted-foreground">
