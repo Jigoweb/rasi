@@ -19,15 +19,23 @@ export interface CampagnaProgrammazione {
   emittenti?: {
     nome: string
   }
+  programmazioni_count?: number
 }
 
 export const getCampagneProgrammazione = async () => {
   const { data, error } = await supabase
     .from('campagne_programmazione' as any)
-    .select('*, emittenti(nome)')
+    .select('*, emittenti(nome), programmazioni(count)')
     .order('created_at', { ascending: false })
 
-  return { data: (data as unknown) as CampagnaProgrammazione[], error }
+  // Transform data to include programmazioni_count
+  const transformedData = data?.map((item: any) => ({
+    ...item,
+    programmazioni_count: item.programmazioni?.[0]?.count || 0,
+    programmazioni: undefined, // Remove the nested array
+  }))
+
+  return { data: (transformedData as unknown) as CampagnaProgrammazione[], error }
 }
 
 export const createCampagnaProgrammazione = async (payload: CampagnaProgrammazionePayload) => {
@@ -76,7 +84,6 @@ export interface ProgrammazionePayload {
   total_revenue?: number
   canale?: string
   emittente?: string
-  descrizione?: string
 }
 
 export const uploadProgrammazioni = async (programmazioni: ProgrammazionePayload[]) => {

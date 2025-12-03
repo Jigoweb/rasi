@@ -10,6 +10,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
+import { processCampagnaIndividuazioneBatch, BatchProcessingProgress } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -19,7 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon } from 'lucide-react'
 
 type Emittente = Database['public']['Tables']['emittenti']['Row']
 
@@ -79,6 +81,83 @@ export default function ProgrammazioniPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [deleteProgress, setDeleteProgress] = useState<Record<string, { done: number; total: number }>>({})
+
+  // Individuazioni State
+  const [isIndividuazioniDialogOpen, setIsIndividuazioniDialogOpen] = useState(false)
+  const [campagnaForIndividuazioni, setCampagnaForIndividuazioni] = useState<CampagnaProgrammazione | null>(null)
+  const [isProcessingIndividuazioni, setIsProcessingIndividuazioni] = useState(false)
+  const [batchProgress, setBatchProgress] = useState<BatchProcessingProgress | null>(null)
+  const [individuazioniResult, setIndividuazioniResult] = useState<{
+    success: boolean
+    stats?: any
+    error?: string
+    campagneIndividuazioneId?: string
+  } | null>(null)
+
+  const handleProcessIndividuazioni = async () => {
+    if (!campagnaForIndividuazioni) return
+
+    setIsProcessingIndividuazioni(true)
+    setIndividuazioniResult(null)
+    setBatchProgress(null)
+
+    try {
+      // Aggiorna lo stato locale
+      setCampagne(prev => prev.map(c => 
+        c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_corso' } : c
+      ))
+
+      const result = await processCampagnaIndividuazioneBatch(
+        campagnaForIndividuazioni.id,
+        (progress) => {
+          setBatchProgress(progress)
+        },
+        {
+          chunkSize: 25, // Processa 25 programmazioni per chunk (~1.5s, sotto il timeout di 8s)
+        }
+      )
+
+      if (result.success && result.data) {
+        // Aggiorna lo stato della campagna a 'individuata'
+        setCampagne(prev => prev.map(c => 
+          c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'individuata' } : c
+        ))
+        
+        // Mostra risultato nel dialog
+        setIndividuazioniResult({
+          success: true,
+          stats: result.data.statistiche,
+          campagneIndividuazioneId: (result.data.statistiche as any).campagne_individuazione_id
+        })
+      } else {
+        // Ripristina lo stato
+        setCampagne(prev => prev.map(c => 
+          c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_review' } : c
+        ))
+        setIndividuazioniResult({
+          success: false,
+          error: result.error || 'Errore sconosciuto durante il processamento'
+        })
+      }
+    } catch (error: any) {
+      setCampagne(prev => prev.map(c => 
+        c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_review' } : c
+      ))
+      setIndividuazioniResult({
+        success: false,
+        error: error.message || 'Errore inatteso'
+      })
+    } finally {
+      setIsProcessingIndividuazioni(false)
+    }
+  }
+
+  const handleCloseIndividuazioniDialog = () => {
+    setIsIndividuazioniDialogOpen(false)
+    setCampagnaForIndividuazioni(null)
+    setIndividuazioniResult(null)
+    setBatchProgress(null)
+  }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -157,7 +236,7 @@ export default function ProgrammazioniPage() {
       setUploadProgress(prev => ({ ...prev, [selectedCampagna.id]: { done: 0, total: parsedRows.length } }))
       await updateCampagnaStatus(selectedCampagna.id, 'uploading')
       const allowed = new Set([
-        'canale','emittente','tipo','titolo','titolo_originale','numero_episodio','titolo_episodio','titolo_episodio_originale','numero_stagione','anno','production','regia','data_trasmissione','ora_inizio','ora_fine','durata_minuti','data_inizio','data_fine','retail_price','sales_month','track_price_local_currency','views','total_net_ad_revenue','total_revenue','descrizione'
+        'canale','emittente','tipo','titolo','titolo_originale','numero_episodio','titolo_episodio','titolo_episodio_originale','numero_stagione','anno','production','regia','data_trasmissione','ora_inizio','ora_fine','durata_minuti','data_inizio','data_fine','retail_price','sales_month','track_price_local_currency','views','total_net_ad_revenue','total_revenue'
       ])
 
       const normalizeKey = (k: string) => k.toLowerCase().trim()
@@ -524,118 +603,211 @@ export default function ProgrammazioniPage() {
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Emittente</TableHead>
-                    <TableHead className="w-32">Anno</TableHead>
-                    <TableHead className="w-32">Stato</TableHead>
-                    <TableHead className="w-48">Creato il</TableHead>
-                    <TableHead className="w-16">Azioni</TableHead>
+                    <TableHead className="py-4">Nome</TableHead>
+                    <TableHead className="py-4">Emittente</TableHead>
+                    <TableHead className="py-4 w-24 text-center">Anno</TableHead>
+                    <TableHead className="py-4 w-44">Stato</TableHead>
+                    <TableHead className="py-4 w-36">Creato il</TableHead>
+                    <TableHead className="py-4 w-72">Operazioni</TableHead>
+                    <TableHead className="py-4 w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredCampagne.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={7} className="text-center py-12 text-gray-500">
                         Nessuna campagna trovata con i criteri di ricerca attuali
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredCampagne.map((campagna) => (
+                    filteredCampagne.map((campagna) => {
+                      const hasData = (campagna.programmazioni_count || 0) > 0
+                      const canCreateIndividuazioni = hasData && campagna.stato === 'in_review'
+                      const isProcessing = campagna.stato === 'in_corso' || campagna.stato === 'uploading' || campagna.stato === 'deleting'
+                      const isCompleted = campagna.stato === 'individuata'
+                      
+                      return (
                       <TableRow
                         key={campagna.id}
-                        className="hover:bg-gray-50 cursor-pointer"
+                        className="hover:bg-muted/50 cursor-pointer"
                         tabIndex={0}
                         onClick={() => router.push(`/dashboard/programmazioni/${campagna.id}`)}
                         onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/programmazioni/${campagna.id}`) }}
                       >
-                        <TableCell>
-                          <div className="font-medium">{campagna.nome}</div>
+                        <TableCell className="py-4">
+                          <div className="font-medium text-foreground">{campagna.nome}</div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-4">
                           <div className="flex items-center gap-2">
-                            <Tv className="h-4 w-4 text-gray-400" />
-                            <span>{campagna.emittenti?.nome || '—'}</span>
+                            <Tv className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">{campagna.emittenti?.nome || '—'}</span>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <span className="font-mono">{campagna.anno}</span>
+                        <TableCell className="py-4 text-center">
+                          <span className="font-mono text-muted-foreground">{campagna.anno}</span>
                         </TableCell>
-                        <TableCell>
-                          {uploadProgress[campagna.id] ? (
-                            <div className="space-y-1">
-                              <Badge variant="secondary">
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading
-                              </Badge>
-                              <div className="h-2 w-32 bg-gray-200 rounded">
-                                <div
-                                  className="h-2 bg-blue-600 rounded"
-                                  style={{ width: `${Math.min(100, Math.round((uploadProgress[campagna.id].done / uploadProgress[campagna.id].total) * 100))}%` }}
-                                />
+                        <TableCell className="py-4">
+                          <div className="flex items-center gap-2">
+                            {uploadProgress[campagna.id] ? (
+                              <div className="space-y-1.5">
+                                <Badge variant="secondary">
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading
+                                </Badge>
+                                <div className="h-1.5 w-28 bg-muted rounded-full">
+                                  <div
+                                    className="h-1.5 bg-primary rounded-full transition-all"
+                                    style={{ width: `${Math.min(100, Math.round((uploadProgress[campagna.id].done / uploadProgress[campagna.id].total) * 100))}%` }}
+                                  />
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {uploadProgress[campagna.id].done.toLocaleString()} / {uploadProgress[campagna.id].total.toLocaleString()}
+                                </div>
                               </div>
-                              <div className="text-xs text-gray-600">
-                                {uploadProgress[campagna.id].done} / {uploadProgress[campagna.id].total}
+                            ) : deleteProgress[campagna.id] ? (
+                              <div className="space-y-1.5">
+                                <Badge variant="outline">
+                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Eliminazione
+                                </Badge>
+                                <div className="h-1.5 w-28 bg-muted rounded-full">
+                                  <div
+                                    className="h-1.5 bg-destructive rounded-full transition-all"
+                                    style={{ width: `${Math.min(100, Math.round((deleteProgress[campagna.id].done / deleteProgress[campagna.id].total) * 100))}%` }}
+                                  />
+                                </div>
                               </div>
-                            </div>
-                          ) : deleteProgress[campagna.id] ? (
-                            <div className="space-y-1">
-                              <Badge variant="outline">
-                                <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Deleting
-                              </Badge>
-                              <div className="h-2 w-32 bg-gray-200 rounded">
-                                <div
-                                  className="h-2 bg-red-600 rounded"
-                                  style={{ width: `${Math.min(100, Math.round((deleteProgress[campagna.id].done / deleteProgress[campagna.id].total) * 100))}%` }}
-                                />
-                              </div>
-                              <div className="text-xs text-gray-600">
-                                {deleteProgress[campagna.id].done} / {deleteProgress[campagna.id].total}
-                              </div>
-                            </div>
-                          ) : (
-                            campagna.stato === 'uploading' ? (
-                              <Badge variant="secondary"><span className="flex items-center"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading</span></Badge>
-                            ) : campagna.stato === 'deleting' ? (
-                              <Badge variant="outline"><span className="flex items-center"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Deleting</span></Badge>
-                            ) : campagna.stato === 'error' ? (
-                              <Badge variant="outline" className="text-red-600 border-red-200">Error</Badge>
-                            ) : campagna.stato === 'in_review' ? (
-                              <Badge variant="default">In review</Badge>
-                            ) : campagna.stato === 'bozza' ? (
-                              <Badge variant="outline">Bozza</Badge>
                             ) : (
-                              <Badge variant="secondary">{campagna.stato}</Badge>
-                            )
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            <span>{formatDate(campagna.created_at)}</span>
+                              <>
+                                {campagna.stato === 'uploading' ? (
+                                  <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading</Badge>
+                                ) : campagna.stato === 'deleting' ? (
+                                  <Badge variant="outline"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Eliminazione</Badge>
+                                ) : campagna.stato === 'error' ? (
+                                  <Badge variant="destructive">Errore</Badge>
+                                ) : campagna.stato === 'in_review' ? (
+                                  <Badge variant="default">In review</Badge>
+                                ) : campagna.stato === 'in_corso' ? (
+                                  <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Processando</Badge>
+                                ) : campagna.stato === 'individuata' ? (
+                                  <Badge variant="default" className="bg-green-600">Individuata</Badge>
+                                ) : campagna.stato === 'bozza' ? (
+                                  <Badge variant="outline">Bozza</Badge>
+                                ) : (
+                                  <Badge variant="secondary">{campagna.stato}</Badge>
+                                )}
+                                
+                                {/* Info Tooltip */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button 
+                                      className="text-muted-foreground hover:text-foreground transition-colors"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Info className="h-4 w-4" />
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="max-w-sm">
+                                    <div className="space-y-3">
+                                      <div>
+                                        <p className="font-semibold mb-1">Informazioni Campagna</p>
+                                        <div className="flex items-center gap-2 text-sm">
+                                          <DatabaseIcon className="h-3.5 w-3.5 shrink-0" />
+                                          <span>Record caricati: <strong>{(campagna.programmazioni_count || 0).toLocaleString()}</strong></span>
+                                        </div>
+                                      </div>
+                                      <div className="pt-2 border-t border-primary-foreground/20">
+                                        <p className="font-medium text-sm mb-1">Stato: {campagna.stato}</p>
+                                        <p className="text-xs opacity-90">
+                                          {campagna.stato === 'bozza' && 'La campagna è stata creata ma non sono ancora stati caricati dati. Utilizza il pulsante "Carica Dati" per importare un file CSV o Excel.'}
+                                          {campagna.stato === 'in_review' && 'I dati sono stati caricati correttamente. Puoi procedere con la creazione delle individuazioni oppure caricare ulteriori file per aggiungere altri record.'}
+                                          {campagna.stato === 'individuata' && 'Il processo di individuazione è stato completato con successo. Le individuazioni sono state create e sono pronte per la revisione.'}
+                                          {campagna.stato === 'error' && 'Si è verificato un errore durante l\'elaborazione. Verifica i dati e riprova il caricamento.'}
+                                          {campagna.stato === 'in_corso' && 'Il sistema sta processando le programmazioni e creando le individuazioni. Attendere il completamento...'}
+                                          {campagna.stato === 'uploading' && 'Caricamento dati in corso. Attendere il completamento...'}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </>
+                            )}
                           </div>
                         </TableCell>
-                        <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button aria-label="Azioni" variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
+                        <TableCell className="py-4">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Calendar className="h-4 w-4" />
+                            <span className="text-sm">{formatDate(campagna.created_at)}</span>
+                          </div>
+                        </TableCell>
+                        {/* Colonna Operazioni Primarie */}
+                        <TableCell className="py-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-3">
+                            {/* CTA Carica Dati */}
+                            {!isCompleted && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={isProcessing || !!uploadProgress[campagna.id]}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedCampagna(campagna)
+                                  setNewProgrammazioneStep(2)
+                                  setIsResumingUpload(true)
+                                  setIsNewModalOpen(true)
+                                }}
+                                className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                {campagna.stato === 'uploading' || uploadProgress[campagna.id] ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <FileUp className="h-3.5 w-3.5" />
+                                )}
+                                Carica Dati
+                              </Button>
+                            )}
+                            
+                            {/* CTA Crea Individuazioni - sempre visibile ma disabilitato se non ci sono dati */}
+                            {!isCompleted && !isProcessing && (
+                              <Button
+                                size="sm"
+                                disabled={!canCreateIndividuazioni}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setCampagnaForIndividuazioni(campagna)
+                                  setIsIndividuazioniDialogOpen(true)
+                                }}
+                                className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Crea Individuazioni
+                              </Button>
+                            )}
+
+                            {/* Badge stato completato */}
+                            {isCompleted && (
+                              <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 gap-1.5 py-1.5 px-3">
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Completata
+                              </Badge>
+                            )}
+
+                            {/* Badge processamento in corso */}
+                            {campagna.stato === 'in_corso' && (
+                              <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Processamento...
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        {/* Colonna Azioni Secondarie */}
+                        <TableCell className="py-4">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {campagna.stato === 'bozza' || campagna.stato === 'uploading' || campagna.stato === 'error' ? (
-                                <DropdownMenuItem 
-                                  disabled={campagna.stato === 'uploading'}
-                                  onClick={() => {
-                                    if (campagna.stato === 'uploading') return
-                                    setSelectedCampagna(campagna)
-                                    setNewProgrammazioneStep(2)
-                                    setIsResumingUpload(true)
-                                    setIsNewModalOpen(true)
-                                  }}
-                                >
-                                  <FileUp className="h-4 w-4 mr-2" />
-                                  {campagna.stato === 'uploading' ? 'Upload in corso' : 'Carica Dati'}
-                                </DropdownMenuItem>
-                              ) : null}
                               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/programmazioni/${campagna.id}`) }}>
                                 <Eye className="h-4 w-4 mr-2" />
                                 Dettaglio
@@ -646,7 +818,8 @@ export default function ProgrammazioniPage() {
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 className="text-red-600"
-                                onClick={async () => {
+                                onClick={async (e) => {
+                                  e.stopPropagation()
                                   const ok = window.confirm('Eliminare la campagna e tutte le programmazioni associate?')
                                   if (!ok) return
                                   try {
@@ -667,7 +840,8 @@ export default function ProgrammazioniPage() {
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
-                    ))
+                      )
+                    })
                   )}
                 </TableBody>
               </Table>
@@ -1056,6 +1230,301 @@ export default function ProgrammazioniPage() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Individuazioni Confirmation Dialog */}
+      <Dialog open={isIndividuazioniDialogOpen} onOpenChange={handleCloseIndividuazioniDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {individuazioniResult?.success ? (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              ) : individuazioniResult?.success === false ? (
+                <XCircle className="h-5 w-5 text-red-600" />
+              ) : (
+                <Sparkles className="h-5 w-5" />
+              )}
+              {individuazioniResult?.success 
+                ? 'Individuazioni Completate' 
+                : individuazioniResult?.success === false 
+                  ? 'Errore Processamento'
+                  : 'Crea Individuazioni'
+              }
+            </DialogTitle>
+            {!individuazioniResult && (
+              <DialogDescription>
+                Questa operazione creerà le individuazioni per tutte le programmazioni della campagna <span className="font-medium text-foreground">{campagnaForIndividuazioni?.nome}</span>.
+              </DialogDescription>
+            )}
+          </DialogHeader>
+          
+          {/* Stato: Prima del processamento */}
+          {!isProcessingIndividuazioni && !individuazioniResult && (
+            <div className="py-4 space-y-4">
+              <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Tempo stimato:</strong> {(() => {
+                    const count = campagnaForIndividuazioni?.programmazioni_count || 0
+                    const chunkSize = 25
+                    const secondsPerChunk = 2.5
+                    const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
+                    
+                    if (totalSeconds < 60) {
+                      return `~${Math.ceil(totalSeconds)} secondi`
+                    } else if (totalSeconds < 3600) {
+                      const minutes = Math.ceil(totalSeconds / 60)
+                      return `~${minutes} minut${minutes === 1 ? 'o' : 'i'}`
+                    } else {
+                      const hours = Math.floor(totalSeconds / 3600)
+                      const minutes = Math.ceil((totalSeconds % 3600) / 60)
+                      return `~${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` e ${minutes} min` : ''}`
+                    }
+                  })()}
+                </p>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-2">Il sistema effettuerà il matching automatico tra:</p>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  <li>Programmazioni caricate</li>
+                  <li>Opere nel catalogo</li>
+                  <li>Partecipazioni degli artisti</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* Stato: Processamento in corso */}
+          {isProcessingIndividuazioni && batchProgress && (
+            <div className="py-6 space-y-4">
+              {/* Progress header */}
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+                <div>
+                  <p className="font-medium">
+                    {batchProgress.phase === 'init' && 'Inizializzazione...'}
+                    {batchProgress.phase === 'processing' && 'Processamento in corso...'}
+                    {batchProgress.phase === 'finalizing' && 'Finalizzazione...'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {batchProgress.phase === 'processing' && (
+                      <>Chunk {batchProgress.current_chunk}/{batchProgress.total_chunks}</>
+                    )}
+                    {batchProgress.phase === 'init' && 'Preparazione dati...'}
+                    {batchProgress.phase === 'finalizing' && 'Calcolo statistiche finali...'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Progresso</span>
+                  <span className="font-medium">
+                    {batchProgress.programmazioni_processate.toLocaleString()}/{batchProgress.programmazioni_totali.toLocaleString()}
+                  </span>
+                </div>
+                <div className="h-3 bg-muted rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                    style={{ 
+                      width: `${batchProgress.programmazioni_totali > 0 
+                        ? (batchProgress.programmazioni_processate / batchProgress.programmazioni_totali) * 100 
+                        : 0}%` 
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    {batchProgress.programmazioni_totali > 0 
+                      ? Math.round((batchProgress.programmazioni_processate / batchProgress.programmazioni_totali) * 100) 
+                      : 0}% completato
+                  </span>
+                  <span>
+                    {(batchProgress.programmazioni_totali - batchProgress.programmazioni_processate).toLocaleString()} rimanenti
+                  </span>
+                </div>
+              </div>
+
+              {/* Live stats */}
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-xl font-bold text-foreground">
+                    {batchProgress.individuazioni_create.toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Individuazioni create</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-xl font-bold text-foreground">
+                    {batchProgress.current_chunk}/{batchProgress.total_chunks}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Chunk processati</p>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-xs text-amber-800 text-center">
+                  ⚠️ Non chiudere questa finestra. Il processo potrebbe richiedere diversi minuti.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Stato: Risultato positivo */}
+          {individuazioniResult?.success && individuazioniResult.stats && (
+            <div className="py-4 space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm text-green-800 font-medium">
+                  Il processo di individuazione è stato completato con successo.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">
+                    {(individuazioniResult.stats.individuazioni_create || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Individuazioni create</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">
+                    {(individuazioniResult.stats.programmazioni_con_match || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Programmazioni con match</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">
+                    {(individuazioniResult.stats.artisti_distinti || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Artisti individuati</p>
+                </div>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-foreground">
+                    {(individuazioniResult.stats.opere_distinte || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Opere distinte</p>
+                </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+                <div className="flex justify-between">
+                  <span>Programmazioni totali:</span>
+                  <span>{(individuazioniResult.stats.programmazioni_totali || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Programmazioni processate:</span>
+                  <span>{(individuazioniResult.stats.programmazioni_processate || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Senza match:</span>
+                  <span>{(individuazioniResult.stats.programmazioni_senza_match || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Tempo processamento:</span>
+                  <span>{(() => {
+                    const totalSeconds = (individuazioniResult.stats.tempo_processamento_ms || 0) / 1000
+                    
+                    if (totalSeconds < 60) {
+                      return `${totalSeconds.toFixed(1)} secondi`
+                    } else if (totalSeconds < 3600) {
+                      const minutes = Math.floor(totalSeconds / 60)
+                      const seconds = Math.round(totalSeconds % 60)
+                      return `${minutes} min${seconds > 0 ? ` ${seconds}s` : ''}`
+                    } else {
+                      const hours = Math.floor(totalSeconds / 3600)
+                      const minutes = Math.round((totalSeconds % 3600) / 60)
+                      return `${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` ${minutes} min` : ''}`
+                    }
+                  })()}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Stato: Errore */}
+          {individuazioniResult?.success === false && (
+            <div className="py-4 space-y-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-800 font-medium mb-1">
+                  Si è verificato un errore durante il processamento.
+                </p>
+                <p className="text-xs text-red-600 font-mono">
+                  {individuazioniResult.error}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            {/* Prima del processamento */}
+            {!isProcessingIndividuazioni && !individuazioniResult && (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={handleCloseIndividuazioniDialog}
+                >
+                  Annulla
+                </Button>
+                <Button onClick={handleProcessIndividuazioni}>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Avvia Processamento
+                </Button>
+              </>
+            )}
+
+            {/* Durante il processamento */}
+            {isProcessingIndividuazioni && (
+              <Button variant="outline" disabled>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processamento in corso...
+              </Button>
+            )}
+
+            {/* Dopo il processamento - Successo */}
+            {individuazioniResult?.success && (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={handleCloseIndividuazioniDialog}
+                >
+                  Chiudi
+                </Button>
+                <Button 
+                  onClick={() => {
+                    handleCloseIndividuazioniDialog()
+                    router.push(`/dashboard/individuazioni/${individuazioniResult.campagneIndividuazioneId}`)
+                  }}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Visualizza Individuazioni
+                </Button>
+              </>
+            )}
+
+            {/* Dopo il processamento - Errore */}
+            {individuazioniResult?.success === false && (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={handleCloseIndividuazioniDialog}
+                >
+                  Chiudi
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setIndividuazioniResult(null)
+                  }}
+                >
+                  Riprova
+                </Button>
+              </>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
