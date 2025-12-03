@@ -9,7 +9,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: 'id_required' }, { status: 400 })
     }
 
-    const url = `${API_URL}/titles/${encodeURIComponent(id)}`
+    const url = `${API_URL}/titles/${encodeURIComponent(id)}/credits`
     const res = await fetch(url)
 
     if (!res.ok) {
@@ -17,15 +17,16 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     }
 
     const data = await res.json()
+    // Normalize to match service expectation (result.cast)
+    // The API returns { credits: [...] }
     const normalized = {
-      title: data?.primaryTitle || data?.title || '',
-      originalTitle: data?.originalTitle || null,
-      year: data?.startYear ?? data?.year ?? null,
-      type: data?.type || null,
-      id: data?.id || data?.tconst || id,
-      directors: data?.directors || null,
+      cast: data?.credits?.map((c: any) => ({
+        id: c?.name?.id || '',
+        name: c?.name?.displayName || '',
+        character: Array.isArray(c?.characters) ? c.characters.join(', ') : ''
+      })) || []
     }
-
+    
     return NextResponse.json({ result: normalized }, { status: 200 })
   } catch (e) {
     return NextResponse.json({ error: 'unexpected' }, { status: 500 })

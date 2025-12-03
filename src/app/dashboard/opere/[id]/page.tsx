@@ -15,8 +15,8 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId } from '@/features/opere/services/opere.service'
-import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
-import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle } from 'lucide-react'
+import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits } from '@/features/opere/services/external/imdb.service'
+import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2 } from 'lucide-react'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -31,6 +31,14 @@ export default function OperaDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showEditForm, setShowEditForm] = useState(false)
+  
+  // IMDb Integration State
+  const [showImdbSearch, setShowImdbSearch] = useState(false)
+  const [imdbSearchResults, setImdbSearchResults] = useState<any[]>([])
+  const [isSearchingImdb, setIsSearchingImdb] = useState(false)
+  const [imdbCredits, setImdbCredits] = useState<any[]>([])
+  const [loadingImdbCredits, setLoadingImdbCredits] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const fetchData = useCallback(async () => {
     try {
@@ -68,6 +76,97 @@ export default function OperaDetailPage() {
   useEffect(() => {
     if (operaId) fetchData()
   }, [operaId, fetchData])
+
+  const performSearch = async (term: string, year?: number, type?: string) => {
+    if (!term) return
+    setIsSearchingImdb(true)
+    try {
+      // Search by title, year and type to get more accurate results
+      let { ok, results } = await searchTitles(term, year, type)
+
+      // Intelligent fallback: if no results and we had strict filters, relax them
+      if (ok && results.length === 0 && year) {
+        // Retry without year
+        const retry = await searchTitles(term, undefined, type)
+        if (retry.ok) {
+          results = retry.results
+          ok = retry.ok
+        }
+      }
+      
+      // If still no results and we had a type, try without type (broadest search)
+      if (ok && results.length === 0 && type) {
+        const retry = await searchTitles(term, undefined, undefined)
+        if (retry.ok) {
+          results = retry.results
+          ok = retry.ok
+        }
+      }
+
+      if (ok) {
+        setImdbSearchResults(results)
+      } else {
+        setImdbSearchResults([])
+      }
+    } catch (e) {
+      console.error(e)
+      setImdbSearchResults([])
+    } finally {
+      setIsSearchingImdb(false)
+    }
+  }
+
+  const handleSearchImdb = async () => {
+    if (!opera) return
+    setShowImdbSearch(true)
+
+    // 1. Try to find by IMDb ID if available
+    if (opera.imdb_tconst) {
+      setSearchTerm(opera.imdb_tconst)
+      setIsSearchingImdb(true)
+      try {
+        const { ok, result } = await getTitleById(opera.imdb_tconst)
+        if (ok && result) {
+          setImdbSearchResults([{
+            title: result.title,
+            year: result.year,
+            type: result.type,
+            id: result.id
+          }])
+          setIsSearchingImdb(false)
+          return
+        }
+      } catch (e) {
+        console.error('Failed to fetch by ID, falling back to search', e)
+      }
+    }
+
+    // 2. Fallback to search by title/year/type
+    setSearchTerm(opera.titolo)
+    performSearch(opera.titolo, opera.anno_produzione ?? undefined, opera.tipo)
+  }
+
+  const handleSelectImdbTitle = async (imdbId: string) => {
+    try {
+      setLoadingImdbCredits(true)
+      // Fetch credits
+      const { ok, result } = await getTitleCredits(imdbId)
+      if (ok && result?.cast) {
+        setImdbCredits(result.cast)
+      }
+      
+      // Update local opera state with the selected IMDb ID if different
+      if (opera && opera.imdb_tconst !== imdbId) {
+        setOpera({ ...opera, imdb_tconst: imdbId })
+      }
+      
+      setShowImdbSearch(false)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingImdbCredits(false)
+    }
+  }
 
   const getTipoBadge = (tipo: string) => {
     switch (tipo) {
@@ -212,6 +311,10 @@ export default function OperaDetailPage() {
             </div>
           </div>
           <div className="mt-4 flex gap-2">
+            <Button variant="outline" onClick={handleSearchImdb}>
+              <Search className="mr-2 h-4 w-4" />
+              Ricerca su IMDb
+            </Button>
             {opera.imdb_tconst && (
               <Button variant="secondary" onClick={async () => {
                 const { ok, result } = await getTitleById(opera.imdb_tconst!)
@@ -281,6 +384,96 @@ export default function OperaDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {imdbCredits.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5" />Credits IMDb</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="hidden lg:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Personaggio</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {imdbCredits.map((credit: any) => (
+                    <TableRow key={credit.id}>
+                      <TableCell className="font-medium">{credit.name}</TableCell>
+                      <TableCell>{credit.character || '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="lg:hidden p-4 space-y-3">
+              {imdbCredits.map((credit: any) => (
+                <Card key={credit.id}>
+                  <CardContent className="p-4 space-y-1">
+                    <div className="font-medium">{credit.name}</div>
+                    <div className="text-sm text-muted-foreground">{credit.character || '—'}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={showImdbSearch} onOpenChange={setShowImdbSearch}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Risultati ricerca IMDb</DialogTitle>
+            <DialogDescription>Seleziona il titolo corretto per visualizzare i credits</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Input 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+              placeholder="Cerca titolo..." 
+              onKeyDown={(e) => e.key === 'Enter' && performSearch(searchTerm)}
+            />
+            <Button onClick={() => performSearch(searchTerm)} disabled={isSearchingImdb}>
+              {isSearchingImdb ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {isSearchingImdb ? (
+              <div className="flex justify-center py-8">Caricamento...</div>
+            ) : imdbSearchResults.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">Nessun risultato trovato</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Titolo</TableHead>
+                    <TableHead>Anno</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="w-[100px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {imdbSearchResults.map((result) => (
+                    <TableRow key={result.id}>
+                      <TableCell className="font-medium">{result.title}</TableCell>
+                      <TableCell>{result.year || '—'}</TableCell>
+                      <TableCell>{result.type || '—'}</TableCell>
+                      <TableCell>
+                        <Button size="sm" onClick={() => handleSelectImdbTitle(result.id)}>
+                          Seleziona
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {(opera.tipo || '').toLowerCase() === 'serie_tv' && (
         <Card>
