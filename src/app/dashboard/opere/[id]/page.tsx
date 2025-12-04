@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -16,7 +16,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
-import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music } from 'lucide-react'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Label } from '@/shared/components/ui/label'
 
@@ -41,6 +41,7 @@ export default function OperaDetailPage() {
   const [imdbCredits, setImdbCredits] = useState<any[]>([])
   const [imdbCreditsGrouped, setImdbCreditsGrouped] = useState<any>(null)
   const [loadingImdbCredits, setLoadingImdbCredits] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [pendingImdbTconst, setPendingImdbTconst] = useState<string | null>(null) // IMDb ID selezionato ma non ancora salvato
   
@@ -578,37 +579,18 @@ export default function OperaDetailPage() {
             <Button 
               variant="outline" 
               size="sm"
-              onClick={() => {
-                // Export cast (actors only) to CSV
-                const castCredits = imdbCredits.filter((c: any) => c.categoryGroup === 'cast')
-                const csvContent = [
-                  ['Nome', 'Ruolo Professionale', 'Personaggio', 'Tipo Cast'].join(';'),
-                  ...castCredits.map((c: any) => [
-                    c.name,
-                    c.categoryLabel || c.category,
-                    c.character || '',
-                    c.castRole || ''
-                  ].join(';'))
-                ].join('\n')
-                
-                const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' })
-                const url = window.URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `credits_imdb_${opera?.titolo?.replace(/\s+/g, '_') || 'export'}.csv`
-                a.click()
-                window.URL.revokeObjectURL(url)
-              }}
+              onClick={() => setShowExportDialog(true)}
             >
               <Download className="h-4 w-4 mr-2" />
-              Esporta Cast CSV
+              Esporta Cast
             </Button>
           </CardHeader>
-          <CardContent className="p-0 space-y-6">
+          <CardContent className="p-0 space-y-0">
             {/* Regia */}
             {imdbCreditsGrouped?.direction?.length > 0 && (
               <CreditsSection 
-                title="🎬 Regia" 
+                title="Regia" 
+                icon={<Clapperboard className="h-4 w-4" />}
                 credits={imdbCreditsGrouped.direction}
                 showCharacter={false}
               />
@@ -617,7 +599,8 @@ export default function OperaDetailPage() {
             {/* Sceneggiatura */}
             {imdbCreditsGrouped?.writing?.length > 0 && (
               <CreditsSection 
-                title="✍️ Sceneggiatura" 
+                title="Sceneggiatura" 
+                icon={<PenTool className="h-4 w-4" />}
                 credits={imdbCreditsGrouped.writing}
                 showCharacter={false}
               />
@@ -626,7 +609,8 @@ export default function OperaDetailPage() {
             {/* Cast Principale */}
             {imdbCreditsGrouped?.castPrimary?.length > 0 && (
               <CreditsSection 
-                title="⭐ Cast Principale" 
+                title="Cast Principale" 
+                icon={<Star className="h-4 w-4 text-amber-500" />}
                 credits={imdbCreditsGrouped.castPrimary}
                 showCharacter={true}
                 showStar={true}
@@ -636,7 +620,8 @@ export default function OperaDetailPage() {
             {/* Altri Attori */}
             {imdbCreditsGrouped?.castSecondary?.length > 0 && (
               <CreditsSection 
-                title="🎭 Altri Attori" 
+                title="Altri Attori" 
+                icon={<Users className="h-4 w-4" />}
                 credits={imdbCreditsGrouped.castSecondary}
                 showCharacter={true}
                 collapsible={imdbCreditsGrouped.castSecondary.length > 10}
@@ -646,7 +631,8 @@ export default function OperaDetailPage() {
             {/* Produzione */}
             {imdbCreditsGrouped?.production?.length > 0 && (
               <CreditsSection 
-                title="🎥 Produzione" 
+                title="Produzione" 
+                icon={<Video className="h-4 w-4" />}
                 credits={imdbCreditsGrouped.production}
                 showCharacter={false}
                 collapsible={true}
@@ -656,7 +642,8 @@ export default function OperaDetailPage() {
             {/* Musica */}
             {imdbCreditsGrouped?.music?.length > 0 && (
               <CreditsSection 
-                title="🎵 Musica" 
+                title="Musica" 
+                icon={<Music className="h-4 w-4" />}
                 credits={imdbCreditsGrouped.music}
                 showCharacter={false}
               />
@@ -664,6 +651,83 @@ export default function OperaDetailPage() {
           </CardContent>
         </Card>
       )}
+      
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Esporta Cast</DialogTitle>
+            <DialogDescription>
+              Scegli il formato di esportazione per il cast di "{opera?.titolo}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <Button
+              variant="outline"
+              className="h-24 flex-col gap-2"
+              onClick={() => {
+                const castCredits = imdbCredits.filter((c: any) => c.categoryGroup === 'cast')
+                const csvContent = [
+                  ['Nome', 'Ruolo', 'Personaggio'].join(';'),
+                  ...castCredits.map((c: any) => [
+                    c.name,
+                    c.castRole || '',
+                    c.character || ''
+                  ].join(';'))
+                ].join('\n')
+                
+                const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' })
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `cast_${opera?.titolo?.replace(/\s+/g, '_') || 'export'}.csv`
+                a.click()
+                window.URL.revokeObjectURL(url)
+                setShowExportDialog(false)
+              }}
+            >
+              <FileText className="h-8 w-8" />
+              <span>CSV</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-24 flex-col gap-2"
+              onClick={async () => {
+                const castCredits = imdbCredits.filter((c: any) => c.categoryGroup === 'cast')
+                
+                // Dynamic import xlsx
+                const XLSX = await import('xlsx')
+                
+                const data = castCredits.map((c: any) => ({
+                  'Nome': c.name,
+                  'Ruolo': c.castRole || '',
+                  'Personaggio': c.character || ''
+                }))
+                
+                const ws = XLSX.utils.json_to_sheet(data)
+                const wb = XLSX.utils.book_new()
+                XLSX.utils.book_append_sheet(wb, ws, 'Cast')
+                
+                // Set column widths
+                ws['!cols'] = [
+                  { wch: 30 }, // Nome
+                  { wch: 15 }, // Ruolo
+                  { wch: 30 }, // Personaggio
+                ]
+                
+                XLSX.writeFile(wb, `cast_${opera?.titolo?.replace(/\s+/g, '_') || 'export'}.xlsx`)
+                setShowExportDialog(false)
+              }}
+            >
+              <FileText className="h-8 w-8" />
+              <span>Excel</span>
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Il file conterrà {imdbCredits.filter((c: any) => c.categoryGroup === 'cast').length} attori con le colonne: Nome, Ruolo (Primario/Comprimario), Personaggio
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showImdbSearch} onOpenChange={setShowImdbSearch}>
         <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
@@ -1205,12 +1269,14 @@ function ImportFieldRow({
 // Component for credits section
 function CreditsSection({
   title,
+  icon,
   credits,
   showCharacter = true,
   showStar = false,
   collapsible = false,
 }: {
   title: string
+  icon?: ReactNode
   credits: any[]
   showCharacter?: boolean
   showStar?: boolean
@@ -1228,7 +1294,10 @@ function CreditsSection({
         className={`px-6 py-3 bg-muted/30 flex items-center justify-between ${collapsible ? 'cursor-pointer hover:bg-muted/50' : ''}`}
         onClick={() => collapsible && setExpanded(!expanded)}
       >
-        <h3 className="font-semibold text-sm">{title}</h3>
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          {icon}
+          {title}
+        </h3>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">{credits.length} persone</span>
           {collapsible && (
@@ -1245,7 +1314,7 @@ function CreditsSection({
               className="px-6 py-3 flex items-center gap-4 hover:bg-muted/30"
             >
               {showStar && credit.isStar && (
-                <span className="text-amber-500" title="Attore principale">⭐</span>
+                <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
               )}
               <div className="flex-1 min-w-0">
                 <div className="font-medium">{credit.name}</div>
