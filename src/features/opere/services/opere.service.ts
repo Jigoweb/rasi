@@ -79,10 +79,114 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
 export const getEpisodiByOperaId = async (operaId: string) => {
   const { data, error } = await supabase
     .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, data_prima_messa_in_onda, durata_minuti')
+    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, metadati')
     .eq('opera_id', operaId)
     .order('numero_stagione', { ascending: true })
     .order('numero_episodio', { ascending: true })
 
   return { data, error }
+}
+
+export const createEpisodio = async (
+  payload: import('@/shared/lib/supabase').Database['public']['Tables']['episodi']['Insert']
+) => {
+  const { data, error } = await supabase
+    .from('episodi')
+    .insert(payload)
+    .select('*')
+    .single()
+
+  return { data, error }
+}
+
+export const updateEpisodio = async (
+  id: string,
+  payload: import('@/shared/lib/supabase').Database['public']['Tables']['episodi']['Update']
+) => {
+  const { data, error } = await supabase
+    .from('episodi')
+    .update(payload)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  return { data, error }
+}
+
+// Upsert batch di episodi - trova per opera_id + numero_stagione + numero_episodio
+export const upsertEpisodi = async (
+  operaId: string,
+  episodi: Array<{
+    numero_stagione: number
+    numero_episodio: number
+    titolo_episodio?: string | null
+    descrizione?: string | null
+    durata_minuti?: number | null
+    data_prima_messa_in_onda?: string | null
+    metadati?: Record<string, any> | null
+  }>
+) => {
+  // Per ogni episodio, cerca se esiste già e aggiorna o crea
+  const results: { created: number; updated: number; errors: string[] } = {
+    created: 0,
+    updated: 0,
+    errors: [],
+  }
+
+  for (const ep of episodi) {
+    try {
+      // Cerca episodio esistente
+      const { data: existing } = await supabase
+        .from('episodi')
+        .select('id')
+        .eq('opera_id', operaId)
+        .eq('numero_stagione', ep.numero_stagione)
+        .eq('numero_episodio', ep.numero_episodio)
+        .single()
+
+      if (existing) {
+        // Aggiorna
+        const { error } = await supabase
+          .from('episodi')
+          .update({
+            titolo_episodio: ep.titolo_episodio,
+            descrizione: ep.descrizione,
+            durata_minuti: ep.durata_minuti,
+            data_prima_messa_in_onda: ep.data_prima_messa_in_onda,
+            metadati: ep.metadati,
+          })
+          .eq('id', existing.id)
+
+        if (error) {
+          results.errors.push(`S${ep.numero_stagione}E${ep.numero_episodio}: ${error.message}`)
+        } else {
+          results.updated++
+        }
+      } else {
+        // Crea
+        const { error } = await supabase
+          .from('episodi')
+          .insert({
+            opera_id: operaId,
+            numero_stagione: ep.numero_stagione,
+            numero_episodio: ep.numero_episodio,
+            titolo_episodio: ep.titolo_episodio,
+            descrizione: ep.descrizione,
+            durata_minuti: ep.durata_minuti,
+            data_prima_messa_in_onda: ep.data_prima_messa_in_onda,
+            metadati: ep.metadati,
+          })
+
+        if (error) {
+          results.errors.push(`S${ep.numero_stagione}E${ep.numero_episodio}: ${error.message}`)
+        } else {
+          results.created++
+        }
+      }
+    } catch (e: any) {
+      results.errors.push(`S${ep.numero_stagione}E${ep.numero_episodio}: ${e.message}`)
+    }
+  }
+
+  return results
 }

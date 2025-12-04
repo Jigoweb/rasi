@@ -346,18 +346,18 @@ export default function OperePage() {
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                <TableHead className="w-32">Codice</TableHead>
-                <TableHead>Titolo</TableHead>
-                <TableHead>Titolo Originale</TableHead>
-                <TableHead className="w-32">Tipo</TableHead>
-                <TableHead className="w-20">Anno</TableHead>
-                <TableHead className="text-right sticky right-0 bg-background z-10 w-[1%]">Azioni</TableHead>
+                <TableHead className="py-3 px-4 pl-6 w-32">Codice</TableHead>
+                <TableHead className="py-3 px-4">Titolo</TableHead>
+                <TableHead className="py-3 px-4">Titolo Originale</TableHead>
+                <TableHead className="py-3 px-4 w-32">Tipo</TableHead>
+                <TableHead className="py-3 px-4 w-20 text-center">Anno</TableHead>
+                <TableHead className="py-3 px-4 pr-6 text-right sticky right-0 bg-background z-10 w-[1%]">Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {opere.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nessuna opera trovata con i criteri di ricerca attuali
                   </TableCell>
                 </TableRow>
@@ -365,31 +365,31 @@ export default function OperePage() {
                 opere.map((opera) => (
                   <TableRow
                     key={opera.id}
-                    className="hover:bg-gray-50 cursor-pointer"
+                    className="hover:bg-muted/50 cursor-pointer"
                     tabIndex={0}
                     onClick={() => { window.location.href = `/dashboard/opere/${opera.id}` }}
                     onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = `/dashboard/opere/${opera.id}` }}
                   >
-                    <TableCell className="font-mono text-sm">
+                    <TableCell className="py-4 px-4 pl-6 font-mono text-sm">
                       {opera.codice_opera}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-4">
                       <div className="font-medium">{opera.titolo}</div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-4">
                       {opera.titolo_originale ? (
-                        <span className="text-gray-600 italic">{opera.titolo_originale}</span>
+                        <span className="text-muted-foreground italic">{opera.titolo_originale}</span>
                       ) : (
-                        <span className="text-gray-400">—</span>
+                        <span className="text-muted-foreground/50">—</span>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-4 px-4">
                       {getTypeBadge(opera.tipo)}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {opera.anno_produzione}
+                    <TableCell className="py-4 px-4 text-center font-mono text-muted-foreground">
+                      {opera.anno_produzione || '—'}
                     </TableCell>
-                    <TableCell className="sticky right-0 bg-background z-10 w-[1%]">
+                    <TableCell className="py-4 px-4 pr-6 sticky right-0 bg-background z-10 w-[1%]">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
