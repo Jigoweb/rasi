@@ -9,7 +9,8 @@ import {
   getIndividuazioniForExport,
   formatIndividuazioniForExport,
   CampagnaIndividuazione, 
-  Individuazione 
+  Individuazione,
+  SearchField 
 } from '@/features/individuazioni/services/individuazioni.service'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
@@ -17,6 +18,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { 
   Search, 
   Sparkles, 
@@ -46,12 +48,14 @@ export default function IndividuazioneDetailPage() {
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [showExportDialog, setShowExportDialog] = useState(false)
   
   // Pagination & filters
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
+  const [searchField, setSearchField] = useState<SearchField>('titolo')
   const [statoFilter, setStatoFilter] = useState<string>('all')
   const pageSize = 50
 
@@ -63,7 +67,7 @@ export default function IndividuazioneDetailPage() {
     if (campagna) {
       loadIndividuazioni()
     }
-  }, [campagna, page, searchTerm, statoFilter])
+  }, [campagna, page, searchTerm, searchField, statoFilter])
 
   const loadCampagna = async () => {
     setLoading(true)
@@ -83,6 +87,7 @@ export default function IndividuazioneDetailPage() {
       page,
       pageSize,
       search: searchTerm || undefined,
+      searchField,
       stato: statoFilter !== 'all' ? statoFilter : undefined
     })
     if (data) {
@@ -228,31 +233,17 @@ export default function IndividuazioneDetailPage() {
           </p>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => handleExport('csv')}
-            disabled={exporting}
-          >
-            {exporting ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Export CSV
-          </Button>
-          <Button
-            onClick={() => handleExport('xlsx')}
-            disabled={exporting}
-          >
-            {exporting ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <FileSpreadsheet className="h-4 w-4 mr-2" />
-            )}
-            Export Excel
-          </Button>
-        </div>
+        <Button
+          onClick={() => setShowExportDialog(true)}
+          disabled={exporting}
+        >
+          {exporting ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4 mr-2" />
+          )}
+          Esporta Individuazioni
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -303,10 +294,24 @@ export default function IndividuazioneDetailPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
+            <Select value={searchField} onValueChange={(v) => { setSearchField(v as SearchField); setSearchTerm(''); setPage(1) }}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Cerca per..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="titolo">Titolo Programmazione</SelectItem>
+                <SelectItem value="artista">Artista</SelectItem>
+                <SelectItem value="opera">Opera Matchata</SelectItem>
+              </SelectContent>
+            </Select>
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Cerca per titolo..."
+                placeholder={
+                  searchField === 'titolo' ? 'Cerca per titolo programmazione...' :
+                  searchField === 'artista' ? 'Cerca per nome artista...' :
+                  'Cerca per titolo opera...'
+                }
                 value={searchTerm}
                 onChange={(e) => handleSearch(e.target.value)}
                 className="pl-10"
@@ -449,6 +454,47 @@ export default function IndividuazioneDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Esporta Individuazioni</DialogTitle>
+            <DialogDescription>
+              Scegli il formato di esportazione per le individuazioni di "{campagna?.nome}"
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <Button
+              variant="outline"
+              className="h-24 flex-col gap-2"
+              disabled={exporting}
+              onClick={() => {
+                setShowExportDialog(false)
+                handleExport('csv')
+              }}
+            >
+              <FileText className="h-8 w-8" />
+              <span>CSV</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-24 flex-col gap-2"
+              disabled={exporting}
+              onClick={() => {
+                setShowExportDialog(false)
+                handleExport('xlsx')
+              }}
+            >
+              <FileSpreadsheet className="h-8 w-8" />
+              <span>Excel</span>
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground text-center">
+            Il file conterrà tutte le {formatNumber(campagna?.statistiche?.individuazioni_create || 0)} individuazioni della campagna
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

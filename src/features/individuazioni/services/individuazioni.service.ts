@@ -116,18 +116,49 @@ export const getCampagnaIndividuazione = async (id: string) => {
 // INDIVIDUAZIONI
 // ============================================
 
+export type SearchField = 'titolo' | 'artista' | 'opera'
+
 export const getIndividuazioni = async (
   campagnaId: string,
   options?: {
     page?: number
     pageSize?: number
     search?: string
+    searchField?: SearchField
     stato?: string
   }
 ) => {
   const page = options?.page || 1
   const pageSize = options?.pageSize || 50
   const offset = (page - 1) * pageSize
+  const searchField = options?.searchField || 'titolo'
+
+  // Se si cerca per artista o opera, dobbiamo prima trovare gli ID corrispondenti
+  let filterIds: string[] | null = null
+
+  if (options?.search && searchField === 'artista') {
+    const { data: artisti } = await supabase
+      .from('artisti')
+      .select('id')
+      .or(`nome.ilike.%${options.search}%,cognome.ilike.%${options.search}%,nome_arte.ilike.%${options.search}%`)
+    
+    filterIds = artisti?.map(a => a.id) || []
+    if (filterIds.length === 0) {
+      return { data: [] as Individuazione[], error: null, count: 0, totalPages: 0 }
+    }
+  }
+
+  if (options?.search && searchField === 'opera') {
+    const { data: opere } = await supabase
+      .from('opere')
+      .select('id')
+      .or(`titolo.ilike.%${options.search}%,titolo_originale.ilike.%${options.search}%`)
+    
+    filterIds = opere?.map(o => o.id) || []
+    if (filterIds.length === 0) {
+      return { data: [] as Individuazione[], error: null, count: 0, totalPages: 0 }
+    }
+  }
 
   let query = supabase
     .from('individuazioni')
@@ -141,8 +172,15 @@ export const getIndividuazioni = async (
     .order('data_trasmissione', { ascending: false })
     .range(offset, offset + pageSize - 1)
 
+  // Applica filtro di ricerca
   if (options?.search) {
-    query = query.or(`titolo.ilike.%${options.search}%,artisti.nome.ilike.%${options.search}%`)
+    if (searchField === 'titolo') {
+      query = query.ilike('titolo', `%${options.search}%`)
+    } else if (searchField === 'artista' && filterIds) {
+      query = query.in('artista_id', filterIds)
+    } else if (searchField === 'opera' && filterIds) {
+      query = query.in('opera_id', filterIds)
+    }
   }
 
   if (options?.stato) {
