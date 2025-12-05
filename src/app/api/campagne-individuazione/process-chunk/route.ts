@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Processa il chunk
-    const { data: result, error: processError } = await supabaseServer
+    const { data: result, error: processError } = await (supabaseServer as any)
       .rpc('process_programmazioni_chunk', {
         p_campagne_individuazione_id: campagne_individuazione_id,
         p_programmazione_ids: programmazione_ids,
@@ -77,5 +77,4 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-
 

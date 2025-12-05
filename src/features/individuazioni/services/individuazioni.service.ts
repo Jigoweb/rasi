@@ -160,7 +160,7 @@ export const getIndividuazioni = async (
     }
   }
 
-  let query = supabase
+  let query = (supabase as any)
     .from('individuazioni')
     .select(`
       *,
@@ -203,7 +203,7 @@ export const getIndividuazioni = async (
 
 export const getIndividuazioniForExport = async (campagnaId: string) => {
   // Fetch all records without pagination for export
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('individuazioni')
     .select(`
       canale,
@@ -281,6 +281,5 @@ export const getCampagnaStatistiche = async (campagnaId: string) => {
     .eq('id', campagnaId)
     .single()
 
-  return { data: data?.statistiche, error }
+  return { data: (data as any)?.statistiche, error }
 }
-

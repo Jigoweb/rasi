@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Verifica che la campagna_programmazione esista
-    const { data: campagna, error: campagnaError } = await supabaseServer
+    const { data: campagna, error: campagnaError } = await (supabaseServer as any)
       .from('campagne_programmazione')
       .select('id, nome')
       .eq('id', campagne_programmazione_id)
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Chiama la funzione SQL per processare la campagna
-    const { data: result, error: processError } = await supabaseServer
+    const { data: result, error: processError } = await (supabaseServer as any)
       .rpc('process_campagna_individuazione', {
         p_campagne_programmazione_id: campagne_programmazione_id,
         p_nome_campagna_individuazione: nome_campagna_individuazione || null,
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Carica la campagna_individuazione creata per ritornarla completa
-    const { data: campagnaIndividuazione } = await supabaseServer
+    const { data: campagnaIndividuazione } = await (supabaseServer as any)
       .from('campagne_individuazione')
       .select('*')
       .eq('id', result.campagne_individuazione_id)
@@ -120,4 +120,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-

@@ -272,7 +272,7 @@ export default function OperaDetailPage() {
         .map(ep => ({
           numero_stagione: ep.season,
           numero_episodio: ep.episodeNumber,
-          titolo_episodio: ep.title?.toUpperCase() || null,
+          titolo_episodio: ep.title || null,
           descrizione: ep.plot || null,
           durata_minuti: ep.runtimeMinutes,
           data_prima_messa_in_onda: ep.releaseDate 
@@ -304,8 +304,8 @@ export default function OperaDetailPage() {
       const updates: any = {}
       
       if (selectedFields['titolo_originale']) {
-        // IMDb title (English) goes to titolo_originale (uppercase)
-        updates.titolo_originale = imdbDataToImport.title?.toUpperCase() || null
+        // IMDb title (English) goes to titolo_originale
+        updates.titolo_originale = imdbDataToImport.title || null
       }
       if (selectedFields['anno_produzione']) {
         updates.anno_produzione = imdbDataToImport.year
@@ -315,8 +315,8 @@ export default function OperaDetailPage() {
         updates.codici_esterni = { ...(opera.codici_esterni as any || {}), imdb: imdbDataToImport.id }
       }
       if (selectedFields['regista']) {
-        // regista is an array in DB, convert directors string to array (uppercase)
-        const directors = imdbDataToImport.directorsFormatted?.toUpperCase()
+        // regista is an array in DB, convert directors string to array
+        const directors = imdbDataToImport.directorsFormatted
         updates.regista = directors ? directors.split(', ').map((d: string) => d.trim()) : null
       }
       
@@ -1223,13 +1223,17 @@ function ImportFieldRow({
   if (status === 'empty') return null
   
   return (
-    <div className={`p-4 rounded-lg border transition-colors ${selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}>
+    <div 
+      className={`p-4 rounded-lg border transition-colors cursor-pointer ${selected ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'}`}
+      onClick={() => onToggle(!selected)}
+    >
       <div className="flex items-start gap-3">
         <Checkbox 
           id={fieldKey}
           checked={selected}
           onCheckedChange={onToggle}
           className="mt-1"
+          onClick={(e) => e.stopPropagation()}
         />
         <div className="flex-1 space-y-2">
           <div className="flex items-center justify-between">
@@ -1246,15 +1250,10 @@ function ImportFieldRow({
             </div>
             <div className="space-y-1">
               <div className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                IMDb <ArrowRight className="h-3 w-3" /> {selected && <span className="text-primary">(verrà importato in CAPS)</span>}
+                IMDb <ArrowRight className="h-3 w-3" />
               </div>
               <div className={`p-2 rounded font-mono text-xs break-all ${selected ? 'bg-primary/10 border border-primary/20' : 'bg-muted/50'}`}>
                 {formatValue(imdbValue)}
-                {selected && imdbValue && (
-                  <div className="mt-1 pt-1 border-t border-dashed text-primary font-semibold">
-                    → {String(imdbValue).toUpperCase()}
-                  </div>
-                )}
               </div>
             </div>
           </div>

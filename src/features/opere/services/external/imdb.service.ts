@@ -42,7 +42,19 @@ export async function getTitleById(id: string) {
 }
 
 export async function getTitleCredits(id: string) {
-  const { ok, data } = await fetchJson<{ result: { cast: Array<{ id: string; name: string; character: string; }> } }>(`/api/imdb/title/${encodeURIComponent(id)}/credits`)
+  const { ok, data } = await fetchJson<{ 
+    result: { 
+      cast: Array<{ 
+        id: string; 
+        name: string; 
+        character: string; 
+        category?: string;
+        categoryLabel?: string;
+        isStar?: boolean;
+      }>;
+      grouped?: any;
+    } 
+  }>(`/api/imdb/title/${encodeURIComponent(id)}/credits`)
   return { ok, result: data?.result }
 }
 

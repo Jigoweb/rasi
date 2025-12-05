@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     // Note: RLS policies may block direct queries, but RPC functions bypass RLS
 
     // Inizializza la campagna_individuazione
-    const { data: initResult, error: initError } = await supabaseServer
+    const { data: initResult, error: initError } = await (supabaseServer as any)
       .rpc('init_campagna_individuazione', {
         p_campagne_programmazione_id: campagne_programmazione_id,
         p_nome_campagna_individuazione: nome_campagna_individuazione || null,
@@ -82,4 +82,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-

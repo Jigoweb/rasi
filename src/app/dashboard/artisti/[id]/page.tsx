@@ -72,7 +72,7 @@ export default function ArtistaProfiloPage() {
 
       if (partecipazioniError) throw partecipazioniError
 
-      setPartecipazioni(partecipazioniData || [])
+      setPartecipazioni((partecipazioniData as any) || [])
     } catch (error) {
       console.error('Error fetching artista data:', JSON.stringify(error, null, 2))
       setError('Errore nel caricamento dei dati')

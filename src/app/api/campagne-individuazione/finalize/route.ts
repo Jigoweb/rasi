@@ -23,11 +23,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Finalizza la campagna
-    const { data: result, error: finalizeError } = await supabaseServer
-      .rpc('finalize_campagna_individuazione', {
-        p_campagne_individuazione_id: campagne_individuazione_id,
-        p_campagne_programmazione_id: campagne_programmazione_id
-      })
+    const { data: result, error: finalizeError } = await (supabaseServer as any)
+      .rpc(
+        'finalize_campagna_individuazione',
+        {
+          p_campagne_individuazione_id: campagne_individuazione_id,
+          p_campagne_programmazione_id: campagne_programmazione_id,
+        }
+      )
 
     if (finalizeError) {
       console.error('Errore finalizzazione:', finalizeError)
@@ -67,5 +70,3 @@ export async function POST(req: NextRequest) {
     )
   }
 }
-
-

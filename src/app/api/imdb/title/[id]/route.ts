@@ -1,10 +1,14 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, NextRequest } from 'next/server'
 
 const API_URL = process.env.IMDB_API_URL || 'https://api.imdbapi.dev'
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
-    const id = (params?.id || '').trim()
+    const { id: rawId } = await params
+    const id = (rawId || '').trim()
     if (!id) {
       return NextResponse.json({ error: 'id_required' }, { status: 400 })
     }

@@ -341,11 +341,11 @@ export const processCampagnaIndividuazioneBatch = async (
       success: true,
       data: {
         ...finalizeResult.data!,
-        statistiche: {
-          ...finalizeResult.data!.statistiche,
+        statistiche: ({
+          ...(finalizeResult.data!.statistiche as any),
           campagne_individuazione_id,
           tempo_processamento_ms: tempoProcessamentoMs
-        }
+        } as any)
       }
     }
 
@@ -425,4 +425,3 @@ export const processCampagnaIndividuazione = async (
     }
   }
 }
-
