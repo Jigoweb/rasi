@@ -10,7 +10,8 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
-import { processCampagnaIndividuazioneBatch, BatchProcessingProgress } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
+import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
+import { ProcessBlockedDialog } from '@/shared/components/individuazione-progress-indicator'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -82,17 +83,11 @@ export default function ProgrammazioniPage() {
   const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [deleteProgress, setDeleteProgress] = useState<Record<string, { done: number; total: number }>>({})
 
-  // Individuazioni State
-  const [isIndividuazioniDialogOpen, setIsIndividuazioniDialogOpen] = useState(false)
+  // Individuazioni - use global context
+  const { state: individuazioneState, startProcess, canStartNewProcess } = useIndividuazioneProcess()
+  const [showProcessBlockedDialog, setShowProcessBlockedDialog] = useState(false)
+  const [showIndividuazioniConfirmDialog, setShowIndividuazioniConfirmDialog] = useState(false)
   const [campagnaForIndividuazioni, setCampagnaForIndividuazioni] = useState<CampagnaProgrammazione | null>(null)
-  const [isProcessingIndividuazioni, setIsProcessingIndividuazioni] = useState(false)
-  const [batchProgress, setBatchProgress] = useState<BatchProcessingProgress | null>(null)
-  const [individuazioniResult, setIndividuazioniResult] = useState<{
-    success: boolean
-    stats?: any
-    error?: string
-    campagneIndividuazioneId?: string
-  } | null>(null)
 
   // Delete Campagna State
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -101,69 +96,45 @@ export default function ProgrammazioniPage() {
   const [isLoadingDeleteInfo, setIsLoadingDeleteInfo] = useState(false)
   const [isDeletingCampagna, setIsDeletingCampagna] = useState(false)
 
-  const handleProcessIndividuazioni = async () => {
+  // Handle starting individuazioni process - show confirmation first
+  const handleStartIndividuazioni = (campagna: CampagnaProgrammazione) => {
+    if (!canStartNewProcess) {
+      // Show blocked dialog if process already running
+      setShowProcessBlockedDialog(true)
+      return
+    }
+
+    // Show confirmation dialog first
+    setCampagnaForIndividuazioni(campagna)
+    setShowIndividuazioniConfirmDialog(true)
+  }
+
+  // Actually start the process after confirmation
+  const handleConfirmStartIndividuazioni = async () => {
     if (!campagnaForIndividuazioni) return
 
-    setIsProcessingIndividuazioni(true)
-    setIndividuazioniResult(null)
-    setBatchProgress(null)
+    setShowIndividuazioniConfirmDialog(false)
 
-    try {
-      // Aggiorna lo stato locale
+    // Update local state to show processing
+    setCampagne(prev => prev.map(c => 
+      c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_corso' } : c
+    ))
+
+    // Start the global process
+    const result = await startProcess(campagnaForIndividuazioni)
+
+    // Update local state based on result
+    if (result.success) {
       setCampagne(prev => prev.map(c => 
-        c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_corso' } : c
+        c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'individuata' } : c
       ))
-
-      const result = await processCampagnaIndividuazioneBatch(
-        campagnaForIndividuazioni.id,
-        (progress) => {
-          setBatchProgress(progress)
-        },
-        {
-          chunkSize: 25, // Processa 25 programmazioni per chunk (~1.5s, sotto il timeout di 8s)
-        }
-      )
-
-      if (result.success && result.data) {
-        // Aggiorna lo stato della campagna a 'individuata'
-        setCampagne(prev => prev.map(c => 
-          c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'individuata' } : c
-        ))
-        
-        // Mostra risultato nel dialog
-        setIndividuazioniResult({
-          success: true,
-          stats: result.data.statistiche,
-          campagneIndividuazioneId: (result.data.statistiche as any).campagne_individuazione_id
-        })
-      } else {
-        // Ripristina lo stato
-        setCampagne(prev => prev.map(c => 
-          c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_review' } : c
-        ))
-        setIndividuazioniResult({
-          success: false,
-          error: result.error || 'Errore sconosciuto durante il processamento'
-        })
-      }
-    } catch (error: any) {
+    } else {
       setCampagne(prev => prev.map(c => 
         c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_review' } : c
       ))
-      setIndividuazioniResult({
-        success: false,
-        error: error.message || 'Errore inatteso'
-      })
-    } finally {
-      setIsProcessingIndividuazioni(false)
     }
-  }
 
-  const handleCloseIndividuazioniDialog = () => {
-    setIsIndividuazioniDialogOpen(false)
     setCampagnaForIndividuazioni(null)
-    setIndividuazioniResult(null)
-    setBatchProgress(null)
   }
 
   // Delete Campagna Handlers
@@ -361,9 +332,10 @@ export default function ProgrammazioniPage() {
         return next
       })
       await fetchCampagne()
-    } catch (error) {
-      console.error('Error uploading database:', error)
-      alert('Errore durante l\'upload al database. Verifica il file e riprova.')
+    } catch (error: any) {
+      const errorMessage = error?.message || error?.details || (typeof error === 'object' ? JSON.stringify(error) : String(error))
+      console.error('Error uploading database:', errorMessage, error)
+      alert(`Errore durante l'upload al database: ${errorMessage}`)
       await updateCampagnaStatus(selectedCampagna.id, 'error')
       setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'error' } : c))
       setUploadProgress(prev => {
@@ -684,8 +656,9 @@ export default function ProgrammazioniPage() {
                   ) : (
                     filteredCampagne.map((campagna) => {
                       const hasData = (campagna.programmazioni_count || 0) > 0
-                      const canCreateIndividuazioni = hasData && campagna.stato === 'in_review'
-                      const isProcessing = campagna.stato === 'in_corso' || campagna.stato === 'uploading' || campagna.stato === 'deleting'
+                      const isGlobalProcessingThisCampagna = individuazioneState.status === 'processing' && individuazioneState.campagna?.id === campagna.id
+                      const canCreateIndividuazioni = hasData && campagna.stato === 'in_review' && !isGlobalProcessingThisCampagna
+                      const isProcessing = campagna.stato === 'in_corso' || campagna.stato === 'uploading' || campagna.stato === 'deleting' || isGlobalProcessingThisCampagna
                       const isCompleted = campagna.stato === 'individuata'
                       
                       return (
@@ -834,8 +807,7 @@ export default function ProgrammazioniPage() {
                                 disabled={!canCreateIndividuazioni}
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setCampagnaForIndividuazioni(campagna)
-                                  setIsIndividuazioniDialogOpen(true)
+                                  handleStartIndividuazioni(campagna)
                                 }}
                                 className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                               >
@@ -1398,300 +1370,76 @@ export default function ProgrammazioniPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Individuazioni Confirmation Dialog */}
-      <Dialog open={isIndividuazioniDialogOpen} onOpenChange={handleCloseIndividuazioniDialog}>
+      {/* Individuazioni Confirmation Dialog - shown before starting process */}
+      <Dialog open={showIndividuazioniConfirmDialog} onOpenChange={setShowIndividuazioniConfirmDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {individuazioniResult?.success ? (
-                <CheckCircle className="h-5 w-5 text-green-600" />
-              ) : individuazioniResult?.success === false ? (
-                <XCircle className="h-5 w-5 text-red-600" />
-              ) : (
-                <Sparkles className="h-5 w-5" />
-              )}
-              {individuazioniResult?.success 
-                ? 'Individuazioni Completate' 
-                : individuazioniResult?.success === false 
-                  ? 'Errore Processamento'
-                  : 'Crea Individuazioni'
-              }
+              <Sparkles className="h-5 w-5" />
+              Crea Individuazioni
             </DialogTitle>
-            {!individuazioniResult && (
-              <DialogDescription>
-                Questa operazione creerà le individuazioni per tutte le programmazioni della campagna <span className="font-medium text-foreground">{campagnaForIndividuazioni?.nome}</span>.
-              </DialogDescription>
-            )}
+            <DialogDescription>
+              Questa operazione creerà le individuazioni per tutte le programmazioni della campagna <span className="font-medium text-foreground">{campagnaForIndividuazioni?.nome}</span>.
+            </DialogDescription>
           </DialogHeader>
-          
-          {/* Stato: Prima del processamento */}
-          {!isProcessingIndividuazioni && !individuazioniResult && (
-            <div className="py-4 space-y-4">
-              <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">Tempo stimato:</strong> {(() => {
-                    const count = campagnaForIndividuazioni?.programmazioni_count || 0
-                    const chunkSize = 25
-                    const secondsPerChunk = 2.5
-                    const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
-                    
-                    if (totalSeconds < 60) {
-                      return `~${Math.ceil(totalSeconds)} secondi`
-                    } else if (totalSeconds < 3600) {
-                      const minutes = Math.ceil(totalSeconds / 60)
-                      return `~${minutes} minut${minutes === 1 ? 'o' : 'i'}`
-                    } else {
-                      const hours = Math.floor(totalSeconds / 3600)
-                      const minutes = Math.ceil((totalSeconds % 3600) / 60)
-                      return `~${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` e ${minutes} min` : ''}`
-                    }
-                  })()}
-                </p>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-2">Il sistema effettuerà il matching automatico tra:</p>
-                <ul className="list-disc list-inside space-y-1 ml-1">
-                  <li>Programmazioni caricate</li>
-                  <li>Opere nel catalogo</li>
-                  <li>Partecipazioni degli artisti</li>
-                </ul>
-              </div>
+
+          <div className="py-4 space-y-4">
+            <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
+              </p>
+              <p className="text-sm text-muted-foreground">
+                <strong className="text-foreground">Tempo stimato:</strong> {(() => {
+                  const count = campagnaForIndividuazioni?.programmazioni_count || 0
+                  const chunkSize = 25
+                  const secondsPerChunk = 2.5
+                  const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
+                  
+                  if (totalSeconds < 60) {
+                    return `~${Math.ceil(totalSeconds)} secondi`
+                  } else if (totalSeconds < 3600) {
+                    const minutes = Math.ceil(totalSeconds / 60)
+                    return `~${minutes} minut${minutes === 1 ? 'o' : 'i'}`
+                  } else {
+                    const hours = Math.floor(totalSeconds / 3600)
+                    const minutes = Math.ceil((totalSeconds % 3600) / 60)
+                    return `~${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` e ${minutes} min` : ''}`
+                  }
+                })()}
+              </p>
             </div>
-          )}
-
-          {/* Stato: Processamento in corso */}
-          {isProcessingIndividuazioni && batchProgress && (
-            <div className="py-6 space-y-4">
-              {/* Progress header */}
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {batchProgress.phase === 'init' && 'Inizializzazione...'}
-                    {batchProgress.phase === 'processing' && 'Processamento in corso...'}
-                    {batchProgress.phase === 'finalizing' && 'Finalizzazione...'}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {batchProgress.phase === 'processing' && (
-                      <>Chunk {batchProgress.current_chunk}/{batchProgress.total_chunks}</>
-                    )}
-                    {batchProgress.phase === 'init' && 'Preparazione dati...'}
-                    {batchProgress.phase === 'finalizing' && 'Calcolo statistiche finali...'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Progresso</span>
-                  <span className="font-medium">
-                    {batchProgress.programmazioni_processate.toLocaleString()}/{batchProgress.programmazioni_totali.toLocaleString()}
-                  </span>
-                </div>
-                <div className="h-3 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
-                    style={{ 
-                      width: `${batchProgress.programmazioni_totali > 0 
-                        ? (batchProgress.programmazioni_processate / batchProgress.programmazioni_totali) * 100 
-                        : 0}%` 
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>
-                    {batchProgress.programmazioni_totali > 0 
-                      ? Math.round((batchProgress.programmazioni_processate / batchProgress.programmazioni_totali) * 100) 
-                      : 0}% completato
-                  </span>
-                  <span>
-                    {(batchProgress.programmazioni_totali - batchProgress.programmazioni_processate).toLocaleString()} rimanenti
-                  </span>
-                </div>
-              </div>
-
-              {/* Live stats */}
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-xl font-bold text-foreground">
-                    {batchProgress.individuazioni_create.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Individuazioni create</p>
-                </div>
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-xl font-bold text-foreground">
-                    {batchProgress.current_chunk}/{batchProgress.total_chunks}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Chunk processati</p>
-                </div>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-xs text-amber-800 text-center">
-                  ⚠️ Non chiudere questa finestra. Il processo potrebbe richiedere diversi minuti.
-                </p>
-              </div>
+            <div className="text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-2">Il sistema effettuerà il matching automatico tra:</p>
+              <ul className="list-disc list-inside space-y-1 ml-1">
+                <li>Programmazioni caricate</li>
+                <li>Opere nel catalogo</li>
+                <li>Partecipazioni degli artisti</li>
+              </ul>
             </div>
-          )}
-
-          {/* Stato: Risultato positivo */}
-          {individuazioniResult?.success && individuazioniResult.stats && (
-            <div className="py-4 space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-800 font-medium">
-                  Il processo di individuazione è stato completato con successo.
-                </p>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-foreground">
-                    {(individuazioniResult.stats.individuazioni_create || 0).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Individuazioni create</p>
-                </div>
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-foreground">
-                    {(individuazioniResult.stats.programmazioni_con_match || 0).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Programmazioni con match</p>
-                </div>
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-foreground">
-                    {(individuazioniResult.stats.artisti_distinti || 0).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Artisti individuati</p>
-                </div>
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold text-foreground">
-                    {(individuazioniResult.stats.opere_distinte || 0).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Opere distinte</p>
-                </div>
-              </div>
-
-              <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
-                <div className="flex justify-between">
-                  <span>Programmazioni totali:</span>
-                  <span>{(individuazioniResult.stats.programmazioni_totali || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Programmazioni processate:</span>
-                  <span>{(individuazioniResult.stats.programmazioni_processate || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Senza match:</span>
-                  <span>{(individuazioniResult.stats.programmazioni_senza_match || 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Tempo processamento:</span>
-                  <span>{(() => {
-                    const totalSeconds = (individuazioniResult.stats.tempo_processamento_ms || 0) / 1000
-                    
-                    if (totalSeconds < 60) {
-                      return `${totalSeconds.toFixed(1)} secondi`
-                    } else if (totalSeconds < 3600) {
-                      const minutes = Math.floor(totalSeconds / 60)
-                      const seconds = Math.round(totalSeconds % 60)
-                      return `${minutes} min${seconds > 0 ? ` ${seconds}s` : ''}`
-                    } else {
-                      const hours = Math.floor(totalSeconds / 3600)
-                      const minutes = Math.round((totalSeconds % 3600) / 60)
-                      return `${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` ${minutes} min` : ''}`
-                    }
-                  })()}</span>
-                </div>
-              </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs text-blue-800">
+                💡 Puoi minimizzare il processo e continuare a navigare la piattaforma mentre viene eseguito in background.
+              </p>
             </div>
-          )}
-
-          {/* Stato: Errore */}
-          {individuazioniResult?.success === false && (
-            <div className="py-4 space-y-4">
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-800 font-medium mb-1">
-                  Si è verificato un errore durante il processamento.
-                </p>
-                <p className="text-xs text-red-600 font-mono">
-                  {individuazioniResult.error}
-                </p>
-              </div>
-            </div>
-          )}
+          </div>
 
           <DialogFooter className="gap-2">
-            {/* Prima del processamento */}
-            {!isProcessingIndividuazioni && !individuazioniResult && (
-              <>
-                <Button 
-                  variant="outline" 
-                  onClick={handleCloseIndividuazioniDialog}
-                >
-                  Annulla
-                </Button>
-                <Button onClick={handleProcessIndividuazioni}>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Avvia Processamento
-                </Button>
-              </>
-            )}
-
-            {/* Durante il processamento */}
-            {isProcessingIndividuazioni && (
-              <Button variant="outline" disabled>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processamento in corso...
-              </Button>
-            )}
-
-            {/* Dopo il processamento - Successo */}
-            {individuazioniResult?.success && (
-              <>
-                <Button 
-                  variant="outline" 
-                  onClick={handleCloseIndividuazioniDialog}
-                >
-                  Chiudi
-                </Button>
-                <Button 
-                  onClick={() => {
-                    handleCloseIndividuazioniDialog()
-                    router.push(`/dashboard/individuazioni/${individuazioniResult.campagneIndividuazioneId}`)
-                  }}
-                >
-                  <Eye className="mr-2 h-4 w-4" />
-                  Visualizza Individuazioni
-                </Button>
-              </>
-            )}
-
-            {/* Dopo il processamento - Errore */}
-            {individuazioniResult?.success === false && (
-              <>
-                <Button 
-                  variant="outline" 
-                  onClick={handleCloseIndividuazioniDialog}
-                >
-                  Chiudi
-                </Button>
-                <Button 
-                  onClick={() => {
-                    setIndividuazioniResult(null)
-                  }}
-                >
-                  Riprova
-                </Button>
-              </>
-            )}
+            <Button variant="outline" onClick={() => setShowIndividuazioniConfirmDialog(false)}>
+              Annulla
+            </Button>
+            <Button onClick={handleConfirmStartIndividuazioni}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Avvia Processamento
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Process Blocked Dialog - shown when trying to start a new process while one is running */}
+      <ProcessBlockedDialog 
+        open={showProcessBlockedDialog} 
+        onClose={() => setShowProcessBlockedDialog(false)} 
+      />
     </div>
   )
 }

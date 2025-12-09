@@ -499,6 +499,16 @@ export default function OperaDetailPage() {
               <div className="flex items-center text-sm text-muted-foreground"><FileText className="mr-2 h-4 w-4" />IMDb tconst</div>
               <div className="font-medium">{opera.imdb_tconst || '-'}</div>
             </div>
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground"><Clapperboard className="mr-2 h-4 w-4" />Regia</div>
+              <div className="font-medium">
+                {(opera as any).regista
+                  ? (Array.isArray((opera as any).regista) 
+                      ? (opera as any).regista.join(', ') 
+                      : (opera as any).regista)
+                  : '-'}
+              </div>
+            </div>
           </div>
           <div className="mt-4 flex gap-2">
             <Button variant="outline" onClick={handleSearchImdb}>

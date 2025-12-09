@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -23,6 +23,7 @@ import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external
 type Opera = Database['public']['Tables']['opere']['Row']
 
 export default function OperePage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [opere, setOpere] = useState<Opera[]>([])
   const [loading, setLoading] = useState(true)
@@ -367,8 +368,17 @@ export default function OperePage() {
                     key={opera.id}
                     className="hover:bg-muted/50 cursor-pointer"
                     tabIndex={0}
-                    onClick={() => { window.location.href = `/dashboard/opere/${opera.id}` }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = `/dashboard/opere/${opera.id}` }}
+                    onClick={(e) => { 
+                      e.preventDefault()
+                      e.stopPropagation()
+                      router.push(`/dashboard/opere/${opera.id}`)
+                    }}
+                    onKeyDown={(e) => { 
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        router.push(`/dashboard/opere/${opera.id}`)
+                      }
+                    }}
                   >
                     <TableCell className="py-4 px-4 pl-6 font-mono text-sm">
                       {opera.codice_opera}
@@ -397,7 +407,10 @@ export default function OperePage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard/opere/${opera.id}` }}>
+                          <DropdownMenuItem onClick={(e) => { 
+                            e.stopPropagation()
+                            router.push(`/dashboard/opere/${opera.id}`)
+                          }}>
                             <Eye className="h-4 w-4 mr-2" />
                             Dettaglio
                           </DropdownMenuItem>
@@ -428,8 +441,17 @@ export default function OperePage() {
                   key={opera.id}
                   className="p-4 cursor-pointer"
                   tabIndex={0}
-                  onClick={() => { window.location.href = `/dashboard/opere/${opera.id}` }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') window.location.href = `/dashboard/opere/${opera.id}` }}
+                  onClick={(e) => { 
+                    e.preventDefault()
+                    e.stopPropagation()
+                    router.push(`/dashboard/opere/${opera.id}`)
+                  }}
+                  onKeyDown={(e) => { 
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      router.push(`/dashboard/opere/${opera.id}`)
+                    }
+                  }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -452,7 +474,10 @@ export default function OperePage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); window.location.href = `/dashboard/opere/${opera.id}` }}>
+                        <DropdownMenuItem onClick={(e) => { 
+                          e.stopPropagation()
+                          router.push(`/dashboard/opere/${opera.id}`)
+                        }}>
                           <Eye className="h-4 w-4 mr-2" />
                           Dettaglio
                         </DropdownMenuItem>

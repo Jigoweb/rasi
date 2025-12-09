@@ -1,6 +1,8 @@
 'use client'
 
 import { useAuth } from '@/shared/contexts/auth-context'
+import { IndividuazioneProcessProvider } from '@/shared/contexts/individuazione-process-context'
+import { FloatingProgressIndicator, IndividuazioneProgressDialog } from '@/shared/components/individuazione-progress-indicator'
 import { Button } from '@/shared/components/ui/button'
 import { Separator } from '@/shared/components/ui/separator'
 import { 
@@ -45,6 +47,7 @@ export default function DashboardLayout({
   }
 
   return (
+    <IndividuazioneProcessProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Mobile menu overlay */}
       {sidebarOpen && (
@@ -176,6 +179,11 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      {/* Global Individuazione Process Components */}
+      <FloatingProgressIndicator />
+      <IndividuazioneProgressDialog />
     </div>
+    </IndividuazioneProcessProvider>
   )
 }
