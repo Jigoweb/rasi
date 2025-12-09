@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getCampagneIndividuazione, CampagnaIndividuazione } from '@/features/individuazioni/services/individuazioni.service'
+import { getCampagneIndividuazione, CampagnaIndividuazione, getDeleteCampagnaIndividuazioneInfo, deleteCampagnaIndividuazione, DeleteCampagnaIndividuazioneInfo } from '@/features/individuazioni/services/individuazioni.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -20,8 +20,12 @@ import {
   Clock,
   Loader2,
   Info,
-  BarChart3
+  BarChart3,
+  Trash2,
+  MoreHorizontal
 } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 
 export default function IndividuazioniPage() {
@@ -29,6 +33,14 @@ export default function IndividuazioniPage() {
   const [campagne, setCampagne] = useState<CampagnaIndividuazione[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+
+  // Delete State
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [campagnaToDelete, setCampagnaToDelete] = useState<CampagnaIndividuazione | null>(null)
+  const [deleteInfo, setDeleteInfo] = useState<DeleteCampagnaIndividuazioneInfo | null>(null)
+  const [isLoadingDeleteInfo, setIsLoadingDeleteInfo] = useState(false)
+  const [isDeletingCampagna, setIsDeletingCampagna] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState<{ phase: string; deleted?: number; total?: number } | null>(null)
 
   useEffect(() => {
     loadCampagne()
@@ -44,6 +56,68 @@ export default function IndividuazioniPage() {
       console.error('Errore caricamento campagne:', error)
     }
     setLoading(false)
+  }
+
+  // Delete Handlers
+  const handleOpenDeleteDialog = async (campagna: CampagnaIndividuazione) => {
+    setCampagnaToDelete(campagna)
+    setIsDeleteDialogOpen(true)
+    setIsLoadingDeleteInfo(true)
+    setDeleteInfo(null)
+    setDeleteProgress(null)
+
+    try {
+      const { data, error } = await getDeleteCampagnaIndividuazioneInfo(campagna.id)
+      if (error) throw error
+      setDeleteInfo(data)
+    } catch (error) {
+      console.error('Error loading delete info:', error)
+    } finally {
+      setIsLoadingDeleteInfo(false)
+    }
+  }
+
+  const handleCloseDeleteDialog = () => {
+    if (isDeletingCampagna) return // Prevent closing during deletion
+    setIsDeleteDialogOpen(false)
+    setCampagnaToDelete(null)
+    setDeleteInfo(null)
+    setDeleteProgress(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!campagnaToDelete) return
+
+    setIsDeletingCampagna(true)
+    setDeleteProgress({ phase: 'starting' })
+    
+    try {
+      const { error } = await deleteCampagnaIndividuazione(
+        campagnaToDelete.id,
+        (progress) => setDeleteProgress(progress)
+      )
+
+      if (error) {
+        const errorMessage = error instanceof Error ? error.message : JSON.stringify(error)
+        console.error('Error deleting campagna:', errorMessage)
+        alert(`Errore durante l'eliminazione: ${errorMessage}`)
+        return
+      }
+      
+      // Remove from list and close dialog
+      setCampagne(prev => prev.filter(c => c.id !== campagnaToDelete.id))
+      setIsDeleteDialogOpen(false)
+      setCampagnaToDelete(null)
+      setDeleteInfo(null)
+      setDeleteProgress(null)
+    } catch (error: any) {
+      const errorMessage = error instanceof Error ? error.message : JSON.stringify(error)
+      console.error('Error deleting campagna:', errorMessage)
+      alert(`Errore durante l'eliminazione: ${errorMessage}`)
+    } finally {
+      setIsDeletingCampagna(false)
+      setDeleteProgress(null)
+    }
   }
 
   const filteredCampagne = campagne.filter(c => 
@@ -262,6 +336,26 @@ export default function IndividuazioniPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => router.push(`/dashboard/individuazioni/${campagna.id}`)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              Dettaglio
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              className="text-red-600"
+                              onClick={() => handleOpenDeleteDialog(campagna)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Elimina
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -277,6 +371,109 @@ export default function IndividuazioniPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Campagna Individuazione Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={handleCloseDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Elimina Campagna Individuazione
+            </DialogTitle>
+            <DialogDescription>
+              Conferma l&apos;eliminazione della campagna <span className="font-medium text-foreground">{campagnaToDelete?.nome}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingDeleteInfo ? (
+            <div className="py-8 flex flex-col items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Verifica in corso...</p>
+            </div>
+          ) : deleteInfo ? (
+            <div className="py-4 space-y-4">
+              {/* Warning message */}
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                <div className="flex items-center gap-2 text-amber-600">
+                  <Info className="h-5 w-5" />
+                  <p className="font-medium">Attenzione</p>
+                </div>
+                <p className="text-sm text-amber-700">
+                  Questa operazione eliminerà <strong>{deleteInfo.individuazioni_count.toLocaleString()}</strong> individuazioni associate alla campagna.
+                </p>
+              </div>
+
+              {/* Additional info */}
+              <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Campagna Programmazione:</strong> {deleteInfo.campagne_programmazione_nome}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  La campagna programmazione tornerà allo stato &quot;In review&quot; e potrai eventualmente ricreare le individuazioni.
+                </p>
+              </div>
+
+              {/* Progress during deletion */}
+              {isDeletingCampagna && deleteProgress && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="text-sm">
+                      {deleteProgress.phase === 'deleting_individuazioni' && 'Eliminazione individuazioni...'}
+                      {deleteProgress.phase === 'updating_programmazione' && 'Aggiornamento campagna programmazione...'}
+                      {deleteProgress.phase === 'deleting_campagna' && 'Eliminazione campagna...'}
+                    </span>
+                  </div>
+                  {deleteProgress.phase === 'deleting_individuazioni' && deleteProgress.total && (
+                    <div className="space-y-1">
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-destructive transition-all"
+                          style={{ width: `${((deleteProgress.deleted || 0) / deleteProgress.total) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground text-right">
+                        {(deleteProgress.deleted || 0).toLocaleString()} / {deleteProgress.total.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              Errore nel caricamento delle informazioni
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleCloseDeleteDialog} 
+              disabled={isDeletingCampagna}
+            >
+              Annulla
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleConfirmDelete}
+              disabled={isLoadingDeleteInfo || isDeletingCampagna || !deleteInfo}
+            >
+              {isDeletingCampagna ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Eliminazione...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Elimina Campagna
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

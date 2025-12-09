@@ -106,11 +106,108 @@ export const updateCampagnaStatus = async (id: string, stato: string) => {
   return { data, error }
 }
 
-export const deleteCampagnaProgrammazione = async (id: string) => {
+// ============================================
+// DELETE CAMPAGNA PROGRAMMAZIONE
+// ============================================
+
+export type DeleteCampagnaProgrammazioneScenario = 
+  | 'empty'           // 1.1 - Nessun record associato
+  | 'has_data'        // 1.2 - Ha dati ma nessuna individuazione
+  | 'has_individuazione' // 1.3 - Esiste campagna individuazione collegata
+
+export interface DeleteCampagnaProgrammazioneInfo {
+  scenario: DeleteCampagnaProgrammazioneScenario
+  programmazioni_count: number
+  campagna_individuazione_id?: string
+  campagna_individuazione_nome?: string
+  individuazioni_count?: number
+}
+
+/**
+ * Verifica lo scenario di cancellazione per una campagna programmazione
+ */
+export const getDeleteCampagnaProgrammazioneInfo = async (campagnaId: string): Promise<{ data: DeleteCampagnaProgrammazioneInfo | null; error: any }> => {
+  try {
+    // Count programmazioni associate
+    const { count: programmazioni_count, error: progError } = await supabase
+      .from('programmazioni')
+      .select('*', { count: 'exact', head: true })
+      .eq('campagna_programmazione_id', campagnaId)
+
+    if (progError) throw progError
+
+    // Check if campagna individuazione exists
+    const { data: campagnaIndividuazione, error: ciError } = await supabase
+      .from('campagne_individuazione')
+      .select('id, nome')
+      .eq('campagne_programmazione_id', campagnaId)
+      .maybeSingle()
+
+    if (ciError) throw ciError
+
+    let individuazioni_count = 0
+    if (campagnaIndividuazione) {
+      const { count, error: indError } = await supabase
+        .from('individuazioni')
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_individuazioni_id', campagnaIndividuazione.id)
+
+      if (indError) throw indError
+      individuazioni_count = count || 0
+    }
+
+    const scenario: DeleteCampagnaProgrammazioneScenario = 
+      campagnaIndividuazione ? 'has_individuazione' :
+      (programmazioni_count || 0) > 0 ? 'has_data' : 'empty'
+
+    return {
+      data: {
+        scenario,
+        programmazioni_count: programmazioni_count || 0,
+        campagna_individuazione_id: campagnaIndividuazione?.id,
+        campagna_individuazione_nome: campagnaIndividuazione?.nome,
+        individuazioni_count
+      },
+      error: null
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+/**
+ * Elimina una campagna programmazione
+ * - Scenario 'empty' o 'has_data': cancella direttamente (programmazioni hanno CASCADE)
+ * - Scenario 'has_individuazione': ritorna errore - deve prima cancellare la campagna individuazione
+ */
+export const deleteCampagnaProgrammazione = async (campagnaId: string): Promise<{ data: any; error: any; blocked?: boolean; blockReason?: string }> => {
+  // Prima verifica lo scenario
+  const { data: info, error: infoError } = await getDeleteCampagnaProgrammazioneInfo(campagnaId)
+  
+  if (infoError) {
+    return { data: null, error: infoError }
+  }
+
+  if (!info) {
+    return { data: null, error: new Error('Campagna non trovata') }
+  }
+
+  // Scenario 1.3: Blocca se esiste campagna individuazione
+  if (info.scenario === 'has_individuazione') {
+    return {
+      data: null,
+      error: null,
+      blocked: true,
+      blockReason: `Esiste una campagna di individuazione collegata ("${info.campagna_individuazione_nome}") con ${info.individuazioni_count?.toLocaleString()} individuazioni. Devi prima eliminarla dalla pagina Individuazioni.`
+    }
+  }
+
+  // Scenario 1.1 e 1.2: Procedi con la cancellazione
+  // Le programmazioni verranno cancellate in CASCADE
   const { data, error } = await supabase
     .from('campagne_programmazione' as any)
     .delete()
-    .eq('id', id)
+    .eq('id', campagnaId)
     .select()
 
   return { data, error }

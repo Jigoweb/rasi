@@ -9,7 +9,7 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
-import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
+import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
 import { processCampagnaIndividuazioneBatch, BatchProcessingProgress } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
@@ -94,6 +94,13 @@ export default function ProgrammazioniPage() {
     campagneIndividuazioneId?: string
   } | null>(null)
 
+  // Delete Campagna State
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [campagnaToDelete, setCampagnaToDelete] = useState<CampagnaProgrammazione | null>(null)
+  const [deleteInfo, setDeleteInfo] = useState<DeleteCampagnaProgrammazioneInfo | null>(null)
+  const [isLoadingDeleteInfo, setIsLoadingDeleteInfo] = useState(false)
+  const [isDeletingCampagna, setIsDeletingCampagna] = useState(false)
+
   const handleProcessIndividuazioni = async () => {
     if (!campagnaForIndividuazioni) return
 
@@ -157,6 +164,61 @@ export default function ProgrammazioniPage() {
     setCampagnaForIndividuazioni(null)
     setIndividuazioniResult(null)
     setBatchProgress(null)
+  }
+
+  // Delete Campagna Handlers
+  const handleOpenDeleteDialog = async (campagna: CampagnaProgrammazione) => {
+    setCampagnaToDelete(campagna)
+    setIsDeleteDialogOpen(true)
+    setIsLoadingDeleteInfo(true)
+    setDeleteInfo(null)
+
+    try {
+      const { data, error } = await getDeleteCampagnaProgrammazioneInfo(campagna.id)
+      if (error) throw error
+      setDeleteInfo(data)
+    } catch (error) {
+      console.error('Error loading delete info:', error)
+    } finally {
+      setIsLoadingDeleteInfo(false)
+    }
+  }
+
+  const handleCloseDeleteDialog = () => {
+    setIsDeleteDialogOpen(false)
+    setCampagnaToDelete(null)
+    setDeleteInfo(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!campagnaToDelete) return
+
+    setIsDeletingCampagna(true)
+    try {
+      // Update UI immediately
+      setCampagne(prev => prev.map(c => c.id === campagnaToDelete.id ? { ...c, stato: 'deleting' } : c))
+      
+      const { error, blocked, blockReason } = await deleteCampagnaProgrammazione(campagnaToDelete.id)
+      
+      if (blocked) {
+        // Shouldn't happen as we check in dialog, but handle it
+        alert(blockReason)
+        setCampagne(prev => prev.map(c => c.id === campagnaToDelete.id ? { ...c, stato: 'error' } : c))
+        return
+      }
+
+      if (error) throw error
+      
+      // Remove from list
+      setCampagne(prev => prev.filter(c => c.id !== campagnaToDelete.id))
+      handleCloseDeleteDialog()
+    } catch (error) {
+      console.error('Error deleting campagna:', error)
+      alert('Errore durante l\'eliminazione della campagna')
+      setCampagne(prev => prev.map(c => c.id === campagnaToDelete.id ? { ...c, stato: 'error' } : c))
+    } finally {
+      setIsDeletingCampagna(false)
+    }
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -818,19 +880,9 @@ export default function ProgrammazioniPage() {
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 className="text-red-600"
-                                onClick={async (e) => {
+                                onClick={(e) => {
                                   e.stopPropagation()
-                                  const ok = window.confirm('Eliminare la campagna e tutte le programmazioni associate?')
-                                  if (!ok) return
-                                  try {
-                                    setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'deleting' } : c))
-                                    const { error } = await deleteCampagnaProgrammazione(campagna.id)
-                                    if (error) throw error
-                                    setCampagne(prev => prev.filter(c => c.id !== campagna.id))
-                                  } catch (e) {
-                                    alert('Errore durante l\'eliminazione della campagna')
-                                    setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'error' } : c))
-                                  }
+                                  handleOpenDeleteDialog(campagna)
                                 }}
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
@@ -1230,6 +1282,119 @@ export default function ProgrammazioniPage() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Campagna Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={handleCloseDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Elimina Campagna
+            </DialogTitle>
+            <DialogDescription>
+              Conferma l&apos;eliminazione della campagna <span className="font-medium text-foreground">{campagnaToDelete?.nome}</span>
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingDeleteInfo ? (
+            <div className="py-8 flex flex-col items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Verifica in corso...</p>
+            </div>
+          ) : deleteInfo ? (
+            <div className="py-4 space-y-4">
+              {/* Scenario 1.1: Nessun dato */}
+              {deleteInfo.scenario === 'empty' && (
+                <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-green-600">
+                    <CheckCircle className="h-5 w-5" />
+                    <p className="font-medium">Campagna vuota</p>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Non ci sono programmazioni associate a questa campagna. Puoi eliminarla in sicurezza.
+                  </p>
+                </div>
+              )}
+
+              {/* Scenario 1.2: Ha dati ma nessuna individuazione */}
+              {deleteInfo.scenario === 'has_data' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-amber-600">
+                    <Info className="h-5 w-5" />
+                    <p className="font-medium">Campagna con dati</p>
+                  </div>
+                  <p className="text-sm text-amber-700">
+                    Questa campagna contiene <strong>{deleteInfo.programmazioni_count.toLocaleString()}</strong> programmazioni. 
+                    Eliminando la campagna, verranno eliminate anche tutte le programmazioni associate.
+                  </p>
+                </div>
+              )}
+
+              {/* Scenario 1.3: Ha individuazione collegata - BLOCCO */}
+              {deleteInfo.scenario === 'has_individuazione' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-red-600">
+                    <XCircle className="h-5 w-5" />
+                    <p className="font-medium">Eliminazione non consentita</p>
+                  </div>
+                  <p className="text-sm text-red-700">
+                    Questa campagna ha una <strong>campagna di individuazione collegata</strong>:
+                  </p>
+                  <div className="bg-white/60 rounded p-3 space-y-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {deleteInfo.campagna_individuazione_nome}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {deleteInfo.individuazioni_count?.toLocaleString()} individuazioni create
+                    </p>
+                  </div>
+                  <p className="text-sm text-red-700">
+                    Per eliminare questa campagna, devi prima eliminare la campagna di individuazione dalla pagina <strong>Individuazioni</strong>.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              Errore nel caricamento delle informazioni
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={handleCloseDeleteDialog} disabled={isDeletingCampagna}>
+              Annulla
+            </Button>
+            {deleteInfo?.scenario !== 'has_individuazione' && (
+              <Button 
+                variant="destructive" 
+                onClick={handleConfirmDelete}
+                disabled={isLoadingDeleteInfo || isDeletingCampagna}
+              >
+                {isDeletingCampagna ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Eliminazione...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Elimina Campagna
+                  </>
+                )}
+              </Button>
+            )}
+            {deleteInfo?.scenario === 'has_individuazione' && (
+              <Button onClick={() => {
+                handleCloseDeleteDialog()
+                router.push('/dashboard/individuazioni')
+              }}>
+                <Eye className="mr-2 h-4 w-4" />
+                Vai a Individuazioni
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
