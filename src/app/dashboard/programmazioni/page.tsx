@@ -879,7 +879,7 @@ export default function ProgrammazioniPage() {
                                 Modifica
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                className="text-red-600"
+                                variant="destructive"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleOpenDeleteDialog(campagna)
