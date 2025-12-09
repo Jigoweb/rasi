@@ -79,7 +79,7 @@ export interface Individuazione {
 // ============================================
 
 export const getCampagneIndividuazione = async () => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('campagne_individuazione')
     .select(`
       *,
@@ -96,7 +96,7 @@ export const getCampagneIndividuazione = async () => {
 }
 
 export const getCampagnaIndividuazione = async (id: string) => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('campagne_individuazione')
     .select(`
       *,
@@ -275,7 +275,7 @@ export const formatIndividuazioniForExport = (individuazioni: any[]) => {
 // ============================================
 
 export const getCampagnaStatistiche = async (campagnaId: string) => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from('campagne_individuazione')
     .select('statistiche')
     .eq('id', campagnaId)
@@ -300,7 +300,7 @@ export interface DeleteCampagnaIndividuazioneInfo {
 export const getDeleteCampagnaIndividuazioneInfo = async (campagnaId: string): Promise<{ data: DeleteCampagnaIndividuazioneInfo | null; error: any }> => {
   try {
     // Get campagna with related info
-    const { data: campagna, error: campagnaError } = await supabase
+    const { data: campagna, error: campagnaError } = await (supabase as any)
       .from('campagne_individuazione')
       .select('campagne_programmazione_id, campagne_programmazione(nome)')
       .eq('id', campagnaId)
@@ -319,8 +319,8 @@ export const getDeleteCampagnaIndividuazioneInfo = async (campagnaId: string): P
     return {
       data: {
         individuazioni_count: individuazioni_count || 0,
-        campagne_programmazione_id: campagna.campagne_programmazione_id,
-        campagne_programmazione_nome: (campagna.campagne_programmazione as any)?.nome
+        campagne_programmazione_id: (campagna as any).campagne_programmazione_id,
+        campagne_programmazione_nome: ((campagna as any).campagne_programmazione as any)?.nome
       },
       error: null
     }
@@ -370,8 +370,8 @@ export const deleteCampagnaIndividuazione = async (
     // 2. Update campagna_programmazione to remove 'individuata' status
     onProgress?.({ phase: 'updating_programmazione' })
     
-    const { error: updateProgError } = await supabase
-      .from('campagne_programmazione' as any)
+    const { error: updateProgError } = await (supabase as any)
+      .from('campagne_programmazione')
       .update({ stato: 'in_review', is_individuated: false })
       .eq('id', info.campagne_programmazione_id)
 
@@ -385,7 +385,7 @@ export const deleteCampagnaIndividuazione = async (
     // 3. Delete campagna_individuazione
     onProgress?.({ phase: 'deleting_campagna' })
     
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('campagne_individuazione')
       .delete()
       .eq('id', campagnaId)
