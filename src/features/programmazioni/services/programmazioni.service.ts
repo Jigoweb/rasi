@@ -137,7 +137,7 @@ export const getDeleteCampagnaProgrammazioneInfo = async (campagnaId: string): P
     if (progError) throw progError
 
     // Check if campagna individuazione exists
-    const { data: campagnaIndividuazione, error: ciError } = await supabase
+    const { data: campagnaIndividuazione, error: ciError } = await (supabase as any)
       .from('campagne_individuazione')
       .select('id, nome')
       .eq('campagne_programmazione_id', campagnaId)
@@ -147,7 +147,7 @@ export const getDeleteCampagnaProgrammazioneInfo = async (campagnaId: string): P
 
     let individuazioni_count = 0
     if (campagnaIndividuazione) {
-      const { count, error: indError } = await supabase
+      const { count, error: indError } = await (supabase as any)
         .from('individuazioni')
         .select('*', { count: 'exact', head: true })
         .eq('campagna_individuazioni_id', campagnaIndividuazione.id)

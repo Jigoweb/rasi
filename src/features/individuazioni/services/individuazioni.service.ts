@@ -309,7 +309,7 @@ export const getDeleteCampagnaIndividuazioneInfo = async (campagnaId: string): P
     if (campagnaError) throw campagnaError
 
     // Count individuazioni
-    const { count: individuazioni_count, error: countError } = await supabase
+    const { count: individuazioni_count, error: countError } = await (supabase as any)
       .from('individuazioni')
       .select('*', { count: 'exact', head: true })
       .eq('campagna_individuazioni_id', campagnaId)
@@ -354,7 +354,7 @@ export const deleteCampagnaIndividuazione = async (
     onProgress?.({ phase: 'deleting_individuazioni', deleted: 0, total: info.individuazioni_count })
     
     // Delete directly - Supabase handles large deletes
-    const { error: deleteIndError } = await supabase
+    const { error: deleteIndError } = await (supabase as any)
       .from('individuazioni')
       .delete()
       .eq('campagna_individuazioni_id', campagnaId)
