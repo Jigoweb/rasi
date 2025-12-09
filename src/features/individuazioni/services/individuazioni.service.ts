@@ -306,7 +306,7 @@ export const getDeleteCampagnaIndividuazioneInfo = async (campagnaId: string): P
       .eq('id', campagnaId)
       .single()
 
-    if (campagnaError) throw campagnaError
+    if (campagnaError || !campagna) throw campagnaError || new Error('Campagna non trovata')
 
     // Count individuazioni
     const { count: individuazioni_count, error: countError } = await (supabase as any)
