@@ -74,7 +74,7 @@ export default function DashboardPage() {
             .select('id', { count: 'exact', head: true })
             .gte('data_trasmissione', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
           */
-          supabase
+          (supabase as any)
             .from('campagne_individuazione')
             .select('id', { count: 'exact', head: true })
             .eq('stato', 'in_corso')

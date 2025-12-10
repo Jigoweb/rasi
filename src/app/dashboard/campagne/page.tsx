@@ -68,7 +68,7 @@ export default function CampagnePage() {
   const fetchCampagne = async () => {
     try {
       // Fetch individuazione campaigns
-      const { data: individuazioneData, error: individuazioneError } = await supabase
+      const { data: individuazioneData, error: individuazioneError } = await (supabase as any)
         .from('campagne_individuazione')
         .select('*')
         .order('data_inizio', { ascending: false })

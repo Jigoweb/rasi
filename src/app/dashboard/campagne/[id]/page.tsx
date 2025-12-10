@@ -18,8 +18,8 @@ export default function CampagnaDettaglioPage() {
   const fetchCampagna = useCallback(async () => {
     setLoading(true)
     // Campagne possono essere di 2 tabelle: individuazione o ripartizione
-    const { data: ind, error: e1 } = await supabase.from('campagne_individuazione').select('*').eq('id', id).single()
-    const { data: rip, error: e2 } = await supabase.from('campagne_ripartizione').select('*').eq('id', id).single()
+    const { data: ind, error: e1 } = await (supabase as any).from('campagne_individuazione').select('*').eq('id', id).single()
+    const { data: rip, error: e2 } = await (supabase as any).from('campagne_ripartizione').select('*').eq('id', id).single()
     const data = ind ?? rip
     setCampagna(data || null)
     setLoading(false)

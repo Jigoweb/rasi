@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Carica la campagna_individuazione completa
-    const { data: campagna } = await supabaseServer
+    const { data: campagna } = await (supabaseServer as any)
       .from('campagne_individuazione')
       .select('*')
       .eq('id', campagne_individuazione_id)
