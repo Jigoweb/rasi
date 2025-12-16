@@ -109,3 +109,4 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 **Nota**: La build è stata testata localmente e funziona correttamente. Se il deploy fallisce, è probabilmente un problema di configurazione su Vercel (variabili d'ambiente o altro) piuttosto che un problema del codice.
 
 
+

@@ -22,7 +22,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon } from 'lucide-react'
+import { Checkbox } from '@/shared/components/ui/checkbox'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon, Users, Check, ChevronDown, ChevronUp } from 'lucide-react'
 
 type Emittente = Database['public']['Tables']['emittenti']['Row']
 
@@ -88,6 +89,13 @@ export default function ProgrammazioniPage() {
   const [showProcessBlockedDialog, setShowProcessBlockedDialog] = useState(false)
   const [showIndividuazioniConfirmDialog, setShowIndividuazioniConfirmDialog] = useState(false)
   const [campagnaForIndividuazioni, setCampagnaForIndividuazioni] = useState<CampagnaProgrammazione | null>(null)
+  
+  // Artist filter for individuazioni
+  const [showArtistFilter, setShowArtistFilter] = useState(false)
+  const [allArtists, setAllArtists] = useState<Array<{ id: string; nome: string; cognome: string; nome_arte: string | null }>>([])
+  const [loadingArtists, setLoadingArtists] = useState(false)
+  const [selectedArtistIds, setSelectedArtistIds] = useState<Set<string>>(new Set())
+  const [artistSearchQuery, setArtistSearchQuery] = useState('')
 
   // Delete Campagna State
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -95,6 +103,29 @@ export default function ProgrammazioniPage() {
   const [deleteInfo, setDeleteInfo] = useState<DeleteCampagnaProgrammazioneInfo | null>(null)
   const [isLoadingDeleteInfo, setIsLoadingDeleteInfo] = useState(false)
   const [isDeletingCampagna, setIsDeletingCampagna] = useState(false)
+
+  // Load all artists for filter selection
+  const loadArtists = useCallback(async () => {
+    if (allArtists.length > 0) return // Already loaded
+    
+    setLoadingArtists(true)
+    try {
+      const { data, error } = await supabase
+        .from('artisti')
+        .select('id, nome, cognome, nome_arte')
+        .order('cognome', { ascending: true })
+        .order('nome', { ascending: true })
+      
+      if (error) throw error
+      setAllArtists(data || [])
+      // By default, select all artists
+      setSelectedArtistIds(new Set((data || []).map((a: any) => a.id)))
+    } catch (error) {
+      console.error('Errore caricamento artisti:', error)
+    } finally {
+      setLoadingArtists(false)
+    }
+  }, [allArtists.length])
 
   // Handle starting individuazioni process - show confirmation first
   const handleStartIndividuazioni = (campagna: CampagnaProgrammazione) => {
@@ -107,6 +138,9 @@ export default function ProgrammazioniPage() {
     // Show confirmation dialog first
     setCampagnaForIndividuazioni(campagna)
     setShowIndividuazioniConfirmDialog(true)
+    setShowArtistFilter(false) // Reset filter panel
+    setArtistSearchQuery('') // Reset search
+    loadArtists() // Load artists if not already loaded
   }
 
   // Actually start the process after confirmation
@@ -120,8 +154,14 @@ export default function ProgrammazioniPage() {
       c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_corso' } : c
     ))
 
-    // Start the global process
-    const result = await startProcess(campagnaForIndividuazioni)
+    // Determine if we should filter by artists
+    // If all artists are selected (or none selected), pass null (no filter)
+    const artistaIds = selectedArtistIds.size === allArtists.length || selectedArtistIds.size === 0
+      ? null 
+      : Array.from(selectedArtistIds)
+
+    // Start the global process with optional artist filter
+    const result = await startProcess(campagnaForIndividuazioni, { artistaIds })
 
     // Update local state based on result
     if (result.success) {
@@ -1421,15 +1461,132 @@ export default function ProgrammazioniPage() {
                 💡 Puoi minimizzare il processo e continuare a navigare la piattaforma mentre viene eseguito in background.
               </p>
             </div>
+
+            {/* Artist Filter Section */}
+            <div className="border rounded-lg">
+              <button
+                type="button"
+                onClick={() => setShowArtistFilter(!showArtistFilter)}
+                className="w-full flex items-center justify-between p-3 text-sm hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Filtra Artisti</span>
+                  {selectedArtistIds.size !== allArtists.length && selectedArtistIds.size > 0 && (
+                    <Badge variant="secondary" className="ml-2">
+                      {selectedArtistIds.size} selezionati
+                    </Badge>
+                  )}
+                </div>
+                {showArtistFilter ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+              </button>
+              
+              {showArtistFilter && (
+                <div className="border-t p-3 space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Di default tutti gli artisti sono selezionati. Deseleziona quelli che vuoi escludere dal processo.
+                  </p>
+                  
+                  {/* Search and bulk actions */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Cerca artista..."
+                        value={artistSearchQuery}
+                        onChange={(e) => setArtistSearchQuery(e.target.value)}
+                        className="pl-8 h-8 text-sm"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedArtistIds(new Set(allArtists.map(a => a.id)))}
+                      className="text-xs"
+                    >
+                      Tutti
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedArtistIds(new Set())}
+                      className="text-xs"
+                    >
+                      Nessuno
+                    </Button>
+                  </div>
+                  
+                  {/* Artists list */}
+                  {loadingArtists ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      <span className="ml-2 text-sm text-muted-foreground">Caricamento artisti...</span>
+                    </div>
+                  ) : (
+                    <div className="max-h-48 overflow-y-auto border rounded-md">
+                      {allArtists
+                        .filter(artist => {
+                          if (!artistSearchQuery) return true
+                          const searchLower = artistSearchQuery.toLowerCase()
+                          const fullName = `${artist.nome} ${artist.cognome}`.toLowerCase()
+                          const nomeArte = artist.nome_arte?.toLowerCase() || ''
+                          return fullName.includes(searchLower) || nomeArte.includes(searchLower)
+                        })
+                        .map(artist => (
+                          <label
+                            key={artist.id}
+                            className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
+                          >
+                            <Checkbox
+                              checked={selectedArtistIds.has(artist.id)}
+                              onCheckedChange={(checked) => {
+                                const newSet = new Set(selectedArtistIds)
+                                if (checked) {
+                                  newSet.add(artist.id)
+                                } else {
+                                  newSet.delete(artist.id)
+                                }
+                                setSelectedArtistIds(newSet)
+                              }}
+                            />
+                            <span className="text-sm">
+                              {artist.cognome} {artist.nome}
+                              {artist.nome_arte && (
+                                <span className="text-muted-foreground ml-1">({artist.nome_arte})</span>
+                              )}
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                  )}
+                  
+                  {/* Summary */}
+                  <p className="text-xs text-muted-foreground text-right">
+                    {selectedArtistIds.size} di {allArtists.length} artisti selezionati
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowIndividuazioniConfirmDialog(false)}>
               Annulla
             </Button>
-            <Button onClick={handleConfirmStartIndividuazioni}>
+            <Button 
+              onClick={handleConfirmStartIndividuazioni}
+              disabled={selectedArtistIds.size === 0}
+            >
               <Sparkles className="mr-2 h-4 w-4" />
-              Avvia Processamento
+              {selectedArtistIds.size === allArtists.length 
+                ? 'Avvia Processamento' 
+                : `Avvia con ${selectedArtistIds.size} Artisti`}
             </Button>
           </DialogFooter>
         </DialogContent>

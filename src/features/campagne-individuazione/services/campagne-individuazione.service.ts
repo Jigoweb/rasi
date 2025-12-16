@@ -39,6 +39,7 @@ export interface ProcessChunkRequest {
   campagne_individuazione_id: string
   programmazione_ids: string[]
   soglia_titolo?: number
+  artista_ids?: string[] | null  // Filtro artisti opzionale
 }
 
 export interface ProcessChunkResponse {
@@ -216,10 +217,12 @@ export const processCampagnaIndividuazioneBatch = async (
     sogliaItolo?: number
     nomeCampagna?: string
     descrizione?: string
+    artistaIds?: string[] | null  // Filtro artisti opzionale
   }
 ): Promise<FinalizeCampagnaResponse> => {
   const chunkSize = options?.chunkSize || 500
   const sogliaItolo = options?.sogliaItolo || 0.7
+  const artistaIds = options?.artistaIds || null
   const startTime = Date.now()
 
   let progress: BatchProcessingProgress = {
@@ -294,7 +297,8 @@ export const processCampagnaIndividuazioneBatch = async (
       const chunkResult = await processChunk({
         campagne_individuazione_id,
         programmazione_ids,
-        soglia_titolo: sogliaItolo
+        soglia_titolo: sogliaItolo,
+        artista_ids: artistaIds  // Passa il filtro artisti
       })
 
       console.log(`[Batch] Chunk ${chunkIndex + 1} result:`, chunkResult.success ? 'success' : 'failed', chunkResult.data || chunkResult.error)

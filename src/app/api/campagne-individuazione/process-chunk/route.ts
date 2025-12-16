@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
     const { 
       campagne_individuazione_id,
       programmazione_ids,
-      soglia_titolo = 0.7
+      soglia_titolo = 0.7,
+      artista_ids = null  // Nuovo: filtro artisti opzionale
     } = body
 
     if (!campagne_individuazione_id) {
@@ -29,12 +30,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Processa il chunk
+    // Processa il chunk (con filtro artisti opzionale)
     const { data: result, error: processError } = await (supabaseServer as any)
       .rpc('process_programmazioni_chunk', {
         p_campagne_individuazione_id: campagne_individuazione_id,
         p_programmazione_ids: programmazione_ids,
-        p_soglia_titolo: soglia_titolo
+        p_soglia_titolo: soglia_titolo,
+        p_artista_ids: artista_ids  // Passa il filtro artisti alla funzione SQL
       })
 
     if (processError) {

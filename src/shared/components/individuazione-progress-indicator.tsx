@@ -35,8 +35,11 @@ export function FloatingProgressIndicator() {
     <div 
       className="fixed bottom-4 right-4 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300 pointer-events-auto"
     >
-      <button
+      <div
         onClick={maximize}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === 'Enter' && maximize()}
         className="flex items-center gap-3 bg-background border rounded-lg shadow-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer group pointer-events-auto"
       >
         {/* Icon */}
@@ -91,7 +94,7 @@ export function FloatingProgressIndicator() {
             <X className="h-4 w-4 text-muted-foreground" />
           </button>
         )}
-      </button>
+      </div>
     </div>
   )
 }

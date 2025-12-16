@@ -27,9 +27,13 @@ export interface IndividuazioneProcessState {
   isMinimized: boolean
 }
 
+export interface StartProcessOptions {
+  artistaIds?: string[] | null  // Filtro artisti opzionale
+}
+
 export interface IndividuazioneProcessContextValue {
   state: IndividuazioneProcessState
-  startProcess: (campagna: CampagnaProgrammazione) => Promise<FinalizeCampagnaResponse>
+  startProcess: (campagna: CampagnaProgrammazione, options?: StartProcessOptions) => Promise<FinalizeCampagnaResponse>
   minimize: () => void
   maximize: () => void
   reset: () => void
@@ -71,7 +75,10 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [state.status])
 
-  const startProcess = useCallback(async (campagna: CampagnaProgrammazione): Promise<FinalizeCampagnaResponse> => {
+  const startProcess = useCallback(async (
+    campagna: CampagnaProgrammazione, 
+    options?: StartProcessOptions
+  ): Promise<FinalizeCampagnaResponse> => {
     // Set initial state
     setState({
       status: 'processing',
@@ -92,6 +99,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         },
         {
           chunkSize: 25,
+          artistaIds: options?.artistaIds,  // Passa il filtro artisti
         }
       )
 
@@ -175,6 +183,7 @@ export function useIndividuazioneProcess() {
   }
   return context
 }
+
 
 
 
