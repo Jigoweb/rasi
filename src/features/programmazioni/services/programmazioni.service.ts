@@ -4,6 +4,7 @@ export interface CampagnaProgrammazionePayload {
   emittente_id: string
   anno: number
   nome: string
+  descrizione?: string
   stato?: string
   created_by?: string
 }
@@ -13,6 +14,7 @@ export interface CampagnaProgrammazione {
   emittente_id: string
   anno: number
   nome: string
+  descrizione?: string | null
   stato: string
   created_at: string
   created_by: string | null

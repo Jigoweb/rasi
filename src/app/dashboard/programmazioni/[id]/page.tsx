@@ -130,6 +130,12 @@ export default function CampagnaDettaglioPage() {
               <div className="text-sm font-medium text-gray-500">Nome Campagna</div>
               <div className="text-lg font-medium">{campagna?.nome || '-'}</div>
             </div>
+            {campagna?.descrizione && (
+              <div className="col-span-2">
+                <div className="text-sm font-medium text-gray-500">Descrizione / Note</div>
+                <div className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{campagna.descrizione}</div>
+              </div>
+            )}
             <div>
               <div className="text-sm font-medium text-gray-500">Emittente</div>
               <div className="flex items-center gap-2"><Tv className="h-4 w-4 text-gray-400" /><span>{campagna?.emittenti?.nome || '-'}</span></div>

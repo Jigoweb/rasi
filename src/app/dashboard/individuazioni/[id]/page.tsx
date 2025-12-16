@@ -231,6 +231,11 @@ export default function IndividuazioneDetailPage() {
           <p className="text-muted-foreground">
             {campagna.emittenti?.nome} • Anno {campagna.anno}
           </p>
+          {campagna.descrizione && (
+            <p className="text-sm text-muted-foreground mt-2 max-w-xl">
+              <span className="font-medium">Note:</span> {campagna.descrizione}
+            </p>
+          )}
         </div>
         
         <Button

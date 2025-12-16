@@ -1,3 +1,20 @@
+import { supabase } from '@/shared/lib/supabase'
+
+// ============================================
+// HELPER: Get auth token for API requests
+// ============================================
+
+const getAuthHeaders = async (): Promise<HeadersInit> => {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  }
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`
+  }
+  return headers
+}
+
 // ============================================
 // BATCH PROCESSING TYPES
 // ============================================
@@ -16,6 +33,10 @@ export interface InitCampagnaResponse {
     campagne_programmazione_id: string
   }
   error?: string
+  error_code?: string  // 'LOCKED_BY_OTHER' if campaign is locked
+  locked_by?: string   // User ID who holds the lock
+  locked_since?: string // When the lock was acquired
+  message?: string     // User-friendly message
 }
 
 export interface GetBatchIdsRequest {
@@ -93,21 +114,31 @@ export interface BatchProcessingProgress {
 
 /**
  * Inizializza una campagna_individuazione per il batch processing
+ * Acquisisce anche un lock server-side per prevenire elaborazioni concorrenti
  */
 export const initCampagnaIndividuazione = async (
   request: InitCampagnaRequest
 ): Promise<InitCampagnaResponse> => {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch('/api/campagne-individuazione/init', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(request),
     })
 
     const data = await response.json()
 
     if (!response.ok) {
-      return { success: false, error: data.error || 'Errore durante l\'inizializzazione' }
+      // Return the full response including lock info for LOCKED_BY_OTHER
+      return { 
+        success: false, 
+        error: data.error || 'Errore durante l\'inizializzazione',
+        error_code: data.error_code,
+        locked_by: data.locked_by,
+        locked_since: data.locked_since,
+        message: data.message
+      }
     }
 
     return data as InitCampagnaResponse
@@ -147,14 +178,16 @@ export const processChunk = async (
 
 /**
  * Finalizza una campagna_individuazione
+ * Rilascia anche il lock server-side
  */
 export const finalizeCampagnaIndividuazione = async (
   request: FinalizeCampagnaRequest
 ): Promise<FinalizeCampagnaResponse> => {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch('/api/campagne-individuazione/finalize', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(request),
     })
 
@@ -248,7 +281,19 @@ export const processCampagnaIndividuazioneBatch = async (
     console.log('[Batch] Init result:', JSON.stringify(initResult, null, 2))
 
     if (!initResult.success || !initResult.data) {
-      console.error('[Batch] Init failed:', initResult.error)
+      console.error('[Batch] Init failed:', initResult.error, 'Code:', initResult.error_code)
+      
+      // If locked by another user, return the lock info for the UI
+      if (initResult.error_code === 'LOCKED_BY_OTHER') {
+        return {
+          success: false,
+          error: initResult.message || initResult.error || 'Campagna già in elaborazione da un altro utente',
+          error_code: initResult.error_code,
+          locked_by: initResult.locked_by,
+          locked_since: initResult.locked_since
+        } as any
+      }
+      
       throw new Error(initResult.error || 'Errore durante l\'inizializzazione')
     }
 

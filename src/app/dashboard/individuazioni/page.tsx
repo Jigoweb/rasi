@@ -288,6 +288,37 @@ export default function IndividuazioniPage() {
                       <div className="flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">{campagna.nome}</span>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button 
+                              className="text-muted-foreground hover:text-foreground transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Info className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <div className="space-y-2">
+                              <p className="font-semibold">Informazioni Campagna</p>
+                              <div className="text-sm space-y-1">
+                                <p>Individuazioni: <strong>{formatNumber(campagna.statistiche?.individuazioni_create)}</strong></p>
+                                {campagna.statistiche && (
+                                  <>
+                                    <p>Programmazioni totali: <strong>{formatNumber(campagna.statistiche.programmazioni_totali)}</strong></p>
+                                    <p>Con match: <strong>{formatNumber(campagna.statistiche.programmazioni_con_match)}</strong></p>
+                                    <p>Senza match: <strong>{formatNumber(campagna.statistiche.programmazioni_senza_match)}</strong></p>
+                                  </>
+                                )}
+                              </div>
+                              {campagna.descrizione && (
+                                <div className="pt-2 border-t">
+                                  <p className="text-xs font-medium">Note:</p>
+                                  <p className="text-xs">{campagna.descrizione}</p>
+                                </div>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableCell>
                     <TableCell className="py-4">
@@ -306,23 +337,7 @@ export default function IndividuazioniPage() {
                       {formatNumber(campagna.statistiche?.opere_distinte)}
                     </TableCell>
                     <TableCell className="py-4">
-                      <div className="flex items-center gap-2">
-                        {getStatoBadge(campagna.stato)}
-                        {campagna.stato === 'completata' && campagna.statistiche && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-xs">
-                              <div className="space-y-1 text-xs">
-                                <p><strong>Programmazioni totali:</strong> {formatNumber(campagna.statistiche.programmazioni_totali)}</p>
-                                <p><strong>Con match:</strong> {formatNumber(campagna.statistiche.programmazioni_con_match)}</p>
-                                <p><strong>Senza match:</strong> {formatNumber(campagna.statistiche.programmazioni_senza_match)}</p>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
+                      {getStatoBadge(campagna.stato)}
                     </TableCell>
                     <TableCell className="py-4">
                       {formatDate(campagna.created_at)}

@@ -23,6 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { Checkbox } from '@/shared/components/ui/checkbox'
+import { Textarea } from '@/shared/components/ui/textarea'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon, Users, Check, ChevronDown, ChevronUp } from 'lucide-react'
 
 type Emittente = Database['public']['Tables']['emittenti']['Row']
@@ -31,6 +32,7 @@ const formSchema = z.object({
   emittente_id: z.string().min(1, "Seleziona un'emittente"),
   anno: z.coerce.number().min(1900, "Anno non valido").max(2100, "Anno non valido"),
   nome: z.string().min(1, "Il nome è obbligatorio"),
+  descrizione: z.string().optional(),
 })
 
 export default function ProgrammazioniPage() {
@@ -49,6 +51,7 @@ export default function ProgrammazioniPage() {
       emittente_id: '',
       anno: new Date().getFullYear(),
       nome: '',
+      descrizione: '',
     },
   })
 
@@ -710,7 +713,47 @@ export default function ProgrammazioniPage() {
                         onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/programmazioni/${campagna.id}`) }}
                       >
                         <TableCell className="py-4">
-                          <div className="font-medium text-foreground">{campagna.nome}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground">{campagna.nome}</span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button 
+                                  className="text-muted-foreground hover:text-foreground transition-colors"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <Info className="h-4 w-4" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-sm">
+                                <div className="space-y-3">
+                                  <div>
+                                    <p className="font-semibold mb-1">Informazioni Campagna</p>
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <DatabaseIcon className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Record caricati: <strong>{(campagna.programmazioni_count || 0).toLocaleString()}</strong></span>
+                                    </div>
+                                  </div>
+                                  {campagna.descrizione && (
+                                    <div className="pt-2 border-t border-primary-foreground/20">
+                                      <p className="font-medium text-sm mb-1">Note:</p>
+                                      <p className="text-xs opacity-90">{campagna.descrizione}</p>
+                                    </div>
+                                  )}
+                                  <div className="pt-2 border-t border-primary-foreground/20">
+                                    <p className="font-medium text-sm mb-1">Stato: {campagna.stato}</p>
+                                    <p className="text-xs opacity-90">
+                                      {campagna.stato === 'bozza' && 'La campagna è stata creata ma non sono ancora stati caricati dati. Utilizza il pulsante "Carica Dati" per importare un file CSV o Excel.'}
+                                      {campagna.stato === 'in_review' && 'I dati sono stati caricati correttamente. Puoi procedere con la creazione delle individuazioni oppure caricare ulteriori file per aggiungere altri record.'}
+                                      {campagna.stato === 'individuata' && 'Il processo di individuazione è stato completato con successo. Le individuazioni sono state create e sono pronte per la revisione.'}
+                                      {campagna.stato === 'error' && 'Si è verificato un errore durante l\'elaborazione. Verifica i dati e riprova il caricamento.'}
+                                      {campagna.stato === 'in_corso' && 'Il sistema sta processando le programmazioni e creando le individuazioni. Attendere il completamento...'}
+                                      {campagna.stato === 'uploading' && 'Caricamento dati in corso. Attendere il completamento...'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                         </TableCell>
                         <TableCell className="py-4">
                           <div className="flex items-center gap-2">
@@ -769,40 +812,6 @@ export default function ProgrammazioniPage() {
                                 ) : (
                                   <Badge variant="secondary">{campagna.stato}</Badge>
                                 )}
-                                
-                                {/* Info Tooltip */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button 
-                                      className="text-muted-foreground hover:text-foreground transition-colors"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Info className="h-4 w-4" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="right" className="max-w-sm">
-                                    <div className="space-y-3">
-                                      <div>
-                                        <p className="font-semibold mb-1">Informazioni Campagna</p>
-                                        <div className="flex items-center gap-2 text-sm">
-                                          <DatabaseIcon className="h-3.5 w-3.5 shrink-0" />
-                                          <span>Record caricati: <strong>{(campagna.programmazioni_count || 0).toLocaleString()}</strong></span>
-                                        </div>
-                                      </div>
-                                      <div className="pt-2 border-t border-primary-foreground/20">
-                                        <p className="font-medium text-sm mb-1">Stato: {campagna.stato}</p>
-                                        <p className="text-xs opacity-90">
-                                          {campagna.stato === 'bozza' && 'La campagna è stata creata ma non sono ancora stati caricati dati. Utilizza il pulsante "Carica Dati" per importare un file CSV o Excel.'}
-                                          {campagna.stato === 'in_review' && 'I dati sono stati caricati correttamente. Puoi procedere con la creazione delle individuazioni oppure caricare ulteriori file per aggiungere altri record.'}
-                                          {campagna.stato === 'individuata' && 'Il processo di individuazione è stato completato con successo. Le individuazioni sono state create e sono pronte per la revisione.'}
-                                          {campagna.stato === 'error' && 'Si è verificato un errore durante l\'elaborazione. Verifica i dati e riprova il caricamento.'}
-                                          {campagna.stato === 'in_corso' && 'Il sistema sta processando le programmazioni e creando le individuazioni. Attendere il completamento...'}
-                                          {campagna.stato === 'uploading' && 'Caricamento dati in corso. Attendere il completamento...'}
-                                        </p>
-                                      </div>
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
                               </>
                             )}
                           </div>
@@ -925,7 +934,26 @@ export default function ProgrammazioniPage() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-medium text-lg">{campagna.nome}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-lg">{campagna.nome}</h3>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="right" className="max-w-xs">
+                                <div className="space-y-2">
+                                  <p className="font-semibold">Informazioni</p>
+                                  <p className="text-sm">Record: <strong>{(campagna.programmazioni_count || 0).toLocaleString()}</strong></p>
+                                  {campagna.descrizione && (
+                                    <div className="pt-1 border-t">
+                                      <p className="text-xs font-medium">Note:</p>
+                                      <p className="text-xs">{campagna.descrizione}</p>
+                                    </div>
+                                  )}
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
                           <div className="mt-1 text-sm text-gray-600 flex items-center gap-2">
                             <Tv className="h-4 w-4 text-gray-400" />
                             <span>{campagna.emittenti?.nome || '—'}</span>
@@ -1195,6 +1223,25 @@ export default function ProgrammazioniPage() {
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="descrizione"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Descrizione / Note (opzionale)</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          {...field} 
+                          placeholder="Aggiungi informazioni aggiuntive sulla campagna..."
+                          className="resize-none"
+                          rows={3}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={handleCloseModal}>
                     Annulla
@@ -1412,7 +1459,7 @@ export default function ProgrammazioniPage() {
 
       {/* Individuazioni Confirmation Dialog - shown before starting process */}
       <Dialog open={showIndividuazioniConfirmDialog} onOpenChange={setShowIndividuazioniConfirmDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
@@ -1447,6 +1494,13 @@ export default function ProgrammazioniPage() {
                   }
                 })()}
               </p>
+              {campagnaForIndividuazioni?.descrizione && (
+                <div className="pt-2 border-t mt-2">
+                  <p className="text-sm text-muted-foreground">
+                    <strong className="text-foreground">Note:</strong> {campagnaForIndividuazioni.descrizione}
+                  </p>
+                </div>
+              )}
             </div>
             <div className="text-sm text-muted-foreground">
               <p className="font-medium text-foreground mb-2">Il sistema effettuerà il matching automatico tra:</p>

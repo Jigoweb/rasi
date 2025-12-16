@@ -299,14 +299,32 @@ export function IndividuazioneProgressDialog() {
         {/* Error State */}
         {state.status === 'error' && (
           <div className="py-4 space-y-4">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <p className="text-sm text-red-800 font-medium mb-1">
-                Si è verificato un errore durante il processamento.
-              </p>
-              <p className="text-xs text-red-600 font-mono">
-                {state.result?.error}
-              </p>
-            </div>
+            {state.result?.error_code === 'LOCKED_BY_OTHER' ? (
+              // Lock conflict - another user is processing this campaign
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2">
+                <p className="text-sm text-amber-800 font-medium">
+                  🔒 Campagna già in elaborazione
+                </p>
+                <p className="text-sm text-amber-700">
+                  Un altro utente sta già elaborando questa campagna. Attendi il completamento o riprova più tardi.
+                </p>
+                {state.result?.locked_since && (
+                  <p className="text-xs text-amber-600">
+                    Elaborazione iniziata: {new Date(state.result.locked_since).toLocaleString('it-IT')}
+                  </p>
+                )}
+              </div>
+            ) : (
+              // Generic error
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-800 font-medium mb-1">
+                  Si è verificato un errore durante il processamento.
+                </p>
+                <p className="text-xs text-red-600 font-mono">
+                  {state.result?.error}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

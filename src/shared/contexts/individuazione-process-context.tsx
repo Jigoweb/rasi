@@ -22,6 +22,9 @@ export interface IndividuazioneProcessState {
     success: boolean
     stats?: any
     error?: string
+    error_code?: string  // 'LOCKED_BY_OTHER' if campaign is locked by another user
+    locked_by?: string   // User ID who holds the lock
+    locked_since?: string // When the lock was acquired
     campagneIndividuazioneId?: string
   } | null
   isMinimized: boolean
@@ -29,6 +32,7 @@ export interface IndividuazioneProcessState {
 
 export interface StartProcessOptions {
   artistaIds?: string[] | null  // Filtro artisti opzionale
+  descrizione?: string | null   // Descrizione pre-compilata dalla campagna programmazione
 }
 
 export interface IndividuazioneProcessContextValue {
@@ -100,6 +104,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         {
           chunkSize: 25,
           artistaIds: options?.artistaIds,  // Passa il filtro artisti
+          descrizione: options?.descrizione || campagna.descrizione,  // Usa descrizione passata o quella della campagna
         }
       )
 
@@ -114,12 +119,17 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
           }
         }))
       } else {
+        // Check for lock error from init
+        const anyResult = result as any
         setState(prev => ({
           ...prev,
           status: 'error',
           result: {
             success: false,
-            error: result.error || 'Errore sconosciuto'
+            error: anyResult.error || 'Errore sconosciuto',
+            error_code: anyResult.error_code,
+            locked_by: anyResult.locked_by,
+            locked_since: anyResult.locked_since
           }
         }))
       }

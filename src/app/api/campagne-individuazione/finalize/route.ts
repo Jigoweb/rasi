@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/shared/lib/supabase-server'
+import { createClient } from '@supabase/supabase-js'
 
 /**
  * POST /api/campagne-individuazione/finalize
  * 
  * Finalizza una campagna_individuazione dopo il batch processing.
- * Calcola statistiche finali e aggiorna lo stato.
+ * Calcola statistiche finali, aggiorna lo stato e RILASCIA IL LOCK.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -22,6 +23,19 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Get user ID from authorization header for lock release
+    const authHeader = req.headers.get('authorization')
+    let userId: string | null = null
+    
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.substring(7)
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      const tempClient = createClient(supabaseUrl, supabaseAnonKey)
+      const { data: { user } } = await tempClient.auth.getUser(token)
+      userId = user?.id || null
+    }
+
     // Finalizza la campagna
     const { data: result, error: finalizeError } = await (supabaseServer as any)
       .rpc(
@@ -31,6 +45,17 @@ export async function POST(req: NextRequest) {
           p_campagne_programmazione_id: campagne_programmazione_id,
         }
       )
+
+    // Release the lock (regardless of success/failure - process is done)
+    if (userId) {
+      const newStato = (finalizeError || !result?.success) ? 'in_review' : 'individuata'
+      await (supabaseServer as any).rpc('release_campagna_processing_lock', {
+        p_campagna_id: campagne_programmazione_id,
+        p_user_id: userId,
+        p_new_stato: newStato
+      })
+      console.log('Lock released for campagna:', campagne_programmazione_id)
+    }
 
     if (finalizeError) {
       console.error('Errore finalizzazione:', finalizeError)
@@ -64,6 +89,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Errore inatteso:', error)
+    // Note: Lock will automatically expire after timeout in case of crash
     return NextResponse.json(
       { success: false, error: error.message || 'Errore inatteso' },
       { status: 500 }
