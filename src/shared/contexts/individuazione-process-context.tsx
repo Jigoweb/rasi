@@ -104,7 +104,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         {
           chunkSize: 25,
           artistaIds: options?.artistaIds,  // Passa il filtro artisti
-          descrizione: options?.descrizione || campagna.descrizione,  // Usa descrizione passata o quella della campagna
+          descrizione: options?.descrizione || campagna.descrizione || undefined,  // Usa descrizione passata o quella della campagna
         }
       )
 
