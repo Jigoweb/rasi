@@ -341,6 +341,45 @@ export default function ProgrammazioniPage() {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
       }
       
+      // Validate and convert date values to YYYY-MM-DD format
+      const validateDate = (dateStr: string): string | undefined => {
+        if (!dateStr) return undefined
+        const str = String(dateStr).trim()
+        
+        // Already in ISO format (YYYY-MM-DD)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
+        
+        // DD/MM/YY or DD/MM/YYYY format
+        const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+        if (slashMatch) {
+          const day = slashMatch[1].padStart(2, '0')
+          const month = slashMatch[2].padStart(2, '0')
+          let year = slashMatch[3]
+          // Convert 2-digit year to 4-digit
+          if (year.length === 2) {
+            const yearNum = parseInt(year)
+            year = yearNum > 50 ? `19${year}` : `20${year}`
+          }
+          return `${year}-${month}-${day}`
+        }
+        
+        // DD-MM-YY or DD-MM-YYYY format
+        const dashMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/)
+        if (dashMatch) {
+          const day = dashMatch[1].padStart(2, '0')
+          const month = dashMatch[2].padStart(2, '0')
+          let year = dashMatch[3]
+          if (year.length === 2) {
+            const yearNum = parseInt(year)
+            year = yearNum > 50 ? `19${year}` : `20${year}`
+          }
+          return `${year}-${month}-${day}`
+        }
+        
+        // Return as-is if we can't parse it
+        return str
+      }
+      
       const coerce = (k: string, v: any) => {
         if (v === undefined || v === null || v === '') return undefined
         switch (k) {
@@ -359,6 +398,10 @@ export default function ProgrammazioniPage() {
           case 'ora_inizio':
           case 'ora_fine':
             return validateTime(v)
+          case 'data_trasmissione':
+          case 'data_inizio':
+          case 'data_fine':
+            return validateDate(v)
           default:
             return v
         }
@@ -416,7 +459,8 @@ export default function ProgrammazioniPage() {
       console.error('Error uploading database:', errorMessage, error)
       setUploadError(errorMessage)
       await updateCampagnaStatus(selectedCampagna.id, 'error')
-      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'error' } : c))
+      // Store error message in local state for tooltip display
+      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'error', last_error: errorMessage } : c))
       setUploadProgress(prev => {
         const next = { ...prev }
         delete next[selectedCampagna.id]
@@ -870,6 +914,12 @@ export default function ProgrammazioniPage() {
                                       {campagna.stato === 'in_corso' && 'Il sistema sta processando le programmazioni e creando le individuazioni. Attendere il completamento...'}
                                       {campagna.stato === 'uploading' && 'Caricamento dati in corso. Attendere il completamento...'}
                                     </p>
+                                    {campagna.stato === 'error' && (campagna as any).last_error && (
+                                      <div className="mt-2 p-2 bg-red-900/50 rounded text-xs">
+                                        <p className="font-medium text-red-200">Dettaglio errore:</p>
+                                        <p className="text-red-100 mt-1 break-words">{(campagna as any).last_error}</p>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </TooltipContent>
@@ -1069,6 +1119,12 @@ export default function ProgrammazioniPage() {
                                     <div className="pt-1 border-t">
                                       <p className="text-xs font-medium">Note:</p>
                                       <p className="text-xs">{campagna.descrizione}</p>
+                                    </div>
+                                  )}
+                                  {campagna.stato === 'error' && (campagna as any).last_error && (
+                                    <div className="pt-1 border-t">
+                                      <p className="text-xs font-medium text-red-500">Errore:</p>
+                                      <p className="text-xs text-red-400">{(campagna as any).last_error}</p>
                                     </div>
                                   )}
                                 </div>
