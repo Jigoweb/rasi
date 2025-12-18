@@ -284,6 +284,62 @@ export const getCampagnaStatistiche = async (campagnaId: string) => {
   return { data: (data as any)?.statistiche, error }
 }
 
+export interface IndividuazioneProcessingProgress {
+  programmazioni_processate: number
+  programmazioni_totali: number
+  individuazioni_create: number
+  percentuale: number
+  processing_by?: string | null
+  processing_started_at?: string | null
+}
+
+/**
+ * Get the processing progress for a campagna individuazione that is currently being processed
+ */
+export const getIndividuazioneProcessingProgress = async (campagnaIndId: string): Promise<{ data: IndividuazioneProcessingProgress | null; error: any }> => {
+  try {
+    // Get campagna individuazione with statistiche and related campagna programmazione
+    const { data: campagnaInd, error: indError } = await (supabase as any)
+      .from('campagne_individuazione')
+      .select('statistiche, campagne_programmazione_id, campagne_programmazione(processing_by, processing_started_at)')
+      .eq('id', campagnaIndId)
+      .single()
+    
+    if (indError) throw indError
+
+    // Count actual individuazioni
+    const { count: individuazioni_create, error: countError } = await (supabase as any)
+      .from('individuazioni')
+      .select('*', { count: 'exact', head: true })
+      .eq('campagna_individuazioni_id', campagnaIndId)
+    
+    if (countError) throw countError
+
+    const statistiche = campagnaInd?.statistiche || {}
+    const campagnaProg = campagnaInd?.campagne_programmazione || {}
+    
+    const programmazioni_totali = statistiche.programmazioni_totali || 0
+    const programmazioni_processate = statistiche.programmazioni_processate || 0
+    const percentuale = programmazioni_totali > 0 
+      ? Math.round((programmazioni_processate / programmazioni_totali) * 100) 
+      : 0
+
+    return {
+      data: {
+        programmazioni_processate,
+        programmazioni_totali,
+        individuazioni_create: individuazioni_create || 0,
+        percentuale,
+        processing_by: campagnaProg.processing_by,
+        processing_started_at: campagnaProg.processing_started_at
+      },
+      error: null
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
 // ============================================
 // DELETE CAMPAGNA INDIVIDUAZIONE
 // ============================================

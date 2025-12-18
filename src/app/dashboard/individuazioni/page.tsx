@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { getCampagneIndividuazione, CampagnaIndividuazione, getDeleteCampagnaIndividuazioneInfo, deleteCampagnaIndividuazione, DeleteCampagnaIndividuazioneInfo } from '@/features/individuazioni/services/individuazioni.service'
+import { getCampagneIndividuazione, CampagnaIndividuazione, getDeleteCampagnaIndividuazioneInfo, deleteCampagnaIndividuazione, DeleteCampagnaIndividuazioneInfo, getIndividuazioneProcessingProgress, IndividuazioneProcessingProgress } from '@/features/individuazioni/services/individuazioni.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -48,6 +48,10 @@ export default function IndividuazioniPage() {
   const [campagnaToDelete, setCampagnaToDelete] = useState<CampagnaIndividuazione | null>(null)
   const [deleteInfo, setDeleteInfo] = useState<DeleteCampagnaIndividuazioneInfo | null>(null)
   const [isLoadingDeleteInfo, setIsLoadingDeleteInfo] = useState(false)
+  
+  // Processing Progress State
+  const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, IndividuazioneProcessingProgress | null>>({})
+  const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
   const [isDeletingCampagna, setIsDeletingCampagna] = useState(false)
   const [deleteProgress, setDeleteProgress] = useState<{ phase: string; deleted?: number; total?: number } | null>(null)
 
@@ -66,6 +70,22 @@ export default function IndividuazioniPage() {
     }
     setLoading(false)
   }
+
+  // Fetch processing progress for a specific campaign
+  const fetchProcessingProgress = useCallback(async (campagnaId: string) => {
+    if (loadingProgressMap[campagnaId]) return // Already loading
+    
+    setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: true }))
+    try {
+      const { data, error } = await getIndividuazioneProcessingProgress(campagnaId)
+      if (error) throw error
+      setProcessingProgressMap(prev => ({ ...prev, [campagnaId]: data }))
+    } catch (error) {
+      console.error('Error fetching processing progress:', error)
+    } finally {
+      setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: false }))
+    }
+  }, [loadingProgressMap])
 
   // Delete Handlers
   const handleOpenDeleteDialog = async (campagna: CampagnaIndividuazione) => {
@@ -448,7 +468,7 @@ export default function IndividuazioniPage() {
                               <Info className="h-4 w-4" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="right" className="max-w-xs">
+                          <TooltipContent side="right" className="max-w-sm">
                             <div className="space-y-2">
                               <p className="font-semibold">Informazioni Campagna</p>
                               <div className="text-sm space-y-1">
@@ -465,6 +485,61 @@ export default function IndividuazioniPage() {
                                 <div className="pt-2 border-t">
                                   <p className="text-xs font-medium">Note:</p>
                                   <p className="text-xs">{campagna.descrizione}</p>
+                                </div>
+                              )}
+                              
+                              {/* Processing progress for in_corso state */}
+                              {campagna.stato === 'in_corso' && (
+                                <div className="pt-2 border-t">
+                                  <p className="text-xs font-medium mb-2">Stato Elaborazione:</p>
+                                  {!processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id] ? (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        fetchProcessingProgress(campagna.id)
+                                      }}
+                                      className="text-xs text-blue-500 underline hover:text-blue-600"
+                                    >
+                                      Carica stato avanzamento
+                                    </button>
+                                  ) : loadingProgressMap[campagna.id] ? (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                      <Loader2 className="h-3 w-3 animate-spin" />
+                                      <span>Caricamento...</span>
+                                    </div>
+                                  ) : processingProgressMap[campagna.id] ? (
+                                    <div className="space-y-2 text-xs">
+                                      <div className="flex justify-between">
+                                        <span>Programmazioni processate:</span>
+                                        <span className="font-medium">{processingProgressMap[campagna.id]!.programmazioni_processate.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
+                                      </div>
+                                      <div className="h-1.5 bg-muted rounded-full">
+                                        <div 
+                                          className="h-1.5 bg-blue-500 rounded-full transition-all"
+                                          style={{ width: `${processingProgressMap[campagna.id]!.percentuale}%` }}
+                                        />
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span>Individuazioni create:</span>
+                                        <span className="font-medium">{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()}</span>
+                                      </div>
+                                      {processingProgressMap[campagna.id]!.processing_started_at && (
+                                        <div className="flex justify-between pt-1 border-t">
+                                          <span>Avviato:</span>
+                                          <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          fetchProcessingProgress(campagna.id)
+                                        }}
+                                        className="text-blue-500 underline hover:text-blue-600"
+                                      >
+                                        ↻ Aggiorna
+                                      </button>
+                                    </div>
+                                  ) : null}
                                 </div>
                               )}
                             </div>
