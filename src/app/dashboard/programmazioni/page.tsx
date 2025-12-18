@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -62,6 +62,8 @@ export default function ProgrammazioniPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [emittenteFilter, setEmittenteFilter] = useState<string>('all')
+  const [annoFilter, setAnnoFilter] = useState<string>('all')
   const [selectedCampagna, setSelectedCampagna] = useState<CampagnaProgrammazione | null>(null)
   const [showDetails, setShowDetails] = useState(false)
 
@@ -153,9 +155,9 @@ export default function ProgrammazioniPage() {
     setShowIndividuazioniConfirmDialog(false)
 
     // Update local state to show processing
-    setCampagne(prev => prev.map(c => 
-      c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_corso' } : c
-    ))
+      setCampagne(prev => prev.map(c => 
+        c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_corso' } : c
+      ))
 
     // Determine if we should filter by artists
     // If all artists are selected (or none selected), pass null (no filter)
@@ -168,13 +170,13 @@ export default function ProgrammazioniPage() {
 
     // Update local state based on result
     if (result.success) {
-      setCampagne(prev => prev.map(c => 
-        c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'individuata' } : c
-      ))
-    } else {
-      setCampagne(prev => prev.map(c => 
-        c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_review' } : c
-      ))
+        setCampagne(prev => prev.map(c => 
+          c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'individuata' } : c
+        ))
+      } else {
+        setCampagne(prev => prev.map(c => 
+          c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_review' } : c
+        ))
     }
 
     setCampagnaForIndividuazioni(null)
@@ -447,8 +449,35 @@ export default function ProgrammazioniPage() {
       filtered = filtered.filter(campagna => campagna.stato === statusFilter)
     }
 
+    // Filter by emittente
+    if (emittenteFilter !== 'all') {
+      filtered = filtered.filter(campagna => campagna.emittente_id === emittenteFilter)
+    }
+
+    // Filter by anno
+    if (annoFilter !== 'all') {
+      filtered = filtered.filter(campagna => campagna.anno.toString() === annoFilter)
+    }
+
     setFilteredCampagne(filtered)
-  }, [campagne, debouncedSearchQuery, statusFilter])
+  }, [campagne, debouncedSearchQuery, statusFilter, emittenteFilter, annoFilter])
+
+  // Get unique anni from campagne for filter dropdown
+  const uniqueAnni = useMemo(() => {
+    const anni = campagne.map(c => c.anno).filter((v, i, a) => a.indexOf(v) === i)
+    return anni.sort((a, b) => b - a) // Sort descending (most recent first)
+  }, [campagne])
+
+  // Get unique emittenti from campagne for filter dropdown
+  const uniqueEmittenti = useMemo(() => {
+    const emittentiMap = new Map<string, { id: string; nome: string }>()
+    campagne.forEach(c => {
+      if (c.emittente_id && c.emittenti?.nome) {
+        emittentiMap.set(c.emittente_id, { id: c.emittente_id, nome: c.emittenti.nome })
+      }
+    })
+    return Array.from(emittentiMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [campagne])
 
   const filterEmittenti = useCallback(() => {
     let filtered = emittenti
@@ -625,34 +654,82 @@ export default function ProgrammazioniPage() {
           {/* Filters */}
           <Card>
             <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Cerca per nome o emittente..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
+              <div className="flex flex-col gap-4">
+                {/* Prima riga: Ricerca */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Cerca per nome o emittente..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
-                    <Filter className="h-4 w-4 mr-2" />
-                    <SelectValue placeholder="Filtra per stato" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tutti gli stati</SelectItem>
-                    <SelectItem value="bozza">Bozza</SelectItem>
-                    <SelectItem value="uploading">Uploading</SelectItem>
-                    <SelectItem value="deleting">Deleting</SelectItem>
-                    <SelectItem value="in_review">In review</SelectItem>
-                    <SelectItem value="error">Error</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={() => { setSearchQuery(''); setStatusFilter('all') }}>Reset</Button>
+                
+                {/* Seconda riga: Filtri */}
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {/* Filtro Stato */}
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full sm:w-44">
+                      <Filter className="h-4 w-4 mr-2 shrink-0" />
+                      <SelectValue placeholder="Stato" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tutti gli stati</SelectItem>
+                      <SelectItem value="bozza">Bozza</SelectItem>
+                      <SelectItem value="uploading">Uploading</SelectItem>
+                      <SelectItem value="in_review">In review</SelectItem>
+                      <SelectItem value="in_corso">In elaborazione</SelectItem>
+                      <SelectItem value="individuata">Individuata</SelectItem>
+                      <SelectItem value="deleting">In eliminazione</SelectItem>
+                      <SelectItem value="error">Errore</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Filtro Emittente */}
+                  <Select value={emittenteFilter} onValueChange={setEmittenteFilter}>
+                    <SelectTrigger className="w-full sm:w-52">
+                      <Tv className="h-4 w-4 mr-2 shrink-0" />
+                      <SelectValue placeholder="Emittente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tutte le emittenti</SelectItem>
+                      {uniqueEmittenti.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Filtro Anno */}
+                  <Select value={annoFilter} onValueChange={setAnnoFilter}>
+                    <SelectTrigger className="w-full sm:w-32">
+                      <Calendar className="h-4 w-4 mr-2 shrink-0" />
+                      <SelectValue placeholder="Anno" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Tutti gli anni</SelectItem>
+                      {uniqueAnni.map((anno) => (
+                        <SelectItem key={anno} value={anno.toString()}>{anno}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Reset */}
+                  <Button 
+                    variant="outline" 
+                    onClick={() => { 
+                      setSearchQuery('')
+                      setStatusFilter('all')
+                      setEmittenteFilter('all')
+                      setAnnoFilter('all')
+                    }}
+                    className="sm:ml-auto"
+                  >
+                    Reset filtri
+                  </Button>
+                </div>
               </div>
+
               {/* Filter Chips */}
               <div className="mt-3 flex flex-wrap gap-2">
                 {debouncedSearchQuery && (
@@ -662,10 +739,21 @@ export default function ProgrammazioniPage() {
                 )}
                 {statusFilter !== 'all' && (
                   <Button variant="outline" size="sm" onClick={() => setStatusFilter('all')}>
-                    <X className="h-3 w-3 mr-1" /> Stato: {statusFilter}
+                    <X className="h-3 w-3 mr-1" /> Stato: {statusFilter === 'in_corso' ? 'In elaborazione' : statusFilter}
+                  </Button>
+                )}
+                {emittenteFilter !== 'all' && (
+                  <Button variant="outline" size="sm" onClick={() => setEmittenteFilter('all')}>
+                    <X className="h-3 w-3 mr-1" /> Emittente: {uniqueEmittenti.find(e => e.id === emittenteFilter)?.nome}
+                  </Button>
+                )}
+                {annoFilter !== 'all' && (
+                  <Button variant="outline" size="sm" onClick={() => setAnnoFilter('all')}>
+                    <X className="h-3 w-3 mr-1" /> Anno: {annoFilter}
                   </Button>
                 )}
               </div>
+
               <div className="mt-4 text-sm text-gray-600">
                 Mostrando {filteredCampagne.length} di {campagne.length} campagne
               </div>
@@ -935,7 +1023,7 @@ export default function ProgrammazioniPage() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <h3 className="font-medium text-lg">{campagna.nome}</h3>
+                          <h3 className="font-medium text-lg">{campagna.nome}</h3>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -1465,51 +1553,51 @@ export default function ProgrammazioniPage() {
               <Sparkles className="h-5 w-5" />
               Crea Individuazioni
             </DialogTitle>
-            <DialogDescription>
-              Questa operazione creerà le individuazioni per tutte le programmazioni della campagna <span className="font-medium text-foreground">{campagnaForIndividuazioni?.nome}</span>.
-            </DialogDescription>
+              <DialogDescription>
+                Questa operazione creerà le individuazioni per tutte le programmazioni della campagna <span className="font-medium text-foreground">{campagnaForIndividuazioni?.nome}</span>.
+              </DialogDescription>
           </DialogHeader>
-
-          <div className="py-4 space-y-4">
-            <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
-              <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
-              </p>
-              <p className="text-sm text-muted-foreground">
-                <strong className="text-foreground">Tempo stimato:</strong> {(() => {
-                  const count = campagnaForIndividuazioni?.programmazioni_count || 0
-                  const chunkSize = 25
-                  const secondsPerChunk = 2.5
-                  const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
-                  
-                  if (totalSeconds < 60) {
-                    return `~${Math.ceil(totalSeconds)} secondi`
-                  } else if (totalSeconds < 3600) {
-                    const minutes = Math.ceil(totalSeconds / 60)
-                    return `~${minutes} minut${minutes === 1 ? 'o' : 'i'}`
-                  } else {
-                    const hours = Math.floor(totalSeconds / 3600)
-                    const minutes = Math.ceil((totalSeconds % 3600) / 60)
-                    return `~${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` e ${minutes} min` : ''}`
-                  }
-                })()}
+          
+            <div className="py-4 space-y-4">
+              <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  <strong className="text-foreground">Tempo stimato:</strong> {(() => {
+                    const count = campagnaForIndividuazioni?.programmazioni_count || 0
+                    const chunkSize = 25
+                    const secondsPerChunk = 2.5
+                    const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
+                    
+                    if (totalSeconds < 60) {
+                      return `~${Math.ceil(totalSeconds)} secondi`
+                    } else if (totalSeconds < 3600) {
+                      const minutes = Math.ceil(totalSeconds / 60)
+                      return `~${minutes} minut${minutes === 1 ? 'o' : 'i'}`
+                    } else {
+                      const hours = Math.floor(totalSeconds / 3600)
+                      const minutes = Math.ceil((totalSeconds % 3600) / 60)
+                      return `~${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` e ${minutes} min` : ''}`
+                    }
+                  })()}
               </p>
               {campagnaForIndividuazioni?.descrizione && (
                 <div className="pt-2 border-t mt-2">
                   <p className="text-sm text-muted-foreground">
                     <strong className="text-foreground">Note:</strong> {campagnaForIndividuazioni.descrizione}
-                  </p>
+                </p>
                 </div>
               )}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              <p className="font-medium text-foreground mb-2">Il sistema effettuerà il matching automatico tra:</p>
-              <ul className="list-disc list-inside space-y-1 ml-1">
-                <li>Programmazioni caricate</li>
-                <li>Opere nel catalogo</li>
-                <li>Partecipazioni degli artisti</li>
-              </ul>
-            </div>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                <p className="font-medium text-foreground mb-2">Il sistema effettuerà il matching automatico tra:</p>
+                <ul className="list-disc list-inside space-y-1 ml-1">
+                  <li>Programmazioni caricate</li>
+                  <li>Opere nel catalogo</li>
+                  <li>Partecipazioni degli artisti</li>
+                </ul>
+              </div>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-800">
                 💡 Puoi minimizzare il processo e continuare a navigare la piattaforma mentre viene eseguito in background.
@@ -1544,7 +1632,7 @@ export default function ProgrammazioniPage() {
                   <p className="text-xs text-muted-foreground">
                     Di default tutti gli artisti sono selezionati. Deseleziona quelli che vuoi escludere dal processo.
                   </p>
-                  
+
                   {/* Search and bulk actions */}
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
@@ -1555,7 +1643,7 @@ export default function ProgrammazioniPage() {
                         onChange={(e) => setArtistSearchQuery(e.target.value)}
                         className="pl-8 h-8 text-sm"
                       />
-                    </div>
+                </div>
                     <Button
                       type="button"
                       variant="outline"
@@ -1574,14 +1662,14 @@ export default function ProgrammazioniPage() {
                     >
                       Nessuno
                     </Button>
-                  </div>
-                  
+              </div>
+
                   {/* Artists list */}
                   {loadingArtists ? (
                     <div className="flex items-center justify-center py-4">
                       <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                       <span className="ml-2 text-sm text-muted-foreground">Caricamento artisti...</span>
-                    </div>
+                </div>
                   ) : (
                     <div className="max-h-48 overflow-y-auto border rounded-md">
                       {allArtists
@@ -1603,7 +1691,7 @@ export default function ProgrammazioniPage() {
                                 const newSet = new Set(selectedArtistIds)
                                 if (checked) {
                                   newSet.add(artist.id)
-                                } else {
+                    } else {
                                   newSet.delete(artist.id)
                                 }
                                 setSelectedArtistIds(newSet)
@@ -1617,31 +1705,31 @@ export default function ProgrammazioniPage() {
                             </span>
                           </label>
                         ))}
-                    </div>
-                  )}
-                  
+            </div>
+          )}
+
                   {/* Summary */}
                   <p className="text-xs text-muted-foreground text-right">
                     {selectedArtistIds.size} di {allArtists.length} artisti selezionati
                   </p>
-                </div>
-              )}
+            </div>
+          )}
             </div>
           </div>
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowIndividuazioniConfirmDialog(false)}>
-              Annulla
-            </Button>
-            <Button 
+                  Annulla
+                </Button>
+                <Button 
               onClick={handleConfirmStartIndividuazioni}
               disabled={selectedArtistIds.size === 0}
-            >
+                >
               <Sparkles className="mr-2 h-4 w-4" />
               {selectedArtistIds.size === allArtists.length 
                 ? 'Avvia Processamento' 
                 : `Avvia con ${selectedArtistIds.size} Artisti`}
-            </Button>
+                </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -337,7 +337,7 @@ export default function IndividuazioniPage() {
                       {formatNumber(campagna.statistiche?.opere_distinte)}
                     </TableCell>
                     <TableCell className="py-4">
-                      {getStatoBadge(campagna.stato)}
+                        {getStatoBadge(campagna.stato)}
                     </TableCell>
                     <TableCell className="py-4">
                       {formatDate(campagna.created_at)}
