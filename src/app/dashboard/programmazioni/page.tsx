@@ -272,23 +272,24 @@ export default function ProgrammazioniPage() {
       }
 
       const normalize = (s: string) => s.toLowerCase().trim()
-      const requiredHeaders = ['titolo', 'tipo']
+      const requiredHeaders = ['titolo', 'emittente']
       const headers = rows.length > 0 ? Object.keys(rows[0]).map(normalize) : []
       const hasRequired = requiredHeaders.every(h => headers.includes(h))
 
       if (!hasRequired) {
-        setHeaderError('Header non valido: richiesti titolo e tipo')
+        const missingHeaders = requiredHeaders.filter(h => !headers.includes(h))
+        setHeaderError(`Header non valido: mancano "${missingHeaders.join('", "')}". Trovati: ${headers.slice(0, 10).join(', ')}${headers.length > 10 ? '...' : ''}`)
         setParsedRows([])
         setIsUploadReady(false)
       } else {
         const validRows = rows.filter((r: any) => {
           const titolo = r.titolo ?? r['Titolo']
-          const tipo = r.tipo ?? r['type'] ?? r['Type']
-          return titolo && tipo
+          const emittente = r.emittente ?? r['Emittente']
+          return titolo && emittente
         })
 
         if (validRows.length === 0) {
-          setHeaderError('Nessuna riga valida con titolo e tipo')
+          setHeaderError('Nessuna riga valida con titolo e emittente')
           setParsedRows([])
           setIsUploadReady(false)
         } else {
@@ -1380,7 +1381,7 @@ export default function ProgrammazioniPage() {
                   <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-4" />
                   <p className="text-sm font-medium">Clicca per selezionare il file</p>
                   <p className="text-xs text-gray-500 mt-1">Formati supportati: CSV, Excel (.xlsx, .xls)</p>
-                  <p className="text-xs text-gray-400 mt-1">Colonne obbligatorie: titolo, tipo</p>
+                  <p className="text-xs text-gray-400 mt-1">Colonne obbligatorie: titolo, emittente</p>
                   <Button variant="outline" className="mt-4" disabled={isSubmitting}>
                     {isSubmitting ? (
                       <>
