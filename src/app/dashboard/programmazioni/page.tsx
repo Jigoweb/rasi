@@ -935,65 +935,68 @@ export default function ProgrammazioniPage() {
                                     
                                     {/* Processing progress for in_corso state */}
                                     {campagna.stato === 'in_corso' && (
-                                      <div className="mt-2 p-2 bg-blue-900/50 rounded text-xs space-y-2">
+                                      <div className="pt-2 border-t border-primary-foreground/20">
+                                        <p className="font-medium text-sm mb-2 flex items-center gap-1.5">
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                          Elaborazione in corso
+                                        </p>
                                         {!processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id] ? (
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation()
                                               fetchProcessingProgress(campagna.id)
                                             }}
-                                            className="text-blue-200 underline hover:text-blue-100"
+                                            className="text-xs opacity-80 hover:opacity-100 underline"
                                           >
-                                            Carica stato avanzamento
+                                            Mostra avanzamento dettagliato
                                           </button>
                                         ) : loadingProgressMap[campagna.id] ? (
-                                          <div className="flex items-center gap-2 text-blue-200">
+                                          <div className="flex items-center gap-2 text-xs opacity-80">
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                             <span>Caricamento...</span>
                                           </div>
                                         ) : processingProgressMap[campagna.id] ? (
-                                          <>
-                                            <p className="font-medium text-blue-200">Avanzamento:</p>
-                                            <div className="space-y-1">
-                                              <div className="flex justify-between text-blue-100">
-                                                <span>Programmazioni processate:</span>
-                                                <span>{processingProgressMap[campagna.id]!.programmazioni_processate.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
+                                          <div className="space-y-2 text-xs">
+                                            <div className="space-y-1.5">
+                                              <div className="flex justify-between opacity-90">
+                                                <span>Programmazioni:</span>
+                                                <span className="font-medium">{processingProgressMap[campagna.id]!.programmazioni_processate.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
                                               </div>
-                                              <div className="h-1.5 bg-blue-950 rounded-full">
+                                              <div className="h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden">
                                                 <div 
-                                                  className="h-1.5 bg-blue-400 rounded-full transition-all"
+                                                  className="h-full bg-primary-foreground/80 rounded-full transition-all"
                                                   style={{ width: `${processingProgressMap[campagna.id]!.percentuale}%` }}
                                                 />
                                               </div>
-                                              <div className="flex justify-between text-blue-100">
+                                              <div className="flex justify-between opacity-90">
                                                 <span>Individuazioni create:</span>
-                                                <span>{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()}</span>
+                                                <span className="font-medium">{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()}</span>
                                               </div>
-                                              {processingProgressMap[campagna.id]!.processing_started_at && (
-                                                <div className="flex justify-between text-blue-100 pt-1 border-t border-blue-700">
-                                                  <span>Avviato:</span>
-                                                  <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
-                                                </div>
-                                              )}
                                             </div>
+                                            {processingProgressMap[campagna.id]!.processing_started_at && (
+                                              <div className="flex justify-between opacity-70 pt-1.5 border-t border-primary-foreground/10 text-[11px]">
+                                                <span>Avviato il:</span>
+                                                <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
+                                              </div>
+                                            )}
                                             <button
                                               onClick={(e) => {
                                                 e.stopPropagation()
                                                 fetchProcessingProgress(campagna.id)
                                               }}
-                                              className="text-blue-300 underline hover:text-blue-100 text-xs mt-1"
+                                              className="opacity-70 hover:opacity-100 text-[11px] flex items-center gap-1"
                                             >
-                                              ↻ Aggiorna
+                                              ↻ Aggiorna stato
                                             </button>
-                                          </>
+                                          </div>
                                         ) : null}
                                       </div>
                                     )}
                                     
                                     {campagna.stato === 'error' && (campagna as any).last_error && (
-                                      <div className="mt-2 p-2 bg-red-900/50 rounded text-xs">
-                                        <p className="font-medium text-red-200">Dettaglio errore:</p>
-                                        <p className="text-red-100 mt-1 break-words">{(campagna as any).last_error}</p>
+                                      <div className="pt-2 border-t border-red-500/30">
+                                        <p className="font-medium text-sm text-red-300 mb-1">Dettaglio errore:</p>
+                                        <p className="text-xs text-red-200/90 break-words">{(campagna as any).last_error}</p>
                                       </div>
                                     )}
                                   </div>

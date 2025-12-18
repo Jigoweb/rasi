@@ -490,42 +490,47 @@ export default function IndividuazioniPage() {
                               
                               {/* Processing progress for in_corso state */}
                               {campagna.stato === 'in_corso' && (
-                                <div className="pt-2 border-t">
-                                  <p className="text-xs font-medium mb-2">Stato Elaborazione:</p>
+                                <div className="pt-2 border-t border-primary-foreground/20">
+                                  <p className="font-medium text-sm mb-2 flex items-center gap-1.5">
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                    Elaborazione in corso
+                                  </p>
                                   {!processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id] ? (
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         fetchProcessingProgress(campagna.id)
                                       }}
-                                      className="text-xs text-blue-500 underline hover:text-blue-600"
+                                      className="text-xs opacity-80 hover:opacity-100 underline"
                                     >
-                                      Carica stato avanzamento
+                                      Mostra avanzamento dettagliato
                                     </button>
                                   ) : loadingProgressMap[campagna.id] ? (
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <div className="flex items-center gap-2 text-xs opacity-80">
                                       <Loader2 className="h-3 w-3 animate-spin" />
                                       <span>Caricamento...</span>
                                     </div>
                                   ) : processingProgressMap[campagna.id] ? (
                                     <div className="space-y-2 text-xs">
-                                      <div className="flex justify-between">
-                                        <span>Programmazioni processate:</span>
-                                        <span className="font-medium">{processingProgressMap[campagna.id]!.programmazioni_processate.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
-                                      </div>
-                                      <div className="h-1.5 bg-muted rounded-full">
-                                        <div 
-                                          className="h-1.5 bg-blue-500 rounded-full transition-all"
-                                          style={{ width: `${processingProgressMap[campagna.id]!.percentuale}%` }}
-                                        />
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span>Individuazioni create:</span>
-                                        <span className="font-medium">{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()}</span>
+                                      <div className="space-y-1.5">
+                                        <div className="flex justify-between opacity-90">
+                                          <span>Programmazioni:</span>
+                                          <span className="font-medium">{processingProgressMap[campagna.id]!.programmazioni_processate.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
+                                        </div>
+                                        <div className="h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden">
+                                          <div 
+                                            className="h-full bg-primary-foreground/80 rounded-full transition-all"
+                                            style={{ width: `${processingProgressMap[campagna.id]!.percentuale}%` }}
+                                          />
+                                        </div>
+                                        <div className="flex justify-between opacity-90">
+                                          <span>Individuazioni create:</span>
+                                          <span className="font-medium">{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()}</span>
+                                        </div>
                                       </div>
                                       {processingProgressMap[campagna.id]!.processing_started_at && (
-                                        <div className="flex justify-between pt-1 border-t">
-                                          <span>Avviato:</span>
+                                        <div className="flex justify-between opacity-70 pt-1.5 border-t border-primary-foreground/10 text-[11px]">
+                                          <span>Avviato il:</span>
                                           <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
                                         </div>
                                       )}
@@ -534,9 +539,9 @@ export default function IndividuazioniPage() {
                                           e.stopPropagation()
                                           fetchProcessingProgress(campagna.id)
                                         }}
-                                        className="text-blue-500 underline hover:text-blue-600"
+                                        className="opacity-70 hover:opacity-100 text-[11px] flex items-center gap-1"
                                       >
-                                        ↻ Aggiorna
+                                        ↻ Aggiorna stato
                                       </button>
                                     </div>
                                   ) : null}
