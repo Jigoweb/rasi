@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCampagneIndividuazione, CampagnaIndividuazione, getDeleteCampagnaIndividuazioneInfo, deleteCampagnaIndividuazione, DeleteCampagnaIndividuazioneInfo } from '@/features/individuazioni/services/individuazioni.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -22,8 +22,12 @@ import {
   Info,
   BarChart3,
   Trash2,
-  MoreHorizontal
+  MoreHorizontal,
+  Filter,
+  Tv,
+  X
 } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
@@ -31,8 +35,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/
 export default function IndividuazioniPage() {
   const router = useRouter()
   const [campagne, setCampagne] = useState<CampagnaIndividuazione[]>([])
+  const [filteredCampagne, setFilteredCampagne] = useState<CampagnaIndividuazione[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [emittenteFilter, setEmittenteFilter] = useState<string>('all')
+  const [annoFilter, setAnnoFilter] = useState<string>('all')
 
   // Delete State
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -120,10 +129,63 @@ export default function IndividuazioniPage() {
     }
   }
 
-  const filteredCampagne = campagne.filter(c => 
-    c.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.emittenti?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Filter logic
+  const filterCampagne = useCallback(() => {
+    let filtered = campagne
+
+    // Filter by search query
+    if (debouncedSearchTerm) {
+      filtered = filtered.filter(c =>
+        c.nome?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+        c.emittenti?.nome?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+      )
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(c => c.stato === statusFilter)
+    }
+
+    // Filter by emittente
+    if (emittenteFilter !== 'all') {
+      filtered = filtered.filter(c => c.emittente_id === emittenteFilter)
+    }
+
+    // Filter by anno
+    if (annoFilter !== 'all') {
+      filtered = filtered.filter(c => c.anno?.toString() === annoFilter)
+    }
+
+    setFilteredCampagne(filtered)
+  }, [campagne, debouncedSearchTerm, statusFilter, emittenteFilter, annoFilter])
+
+  useEffect(() => {
+    filterCampagne()
+  }, [filterCampagne])
+
+  // Get unique anni from campagne for filter dropdown
+  const uniqueAnni = useMemo(() => {
+    const anni = campagne.map(c => c.anno).filter((v): v is number => v !== null && v !== undefined)
+    const uniqueSet = [...new Set(anni)]
+    return uniqueSet.sort((a, b) => b - a) // Sort descending (most recent first)
+  }, [campagne])
+
+  // Get unique emittenti from campagne for filter dropdown
+  const uniqueEmittenti = useMemo(() => {
+    const emittentiMap = new Map<string, { id: string; nome: string }>()
+    campagne.forEach(c => {
+      if (c.emittente_id && c.emittenti?.nome) {
+        emittentiMap.set(c.emittente_id, { id: c.emittente_id, nome: c.emittenti.nome })
+      }
+    })
+    return Array.from(emittentiMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [campagne])
 
   const getStatoBadge = (stato: string) => {
     switch (stato) {
@@ -230,11 +292,12 @@ export default function IndividuazioniPage() {
         </Card>
       </div>
 
-      {/* Search */}
+      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-4">
+            {/* Prima riga: Ricerca */}
+            <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Cerca per nome o emittente..."
@@ -243,6 +306,94 @@ export default function IndividuazioniPage() {
                 className="pl-10"
               />
             </div>
+            
+            {/* Seconda riga: Filtri */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              {/* Filtro Stato */}
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <Filter className="h-4 w-4 mr-2 shrink-0" />
+                  <SelectValue placeholder="Stato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti gli stati</SelectItem>
+                  <SelectItem value="completata">Completata</SelectItem>
+                  <SelectItem value="in_corso">In corso</SelectItem>
+                  <SelectItem value="bozza">Bozza</SelectItem>
+                  <SelectItem value="archiviata">Archiviata</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Filtro Emittente */}
+              <Select value={emittenteFilter} onValueChange={setEmittenteFilter}>
+                <SelectTrigger className="w-full sm:w-52">
+                  <Tv className="h-4 w-4 mr-2 shrink-0" />
+                  <SelectValue placeholder="Emittente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutte le emittenti</SelectItem>
+                  {uniqueEmittenti.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Filtro Anno */}
+              <Select value={annoFilter} onValueChange={setAnnoFilter}>
+                <SelectTrigger className="w-full sm:w-32">
+                  <Calendar className="h-4 w-4 mr-2 shrink-0" />
+                  <SelectValue placeholder="Anno" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti gli anni</SelectItem>
+                  {uniqueAnni.map((anno) => (
+                    <SelectItem key={anno} value={anno.toString()}>{anno}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Reset */}
+              <Button 
+                variant="outline" 
+                onClick={() => { 
+                  setSearchTerm('')
+                  setStatusFilter('all')
+                  setEmittenteFilter('all')
+                  setAnnoFilter('all')
+                }}
+                className="sm:ml-auto"
+              >
+                Reset filtri
+              </Button>
+            </div>
+          </div>
+
+          {/* Filter Chips */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {debouncedSearchTerm && (
+              <Button variant="outline" size="sm" onClick={() => setSearchTerm('')}>
+                <X className="h-3 w-3 mr-1" /> Ricerca: {debouncedSearchTerm}
+              </Button>
+            )}
+            {statusFilter !== 'all' && (
+              <Button variant="outline" size="sm" onClick={() => setStatusFilter('all')}>
+                <X className="h-3 w-3 mr-1" /> Stato: {statusFilter === 'in_corso' ? 'In corso' : statusFilter}
+              </Button>
+            )}
+            {emittenteFilter !== 'all' && (
+              <Button variant="outline" size="sm" onClick={() => setEmittenteFilter('all')}>
+                <X className="h-3 w-3 mr-1" /> Emittente: {uniqueEmittenti.find(e => e.id === emittenteFilter)?.nome}
+              </Button>
+            )}
+            {annoFilter !== 'all' && (
+              <Button variant="outline" size="sm" onClick={() => setAnnoFilter('all')}>
+                <X className="h-3 w-3 mr-1" /> Anno: {annoFilter}
+              </Button>
+            )}
+          </div>
+
+          <div className="mt-4 text-sm text-muted-foreground">
+            Mostrando {filteredCampagne.length} di {campagne.length} campagne
           </div>
         </CardContent>
       </Card>
@@ -379,11 +530,6 @@ export default function IndividuazioniPage() {
             </TableBody>
           </Table>
 
-          {!loading && filteredCampagne.length > 0 && (
-            <div className="px-6 py-4 border-t text-sm text-muted-foreground">
-              Mostrando {filteredCampagne.length} di {campagne.length} campagne
-            </div>
-          )}
         </CardContent>
       </Card>
 
