@@ -294,6 +294,8 @@ export const getProcessingProgress = async (campagnaId: string): Promise<{ data:
       ? Math.round((programmazioni_processate / programmazioni_totali) * 100) 
       : 0
 
+    const campagnaData = campagna as { processing_by?: string | null; processing_started_at?: string | null } | null
+
     return {
       data: {
         campagna_individuazione_id: campagnaInd?.id,
@@ -301,8 +303,8 @@ export const getProcessingProgress = async (campagnaId: string): Promise<{ data:
         programmazioni_totali,
         individuazioni_create,
         percentuale,
-        processing_by: campagna?.processing_by,
-        processing_started_at: campagna?.processing_started_at
+        processing_by: campagnaData?.processing_by,
+        processing_started_at: campagnaData?.processing_started_at
       },
       error: null
     }
