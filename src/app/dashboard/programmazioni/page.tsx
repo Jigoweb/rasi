@@ -88,6 +88,7 @@ export default function ProgrammazioniPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [deleteProgress, setDeleteProgress] = useState<Record<string, { done: number; total: number }>>({})
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   // Individuazioni - use global context
   const { state: individuazioneState, startProcess, canStartNewProcess } = useIndividuazioneProcess()
@@ -319,6 +320,27 @@ export default function ProgrammazioniPage() {
       ])
 
       const normalizeKey = (k: string) => k.toLowerCase().trim()
+      
+      // Validate and fix time values (must be 00:00:00 - 23:59:59)
+      const validateTime = (timeStr: string): string | undefined => {
+        if (!timeStr) return undefined
+        const str = String(timeStr).trim()
+        // Match HH:MM:SS or HH:MM format
+        const match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+        if (!match) return str // Return as-is if not a time format
+        
+        let hours = parseInt(match[1])
+        const minutes = parseInt(match[2])
+        const seconds = match[3] ? parseInt(match[3]) : 0
+        
+        // Fix hours >= 24 (wrap around)
+        if (hours >= 24) {
+          hours = hours % 24
+        }
+        
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+      }
+      
       const coerce = (k: string, v: any) => {
         if (v === undefined || v === null || v === '') return undefined
         switch (k) {
@@ -334,6 +356,9 @@ export default function ProgrammazioniPage() {
           case 'total_net_ad_revenue':
           case 'total_revenue':
             return parseFloat((v as string).toString().replace(',', '.'))
+          case 'ora_inizio':
+          case 'ora_fine':
+            return validateTime(v)
           default:
             return v
         }
@@ -361,7 +386,15 @@ export default function ProgrammazioniPage() {
         const chunk = parsedRows.slice(i, i + CHUNK_SIZE)
         const programmazioni = chunk.map(buildPayload)
         const { error } = await uploadProgrammazioni(programmazioni)
-        if (error) throw error
+        if (error) {
+          // Add context about which rows failed
+          const startRow = i + 2 // +2 because Excel rows start at 1 and first row is header
+          const endRow = Math.min(i + CHUNK_SIZE, parsedRows.length) + 1
+          const enhancedError = new Error(
+            `Errore nelle righe ${startRow}-${endRow}: ${error.message || JSON.stringify(error)}`
+          )
+          throw enhancedError
+        }
         setUploadProgress(prev => {
           const curr = prev[selectedCampagna.id]
           const done = (curr?.done || 0) + chunk.length
@@ -381,7 +414,7 @@ export default function ProgrammazioniPage() {
     } catch (error: any) {
       const errorMessage = error?.message || error?.details || (typeof error === 'object' ? JSON.stringify(error) : String(error))
       console.error('Error uploading database:', errorMessage, error)
-      alert(`Errore durante l'upload al database: ${errorMessage}`)
+      setUploadError(errorMessage)
       await updateCampagnaStatus(selectedCampagna.id, 'error')
       setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'error' } : c))
       setUploadProgress(prev => {
@@ -391,8 +424,6 @@ export default function ProgrammazioniPage() {
       })
     } finally {
       setIsUploading(false)
-      setParsedRows([])
-      setIsUploadReady(false)
     }
   }
 
@@ -432,6 +463,7 @@ export default function ProgrammazioniPage() {
     setParsedRows([])
     setIsUploadReady(false)
     setHeaderError(null)
+    setUploadError(null)
   }
 
   const filterCampagne = useCallback(() => {
@@ -657,35 +689,35 @@ export default function ProgrammazioniPage() {
             <CardContent>
               <div className="flex flex-col gap-4">
                 {/* Prima riga: Ricerca */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Cerca per nome o emittente..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Cerca per nome o emittente..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
                 
                 {/* Seconda riga: Filtri */}
                 <div className="flex flex-col sm:flex-row gap-3">
                   {/* Filtro Stato */}
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-full sm:w-44">
                       <Filter className="h-4 w-4 mr-2 shrink-0" />
                       <SelectValue placeholder="Stato" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tutti gli stati</SelectItem>
-                      <SelectItem value="bozza">Bozza</SelectItem>
-                      <SelectItem value="uploading">Uploading</SelectItem>
-                      <SelectItem value="in_review">In review</SelectItem>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutti gli stati</SelectItem>
+                    <SelectItem value="bozza">Bozza</SelectItem>
+                    <SelectItem value="uploading">Uploading</SelectItem>
+                    <SelectItem value="in_review">In review</SelectItem>
                       <SelectItem value="in_corso">In elaborazione</SelectItem>
                       <SelectItem value="individuata">Individuata</SelectItem>
                       <SelectItem value="deleting">In eliminazione</SelectItem>
                       <SelectItem value="error">Errore</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  </SelectContent>
+                </Select>
 
                   {/* Filtro Emittente */}
                   <Select value={emittenteFilter} onValueChange={setEmittenteFilter}>
@@ -728,7 +760,7 @@ export default function ProgrammazioniPage() {
                   >
                     Reset filtri
                   </Button>
-                </div>
+              </div>
               </div>
 
               {/* Filter Chips */}
@@ -1408,6 +1440,29 @@ export default function ProgrammazioniPage() {
             </div>
             {headerError && (
               <div className="mt-3 text-sm text-red-600">{headerError}</div>
+            )}
+            
+            {uploadError && (
+              <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <XCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-red-800">Errore durante l'upload</p>
+                    <p className="text-sm text-red-700 mt-1">{uploadError}</p>
+                    <p className="text-xs text-red-600 mt-2">
+                      Controlla il file Excel e correggi i dati problematici, poi riprova.
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="mt-3"
+                  onClick={() => setUploadError(null)}
+                >
+                  Chiudi errore
+                </Button>
+              </div>
             )}
 
             <div className="flex justify-end">
