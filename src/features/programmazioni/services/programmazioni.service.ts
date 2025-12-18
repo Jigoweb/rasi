@@ -18,6 +18,8 @@ export interface CampagnaProgrammazione {
   stato: string
   created_at: string
   created_by: string | null
+  processing_by?: string | null
+  processing_started_at?: string | null
   emittenti?: {
     nome: string
   }
@@ -223,6 +225,90 @@ export const getCampagnaProgrammazioneById = async (id: string) => {
     .single()
 
   return { data: (data as unknown) as CampagnaProgrammazione, error }
+}
+
+export interface ProcessingProgress {
+  campagna_individuazione_id?: string
+  programmazioni_processate: number
+  programmazioni_totali: number
+  individuazioni_create: number
+  percentuale: number
+  processing_by?: string | null
+  processing_started_at?: string | null
+}
+
+/**
+ * Get the processing progress for a campaign that is currently being processed
+ */
+export const getProcessingProgress = async (campagnaId: string): Promise<{ data: ProcessingProgress | null; error: any }> => {
+  try {
+    // Get campagna info
+    const { data: campagna, error: campagnaError } = await supabase
+      .from('campagne_programmazione' as any)
+      .select('processing_by, processing_started_at')
+      .eq('id', campagnaId)
+      .single()
+    
+    if (campagnaError) throw campagnaError
+
+    // Get total programmazioni
+    const { count: totale, error: totaleError } = await supabase
+      .from('programmazioni')
+      .select('*', { count: 'exact', head: true })
+      .eq('campagna_programmazione_id', campagnaId)
+    
+    if (totaleError) throw totaleError
+
+    // Get processed programmazioni
+    const { count: processate, error: processateError } = await supabase
+      .from('programmazioni')
+      .select('*', { count: 'exact', head: true })
+      .eq('campagna_programmazione_id', campagnaId)
+      .eq('processato', true)
+    
+    if (processateError) throw processateError
+
+    // Check if there's a campagna individuazione
+    const { data: campagnaInd, error: indError } = await (supabase as any)
+      .from('campagne_individuazione')
+      .select('id')
+      .eq('campagne_programmazione_id', campagnaId)
+      .maybeSingle()
+    
+    if (indError) throw indError
+
+    let individuazioni_create = 0
+    if (campagnaInd) {
+      const { count, error: countError } = await (supabase as any)
+        .from('individuazioni')
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_individuazioni_id', campagnaInd.id)
+      
+      if (countError) throw countError
+      individuazioni_create = count || 0
+    }
+
+    const programmazioni_totali = totale || 0
+    const programmazioni_processate = processate || 0
+    const percentuale = programmazioni_totali > 0 
+      ? Math.round((programmazioni_processate / programmazioni_totali) * 100) 
+      : 0
+
+    return {
+      data: {
+        campagna_individuazione_id: campagnaInd?.id,
+        programmazioni_processate,
+        programmazioni_totali,
+        individuazioni_create,
+        percentuale,
+        processing_by: campagna?.processing_by,
+        processing_started_at: campagna?.processing_started_at
+      },
+      error: null
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
 }
 
 export interface ProgrammazioneRow {

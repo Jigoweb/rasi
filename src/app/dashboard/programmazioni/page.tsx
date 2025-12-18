@@ -9,7 +9,7 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
-import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload } from '@/features/programmazioni/services/programmazioni.service'
+import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload, getProcessingProgress, ProcessingProgress } from '@/features/programmazioni/services/programmazioni.service'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { ProcessBlockedDialog } from '@/shared/components/individuazione-progress-indicator'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -89,6 +89,8 @@ export default function ProgrammazioniPage() {
   const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [deleteProgress, setDeleteProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, ProcessingProgress | null>>({})
+  const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
 
   // Individuazioni - use global context
   const { state: individuazioneState, startProcess, canStartNewProcess } = useIndividuazioneProcess()
@@ -132,6 +134,22 @@ export default function ProgrammazioniPage() {
       setLoadingArtists(false)
     }
   }, [allArtists.length])
+
+  // Fetch processing progress for a specific campaign
+  const fetchProcessingProgress = useCallback(async (campagnaId: string) => {
+    if (loadingProgressMap[campagnaId]) return // Already loading
+    
+    setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: true }))
+    try {
+      const { data, error } = await getProcessingProgress(campagnaId)
+      if (error) throw error
+      setProcessingProgressMap(prev => ({ ...prev, [campagnaId]: data }))
+    } catch (error) {
+      console.error('Error fetching processing progress:', error)
+    } finally {
+      setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: false }))
+    }
+  }, [loadingProgressMap])
 
   // Handle starting individuazioni process - show confirmation first
   const handleStartIndividuazioni = (campagna: CampagnaProgrammazione) => {
@@ -911,9 +929,67 @@ export default function ProgrammazioniPage() {
                                       {campagna.stato === 'in_review' && 'I dati sono stati caricati correttamente. Puoi procedere con la creazione delle individuazioni oppure caricare ulteriori file per aggiungere altri record.'}
                                       {campagna.stato === 'individuata' && 'Il processo di individuazione è stato completato con successo. Le individuazioni sono state create e sono pronte per la revisione.'}
                                       {campagna.stato === 'error' && 'Si è verificato un errore durante l\'elaborazione. Verifica i dati e riprova il caricamento.'}
-                                      {campagna.stato === 'in_corso' && 'Il sistema sta processando le programmazioni e creando le individuazioni. Attendere il completamento...'}
+                                      {campagna.stato === 'in_corso' && 'Il sistema sta processando le programmazioni e creando le individuazioni.'}
                                       {campagna.stato === 'uploading' && 'Caricamento dati in corso. Attendere il completamento...'}
                                     </p>
+                                    
+                                    {/* Processing progress for in_corso state */}
+                                    {campagna.stato === 'in_corso' && (
+                                      <div className="mt-2 p-2 bg-blue-900/50 rounded text-xs space-y-2">
+                                        {!processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id] ? (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              fetchProcessingProgress(campagna.id)
+                                            }}
+                                            className="text-blue-200 underline hover:text-blue-100"
+                                          >
+                                            Carica stato avanzamento
+                                          </button>
+                                        ) : loadingProgressMap[campagna.id] ? (
+                                          <div className="flex items-center gap-2 text-blue-200">
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                            <span>Caricamento...</span>
+                                          </div>
+                                        ) : processingProgressMap[campagna.id] ? (
+                                          <>
+                                            <p className="font-medium text-blue-200">Avanzamento:</p>
+                                            <div className="space-y-1">
+                                              <div className="flex justify-between text-blue-100">
+                                                <span>Programmazioni processate:</span>
+                                                <span>{processingProgressMap[campagna.id]!.programmazioni_processate.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
+                                              </div>
+                                              <div className="h-1.5 bg-blue-950 rounded-full">
+                                                <div 
+                                                  className="h-1.5 bg-blue-400 rounded-full transition-all"
+                                                  style={{ width: `${processingProgressMap[campagna.id]!.percentuale}%` }}
+                                                />
+                                              </div>
+                                              <div className="flex justify-between text-blue-100">
+                                                <span>Individuazioni create:</span>
+                                                <span>{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()}</span>
+                                              </div>
+                                              {processingProgressMap[campagna.id]!.processing_started_at && (
+                                                <div className="flex justify-between text-blue-100 pt-1 border-t border-blue-700">
+                                                  <span>Avviato:</span>
+                                                  <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                fetchProcessingProgress(campagna.id)
+                                              }}
+                                              className="text-blue-300 underline hover:text-blue-100 text-xs mt-1"
+                                            >
+                                              ↻ Aggiorna
+                                            </button>
+                                          </>
+                                        ) : null}
+                                      </div>
+                                    )}
+                                    
                                     {campagna.stato === 'error' && (campagna as any).last_error && (
                                       <div className="mt-2 p-2 bg-red-900/50 rounded text-xs">
                                         <p className="font-medium text-red-200">Dettaglio errore:</p>
