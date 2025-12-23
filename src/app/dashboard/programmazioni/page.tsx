@@ -1758,7 +1758,8 @@ export default function ProgrammazioniPage() {
                   <strong className="text-foreground">Tempo stimato:</strong> {(() => {
                     const count = campagnaForIndividuazioni?.programmazioni_count || 0
                     const chunkSize = 25
-                    const secondsPerChunk = 2.5
+                    // Ottimizzato: ~1s per chunk (SQL veloce con indice trigram + overhead rete)
+                    const secondsPerChunk = 1.0
                     const totalSeconds = Math.ceil(count / chunkSize) * secondsPerChunk
                     
                     if (totalSeconds < 60) {
