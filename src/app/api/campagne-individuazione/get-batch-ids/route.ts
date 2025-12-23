@@ -5,13 +5,14 @@ import { supabaseServer } from '@/shared/lib/supabase-server'
  * POST /api/campagne-individuazione/get-batch-ids
  * 
  * Ottiene un batch di programmazione_ids per il processing paginato.
+ * Usa cursor-based pagination per performance ottimale su grandi dataset.
  */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { 
       campagne_programmazione_id,
-      offset = 0,
+      last_id = null,  // Cursor: ultimo ID processato
       limit = 500
     } = body
 
@@ -22,13 +23,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Ottieni un batch di ID con paginazione
-    const { data: programmazioni, error: progError } = await supabaseServer
+    // Cursor-based pagination: molto più veloce di OFFSET per grandi dataset
+    // Invece di "OFFSET 19000" che deve saltare 19000 righe,
+    // usiamo "WHERE id > last_id" che usa l'indice direttamente
+    let query = supabaseServer
       .from('programmazioni')
       .select('id')
       .eq('campagna_programmazione_id', campagne_programmazione_id)
       .order('id', { ascending: true })
-      .range(offset, offset + limit - 1)
+      .limit(limit)
+
+    // Se abbiamo un cursor, prendiamo solo gli ID successivi
+    if (last_id) {
+      query = query.gt('id', last_id)
+    }
+
+    const { data: programmazioni, error: progError } = await query
 
     if (progError) {
       console.error('Errore caricamento batch:', progError)
@@ -39,13 +49,16 @@ export async function POST(req: NextRequest) {
     }
 
     const programmazioneIds = programmazioni?.map(p => p.id) || []
+    const newLastId = programmazioneIds.length > 0 
+      ? programmazioneIds[programmazioneIds.length - 1] 
+      : null
 
     return NextResponse.json({
       success: true,
       data: {
         programmazione_ids: programmazioneIds,
         count: programmazioneIds.length,
-        offset,
+        last_id: newLastId,  // Cursor per il prossimo batch
         has_more: programmazioneIds.length === limit
       }
     })

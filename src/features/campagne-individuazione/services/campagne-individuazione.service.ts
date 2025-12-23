@@ -41,7 +41,7 @@ export interface InitCampagnaResponse {
 
 export interface GetBatchIdsRequest {
   campagne_programmazione_id: string
-  offset: number
+  last_id?: string | null  // Cursor: ultimo ID processato (null per il primo batch)
   limit: number
 }
 
@@ -50,7 +50,7 @@ export interface GetBatchIdsResponse {
   data?: {
     programmazione_ids: string[]
     count: number
-    offset: number
+    last_id: string | null  // Cursor per il prossimo batch
     has_more: boolean
   }
   error?: string
@@ -312,17 +312,17 @@ export const processCampagnaIndividuazioneBatch = async (
     }
     onProgress(progress)
 
-    // 3. Processa ogni chunk con paginazione
-    let offset = 0
+    // 3. Processa ogni chunk con cursor-based pagination (molto più veloce di OFFSET)
+    let lastId: string | null = null
     let chunkIndex = 0
     let hasMore = true
 
     while (hasMore) {
-      // Ottieni il batch di IDs
-      console.log(`[Batch] Fetching IDs batch at offset ${offset}`)
+      // Ottieni il batch di IDs usando cursor (last_id)
+      console.log(`[Batch] Fetching IDs batch with cursor: ${lastId || 'START'}`)
       const batchResult = await getBatchIds({
         campagne_programmazione_id,
-        offset,
+        last_id: lastId,
         limit: chunkSize
       })
 
@@ -330,8 +330,9 @@ export const processCampagnaIndividuazioneBatch = async (
         throw new Error(batchResult.error || 'Errore nel caricamento batch IDs')
       }
 
-      const { programmazione_ids, has_more } = batchResult.data
+      const { programmazione_ids, has_more, last_id: newLastId } = batchResult.data
       hasMore = has_more
+      lastId = newLastId  // Aggiorna cursor per il prossimo batch
       
       if (programmazione_ids.length === 0) {
         break
@@ -360,7 +361,6 @@ export const processCampagnaIndividuazioneBatch = async (
       }
       onProgress(progress)
 
-      offset += chunkSize
       chunkIndex++
     }
 
