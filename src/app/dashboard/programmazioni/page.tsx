@@ -1561,26 +1561,30 @@ export default function ProgrammazioniPage() {
                   </Button>
                 </>
               ) : (
-                <div className="flex flex-col items-center gap-3">
-                  <div className="flex items-center gap-3">
-                    <FileSpreadsheet className="h-8 w-8 text-green-600" />
-                    <div className="text-left">
-                      <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
-                      <p className="text-xs text-gray-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                <div className="flex flex-col items-center gap-4 w-full">
+                  <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-lg w-full">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <FileSpreadsheet className="h-6 w-6 text-primary" />
                     </div>
-                    <Button variant="outline" size="sm" className="ml-4" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isUploading}>
-                      Cambia file
+                    <div className="flex-1 min-w-0 text-left">
+                      <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                      <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isUploading}>
+                      Cambia
                     </Button>
                   </div>
                   {isSubmitting ? (
-                    <div className="flex items-center gap-2 text-sm text-blue-600">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Lettura file in corso...
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      <span>Analisi file in corso...</span>
                     </div>
                   ) : parsedRows.length > 0 ? (
-                    <div className="flex items-center gap-2 text-sm text-green-600">
-                      <CheckCircle className="h-4 w-4" />
-                      {parsedRows.length.toLocaleString()} righe pronte per l&apos;upload
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                        {parsedRows.length.toLocaleString()} righe pronte
+                      </span>
                     </div>
                   ) : null}
                 </div>
@@ -1592,50 +1596,55 @@ export default function ProgrammazioniPage() {
             
             {/* Upload Progress Bar */}
             {isUploading && selectedCampagna && uploadProgress[selectedCampagna.id] && (
-              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center gap-3 mb-3">
-                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                  <div>
-                    <p className="font-medium text-blue-800">Upload in corso...</p>
-                    <p className="text-sm text-blue-600">
-                      {uploadProgress[selectedCampagna.id].done.toLocaleString()} / {uploadProgress[selectedCampagna.id].total.toLocaleString()} record
-                    </p>
+              <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Caricamento in corso</p>
+                      <p className="text-xs text-muted-foreground">
+                        {uploadProgress[selectedCampagna.id].done.toLocaleString()} di {uploadProgress[selectedCampagna.id].total.toLocaleString()} record
+                      </p>
+                    </div>
                   </div>
+                  <span className="text-lg font-semibold text-primary">
+                    {Math.round((uploadProgress[selectedCampagna.id].done / uploadProgress[selectedCampagna.id].total) * 100)}%
+                  </span>
                 </div>
-                <div className="w-full bg-blue-200 rounded-full h-2.5">
+                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                    className="bg-primary h-2 rounded-full transition-all duration-300 ease-out"
                     style={{ 
                       width: `${Math.min(100, Math.round((uploadProgress[selectedCampagna.id].done / uploadProgress[selectedCampagna.id].total) * 100))}%` 
                     }}
                   />
                 </div>
-                <p className="text-xs text-blue-500 mt-2 text-center">
-                  {Math.round((uploadProgress[selectedCampagna.id].done / uploadProgress[selectedCampagna.id].total) * 100)}% completato
-                </p>
               </div>
             )}
 
             {uploadError && (
-              <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-start gap-2">
-                  <XCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-red-800">Errore durante l'upload</p>
-                    <p className="text-sm text-red-700 mt-1">{uploadError}</p>
-                    <p className="text-xs text-red-600 mt-2">
-                      Controlla il file Excel e correggi i dati problematici, poi riprova.
-                    </p>
+              <div className="mt-4 p-4 bg-destructive/5 border border-destructive/20 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-destructive/10 rounded-lg shrink-0">
+                    <XCircle className="h-4 w-4 text-destructive" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-destructive">Errore durante l&apos;upload</p>
+                    <p className="text-sm text-muted-foreground mt-1 break-words">{uploadError}</p>
                   </div>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="mt-3"
-                  onClick={() => setUploadError(null)}
-                >
-                  Chiudi errore
-                </Button>
+                <div className="flex justify-end mt-3">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => setUploadError(null)}
+                  >
+                    Chiudi
+                  </Button>
+                </div>
               </div>
             )}
 
