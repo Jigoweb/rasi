@@ -1561,15 +1561,28 @@ export default function ProgrammazioniPage() {
                   </Button>
                 </>
               ) : (
-                <div className="flex items-center gap-3">
-                  <FileSpreadsheet className="h-8 w-8 text-gray-600" />
-                  <div className="text-left">
-                    <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
-                    <p className="text-xs text-gray-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex items-center gap-3">
+                    <FileSpreadsheet className="h-8 w-8 text-green-600" />
+                    <div className="text-left">
+                      <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
+                      <p className="text-xs text-gray-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <Button variant="outline" size="sm" className="ml-4" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isUploading}>
+                      Cambia file
+                    </Button>
                   </div>
-                  <Button variant="outline" size="sm" className="ml-4" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting}>
-                    Cambia file
-                  </Button>
+                  {isSubmitting ? (
+                    <div className="flex items-center gap-2 text-sm text-blue-600">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Lettura file in corso...
+                    </div>
+                  ) : parsedRows.length > 0 ? (
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <CheckCircle className="h-4 w-4" />
+                      {parsedRows.length.toLocaleString()} righe pronte per l&apos;upload
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -1577,6 +1590,32 @@ export default function ProgrammazioniPage() {
               <div className="mt-3 text-sm text-red-600">{headerError}</div>
             )}
             
+            {/* Upload Progress Bar */}
+            {isUploading && selectedCampagna && uploadProgress[selectedCampagna.id] && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-3 mb-3">
+                  <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
+                  <div>
+                    <p className="font-medium text-blue-800">Upload in corso...</p>
+                    <p className="text-sm text-blue-600">
+                      {uploadProgress[selectedCampagna.id].done.toLocaleString()} / {uploadProgress[selectedCampagna.id].total.toLocaleString()} record
+                    </p>
+                  </div>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-2.5">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                    style={{ 
+                      width: `${Math.min(100, Math.round((uploadProgress[selectedCampagna.id].done / uploadProgress[selectedCampagna.id].total) * 100))}%` 
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-blue-500 mt-2 text-center">
+                  {Math.round((uploadProgress[selectedCampagna.id].done / uploadProgress[selectedCampagna.id].total) * 100)}% completato
+                </p>
+              </div>
+            )}
+
             {uploadError && (
               <div className="mt-3 p-4 bg-red-50 border border-red-200 rounded-lg">
                 <div className="flex items-start gap-2">
