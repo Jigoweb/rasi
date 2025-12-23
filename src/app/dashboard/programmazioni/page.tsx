@@ -1533,7 +1533,7 @@ export default function ProgrammazioniPage() {
               )}
 
             <div 
-            className="border-2 border-dashed border-gray-200 rounded-lg p-8 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer"
+            className="border-2 border-dashed border-gray-200 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer overflow-hidden"
             onClick={() => { if (!isUploading) fileInputRef.current?.click() }}
           >
               <input 
@@ -1561,16 +1561,16 @@ export default function ProgrammazioniPage() {
                   </Button>
                 </>
               ) : (
-                <div className="flex flex-col items-center gap-4 w-full">
-                  <div className="flex items-center gap-4 p-3 bg-muted/30 rounded-lg w-full">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <FileSpreadsheet className="h-6 w-6 text-primary" />
+                <div className="flex flex-col items-center gap-3 w-full max-w-full">
+                  <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg w-full max-w-full overflow-hidden">
+                    <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                      <FileSpreadsheet className="h-5 w-5 text-primary" />
                     </div>
-                    <div className="flex-1 min-w-0 text-left">
-                      <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+                    <div className="flex-1 min-w-0 text-left overflow-hidden">
+                      <p className="text-sm font-medium truncate max-w-[200px]">{selectedFile.name}</p>
                       <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isUploading}>
+                    <Button variant="ghost" size="sm" className="shrink-0" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }} disabled={isSubmitting || isUploading}>
                       Cambia
                     </Button>
                   </div>
@@ -1581,7 +1581,7 @@ export default function ProgrammazioniPage() {
                     </div>
                   ) : parsedRows.length > 0 ? (
                     <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
                       <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
                         {parsedRows.length.toLocaleString()} righe pronte
                       </span>
