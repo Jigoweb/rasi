@@ -291,6 +291,7 @@ export interface IndividuazioneProcessingProgress {
   percentuale: number
   processing_by?: string | null
   processing_started_at?: string | null
+  last_activity_at?: string | null  // Timestamp of last individuazione created
 }
 
 /**
@@ -315,6 +316,22 @@ export const getIndividuazioneProcessingProgress = async (campagnaIndId: string)
     
     if (countError) throw countError
 
+    // Get timestamp of last individuazione created
+    let last_activity_at: string | null = null
+    if (individuazioni_create && individuazioni_create > 0) {
+      const { data: lastInd, error: lastIndError } = await (supabase as any)
+        .from('individuazioni')
+        .select('created_at')
+        .eq('campagna_individuazioni_id', campagnaIndId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      
+      if (!lastIndError && lastInd) {
+        last_activity_at = lastInd.created_at
+      }
+    }
+
     const statistiche = campagnaInd?.statistiche || {}
     const campagnaProg = campagnaInd?.campagne_programmazione || {}
     
@@ -331,7 +348,8 @@ export const getIndividuazioneProcessingProgress = async (campagnaIndId: string)
         individuazioni_create: individuazioni_create || 0,
         percentuale,
         processing_by: campagnaProg.processing_by,
-        processing_started_at: campagnaProg.processing_started_at
+        processing_started_at: campagnaProg.processing_started_at,
+        last_activity_at
       },
       error: null
     }

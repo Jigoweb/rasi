@@ -235,6 +235,7 @@ export interface ProcessingProgress {
   percentuale: number
   processing_by?: string | null
   processing_started_at?: string | null
+  last_activity_at?: string | null  // Timestamp of last individuazione created
 }
 
 /**
@@ -278,6 +279,7 @@ export const getProcessingProgress = async (campagnaId: string): Promise<{ data:
     if (indError) throw indError
 
     let individuazioni_create = 0
+    let last_activity_at: string | null = null
     if (campagnaInd) {
       const { count, error: countError } = await (supabase as any)
         .from('individuazioni')
@@ -286,6 +288,21 @@ export const getProcessingProgress = async (campagnaId: string): Promise<{ data:
       
       if (countError) throw countError
       individuazioni_create = count || 0
+
+      // Get timestamp of last individuazione created
+      if (individuazioni_create > 0) {
+        const { data: lastInd, error: lastIndError } = await (supabase as any)
+          .from('individuazioni')
+          .select('created_at')
+          .eq('campagna_individuazioni_id', campagnaInd.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        
+        if (!lastIndError && lastInd) {
+          last_activity_at = lastInd.created_at
+        }
+      }
     }
 
     const programmazioni_totali = totale || 0
@@ -304,7 +321,8 @@ export const getProcessingProgress = async (campagnaId: string): Promise<{ data:
         individuazioni_create,
         percentuale,
         processing_by: campagnaData?.processing_by,
-        processing_started_at: campagnaData?.processing_started_at
+        processing_started_at: campagnaData?.processing_started_at,
+        last_activity_at
       },
       error: null
     }

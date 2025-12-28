@@ -25,7 +25,8 @@ import {
   MoreHorizontal,
   Filter,
   Tv,
-  X
+  X,
+  AlertCircle
 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
@@ -58,6 +59,18 @@ export default function IndividuazioniPage() {
   useEffect(() => {
     loadCampagne()
   }, [])
+
+  // Load processing progress for all in_corso campaigns when campagne are loaded
+  useEffect(() => {
+    if (campagne.length > 0) {
+      campagne
+        .filter(c => c.stato === 'in_corso' && !processingProgressMap[c.id] && !loadingProgressMap[c.id])
+        .forEach(campagna => {
+          fetchProcessingProgress(campagna.id)
+        })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campagne])
 
   const loadCampagne = async () => {
     setLoading(true)
@@ -207,12 +220,25 @@ export default function IndividuazioniPage() {
     return Array.from(emittentiMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
   }, [campagne])
 
-  const getStatoBadge = (stato: string) => {
+  const getStatoBadge = (stato: string, campagnaId?: string) => {
     switch (stato) {
       case 'completata':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Completata</Badge>
-      case 'in_corso':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">In corso</Badge>
+      case 'in_corso': {
+        // Check if process is stale (no activity for >10 minutes)
+        const progress = campagnaId ? processingProgressMap[campagnaId] : null
+        const isStale = progress?.last_activity_at 
+          ? Math.floor((Date.now() - new Date(progress.last_activity_at).getTime()) / 1000 / 60) > 10
+          : false
+        
+        return isStale ? (
+          <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
+            <AlertCircle className="w-3 h-3 mr-1" /> Bloccato
+          </Badge>
+        ) : (
+          <Badge className="bg-blue-100 text-blue-800 border-blue-200">In corso</Badge>
+        )
+      }
       case 'bozza':
         return <Badge variant="secondary">Bozza</Badge>
       case 'archiviata':
@@ -459,7 +485,14 @@ export default function IndividuazioniPage() {
                       <div className="flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-muted-foreground" />
                         <span className="font-medium">{campagna.nome}</span>
-                        <Tooltip>
+                        <Tooltip
+                          onOpenChange={(open) => {
+                            // Load processing progress when tooltip opens for in_corso campaigns
+                            if (open && campagna.stato === 'in_corso' && !processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id]) {
+                              fetchProcessingProgress(campagna.id)
+                            }
+                          }}
+                        >
                           <TooltipTrigger asChild>
                             <button 
                               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -489,12 +522,27 @@ export default function IndividuazioniPage() {
                               )}
                               
                               {/* Processing progress for in_corso state */}
-                              {campagna.stato === 'in_corso' && (
-                                <div className="pt-2 border-t border-primary-foreground/20">
-                                  <p className="font-medium text-sm mb-2 flex items-center gap-1.5">
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                    Elaborazione in corso
-                                  </p>
+                              {campagna.stato === 'in_corso' && (() => {
+                                const progress = processingProgressMap[campagna.id]
+                                const isStale = progress?.last_activity_at 
+                                  ? Math.floor((Date.now() - new Date(progress.last_activity_at).getTime()) / 1000 / 60) > 10
+                                  : false
+                                
+                                return (
+                                  <div className="pt-2 border-t border-primary-foreground/20">
+                                    <p className="font-medium text-sm mb-2 flex items-center gap-1.5">
+                                      {isStale ? (
+                                        <>
+                                          <AlertCircle className="h-3 w-3 text-yellow-500" />
+                                          Processo bloccato
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                          Elaborazione in corso
+                                        </>
+                                      )}
+                                    </p>
                                   {!processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id] ? (
                                     <button
                                       onClick={(e) => {
@@ -514,18 +562,29 @@ export default function IndividuazioniPage() {
                                     <div className="space-y-2 text-xs">
                                       <div className="space-y-1.5">
                                         <div className="flex justify-between opacity-90">
-                                          <span>Programmazioni:</span>
-                                          <span className="font-medium">{processingProgressMap[campagna.id]!.programmazioni_processate.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
-                                        </div>
-                                        <div className="h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden">
-                                          <div 
-                                            className="h-full bg-primary-foreground/80 rounded-full transition-all"
-                                            style={{ width: `${processingProgressMap[campagna.id]!.percentuale}%` }}
-                                          />
-                                        </div>
-                                        <div className="flex justify-between opacity-90">
                                           <span>Individuazioni create:</span>
-                                          <span className="font-medium">{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()}</span>
+                                          <span className="font-medium">{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()} programmazioni</span>
+                                        </div>
+                                        {(() => {
+                                          // Calculate estimated progress based on individuazioni created
+                                          // Estimate: ~1-2% of programmazioni generate individuazioni on average
+                                          // Scale by 10x to make progress more visible (so 1% completion = 10% bar)
+                                          const estimatedProgress = processingProgressMap[campagna.id]!.programmazioni_totali > 0
+                                            ? Math.min(100, Math.round((processingProgressMap[campagna.id]!.individuazioni_create / processingProgressMap[campagna.id]!.programmazioni_totali) * 10 * 100))
+                                            : 0
+                                          
+                                          return (
+                                            <div className="h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden">
+                                              <div 
+                                                className="h-full bg-primary-foreground/80 rounded-full transition-all"
+                                                style={{ width: `${estimatedProgress}%` }}
+                                              />
+                                            </div>
+                                          )
+                                        })()}
+                                        <div className="flex justify-between opacity-70 text-[11px]">
+                                          <span>Programmazioni totali:</span>
+                                          <span>{processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
                                         </div>
                                       </div>
                                       {processingProgressMap[campagna.id]!.processing_started_at && (
@@ -534,6 +593,26 @@ export default function IndividuazioniPage() {
                                           <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
                                         </div>
                                       )}
+                                      {processingProgressMap[campagna.id]!.last_activity_at && (() => {
+                                        const lastActivity = new Date(processingProgressMap[campagna.id]!.last_activity_at!)
+                                        const minutesSinceActivity = Math.floor((Date.now() - lastActivity.getTime()) / 1000 / 60)
+                                        const isStale = minutesSinceActivity > 10
+                                        
+                                        return (
+                                          <>
+                                            <div className={`flex justify-between pt-1.5 border-t border-primary-foreground/10 text-[11px] ${isStale ? 'text-yellow-300' : 'opacity-70'}`}>
+                                              <span>Ultima attività:</span>
+                                              <span>{lastActivity.toLocaleString('it-IT')}</span>
+                                            </div>
+                                            {isStale && (
+                                              <div className="pt-1.5 text-[11px] text-yellow-300 flex items-center gap-1.5">
+                                                <span>⚠️</span>
+                                                <span>Il processo sembra bloccato ({minutesSinceActivity} minuti senza attività)</span>
+                                              </div>
+                                            )}
+                                          </>
+                                        )
+                                      })()}
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation()
@@ -545,8 +624,9 @@ export default function IndividuazioniPage() {
                                       </button>
                                     </div>
                                   ) : null}
-                                </div>
-                              )}
+                                  </div>
+                                )
+                              })()}
                             </div>
                           </TooltipContent>
                         </Tooltip>
@@ -568,7 +648,7 @@ export default function IndividuazioniPage() {
                       {formatNumber(campagna.statistiche?.opere_distinte)}
                     </TableCell>
                     <TableCell className="py-4">
-                        {getStatoBadge(campagna.stato)}
+                        {getStatoBadge(campagna.stato, campagna.id)}
                     </TableCell>
                     <TableCell className="py-4">
                       {formatDate(campagna.created_at)}
