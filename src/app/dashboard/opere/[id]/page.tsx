@@ -38,6 +38,7 @@ export default function OperaDetailPage() {
   const [showImdbSearch, setShowImdbSearch] = useState(false)
   const [imdbSearchResults, setImdbSearchResults] = useState<any[]>([])
   const [isSearchingImdb, setIsSearchingImdb] = useState(false)
+  const [imdbSearchError, setImdbSearchError] = useState<string | null>(null)
   const [imdbCredits, setImdbCredits] = useState<any[]>([])
   const [imdbCreditsGrouped, setImdbCreditsGrouped] = useState<any>(null)
   const [loadingImdbCredits, setLoadingImdbCredits] = useState(false)
@@ -97,17 +98,25 @@ export default function OperaDetailPage() {
   }, [operaId, fetchData])
 
   const performSearch = async (term: string, year?: number, type?: string) => {
-    if (!term) return
+    if (!term || !term.trim()) {
+      setImdbSearchResults([])
+      setImdbSearchError(null)
+      return
+    }
+    
     setIsSearchingImdb(true)
+    setImdbSearchResults([]) // Clear previous results
+    setImdbSearchError(null) // Clear previous errors
+    
     try {
       // Search by title, year and type to get more accurate results (with directors)
-      let { ok, results } = await searchTitles(term, year, type, true)
+      let { ok, results } = await searchTitles(term.trim(), year, type, true)
 
       // Intelligent fallback: if no results and we had strict filters, relax them
       if (ok && results.length === 0 && year) {
         // Retry without year
-        const retry = await searchTitles(term, undefined, type, true)
-        if (retry.ok) {
+        const retry = await searchTitles(term.trim(), undefined, type, true)
+        if (retry.ok && retry.results.length > 0) {
           results = retry.results
           ok = retry.ok
         }
@@ -115,20 +124,25 @@ export default function OperaDetailPage() {
       
       // If still no results and we had a type, try without type (broadest search)
       if (ok && results.length === 0 && type) {
-        const retry = await searchTitles(term, undefined, undefined, true)
-        if (retry.ok) {
+        const retry = await searchTitles(term.trim(), undefined, undefined, true)
+        if (retry.ok && retry.results.length > 0) {
           results = retry.results
           ok = retry.ok
         }
       }
 
       if (ok) {
-        setImdbSearchResults(results)
+        setImdbSearchResults(results || [])
+        if ((results || []).length === 0) {
+          setImdbSearchError('Nessun risultato trovato. Prova con un termine di ricerca diverso.')
+        }
       } else {
+        setImdbSearchError('Errore durante la ricerca. Riprova più tardi.')
         setImdbSearchResults([])
       }
     } catch (e) {
-      console.error(e)
+      console.error('Error performing IMDb search:', e)
+      setImdbSearchError('Errore durante la ricerca. Verifica la connessione e riprova.')
       setImdbSearchResults([])
     } finally {
       setIsSearchingImdb(false)
@@ -138,6 +152,8 @@ export default function OperaDetailPage() {
   const handleSearchImdb = async () => {
     if (!opera) return
     setShowImdbSearch(true)
+    setImdbSearchError(null)
+    setImdbSearchResults([])
 
     // 1. Try to find by IMDb ID if available
     if (opera.imdb_tconst) {
@@ -172,12 +188,16 @@ export default function OperaDetailPage() {
         }
       } catch (e) {
         console.error('Failed to fetch by ID, falling back to search', e)
+        setImdbSearchError('Impossibile caricare i dettagli IMDb. Passo alla ricerca per titolo.')
       }
     }
 
     // 2. Fallback to search by title/year/type
-    setSearchTerm(opera.titolo)
-    performSearch(opera.titolo, opera.anno_produzione ?? undefined, opera.tipo)
+    const searchTitle = opera.titolo || ''
+    setSearchTerm(searchTitle)
+    if (searchTitle.trim()) {
+      performSearch(searchTitle, opera.anno_produzione ?? undefined, opera.tipo)
+    }
   }
 
   const handleSelectImdbTitle = async (imdbId: string) => {
@@ -206,7 +226,10 @@ export default function OperaDetailPage() {
   const handleOpenImportDialog = async () => {
     // Use pending (newly selected) or existing imdb_tconst
     const imdbId = pendingImdbTconst || opera?.imdb_tconst
-    if (!imdbId) return
+    if (!imdbId) {
+      alert('L\'opera deve avere un IMDb tconst prima di poter importare dati da IMDb. Cerca e seleziona prima il titolo corretto su IMDb.')
+      return
+    }
     
     setLoadingImdbData(true)
     setShowImportDialog(true)
@@ -258,6 +281,13 @@ export default function OperaDetailPage() {
   const handleImportEpisodes = async () => {
     if (!opera || !imdbEpisodesData) return
     
+    // Verifica che l'opera abbia imdb_tconst prima di permettere l'importazione
+    const imdbId = pendingImdbTconst || opera?.imdb_tconst
+    if (!imdbId) {
+      alert('L\'opera deve avere un IMDb tconst prima di poter importare gli episodi.')
+      return
+    }
+    
     const selectedSeasonsArray = Object.entries(selectedSeasons)
       .filter(([_, selected]) => selected)
       .map(([season]) => parseInt(season))
@@ -276,9 +306,10 @@ export default function OperaDetailPage() {
           descrizione: ep.plot || null,
           durata_minuti: ep.runtimeMinutes,
           data_prima_messa_in_onda: ep.releaseDate 
-            ? `${ep.releaseDate.year}-${String(ep.releaseDate.month).padStart(2, '0')}-${String(ep.releaseDate.day).padStart(2, '0')}`
+            ? `${ep.releaseDate.year}-${String(ep.releaseDate.month || 1).padStart(2, '0')}-${String(ep.releaseDate.day || 1).padStart(2, '0')}`
             : null,
-          metadati: { imdb_tconst: ep.id, imdb_rating: ep.rating },
+          imdb_tconst: ep.id || null, // Salva imdb_tconst nel campo dedicato
+          metadati: { imdb_rating: ep.rating }, // Mantieni altri metadati come rating
         }))
       
       const result = await upsertEpisodi(opera.id, episodesToImport)
@@ -748,19 +779,42 @@ export default function OperaDetailPage() {
           <div className="flex gap-2">
             <Input 
               value={searchTerm} 
-              onChange={(e) => setSearchTerm(e.target.value)} 
-              placeholder="Cerca titolo..." 
-              onKeyDown={(e) => e.key === 'Enter' && performSearch(searchTerm)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value)
+                setImdbSearchError(null) // Clear error when typing
+              }}
+              placeholder="Cerca titolo IMDb..." 
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isSearchingImdb) {
+                  performSearch(searchTerm)
+                }
+              }}
+              disabled={isSearchingImdb}
             />
-            <Button onClick={() => performSearch(searchTerm)} disabled={isSearchingImdb}>
+            <Button 
+              onClick={() => performSearch(searchTerm)} 
+              disabled={isSearchingImdb || !searchTerm.trim()}
+            >
               {isSearchingImdb ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </Button>
           </div>
           <div className="flex-1 overflow-y-auto -mx-6 px-6">
             {isSearchingImdb ? (
-              <div className="flex justify-center py-8">Caricamento...</div>
+              <div className="flex flex-col items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">Ricerca in corso...</p>
+              </div>
+            ) : imdbSearchError ? (
+              <div className="text-center py-8">
+                <p className="text-sm text-destructive mb-2">{imdbSearchError}</p>
+                <Button variant="outline" size="sm" onClick={() => performSearch(searchTerm)}>
+                  Riprova
+                </Button>
+              </div>
             ) : imdbSearchResults.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">Nessun risultato trovato</div>
+              <div className="text-center py-8 text-muted-foreground">
+                {searchTerm ? 'Nessun risultato trovato' : 'Inserisci un termine di ricerca e premi Invio o clicca Cerca'}
+              </div>
             ) : (
               <div className="space-y-2">
                 {imdbSearchResults.map((result) => (
@@ -806,13 +860,14 @@ export default function OperaDetailPage() {
                     <TableHead className="py-3 px-4">Episodio</TableHead>
                     <TableHead className="py-3 px-4">Titolo</TableHead>
                     <TableHead className="py-3 px-4">Data</TableHead>
-                    <TableHead className="py-3 px-4 pr-6">Durata</TableHead>
+                    <TableHead className="py-3 px-4">Durata</TableHead>
+                    <TableHead className="py-3 px-4 pr-6">IMDb tconst</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(episodi || []).length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nessun episodio associato</TableCell>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nessun episodio associato</TableCell>
                     </TableRow>
                   ) : (
                     episodi.map((e: any) => (
@@ -821,7 +876,21 @@ export default function OperaDetailPage() {
                         <TableCell className="py-4 px-4">{e.numero_episodio}</TableCell>
                         <TableCell className="py-4 px-4">{e.titolo_episodio || '—'}</TableCell>
                         <TableCell className="py-4 px-4">{e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}</TableCell>
-                        <TableCell className="py-4 px-4 pr-6">{e.durata_minuti || '—'}</TableCell>
+                        <TableCell className="py-4 px-4">{e.durata_minuti ? `${e.durata_minuti} min` : '—'}</TableCell>
+                        <TableCell className="py-4 px-4 pr-6 font-mono text-sm">
+                          {e.imdb_tconst ? (
+                            <a 
+                              href={`https://www.imdb.com/title/${e.imdb_tconst}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              {e.imdb_tconst}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -837,7 +906,22 @@ export default function OperaDetailPage() {
                     <CardContent className="p-4 space-y-1">
                       <div className="font-medium">S{e.numero_stagione} E{e.numero_episodio}</div>
                       <div className="text-sm">{e.titolo_episodio || '—'}</div>
-                      <div className="text-xs text-muted-foreground">{e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}
+                        {e.durata_minuti && ` • ${e.durata_minuti} min`}
+                      </div>
+                      {e.imdb_tconst && (
+                        <div className="text-xs">
+                          <a 
+                            href={`https://www.imdb.com/title/${e.imdb_tconst}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline font-mono"
+                          >
+                            IMDb: {e.imdb_tconst}
+                          </a>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))
@@ -1053,11 +1137,23 @@ export default function OperaDetailPage() {
               {/* Sezione Episodi (solo per serie TV) */}
               {(imdbDataToImport.type === 'tvSeries' || imdbDataToImport.type === 'tvMiniSeries' || opera?.tipo === 'serie_tv') && (
                 <div className="pt-4 border-t space-y-3">
-                  <div className="flex items-center gap-2">
-                    <ListVideo className="h-5 w-5 text-muted-foreground" />
-                    <h3 className="font-semibold">Episodi</h3>
-                    {loadingImdbEpisodes && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ListVideo className="h-5 w-5 text-muted-foreground" />
+                      <h3 className="font-semibold">Episodi</h3>
+                      {loadingImdbEpisodes && <Loader2 className="h-4 w-4 animate-spin" />}
+                    </div>
+                    {!opera?.imdb_tconst && !pendingImdbTconst && (
+                      <Badge variant="destructive" className="text-xs">
+                        Richiede IMDb tconst dell'opera
+                      </Badge>
+                    )}
                   </div>
+                  {!opera?.imdb_tconst && !pendingImdbTconst && (
+                    <div className="p-3 rounded-lg border bg-muted/30 text-sm text-muted-foreground">
+                      ⚠️ Per importare gli episodi, è necessario che l'opera abbia già un IMDb tconst. Salva prima l'opera con il tconst selezionato.
+                    </div>
+                  )}
                   
                   {loadingImdbEpisodes ? (
                     <div className="flex items-center justify-center py-6">
@@ -1089,8 +1185,13 @@ export default function OperaDetailPage() {
                       </div>
                       
                       {/* Lista stagioni */}
-                      <div className="space-y-1 max-h-60 overflow-y-auto">
-                        {imdbEpisodesData.seasons.map(season => (
+                      <div className="space-y-1 max-h-96 overflow-y-auto">
+                        {imdbEpisodesData.seasons.length === 0 ? (
+                          <div className="text-sm text-muted-foreground p-3 text-center">
+                            Nessuna stagione trovata
+                          </div>
+                        ) : (
+                          imdbEpisodesData.seasons.map(season => (
                           <div key={season} className="border rounded-lg">
                             <div 
                               className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/50 transition-colors ${selectedSeasons[season] ? 'bg-primary/5 border-primary/20' : ''}`}
@@ -1119,6 +1220,9 @@ export default function OperaDetailPage() {
                                   <div key={ep.id} className="flex items-center gap-2 text-sm p-1.5 rounded hover:bg-background/50">
                                     <span className="text-muted-foreground font-mono w-8">E{ep.episodeNumber}</span>
                                     <span className="flex-1 truncate">{ep.title}</span>
+                                    {ep.id && (
+                                      <span className="text-xs text-muted-foreground font-mono" title="IMDb tconst">{ep.id}</span>
+                                    )}
                                     {ep.runtimeMinutes && (
                                       <span className="text-xs text-muted-foreground">{ep.runtimeMinutes}m</span>
                                     )}
@@ -1130,8 +1234,17 @@ export default function OperaDetailPage() {
                               </div>
                             )}
                           </div>
-                        ))}
+                          ))
+                        )}
                       </div>
+                      
+                      {/* Warning se sembra che manchino stagioni */}
+                      {imdbEpisodesData.seasons.length > 0 && imdbEpisodesData.seasons.length < 5 && (
+                        <div className="p-2 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-800">
+                          ⚠️ <strong>Nota:</strong> L'API IMDb potrebbe non restituire tutte le stagioni disponibili. 
+                          Se mancano stagioni, prova a ricaricare o verifica direttamente su IMDb.
+                        </div>
+                      )}
                       
                       {/* Risultato importazione episodi */}
                       {importEpisodesResult && (

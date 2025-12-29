@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText } from 'lucide-react'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { createOpera, updateOpera, getOperaById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
@@ -27,12 +27,15 @@ export default function OperePage() {
   const searchParams = useSearchParams()
   const [opere, setOpere] = useState<Opera[]>([])
   const [loading, setLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [tconstFilter, setTconstFilter] = useState<'all' | 'with' | 'without'>('all')
   const [selectedOpera, setSelectedOpera] = useState<Opera | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
+  const searchInputRef = useRef<HTMLInputElement>(null)
   
   
 
@@ -43,7 +46,7 @@ export default function OperePage() {
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [searchQuery, typeFilter])
+  }, [searchQuery, typeFilter, tconstFilter])
 
   useEffect(() => {
     const editId = searchParams?.get('edit')
@@ -59,19 +62,32 @@ export default function OperePage() {
 
   const fetchOpere = async () => {
     try {
-      setLoading(true)
+      // Usa isSearching invece di loading per evitare rerender durante il typing
+      setIsSearching(true)
+      const isInitialLoad = opere.length === 0 && !searchQuery && typeFilter === 'all' && tconstFilter === 'all'
+      if (isInitialLoad) {
+        setLoading(true)
+      }
+
       let query = supabase
         .from('opere')
         .select('*')
         .order('anno_produzione', { ascending: false })
         .limit(100) // Limit results for performance, rely on search to find specific items
 
-      if (searchQuery) {
-        query = query.or(`titolo.ilike.%${searchQuery}%,codice_opera.ilike.%${searchQuery}%,titolo_originale.ilike.%${searchQuery}%`)
+      if (searchQuery.trim()) {
+        query = query.or(`titolo.ilike.%${searchQuery.trim()}%,codice_opera.ilike.%${searchQuery.trim()}%,titolo_originale.ilike.%${searchQuery.trim()}%`)
       }
 
       if (typeFilter !== 'all') {
         query = query.eq('tipo', typeFilter)
+      }
+
+      // Filtro per tconst (IMDB ID)
+      if (tconstFilter === 'with') {
+        query = query.not('imdb_tconst', 'is', null)
+      } else if (tconstFilter === 'without') {
+        query = query.or('imdb_tconst.is.null,imdb_tconst.eq.')
       }
 
       const { data, error } = await query
@@ -82,6 +98,7 @@ export default function OperePage() {
       console.error('Error fetching opere:', error)
     } finally {
       setLoading(false)
+      setIsSearching(false)
     }
   }
 
@@ -106,6 +123,13 @@ export default function OperePage() {
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
             <FileText className="h-3 w-3 mr-1" />
             Documentario
+          </Badge>
+        )
+      case 'cartoon':
+        return (
+          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+            <Film className="h-3 w-3 mr-1" />
+            Cartoon
           </Badge>
         )
       default:
@@ -296,13 +320,24 @@ export default function OperePage() {
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Cerca per titolo, codice opera, casa produzione..."
+                  ref={searchInputRef}
+                  placeholder="Cerca per titolo, codice opera, titolo originale..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 pr-10"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label="Cancella ricerca"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -315,26 +350,91 @@ export default function OperePage() {
                 <SelectItem value="film">Film</SelectItem>
                 <SelectItem value="serie_tv">Serie TV</SelectItem>
                 <SelectItem value="documentario">Documentario</SelectItem>
+                <SelectItem value="cartoon">Cartoon</SelectItem>
                 <SelectItem value="altro">Altro</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => { setSearchQuery(''); setTypeFilter('all') }}>Reset</Button>
+            <Select value={tconstFilter} onValueChange={(v) => setTconstFilter(v as 'all' | 'with' | 'without')}>
+              <SelectTrigger className="w-full sm:w-48">
+                <Database className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtra per IMDB" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutte le opere</SelectItem>
+                <SelectItem value="with">Con IMDB tconst</SelectItem>
+                <SelectItem value="without">Senza IMDB tconst</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button 
+              variant="outline" 
+              onClick={() => { 
+                setSearchQuery(''); 
+                setTypeFilter('all');
+                setTconstFilter('all');
+              }}
+              disabled={!searchQuery && typeFilter === 'all' && tconstFilter === 'all'}
+            >
+              Reset
+            </Button>
           </div>
           {/* Filter Chips */}
-          <div className="mt-3 flex flex-wrap gap-2">
-            {searchQuery && (
-              <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
-                Ricerca: {searchQuery}
-              </Button>
+          {(searchQuery || typeFilter !== 'all' || tconstFilter !== 'all') && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {searchQuery && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setSearchQuery('')}
+                  className="h-8"
+                >
+                  Ricerca: {searchQuery}
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              )}
+              {typeFilter !== 'all' && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setTypeFilter('all')}
+                  className="h-8"
+                >
+                  Tipo: {
+                    typeFilter === 'serie_tv' ? 'Serie TV' :
+                    typeFilter === 'cartoon' ? 'Cartoon' :
+                    typeFilter
+                  }
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              )}
+              {tconstFilter !== 'all' && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setTconstFilter('all')}
+                  className="h-8"
+                >
+                  {tconstFilter === 'with' ? 'Con IMDB tconst' : 'Senza IMDB tconst'}
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              )}
+            </div>
+          )}
+          <div className="mt-4 text-sm text-muted-foreground">
+            {loading ? (
+              <span className="animate-pulse">Caricamento...</span>
+            ) : (
+              <span>
+                {opere.length === 0 ? (
+                  searchQuery || typeFilter !== 'all' || tconstFilter !== 'all' ? (
+                    <>Nessun risultato trovato con i filtri selezionati</>
+                  ) : (
+                    <>Nessuna opera nel catalogo</>
+                  )
+                ) : (
+                  <>Mostrando <strong>{opere.length}</strong> {opere.length === 1 ? 'risultato' : 'risultati'}</>
+                )}
+              </span>
             )}
-            {typeFilter !== 'all' && (
-              <Button variant="outline" size="sm" onClick={() => setTypeFilter('all')}>
-                Tipo: {typeFilter}
-              </Button>
-            )}
-          </div>
-          <div className="mt-4 text-sm text-gray-600">
-            Mostrando {opere.length} risultati
           </div>
         </CardContent>
       </Card>

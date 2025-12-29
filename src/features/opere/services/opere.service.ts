@@ -79,7 +79,7 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
 export const getEpisodiByOperaId = async (operaId: string) => {
   const { data, error } = await supabase
     .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, metadati')
+    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, metadati')
     .eq('opera_id', operaId)
     .order('numero_stagione', { ascending: true })
     .order('numero_episodio', { ascending: true })
@@ -123,6 +123,7 @@ export const upsertEpisodi = async (
     descrizione?: string | null
     durata_minuti?: number | null
     data_prima_messa_in_onda?: string | null
+    imdb_tconst?: string | null
     metadati?: Record<string, any> | null
   }>
 ) => {
@@ -153,6 +154,7 @@ export const upsertEpisodi = async (
             descrizione: ep.descrizione,
             durata_minuti: ep.durata_minuti,
             data_prima_messa_in_onda: ep.data_prima_messa_in_onda,
+            imdb_tconst: ep.imdb_tconst,
             metadati: ep.metadati,
           })
           .eq('id', existing.id)
@@ -174,6 +176,7 @@ export const upsertEpisodi = async (
             descrizione: ep.descrizione,
             durata_minuti: ep.durata_minuti,
             data_prima_messa_in_onda: ep.data_prima_messa_in_onda,
+            imdb_tconst: ep.imdb_tconst,
             metadati: ep.metadati,
           })
 

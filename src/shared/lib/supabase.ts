@@ -299,6 +299,7 @@ export type Database = {
           descrizione: string | null
           durata_minuti: number | null
           data_prima_messa_in_onda: string | null
+          imdb_tconst: string | null
           metadati: any | null
           created_at: string
         }
@@ -311,6 +312,7 @@ export type Database = {
           descrizione?: string | null
           durata_minuti?: number | null
           data_prima_messa_in_onda?: string | null
+          imdb_tconst?: string | null
           metadati?: any | null
           created_at?: string
         }
@@ -323,6 +325,7 @@ export type Database = {
           descrizione?: string | null
           durata_minuti?: number | null
           data_prima_messa_in_onda?: string | null
+          imdb_tconst?: string | null
           metadati?: any | null
           created_at?: string
         }

@@ -27,15 +27,26 @@ export async function GET(req: Request) {
     }
 
     const data = await res.json()
-    const results = Array.isArray(data?.titles) ? data.titles : (Array.isArray(data?.results) ? data.results : [])
+    
+    // Handle different response formats from IMDb API
+    let results: any[] = []
+    if (Array.isArray(data?.titles)) {
+      results = data.titles
+    } else if (Array.isArray(data?.results)) {
+      results = data.results
+    } else if (data?.data && Array.isArray(data.data)) {
+      results = data.data
+    } else if (Array.isArray(data)) {
+      results = data
+    }
     
     let normalized = results.map((r: any) => ({
-      title: r?.primaryTitle || r?.title || '',
-      year: r?.startYear ?? r?.year ?? null,
-      type: r?.type || null,
-      id: r?.id || r?.tconst || null,
+      title: r?.primaryTitle || r?.title || r?.name || '',
+      year: r?.startYear ?? r?.year ?? r?.releaseYear ?? null,
+      type: r?.type || r?.titleType || null,
+      id: r?.id || r?.tconst || r?.imdbId || null,
       directors: null as string | null,
-    }))
+    })).filter((r: any) => r.title && r.id) // Filter out invalid results
 
     // Fetch directors for each result (limit to first 10 to avoid too many requests)
     if (includeDirectors && normalized.length > 0) {
@@ -79,6 +90,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ results: normalized }, { status: 200 })
   } catch (e) {
-    return NextResponse.json({ error: 'unexpected' }, { status: 500 })
+    console.error('IMDb search API error:', e)
+    return NextResponse.json({ error: 'unexpected', message: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
   }
 }

@@ -36,23 +36,50 @@ export async function GET(
     }
 
     const data = await res.json()
-    const episodes = Array.isArray(data?.episodes) ? data.episodes : []
     
-    // Normalize episodes data
-    const normalized: ImdbEpisode[] = episodes.map((ep: any) => ({
-      id: ep?.id || null,
-      title: ep?.title || ep?.primaryTitle || '',
-      season: parseInt(ep?.season) || 0,
-      episodeNumber: ep?.episodeNumber || 0,
-      runtimeMinutes: ep?.runtimeSeconds ? Math.round(ep.runtimeSeconds / 60) : null,
-      plot: ep?.plot || null,
-      releaseDate: ep?.releaseDate ? {
-        year: ep.releaseDate.year || null,
-        month: ep.releaseDate.month || null,
-        day: ep.releaseDate.day || null,
-      } : null,
-      rating: ep?.rating?.aggregateRating || null,
-    }))
+    // Handle different response formats from IMDb API
+    let episodes: any[] = []
+    if (Array.isArray(data?.episodes)) {
+      episodes = data.episodes
+    } else if (Array.isArray(data?.results)) {
+      episodes = data.results
+    } else if (data?.data && Array.isArray(data.data)) {
+      episodes = data.data
+    } else if (Array.isArray(data)) {
+      episodes = data
+    }
+    
+    // Normalize episodes data and filter out invalid entries
+    const normalized: ImdbEpisode[] = episodes
+      .map((ep: any) => {
+        const season = parseInt(ep?.season || ep?.seasonNumber || '0')
+        const episodeNumber = parseInt(ep?.episodeNumber || ep?.episode || ep?.number || '0')
+        
+        // Skip episodes with invalid season/episode numbers
+        if (isNaN(season) || season <= 0 || isNaN(episodeNumber) || episodeNumber <= 0) {
+          return null
+        }
+        
+        return {
+          id: ep?.id || ep?.tconst || ep?.imdbId || null,
+          title: ep?.title || ep?.primaryTitle || ep?.name || '',
+          season: season,
+          episodeNumber: episodeNumber,
+          runtimeMinutes: ep?.runtimeMinutes || (ep?.runtimeSeconds ? Math.round(ep.runtimeSeconds / 60) : null),
+          plot: ep?.plot || ep?.description || null,
+          releaseDate: ep?.releaseDate ? {
+            year: ep.releaseDate.year || null,
+            month: ep.releaseDate.month || null,
+            day: ep.releaseDate.day || null,
+          } : (ep?.year ? {
+            year: ep.year,
+            month: ep.month || null,
+            day: ep.day || null,
+          } : null),
+          rating: ep?.rating?.aggregateRating || ep?.rating || ep?.averageRating || null,
+        }
+      })
+      .filter((ep): ep is ImdbEpisode => ep !== null) // Remove null entries
 
     // Group by season for easier display
     const bySeason: Record<number, ImdbEpisode[]> = {}
@@ -68,11 +95,22 @@ export async function GET(
       bySeason[season].sort((a, b) => a.episodeNumber - b.episodeNumber)
     }
 
+    // Get sorted list of seasons
+    const seasons = Object.keys(bySeason)
+      .map(Number)
+      .sort((a, b) => a - b)
+
+    // Log for debugging (remove in production if needed)
+    console.log(`[IMDb Episodes] Fetched ${normalized.length} episodes across ${seasons.length} seasons for title ${id}`)
+    if (seasons.length > 0) {
+      console.log(`[IMDb Episodes] Seasons found: ${seasons.join(', ')}`)
+    }
+
     return NextResponse.json({ 
       episodes: normalized,
       bySeason,
       totalEpisodes: normalized.length,
-      seasons: Object.keys(bySeason).map(Number).sort((a, b) => a - b),
+      seasons: seasons,
     }, { status: 200 })
   } catch (e) {
     console.error('Error fetching episodes:', e)
