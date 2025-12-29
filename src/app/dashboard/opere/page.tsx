@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database } from 'lucide-react'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { createOpera, updateOpera, getOperaById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
@@ -356,7 +356,7 @@ export default function OperePage() {
             </Select>
             <Select value={tconstFilter} onValueChange={(v) => setTconstFilter(v as 'all' | 'with' | 'without')}>
               <SelectTrigger className="w-full sm:w-48">
-                <Database className="h-4 w-4 mr-2" />
+                <DatabaseIcon className="h-4 w-4 mr-2" />
                 <SelectValue placeholder="Filtra per IMDB" />
               </SelectTrigger>
               <SelectContent>
