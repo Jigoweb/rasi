@@ -501,6 +501,10 @@ export default function OperaDetailPage() {
         const directors = imdbDataToImport.directorsFormatted
         updates.regista = directors ? directors.split(', ').map((d: string) => d.trim()) : null
       }
+      if (selectedFields['tipo']) {
+        // Update tipo to serie_tv when user confirms the type change
+        updates.tipo = 'serie_tv'
+      }
       
       if (Object.keys(updates).length > 0) {
         const { error: err } = await import('@/features/opere/services/opere.service').then(m => m.updateOpera(opera.id, updates))
@@ -706,7 +710,19 @@ export default function OperaDetailPage() {
       {imdbCredits.length > 0 && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5" />Credits IMDb</CardTitle>
+            <div>
+              <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5" />Credits IMDb</CardTitle>
+              {(opera?.imdb_tconst || pendingImdbTconst) && (
+                <a 
+                  href={`https://www.imdb.com/title/${opera?.imdb_tconst || pendingImdbTconst}/fullcredits`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-primary hover:underline flex items-center gap-1 mt-1"
+                >
+                  Vedi tutti i credits su IMDb →
+                </a>
+              )}
+            </div>
             <div className="flex gap-2">
               {(opera?.imdb_tconst || pendingImdbTconst) && (
                 <Button variant="secondary" size="sm" onClick={handleOpenImportDialog} disabled={loadingImdbData}>
@@ -1391,6 +1407,32 @@ export default function OperaDetailPage() {
                 </div>
               )}
               
+              {/* Tipo Opera - mostra se c'è discrepanza tra DB e IMDb */}
+              {(imdbDataToImport.type === 'tvSeries' || imdbDataToImport.type === 'tvMiniSeries') && 
+               opera?.tipo !== 'serie_tv' && (
+                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="tipo_opera"
+                      checked={selectedFields['tipo'] || false}
+                      onCheckedChange={(checked) => setSelectedFields(prev => ({ ...prev, tipo: !!checked }))}
+                    />
+                    <div className="flex-1 space-y-1">
+                      <Label htmlFor="tipo_opera" className="font-medium text-amber-800 dark:text-amber-200 cursor-pointer">
+                        Aggiorna Tipo Opera
+                      </Label>
+                      <div className="text-sm text-amber-700 dark:text-amber-300">
+                        L'opera nel database è registrata come <Badge variant="outline" className="mx-1">{opera?.tipo || 'non specificato'}</Badge> 
+                        ma IMDb la identifica come <Badge variant="outline" className="mx-1 bg-amber-100 dark:bg-amber-900">Serie TV</Badge>
+                      </div>
+                      <div className="text-xs text-amber-600 dark:text-amber-400">
+                        Seleziona per aggiornare il tipo a "serie_tv" e abilitare la gestione degli episodi
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Sezione Episodi (solo per serie TV) */}
               {(imdbDataToImport.type === 'tvSeries' || imdbDataToImport.type === 'tvMiniSeries' || opera?.tipo === 'serie_tv') && (
                 <div className="pt-4 border-t space-y-3">
