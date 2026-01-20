@@ -48,9 +48,9 @@ const artistaSchema = z.object({
   // Dati professionali
   territorio: z.string().optional().or(z.literal('ITA')),
   tipologia: z.string().optional().or(z.literal('')),
-  stato: z.string().default('attivo'),
+  stato: z.string().optional().or(z.literal('attivo')),
   data_inizio_mandato: z.string().optional().or(z.literal('')),
-  is_rasi: z.boolean().default(true),
+  is_rasi: z.boolean().optional(),
   
   // Contatti (salvati come JSONB in 'contatti')
   email: z.string().email().optional().or(z.literal('')),
@@ -66,7 +66,7 @@ const artistaSchema = z.object({
   componente_stabile_gruppo_orchestra: z.string().optional().or(z.literal('')),
   
   // Diritti attivi
-  diritti_attivi: z.array(z.string()).default([]),
+  diritti_attivi: z.array(z.string()).optional(),
 })
 
 type ArtistaFormData = z.infer<typeof artistaSchema>
@@ -204,7 +204,8 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
   const onFormSubmit = async (data: ArtistaFormData) => {
     // Costruisci il payload per Supabase - allineato con lo schema reale
-    const payload: ArtistaInsert = {
+    // Usiamo Partial<ArtistaInsert> perché alcuni campi sono opzionali nel form
+    const payload = {
       codice_ipn: data.codice_ipn || null,
       nome: data.nome,
       cognome: data.cognome,
@@ -214,13 +215,13 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       luogo_nascita: data.luogo_nascita || null,
       territorio: data.territorio || 'ITA',
       tipologia: data.tipologia || null,
-      stato: data.stato,
+      stato: data.stato || 'attivo',
       data_inizio_mandato: data.data_inizio_mandato || new Date().toISOString().split('T')[0],
-      is_rasi: data.is_rasi,
+      is_rasi: data.is_rasi ?? true,
       contatti: {
         email: data.email || null,
         number: data.telefono || null,
-      } as any,
+      },
       imdb_nconst: data.imdb_nconst || null,
       codici_esterni: data.codici_esterni || {},
       ragione_sociale: data.ragione_sociale || null,
@@ -228,8 +229,8 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       partita_iva: data.partita_iva ? Number(data.partita_iva) : null,
       codice_paese: data.codice_paese || null,
       componente_stabile_gruppo_orchestra: data.componente_stabile_gruppo_orchestra || null,
-      diritti_attivi: data.diritti_attivi.length > 0 ? data.diritti_attivi : null,
-    }
+      diritti_attivi: (data.diritti_attivi && data.diritti_attivi.length > 0) ? data.diritti_attivi : null,
+    } as ArtistaInsert
 
     await onSubmit(payload)
   }

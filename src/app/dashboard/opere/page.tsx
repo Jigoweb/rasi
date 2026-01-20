@@ -371,7 +371,7 @@ export default function OperePage() {
       form.setValue('titolo', mapped.titolo || '', { shouldValidate: true })
       form.setValue('titolo_originale', mapped.titolo_originale || '', { shouldValidate: true })
       form.setValue('tipo', tipoValue, { shouldValidate: true })
-      form.setValue('anno_produzione', mapped.anno_produzione ?? '', { shouldValidate: true })
+      form.setValue('anno_produzione', mapped.anno_produzione ?? undefined, { shouldValidate: true })
       form.setValue('imdb_tconst', mapped.imdb_tconst || '', { shouldValidate: true })
       
       // Also set regista if available
