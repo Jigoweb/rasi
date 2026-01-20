@@ -66,6 +66,32 @@ export const updateOpera = async (
   return { data, error }
 }
 
+/**
+ * Counts the number of participations for a given opera.
+ * Used to check if an opera can be deleted.
+ */
+export const getPartecipazioniCountByOperaId = async (operaId: string) => {
+  const { count, error } = await supabase
+    .from('partecipazioni')
+    .select('*', { count: 'exact', head: true })
+    .eq('opera_id', operaId)
+
+  return { count: count ?? 0, error }
+}
+
+/**
+ * Deletes an opera by ID.
+ * Note: This will fail if the opera has associated participations due to FK constraints.
+ */
+export const deleteOpera = async (id: string) => {
+  const { error } = await supabase
+    .from('opere')
+    .delete()
+    .eq('id', id)
+
+  return { error }
+}
+
 export const getPartecipazioniByOperaId = async (operaId: string) => {
   const { data, error } = await supabase
     .from('partecipazioni')
