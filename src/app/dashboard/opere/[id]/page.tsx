@@ -697,17 +697,107 @@ export default function OperaDetailPage() {
               <Search className="mr-2 h-4 w-4" />
               Ricerca su IMDb
             </Button>
-            {(opera.imdb_tconst || pendingImdbTconst) && (
-              <Button variant="secondary" onClick={handleOpenImportDialog} disabled={loadingImdbData}>
-                {loadingImdbData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                Importa da IMDb
-              </Button>
-            )}
             <Button onClick={() => setShowEditForm(true)}>Modifica</Button>
           </div>
         </CardContent>
       </Card>
 
+      {/* Credits IMDb Section */}
+      {imdbCredits.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5" />Credits IMDb</CardTitle>
+            <div className="flex gap-2">
+              {(opera?.imdb_tconst || pendingImdbTconst) && (
+                <Button variant="secondary" size="sm" onClick={handleOpenImportDialog} disabled={loadingImdbData}>
+                  {loadingImdbData ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                  Importa da IMDb
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowExportDialog(true)}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Esporta Cast
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0 space-y-0">
+            {/* Regia */}
+            {imdbCreditsGrouped?.direction?.length > 0 && (
+              <CreditsSection 
+                title="Regia" 
+                icon={<Clapperboard className="h-4 w-4" />}
+                credits={imdbCreditsGrouped.direction}
+                showCharacter={false}
+                showNconst={true}
+              />
+            )}
+            
+            {/* Sceneggiatura */}
+            {imdbCreditsGrouped?.writing?.length > 0 && (
+              <CreditsSection 
+                title="Sceneggiatura" 
+                icon={<PenTool className="h-4 w-4" />}
+                credits={imdbCreditsGrouped.writing}
+                showCharacter={false}
+                showNconst={true}
+              />
+            )}
+            
+            {/* Cast Principale */}
+            {imdbCreditsGrouped?.castPrimary?.length > 0 && (
+              <CreditsSection 
+                title="Cast Principale" 
+                icon={<Star className="h-4 w-4 text-amber-500" />}
+                credits={imdbCreditsGrouped.castPrimary}
+                showCharacter={true}
+                showStar={true}
+                showNconst={true}
+              />
+            )}
+            
+            {/* Altri Attori */}
+            {imdbCreditsGrouped?.castSecondary?.length > 0 && (
+              <CreditsSection 
+                title="Altri Attori" 
+                icon={<Users className="h-4 w-4" />}
+                credits={imdbCreditsGrouped.castSecondary}
+                showCharacter={true}
+                showNconst={true}
+                collapsible={imdbCreditsGrouped.castSecondary.length > 10}
+              />
+            )}
+            
+            {/* Produzione */}
+            {imdbCreditsGrouped?.production?.length > 0 && (
+              <CreditsSection 
+                title="Produzione" 
+                icon={<Video className="h-4 w-4" />}
+                credits={imdbCreditsGrouped.production}
+                showCharacter={false}
+                showNconst={true}
+                collapsible={true}
+              />
+            )}
+            
+            {/* Musica */}
+            {imdbCreditsGrouped?.music?.length > 0 && (
+              <CreditsSection 
+                title="Musica" 
+                icon={<Music className="h-4 w-4" />}
+                credits={imdbCreditsGrouped.music}
+                showCharacter={false}
+                showNconst={true}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Partecipazioni Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -859,86 +949,6 @@ export default function OperaDetailPage() {
           )}
         </CardContent>
       </Card>
-
-      {imdbCredits.length > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5" />Credits IMDb</CardTitle>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setShowExportDialog(true)}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Esporta Cast
-            </Button>
-          </CardHeader>
-          <CardContent className="p-0 space-y-0">
-            {/* Regia */}
-            {imdbCreditsGrouped?.direction?.length > 0 && (
-              <CreditsSection 
-                title="Regia" 
-                icon={<Clapperboard className="h-4 w-4" />}
-                credits={imdbCreditsGrouped.direction}
-                showCharacter={false}
-              />
-            )}
-            
-            {/* Sceneggiatura */}
-            {imdbCreditsGrouped?.writing?.length > 0 && (
-              <CreditsSection 
-                title="Sceneggiatura" 
-                icon={<PenTool className="h-4 w-4" />}
-                credits={imdbCreditsGrouped.writing}
-                showCharacter={false}
-              />
-            )}
-            
-            {/* Cast Principale */}
-            {imdbCreditsGrouped?.castPrimary?.length > 0 && (
-              <CreditsSection 
-                title="Cast Principale" 
-                icon={<Star className="h-4 w-4 text-amber-500" />}
-                credits={imdbCreditsGrouped.castPrimary}
-                showCharacter={true}
-                showStar={true}
-              />
-            )}
-            
-            {/* Altri Attori */}
-            {imdbCreditsGrouped?.castSecondary?.length > 0 && (
-              <CreditsSection 
-                title="Altri Attori" 
-                icon={<Users className="h-4 w-4" />}
-                credits={imdbCreditsGrouped.castSecondary}
-                showCharacter={true}
-                collapsible={imdbCreditsGrouped.castSecondary.length > 10}
-              />
-            )}
-            
-            {/* Produzione */}
-            {imdbCreditsGrouped?.production?.length > 0 && (
-              <CreditsSection 
-                title="Produzione" 
-                icon={<Video className="h-4 w-4" />}
-                credits={imdbCreditsGrouped.production}
-                showCharacter={false}
-                collapsible={true}
-              />
-            )}
-            
-            {/* Musica */}
-            {imdbCreditsGrouped?.music?.length > 0 && (
-              <CreditsSection 
-                title="Musica" 
-                icon={<Music className="h-4 w-4" />}
-                credits={imdbCreditsGrouped.music}
-                showCharacter={false}
-              />
-            )}
-          </CardContent>
-        </Card>
-      )}
       
       {/* Export Dialog */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
@@ -1810,6 +1820,7 @@ function CreditsSection({
   credits,
   showCharacter = true,
   showStar = false,
+  showNconst = false,
   collapsible = false,
 }: {
   title: string
@@ -1817,6 +1828,7 @@ function CreditsSection({
   credits: any[]
   showCharacter?: boolean
   showStar?: boolean
+  showNconst?: boolean
   collapsible?: boolean
 }) {
   const [expanded, setExpanded] = useState(!collapsible)
@@ -1854,7 +1866,12 @@ function CreditsSection({
                 <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="font-medium">{credit.name}</div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{credit.name}</span>
+                  {showNconst && credit.id && (
+                    <span className="text-xs text-muted-foreground font-mono">({credit.id})</span>
+                  )}
+                </div>
                 {showCharacter && credit.character && (
                   <div className="text-sm text-muted-foreground">come {credit.character}</div>
                 )}
