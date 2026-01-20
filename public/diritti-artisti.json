@@ -1,0 +1,146 @@
+{
+  "diritti": [
+    {
+      "codice": "ART_73_AU_BR",
+      "nome": "Art. 73 - AU - BR BROADCASTING",
+      "descrizione": "Diritto di broadcasting per autori",
+      "categoria": "broadcasting"
+    },
+    {
+      "codice": "ART_84_C2_AV_BR",
+      "nome": "Art 84 comma 2 - AV - BR BROADCASTING",
+      "descrizione": "Diritto di broadcasting per artisti interpreti ed esecutori",
+      "categoria": "broadcasting"
+    },
+    {
+      "codice": "ART_73_73BIS_AU_CP",
+      "nome": "Artt. 73 e 73-bis - AU - CP COMMUNICATION TO THE PUBLIC",
+      "descrizione": "Diritto di comunicazione al pubblico per autori",
+      "categoria": "comunicazione"
+    },
+    {
+      "codice": "ART_84_C3_AV_CP",
+      "nome": "Art 84 comma 3 - AV - CP COMMUNICATION TO THE PUBLIC",
+      "descrizione": "Diritto di comunicazione al pubblico per artisti interpreti ed esecutori",
+      "categoria": "comunicazione"
+    },
+    {
+      "codice": "ART_80_C2_LETTC_ALL_CP",
+      "nome": "Art. 80, comma 2, lett. c) - ALL - CP COMMUNICATION TO THE PUBLIC",
+      "descrizione": "Diritto di comunicazione al pubblico per tutti i titolari",
+      "categoria": "comunicazione"
+    },
+    {
+      "codice": "ART_72_C1_LETTC_ART_80_C2_LETTF_AL_LLE",
+      "nome": "Art. 72, comma 1, lett. c) Art. 80, comma 2, lett. f) - AL - LLE LENDING",
+      "descrizione": "Diritto di prestito per autori",
+      "categoria": "prestito"
+    },
+    {
+      "codice": "ART_72_C1_LETTD_AU_MA",
+      "nome": "Art. 72, comma 1, lett. d) - AU - MA MAKING AVAILABLE",
+      "descrizione": "Diritto di messa a disposizione per autori",
+      "categoria": "digitale"
+    },
+    {
+      "codice": "ART_84_C3_AV_MA",
+      "nome": "Art 84 comma 3 - AV - MA MAKING AVAILABLE",
+      "descrizione": "Diritto di messa a disposizione per artisti interpreti ed esecutori",
+      "categoria": "digitale"
+    },
+    {
+      "codice": "ART_80_C2_LETTD_ALL_MA",
+      "nome": "Art. 80, comma 2, lett. d) - ALL - MA MAKING AVAILABLE",
+      "descrizione": "Diritto di messa a disposizione per tutti i titolari",
+      "categoria": "digitale"
+    },
+    {
+      "codice": "ART_71SEPTIES_71OCTIES_ALL_PC",
+      "nome": "Artt. 71-septies e 71-octies - ALL - PC PRIVATE COPYING",
+      "descrizione": "Diritto di copia privata per tutti i titolari",
+      "categoria": "copia"
+    },
+    {
+      "codice": "ART_15_ALL_PP",
+      "nome": "Art. 15 - ALL - PP PUBLIC PERFORMANCE",
+      "descrizione": "Diritto di esecuzione pubblica per tutti i titolari",
+      "categoria": "esecuzione"
+    },
+    {
+      "codice": "ART_72_C1_LETTC_ART_80_C2_LETTF_ALL_RE",
+      "nome": "Art. 72, comma 1, lett. c) Art. 80, comma 2, lett. f) - ALL - RE RENTAL",
+      "descrizione": "Diritto di noleggio per tutti i titolari",
+      "categoria": "noleggio"
+    },
+    {
+      "codice": "ART_72_C1_LETTA_ART_80_C2_LETTB_ALL_RP",
+      "nome": "Art. 72, comma 1, lett. a) Art. 80, comma 2, lett. b) - ALL - RP REPRODUCTION RIGHTS",
+      "descrizione": "Diritto di riproduzione per tutti i titolari",
+      "categoria": "riproduzione"
+    },
+    {
+      "codice": "ART_180BIS_ALL_RR",
+      "nome": "Art. 180-bis - ALL - RR RETRANSMISSION RIGHTS",
+      "descrizione": "Diritto di ritrasmissione per tutti i titolari",
+      "categoria": "ritrasmissione"
+    },
+    {
+      "codice": "ALL",
+      "nome": "ALL (Tutti i diritti)",
+      "descrizione": "Tutti i diritti disponibili",
+      "categoria": "tutti"
+    }
+  ],
+  "categorie": [
+    {
+      "codice": "broadcasting",
+      "nome": "Broadcasting",
+      "descrizione": "Diritti di broadcasting"
+    },
+    {
+      "codice": "comunicazione",
+      "nome": "Comunicazione al Pubblico",
+      "descrizione": "Diritti di comunicazione al pubblico"
+    },
+    {
+      "codice": "prestito",
+      "nome": "Prestito",
+      "descrizione": "Diritti di prestito"
+    },
+    {
+      "codice": "digitale",
+      "nome": "Digitale",
+      "descrizione": "Diritti digitali e messa a disposizione"
+    },
+    {
+      "codice": "copia",
+      "nome": "Copia Privata",
+      "descrizione": "Diritti di copia privata"
+    },
+    {
+      "codice": "esecuzione",
+      "nome": "Esecuzione Pubblica",
+      "descrizione": "Diritti di esecuzione pubblica"
+    },
+    {
+      "codice": "noleggio",
+      "nome": "Noleggio",
+      "descrizione": "Diritti di noleggio"
+    },
+    {
+      "codice": "riproduzione",
+      "nome": "Riproduzione",
+      "descrizione": "Diritti di riproduzione"
+    },
+    {
+      "codice": "ritrasmissione",
+      "nome": "Ritrasmissione",
+      "descrizione": "Diritti di ritrasmissione"
+    },
+    {
+      "codice": "tutti",
+      "nome": "Tutti",
+      "descrizione": "Tutti i diritti"
+    }
+  ]
+}

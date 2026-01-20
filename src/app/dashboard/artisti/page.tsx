@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { z } from 'zod'
-import { zodResolver } from '@hookform/resolvers/zod'
+// Form logic moved to ArtistaFormMultistep component
 import { useRouter } from 'next/navigation'
 import { getArtisti } from '@/features/artisti/services/artisti.service'
 import { Database } from '@/shared/lib/supabase'
@@ -16,10 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download } from 'lucide-react'
 import { SearchInput } from './components/search-input'
-import { Input } from '@/shared/components/ui/input'
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
-import { Checkbox } from '@/shared/components/ui/checkbox'
 import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
+import { ArtistaFormMultistep } from './components/artista-form-multistep'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -34,6 +30,8 @@ export default function ArtistiPage() {
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [submitError, setSubmitError] = useState<string | null>(null)
   
   // Fetch when search query, status or is_rasi filter changes (debounce is now handled in SearchInput)
   useEffect(() => {
@@ -111,44 +109,13 @@ export default function ArtistiPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  const schema = z.object({
-    codice_ipn: z.string().min(1, 'Codice IPN obbligatorio'),
-    nome: z.string().min(1, 'Nome obbligatorio'),
-    cognome: z.string().min(1, 'Cognome obbligatorio'),
-    nome_arte: z.string().optional().or(z.literal('')),
-    codice_fiscale: z.string().max(16, 'Max 16 caratteri').optional().or(z.literal('')),
-    data_nascita: z.string().optional().or(z.literal('')),
-    data_inizio_mandato: z.string().min(1, 'Data inizio mandato obbligatoria'),
-    is_rasi: z.boolean().default(true)
-  })
-
-  const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      codice_ipn: '',
-      nome: '',
-      cognome: '',
-      nome_arte: '',
-      codice_fiscale: '',
-      data_nascita: '',
-      data_inizio_mandato: new Date().toISOString().split('T')[0],
-      is_rasi: true
-    }
-  })
+  // Form schema e logica sono ora gestiti dal componente ArtistaFormMultistep
 
   const openCreateForm = () => {
     setFormMode('create')
     setSelectedArtist(null)
-    form.reset({
-      codice_ipn: '',
-      nome: '',
-      cognome: '',
-      nome_arte: '',
-      codice_fiscale: '',
-      data_nascita: '',
-      data_inizio_mandato: new Date().toISOString().split('T')[0],
-      is_rasi: true
-    })
+    setSubmitStatus('idle')
+    setSubmitError(null)
     setShowForm(true)
   }
 
@@ -162,44 +129,9 @@ export default function ArtistiPage() {
   const openEditForm = (artista: Artista) => {
     setFormMode('edit')
     setSelectedArtist(artista)
-    form.reset({
-      codice_ipn: artista.codice_ipn,
-      nome: artista.nome,
-      cognome: artista.cognome,
-      nome_arte: artista.nome_arte || '',
-      codice_fiscale: artista.codice_fiscale || '',
-      data_nascita: toDateInput(artista.data_nascita),
-      data_inizio_mandato: toDateInput(artista.data_inizio_mandato),
-      is_rasi: artista.is_rasi ?? true
-    })
+    setSubmitStatus('idle')
+    setSubmitError(null)
     setShowForm(true)
-  }
-
-  const onSubmit = async (values: z.infer<typeof schema>) => {
-    try {
-      const payload = {
-        codice_ipn: values.codice_ipn,
-        nome: values.nome,
-        cognome: values.cognome,
-        nome_arte: values.nome_arte || null,
-        codice_fiscale: values.codice_fiscale || null,
-        data_nascita: values.data_nascita || null,
-        data_inizio_mandato: values.data_inizio_mandato,
-        is_rasi: values.is_rasi,
-      } as any
-
-      if (formMode === 'create') {
-        const { error } = await createArtista(payload)
-        if (error) throw error
-      } else if (selectedArtist) {
-        const { error } = await updateArtista(selectedArtist.id, payload)
-        if (error) throw error
-      }
-      setShowForm(false)
-      await fetchArtisti()
-    } catch (e) {
-      console.error(e)
-    }
   }
 
   return (
@@ -550,139 +482,82 @@ export default function ArtistiPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
+      <Dialog open={showForm} onOpenChange={(open) => {
+        if (!open && submitStatus !== 'loading') {
+          setShowForm(false)
+        }
+      }}>
+        <DialogContent className="max-w-4xl overflow-hidden">
+          <DialogHeader className="pb-2">
             <DialogTitle>{formMode === 'create' ? 'Nuovo Artista' : 'Modifica Artista'}</DialogTitle>
-            <DialogDescription>
-              {formMode === 'create' ? 'Inserisci i dati obbligatori' : 'Aggiorna i dati dell’artista'}
-            </DialogDescription>
           </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="codice_ipn"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Codice IPN</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="IPN0001" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="nome"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="cognome"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cognome</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+          
+          {submitStatus === 'success' ? (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
               </div>
-              <FormField
-                control={form.control}
-                name="nome_arte"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome d’Arte</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="codice_fiscale"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Codice Fiscale</FormLabel>
-                    <FormControl>
-                      <Input {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="data_nascita"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Data di Nascita</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="data_inizio_mandato"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Data Inizio Mandato</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <h3 className="text-lg font-semibold text-center">
+                {formMode === 'create' ? 'Artista creato con successo!' : 'Artista aggiornato con successo!'}
+              </h3>
+              <p className="text-muted-foreground text-center">
+                {formMode === 'create' 
+                  ? 'Il nuovo artista è stato aggiunto al database.' 
+                  : 'Le modifiche sono state salvate.'}
+              </p>
+              <Button onClick={() => setShowForm(false)} className="mt-4">
+                Chiudi
+              </Button>
+            </div>
+          ) : submitStatus === 'error' ? (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </div>
-              <FormField
-                control={form.control}
-                name="is_rasi"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>
-                        Artista rappresentato da RASI
-                      </FormLabel>
-                      <p className="text-sm text-muted-foreground">
-                        Seleziona se l&apos;artista è rappresentato da RASI o è un artista esterno
-                      </p>
-                    </div>
-                  </FormItem>
-                )}
-              />
-              <div className="flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Annulla</Button>
-                <Button type="submit">{formMode === 'create' ? 'Crea' : 'Salva'}</Button>
+              <h3 className="text-lg font-semibold text-center text-red-600">
+                Errore durante il salvataggio
+              </h3>
+              <p className="text-muted-foreground text-center">
+                {submitError || 'Si è verificato un errore. Riprova.'}
+              </p>
+              <div className="flex gap-2 mt-4">
+                <Button variant="outline" onClick={() => setSubmitStatus('idle')}>
+                  Riprova
+                </Button>
+                <Button variant="outline" onClick={() => setShowForm(false)}>
+                  Chiudi
+                </Button>
               </div>
-            </form>
-          </Form>
+            </div>
+          ) : (
+            <ArtistaFormMultistep
+              mode={formMode}
+              artista={selectedArtist}
+              onSubmit={async (data) => {
+                setSubmitStatus('loading')
+                try {
+                  if (formMode === 'create') {
+                    const { error } = await createArtista(data)
+                    if (error) throw error
+                  } else if (selectedArtist) {
+                    const { error } = await updateArtista(selectedArtist.id, data)
+                    if (error) throw error
+                  }
+                  setSubmitStatus('success')
+                  await fetchArtisti()
+                } catch (e) {
+                  console.error(e)
+                  setSubmitError(e instanceof Error ? e.message : 'Errore sconosciuto')
+                  setSubmitStatus('error')
+                }
+              }}
+              onCancel={() => setShowForm(false)}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>
