@@ -137,3 +137,8 @@ La migration esegue le seguenti operazioni:
 - Gli episodi esistenti con `imdb_tconst` in `metadati` verranno automaticamente migrati
 - La colonna è nullable, quindi gli episodi senza `imdb_tconst` continueranno a funzionare normalmente
 
+
+
+
+
+

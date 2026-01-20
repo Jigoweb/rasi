@@ -2,10 +2,10 @@ import { supabase } from '@/shared/lib/supabase-client'
 
 /**
  * Fetches a list of artists with optional filtering.
- * @param filters - Optional filters for search and status.
+ * @param filters - Optional filters for search, status, and is_rasi.
  * @returns An object with data and error properties.
  */
-export const getArtisti = async (filters?: { search?: string; stato?: string }) => {
+export const getArtisti = async (filters?: { search?: string; stato?: string; is_rasi?: boolean | 'all' }) => {
   let query = supabase
     .from('artisti')
     .select('*')
@@ -14,6 +14,11 @@ export const getArtisti = async (filters?: { search?: string; stato?: string }) 
   // Apply status filter
   if (filters?.stato && filters.stato !== 'all') {
     query = query.eq('stato', filters.stato)
+  }
+
+  // Apply is_rasi filter
+  if (filters?.is_rasi !== undefined && filters.is_rasi !== 'all') {
+    query = query.eq('is_rasi', filters.is_rasi === true)
   }
 
   // Apply search filter using pure ILIKE approach

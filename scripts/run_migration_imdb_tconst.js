@@ -60,3 +60,8 @@ if (supabaseUrl && supabaseKey) {
 
 process.exit(0)
 
+
+
+
+
+

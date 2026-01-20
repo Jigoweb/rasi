@@ -18,6 +18,7 @@ import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download } from 'lucide-react'
 import { SearchInput } from './components/search-input'
 import { Input } from '@/shared/components/ui/input'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
@@ -28,15 +29,16 @@ export default function ArtistiPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [isRasiFilter, setIsRasiFilter] = useState<boolean | 'all'>('all')
   const [selectedArtist, setSelectedArtist] = useState<Artista | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   
-  // Fetch when search query or status changes (debounce is now handled in SearchInput)
+  // Fetch when search query, status or is_rasi filter changes (debounce is now handled in SearchInput)
   useEffect(() => {
     fetchArtisti()
-  }, [searchQuery, statusFilter])
+  }, [searchQuery, statusFilter, isRasiFilter])
 
   const fetchArtisti = async () => {
     // Only show loading on initial load or if explicitly needed
@@ -46,7 +48,8 @@ export default function ArtistiPage() {
     try {
       const { data, error } = await getArtisti({
         search: searchQuery,
-        stato: statusFilter
+        stato: statusFilter,
+        is_rasi: isRasiFilter
       })
 
       if (error) throw error
@@ -71,19 +74,28 @@ export default function ArtistiPage() {
     }
   }
 
+  const getRasiBadge = (isRasi: boolean) => {
+    if (isRasi) {
+      return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">RASI</Badge>
+    } else {
+      return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Esterno</Badge>
+    }
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT')
   }
 
   const exportData = () => {
     const csvContent = [
-      ['Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Codice Fiscale', 'Stato', 'Data Nascita', 'Data Inizio Mandato'].join(','),
+      ['Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Codice Fiscale', 'Tipologia', 'Stato', 'Data Nascita', 'Data Inizio Mandato'].join(','),
       ...artisti.map(artista => [
         artista.codice_ipn,
         artista.nome,
         artista.cognome,
         artista.nome_arte || '',
         artista.codice_fiscale || '',
+        (artista.is_rasi ?? true) ? 'RASI' : 'Esterno',
         artista.stato,
         artista.data_nascita || '',
         formatDate(artista.data_inizio_mandato)
@@ -106,7 +118,8 @@ export default function ArtistiPage() {
     nome_arte: z.string().optional().or(z.literal('')),
     codice_fiscale: z.string().max(16, 'Max 16 caratteri').optional().or(z.literal('')),
     data_nascita: z.string().optional().or(z.literal('')),
-    data_inizio_mandato: z.string().min(1, 'Data inizio mandato obbligatoria')
+    data_inizio_mandato: z.string().min(1, 'Data inizio mandato obbligatoria'),
+    is_rasi: z.boolean().default(true)
   })
 
   const form = useForm<z.infer<typeof schema>>({
@@ -118,7 +131,8 @@ export default function ArtistiPage() {
       nome_arte: '',
       codice_fiscale: '',
       data_nascita: '',
-      data_inizio_mandato: new Date().toISOString().split('T')[0]
+      data_inizio_mandato: new Date().toISOString().split('T')[0],
+      is_rasi: true
     }
   })
 
@@ -132,7 +146,8 @@ export default function ArtistiPage() {
       nome_arte: '',
       codice_fiscale: '',
       data_nascita: '',
-      data_inizio_mandato: new Date().toISOString().split('T')[0]
+      data_inizio_mandato: new Date().toISOString().split('T')[0],
+      is_rasi: true
     })
     setShowForm(true)
   }
@@ -154,7 +169,8 @@ export default function ArtistiPage() {
       nome_arte: artista.nome_arte || '',
       codice_fiscale: artista.codice_fiscale || '',
       data_nascita: toDateInput(artista.data_nascita),
-      data_inizio_mandato: toDateInput(artista.data_inizio_mandato)
+      data_inizio_mandato: toDateInput(artista.data_inizio_mandato),
+      is_rasi: artista.is_rasi ?? true
     })
     setShowForm(true)
   }
@@ -169,6 +185,7 @@ export default function ArtistiPage() {
         codice_fiscale: values.codice_fiscale || null,
         data_nascita: values.data_nascita || null,
         data_inizio_mandato: values.data_inizio_mandato,
+        is_rasi: values.is_rasi,
       } as any
 
       if (formMode === 'create') {
@@ -237,12 +254,29 @@ export default function ArtistiPage() {
                   <SelectItem value="sospeso">Sospeso</SelectItem>
                 </SelectContent>
               </Select>
+              <Select 
+                value={isRasiFilter === 'all' ? 'all' : isRasiFilter ? 'true' : 'false'} 
+                onValueChange={(value) => {
+                  if (value === 'all') setIsRasiFilter('all')
+                  else setIsRasiFilter(value === 'true')
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Tipologia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutte le tipologie</SelectItem>
+                  <SelectItem value="true">RASI</SelectItem>
+                  <SelectItem value="false">Esterni</SelectItem>
+                </SelectContent>
+              </Select>
               <Button
                 variant="outline"
                 className="w-full sm:w-auto"
                 onClick={() => {
                   setSearchQuery('')
                   setStatusFilter('all')
+                  setIsRasiFilter('all')
                 }}
               >
                 Reset
@@ -276,7 +310,7 @@ export default function ArtistiPage() {
                   <TableRow>
                     <TableHead>Codice IPN</TableHead>
                     <TableHead>Nome Completo</TableHead>
-                    
+                    <TableHead>Tipologia</TableHead>
                     <TableHead>Codice Fiscale</TableHead>
                     <TableHead>Stato</TableHead>
                     <TableHead>Data Nascita</TableHead>
@@ -287,7 +321,7 @@ export default function ArtistiPage() {
                 <TableBody>
                   {artisti.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                         Nessun artista trovato con i criteri di ricerca attuali
                       </TableCell>
                     </TableRow>
@@ -314,6 +348,9 @@ export default function ArtistiPage() {
                               </span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {getRasiBadge(artista.is_rasi ?? true)}
                         </TableCell>
                         <TableCell className="font-mono text-sm">
                           {artista.codice_fiscale || '-'}
@@ -386,10 +423,11 @@ export default function ArtistiPage() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
                               {artista.codice_ipn}
                             </span>
+                            {getRasiBadge(artista.is_rasi ?? true)}
                             {getStatusBadge(artista.stato)}
                           </div>
                           <h3 className="font-medium text-lg">
@@ -461,6 +499,10 @@ export default function ArtistiPage() {
                 <div>
                   <label className="text-sm font-medium text-gray-500">Stato</label>
                   <div className="mt-1">{getStatusBadge(selectedArtist.stato)}</div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Tipologia</label>
+                  <div className="mt-1">{getRasiBadge(selectedArtist.is_rasi ?? true)}</div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Nome</label>
@@ -613,6 +655,28 @@ export default function ArtistiPage() {
                   )}
                 />
               </div>
+              <FormField
+                control={form.control}
+                name="is_rasi"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>
+                        Artista rappresentato da RASI
+                      </FormLabel>
+                      <p className="text-sm text-muted-foreground">
+                        Seleziona se l&apos;artista è rappresentato da RASI o è un artista esterno
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Annulla</Button>
                 <Button type="submit">{formMode === 'create' ? 'Crea' : 'Salva'}</Button>

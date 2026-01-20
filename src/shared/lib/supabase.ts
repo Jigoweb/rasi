@@ -25,6 +25,7 @@ export type Database = {
           partita_iva: number | null
           codice_paese: string | null
           diritti_attivi: any | null
+          is_rasi: boolean
           created_at: string
           updated_at: string
         }
@@ -51,6 +52,7 @@ export type Database = {
           partita_iva?: number | null
           codice_paese?: string | null
           diritti_attivi?: any | null
+          is_rasi?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -77,6 +79,7 @@ export type Database = {
           partita_iva?: number | null
           codice_paese?: string | null
           diritti_attivi?: any | null
+          is_rasi?: boolean
           created_at?: string
           updated_at?: string
         }
