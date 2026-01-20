@@ -73,6 +73,10 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
       note,
       stato_validazione,
       created_at,
+      artista_id,
+      opera_id,
+      episodio_id,
+      ruolo_id,
       opere (
         id,
         codice_opera,
@@ -89,7 +93,8 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
       episodi (
         id,
         titolo_episodio,
-        numero_episodio
+        numero_episodio,
+        numero_stagione
       )
     `)
     .eq('artista_id', artistaId)
@@ -123,3 +128,32 @@ export const updateArtista = async (
 
   return { data, error }
 }
+
+/**
+ * Counts the number of participations for a given artist.
+ * Used to check if an artist can be deleted.
+ */
+export const getPartecipazioniCountByArtistaId = async (artistaId: string) => {
+  const { count, error } = await supabase
+    .from('partecipazioni')
+    .select('*', { count: 'exact', head: true })
+    .eq('artista_id', artistaId)
+
+  return { count: count ?? 0, error }
+}
+
+/**
+ * Deletes an artist by ID.
+ * Note: This will fail if the artist has associated participations due to FK constraints.
+ */
+export const deleteArtista = async (id: string) => {
+  const { error } = await supabase
+    .from('artisti')
+    .delete()
+    .eq('id', id)
+
+  return { error }
+}
+
+// Re-export partecipazioni functions from opere service for convenience
+export { updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple } from '@/features/opere/services/opere.service'

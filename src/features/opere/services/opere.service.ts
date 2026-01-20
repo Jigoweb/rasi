@@ -1,5 +1,14 @@
 import { supabase } from '@/shared/lib/supabase-client'
 
+export const getRuoliTipologie = async () => {
+  const { data, error } = await supabase
+    .from('ruoli_tipologie')
+    .select('id, nome, descrizione, categoria')
+    .order('nome', { ascending: true })
+
+  return { data, error }
+}
+
 export const getOpere = async (filters?: { search?: string; tipo?: string }) => {
   let query = supabase
     .from('opere')
@@ -66,6 +75,10 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
       note,
       stato_validazione,
       created_at,
+      artista_id,
+      opera_id,
+      episodio_id,
+      ruolo_id,
       artisti ( id, nome, cognome, nome_arte ),
       ruoli_tipologie ( id, nome, descrizione ),
       episodi ( id, numero_stagione, numero_episodio, titolo_episodio )
@@ -74,6 +87,44 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
     .order('created_at', { ascending: false })
 
   return { data, error }
+}
+
+export const updatePartecipazione = async (
+  id: string,
+  payload: {
+    ruolo_id?: string
+    personaggio?: string | null
+    note?: string | null
+    stato_validazione?: string | null
+    episodio_id?: string | null
+  }
+) => {
+  const { data, error } = await supabase
+    .from('partecipazioni')
+    .update(payload)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  return { data, error }
+}
+
+export const deletePartecipazione = async (id: string) => {
+  const { error } = await supabase
+    .from('partecipazioni')
+    .delete()
+    .eq('id', id)
+
+  return { error }
+}
+
+export const deletePartecipazioniMultiple = async (ids: string[]) => {
+  const { error } = await supabase
+    .from('partecipazioni')
+    .delete()
+    .in('id', ids)
+
+  return { error }
 }
 
 export const getEpisodiByOperaId = async (operaId: string) => {

@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Badge } from '@/shared/components/ui/badge'
@@ -14,9 +15,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi } from '@/features/opere/services/opere.service'
+import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
-import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music } from 'lucide-react'
+import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
+import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
+import { Textarea } from '@/shared/components/ui/textarea'
+import { DialogFooter } from '@/shared/components/ui/dialog'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Label } from '@/shared/components/ui/label'
 
@@ -60,6 +65,25 @@ export default function OperaDetailPage() {
   const [expandedSeasons, setExpandedSeasons] = useState<Record<number, boolean>>({})
   const [importEpisodesResult, setImportEpisodesResult] = useState<{ created: number; updated: number; errors: string[] } | null>(null)
 
+  // Partecipazioni Edit/Delete State
+  const [ruoli, setRuoli] = useState<{ id: string; nome: string; descrizione: string | null; categoria: string | null }[]>([])
+  const [showEditPartecipazioneDialog, setShowEditPartecipazioneDialog] = useState(false)
+  const [showDeletePartecipazioneDialog, setShowDeletePartecipazioneDialog] = useState(false)
+  const [selectedPartecipazione, setSelectedPartecipazione] = useState<any>(null)
+  const [editPartecipazioneForm, setEditPartecipazioneForm] = useState({
+    ruolo_id: '',
+    personaggio: '',
+    note: '',
+    stato_validazione: ''
+  })
+  const [isSavingPartecipazione, setIsSavingPartecipazione] = useState(false)
+  const [isDeletingPartecipazione, setIsDeletingPartecipazione] = useState(false)
+  
+  // Multi-select state for partecipazioni
+  const [selectedPartecipazioniIds, setSelectedPartecipazioniIds] = useState<Set<string>>(new Set())
+  const [showBulkDeletePartecipazioniDialog, setShowBulkDeletePartecipazioniDialog] = useState(false)
+  const [isBulkDeletingPartecipazioni, setIsBulkDeletingPartecipazioni] = useState(false)
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
@@ -77,7 +101,26 @@ export default function OperaDetailPage() {
 
       const { data: pData, error: pErr } = await getPartecipazioniByOperaId(operaId)
       if (pErr) throw pErr
-      setPartecipazioni(pData || [])
+      
+      // Ordina partecipazioni: per serie TV ordina per stagione/episodio, altrimenti per nome artista
+      const sortedPartecipazioni = [...(pData || [])].sort((a: any, b: any) => {
+        // Se è una serie TV e ci sono episodi, ordina per stagione e episodio
+        if ((oData?.tipo || '').toLowerCase() === 'serie_tv') {
+          const stagA = a.episodi?.numero_stagione ?? 9999
+          const stagB = b.episodi?.numero_stagione ?? 9999
+          if (stagA !== stagB) return stagA - stagB
+          
+          const epA = a.episodi?.numero_episodio ?? 9999
+          const epB = b.episodi?.numero_episodio ?? 9999
+          if (epA !== epB) return epA - epB
+        }
+        
+        // Poi ordina per nome artista
+        const nomeA = `${a.artisti?.cognome || ''} ${a.artisti?.nome || ''}`.toLowerCase()
+        const nomeB = `${b.artisti?.cognome || ''} ${b.artisti?.nome || ''}`.toLowerCase()
+        return nomeA.localeCompare(nomeB)
+      })
+      setPartecipazioni(sortedPartecipazioni)
 
       if ((oData?.tipo || '').toLowerCase() === 'serie_tv') {
         const { data: eData, error: eErr } = await getEpisodiByOperaId(operaId)
@@ -95,7 +138,115 @@ export default function OperaDetailPage() {
 
   useEffect(() => {
     if (operaId) fetchData()
+    // Load ruoli
+    getRuoliTipologie().then(({ data }) => {
+      if (data) setRuoli(data)
+    })
   }, [operaId, fetchData])
+
+  // Partecipazione handlers
+  const openEditPartecipazioneDialog = (p: any) => {
+    setSelectedPartecipazione(p)
+    setEditPartecipazioneForm({
+      ruolo_id: p.ruolo_id || p.ruoli_tipologie?.id || '',
+      personaggio: p.personaggio || '',
+      note: p.note || '',
+      stato_validazione: p.stato_validazione || 'da_validare'
+    })
+    setShowEditPartecipazioneDialog(true)
+  }
+
+  const openDeletePartecipazioneDialog = (p: any) => {
+    setSelectedPartecipazione(p)
+    setShowDeletePartecipazioneDialog(true)
+  }
+
+  const handleSavePartecipazione = async () => {
+    if (!selectedPartecipazione) return
+    
+    setIsSavingPartecipazione(true)
+    try {
+      const { error } = await updatePartecipazione(selectedPartecipazione.id, {
+        ruolo_id: editPartecipazioneForm.ruolo_id,
+        personaggio: editPartecipazioneForm.personaggio || null,
+        note: editPartecipazioneForm.note || null,
+        stato_validazione: editPartecipazioneForm.stato_validazione
+      })
+      
+      if (error) {
+        throw new Error(error.message || 'Errore durante l\'aggiornamento')
+      }
+      
+      setShowEditPartecipazioneDialog(false)
+      fetchData()
+    } catch (e: any) {
+      alert('Errore durante l\'aggiornamento: ' + (e?.message || 'Errore sconosciuto'))
+    } finally {
+      setIsSavingPartecipazione(false)
+    }
+  }
+
+  const handleDeletePartecipazione = async () => {
+    if (!selectedPartecipazione) return
+    
+    setIsDeletingPartecipazione(true)
+    try {
+      const { error } = await deletePartecipazione(selectedPartecipazione.id)
+      
+      if (error) throw error
+      
+      setShowDeletePartecipazioneDialog(false)
+      fetchData()
+    } catch (e) {
+      console.error('Error deleting partecipazione:', e)
+    } finally {
+      setIsDeletingPartecipazione(false)
+    }
+  }
+
+  // Multi-select handlers for partecipazioni
+  const toggleSelectPartecipazione = (id: string) => {
+    setSelectedPartecipazioniIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(id)) {
+        newSet.delete(id)
+      } else {
+        newSet.add(id)
+      }
+      return newSet
+    })
+  }
+
+  const toggleSelectAllPartecipazioni = () => {
+    if (selectedPartecipazioniIds.size === partecipazioni.length) {
+      setSelectedPartecipazioniIds(new Set())
+    } else {
+      setSelectedPartecipazioniIds(new Set(partecipazioni.map((p: any) => p.id)))
+    }
+  }
+
+  const clearPartecipazioniSelection = () => {
+    setSelectedPartecipazioniIds(new Set())
+  }
+
+  const handleBulkDeletePartecipazioni = async () => {
+    if (selectedPartecipazioniIds.size === 0) return
+    
+    setIsBulkDeletingPartecipazioni(true)
+    try {
+      const { error } = await deletePartecipazioniMultiple(Array.from(selectedPartecipazioniIds))
+      
+      if (error) throw error
+      
+      setShowBulkDeletePartecipazioniDialog(false)
+      setSelectedPartecipazioniIds(new Set())
+      fetchData()
+    } catch (e: any) {
+      alert('Errore durante l\'eliminazione: ' + (e?.message || 'Errore sconosciuto'))
+    } finally {
+      setIsBulkDeletingPartecipazioni(false)
+    }
+  }
 
   const performSearch = async (term: string, year?: number, type?: string) => {
     if (!term || !term.trim()) {
@@ -559,57 +710,153 @@ export default function OperaDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5" />Partecipazioni</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Users className="mr-2 h-5 w-5" />
+              Partecipazioni
+            </div>
+            <Badge variant="secondary">
+              {(partecipazioni || []).length} {(partecipazioni || []).length === 1 ? 'artista' : 'artisti'}
+            </Badge>
+          </CardTitle>
         </CardHeader>
+        
+        {/* Barra azioni selezione multipla */}
+        {selectedPartecipazioniIds.size > 0 && (
+          <div className="px-4 py-3 bg-primary/5 border-b flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <CheckboxUI 
+                checked={selectedPartecipazioniIds.size === partecipazioni.length}
+                onCheckedChange={toggleSelectAllPartecipazioni}
+              />
+              <span className="text-sm font-medium">
+                {selectedPartecipazioniIds.size} {selectedPartecipazioniIds.size === 1 ? 'selezionata' : 'selezionate'}
+              </span>
+              <Button variant="ghost" size="sm" onClick={clearPartecipazioniSelection}>
+                <X className="h-4 w-4 mr-1" />
+                Deseleziona
+              </Button>
+            </div>
+            <Button 
+              variant="destructive" 
+              size="sm"
+              onClick={() => setShowBulkDeletePartecipazioniDialog(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Elimina selezionate
+            </Button>
+          </div>
+        )}
+        
         <CardContent className="p-0">
-          <div className="hidden lg:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="py-3 px-4 first:pl-6">Artista</TableHead>
-                  <TableHead className="py-3 px-4">Ruolo</TableHead>
-                  <TableHead className="py-3 px-4">Personaggio</TableHead>
-                  <TableHead className="py-3 px-4">Episodio</TableHead>
-                  <TableHead className="py-3 px-4 last:pr-6">Stato</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(partecipazioni || []).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Nessuna partecipazione trovata</TableCell>
-                  </TableRow>
-                ) : (
-                  partecipazioni.map((p: any) => (
-                    <TableRow key={p.id} className="hover:bg-muted/50">
-                      <TableCell className="py-4 px-4 pl-6">
-                        {p.artisti ? (<div className="font-medium">{p.artisti.nome} {p.artisti.cognome}{p.artisti.nome_arte ? ` (${p.artisti.nome_arte})` : ''}</div>) : '—'}
-                      </TableCell>
-                      <TableCell className="py-4 px-4">{p.ruoli_tipologie ? p.ruoli_tipologie.nome : '—'}</TableCell>
-                      <TableCell className="py-4 px-4">{p.personaggio || '—'}</TableCell>
-                      <TableCell className="py-4 px-4">{p.episodi ? `S${p.episodi.numero_stagione} E${p.episodi.numero_episodio} – ${p.episodi.titolo_episodio || ''}` : '—'}</TableCell>
-                      <TableCell className="py-4 px-4 pr-6">{p.stato_validazione || '—'}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-          <div className="lg:hidden p-4 space-y-3">
-            {(partecipazioni || []).length === 0 ? (
-              <div className="text-center py-8 text-gray-500">Nessuna partecipazione trovata</div>
-            ) : (
-              partecipazioni.map((p: any) => (
-                <Card key={p.id}>
-                  <CardContent className="p-4 space-y-2">
-                    <div className="font-medium">{p.artisti ? `${p.artisti.nome} ${p.artisti.cognome}` : '—'}</div>
-                    <div className="text-sm text-muted-foreground">{p.ruoli_tipologie ? p.ruoli_tipologie.nome : '—'}</div>
-                    <div className="text-sm">{p.personaggio || '—'}</div>
-                    <div className="text-xs text-muted-foreground">{p.episodi ? `S${p.episodi.numero_stagione} E${p.episodi.numero_episodio}` : '—'}</div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+          {(partecipazioni || []).length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p>Nessuna partecipazione trovata per quest&apos;opera</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {partecipazioni.map((p: any) => {
+                const getValidationBadge = (stato: string | null) => {
+                  if (!stato) return <Badge variant="outline">Non specificato</Badge>
+                  switch (stato) {
+                    case 'validato':
+                      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Validato</Badge>
+                    case 'da_validare':
+                      return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Da Validare</Badge>
+                    case 'respinto':
+                      return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Respinto</Badge>
+                    default:
+                      return <Badge variant="outline">Sconosciuto</Badge>
+                  }
+                }
+                
+                const isSelected = selectedPartecipazioniIds.has(p.id)
+                
+                return (
+                  <div key={p.id} className={`px-4 py-3 hover:bg-muted/30 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
+                    <div className="flex gap-3 items-start">
+                      {/* Checkbox selezione */}
+                      <div className="flex items-center shrink-0 pt-0.5">
+                        <CheckboxUI 
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelectPartecipazione(p.id)}
+                        />
+                      </div>
+                      
+                      {/* Contenuto principale */}
+                      <div className="flex-1 min-w-0">
+                        {/* Riga 1: Nome artista, Badges, Azioni */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                            <Link 
+                              href={`/dashboard/artisti/${p.artisti?.id}`}
+                              className="font-semibold hover:text-primary transition-colors"
+                            >
+                              {p.artisti ? `${p.artisti.nome} ${p.artisti.cognome}` : '—'}
+                            </Link>
+                            <Badge className="bg-primary/10 text-primary border-0 hover:bg-primary/10 text-xs">
+                              {p.ruoli_tipologie?.nome || 'Ruolo'}
+                            </Badge>
+                            {p.personaggio && (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
+                                &quot;{p.personaggio}&quot;
+                              </Badge>
+                            )}
+                            {getValidationBadge(p.stato_validazione)}
+                          </div>
+                          
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditPartecipazioneDialog(p)}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Modifica
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => openDeletePartecipazioneDialog(p)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Elimina
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        
+                        {/* Riga 2: Nome d'arte / Episodio */}
+                        {(p.artisti?.nome_arte || p.episodi) && (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground mt-1">
+                            {p.artisti?.nome_arte && (
+                              <span>{p.artisti.nome_arte}</span>
+                            )}
+                            {p.episodi && (
+                              <span className="flex items-center gap-1">
+                                <Tv className="h-3 w-3" />
+                                S{p.episodi.numero_stagione || '?'}E{p.episodi.numero_episodio || '?'}
+                                {p.episodi.titolo_episodio && ` – ${p.episodi.titolo_episodio}`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Note (se presenti) */}
+                        {p.note && (
+                          <div className="mt-1.5 text-sm text-muted-foreground bg-muted/50 rounded px-2 py-1">
+                            {p.note}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1299,6 +1546,174 @@ export default function OperaDetailPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Partecipazione Dialog */}
+      <Dialog open={showEditPartecipazioneDialog} onOpenChange={setShowEditPartecipazioneDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifica Partecipazione</DialogTitle>
+            <DialogDescription>
+              Modifica i dettagli della partecipazione di {selectedPartecipazione?.artisti?.nome} {selectedPartecipazione?.artisti?.cognome}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="ruolo">Ruolo</Label>
+              <Select 
+                value={editPartecipazioneForm.ruolo_id} 
+                onValueChange={(value) => setEditPartecipazioneForm({ ...editPartecipazioneForm, ruolo_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona ruolo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ruoli.map((ruolo) => (
+                    <SelectItem key={ruolo.id} value={ruolo.id}>
+                      {ruolo.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="personaggio">Personaggio</Label>
+              <Input
+                id="personaggio"
+                value={editPartecipazioneForm.personaggio}
+                onChange={(e) => setEditPartecipazioneForm({ ...editPartecipazioneForm, personaggio: e.target.value })}
+                placeholder="Nome del personaggio interpretato"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="stato_validazione">Stato Validazione</Label>
+              <Select 
+                value={editPartecipazioneForm.stato_validazione} 
+                onValueChange={(value) => setEditPartecipazioneForm({ ...editPartecipazioneForm, stato_validazione: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona stato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="da_validare">Da Validare</SelectItem>
+                  <SelectItem value="validato">Validato</SelectItem>
+                  <SelectItem value="respinto">Respinto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="note">Note</Label>
+              <Textarea
+                id="note"
+                value={editPartecipazioneForm.note}
+                onChange={(e) => setEditPartecipazioneForm({ ...editPartecipazioneForm, note: e.target.value })}
+                placeholder="Note aggiuntive..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditPartecipazioneDialog(false)}>
+              Annulla
+            </Button>
+            <Button onClick={handleSavePartecipazione} disabled={isSavingPartecipazione}>
+              {isSavingPartecipazione ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvataggio...
+                </>
+              ) : (
+                'Salva Modifiche'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Partecipazione Dialog */}
+      <Dialog open={showDeletePartecipazioneDialog} onOpenChange={setShowDeletePartecipazioneDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Elimina Partecipazione</DialogTitle>
+            <DialogDescription>
+              Sei sicuro di voler eliminare questa partecipazione?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-muted rounded-md space-y-2">
+              <p><strong>Artista:</strong> {selectedPartecipazione?.artisti?.nome} {selectedPartecipazione?.artisti?.cognome}</p>
+              <p><strong>Ruolo:</strong> {selectedPartecipazione?.ruoli_tipologie?.nome}</p>
+              {selectedPartecipazione?.personaggio && (
+                <p><strong>Personaggio:</strong> {selectedPartecipazione.personaggio}</p>
+              )}
+            </div>
+            <p className="mt-4 text-sm text-red-600">
+              Questa azione non può essere annullata.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeletePartecipazioneDialog(false)}>
+              Annulla
+            </Button>
+            <Button variant="destructive" onClick={handleDeletePartecipazione} disabled={isDeletingPartecipazione}>
+              {isDeletingPartecipazione ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Eliminazione...
+                </>
+              ) : (
+                'Elimina'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Partecipazioni Dialog */}
+      <Dialog open={showBulkDeletePartecipazioniDialog} onOpenChange={setShowBulkDeletePartecipazioniDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Elimina Partecipazioni</DialogTitle>
+            <DialogDescription>
+              Sei sicuro di voler eliminare {selectedPartecipazioniIds.size} partecipazion{selectedPartecipazioniIds.size === 1 ? 'e' : 'i'}?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-muted rounded-md max-h-48 overflow-y-auto space-y-2">
+              {partecipazioni
+                .filter((p: any) => selectedPartecipazioniIds.has(p.id))
+                .map((p: any) => (
+                  <div key={p.id} className="text-sm flex items-center gap-2">
+                    <User className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{p.artisti?.nome} {p.artisti?.cognome}</span>
+                    <span className="text-muted-foreground">({p.ruoli_tipologie?.nome})</span>
+                  </div>
+                ))
+              }
+            </div>
+            <p className="mt-4 text-sm text-red-600">
+              Questa azione non può essere annullata.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkDeletePartecipazioniDialog(false)}>
+              Annulla
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDeletePartecipazioni} disabled={isBulkDeletingPartecipazioni}>
+              {isBulkDeletingPartecipazioni ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Eliminazione...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Elimina {selectedPartecipazioniIds.size}
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
