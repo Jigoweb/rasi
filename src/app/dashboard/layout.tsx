@@ -2,7 +2,9 @@
 
 import { useAuth, AVAILABLE_ROLES } from '@/shared/contexts/auth-context'
 import { IndividuazioneProcessProvider } from '@/shared/contexts/individuazione-process-context'
+import { ExportProcessProvider } from '@/shared/contexts/export-process-context'
 import { FloatingProgressIndicator, IndividuazioneProgressDialog } from '@/shared/components/individuazione-progress-indicator'
+import { FloatingExportIndicator, ExportProgressDialog } from '@/shared/components/export-progress-indicator'
 import { Button } from '@/shared/components/ui/button'
 import { Separator } from '@/shared/components/ui/separator'
 import { Badge } from '@/shared/components/ui/badge'
@@ -89,7 +91,8 @@ export default function DashboardLayout({
 
   return (
     <IndividuazioneProcessProvider>
-    <div className="min-h-screen bg-gray-50">
+      <ExportProcessProvider>
+        <div className="min-h-screen bg-gray-50">
       {/* Mobile menu overlay */}
       {sidebarOpen && (
         <div 
@@ -219,7 +222,12 @@ export default function DashboardLayout({
       {/* Global Individuazione Process Components */}
       <FloatingProgressIndicator />
       <IndividuazioneProgressDialog />
-    </div>
+      
+      {/* Global Export Process Components */}
+      <FloatingExportIndicator />
+      <ExportProgressDialog />
+        </div>
+      </ExportProcessProvider>
     </IndividuazioneProcessProvider>
   )
 }

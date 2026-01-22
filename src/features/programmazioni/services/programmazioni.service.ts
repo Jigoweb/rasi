@@ -27,19 +27,55 @@ export interface CampagnaProgrammazione {
 }
 
 export const getCampagneProgrammazione = async () => {
-  const { data, error } = await supabase
-    .from('campagne_programmazione' as any)
-    .select('*, emittenti(nome), programmazioni(count)')
-    .order('created_at', { ascending: false })
+  try {
+    const { data, error } = await supabase
+      .from('campagne_programmazione' as any)
+      .select('*, emittenti(nome)')
+      .order('created_at', { ascending: false })
 
-  // Transform data to include programmazioni_count
-  const transformedData = data?.map((item: any) => ({
-    ...item,
-    programmazioni_count: item.programmazioni?.[0]?.count || 0,
-    programmazioni: undefined, // Remove the nested array
-  }))
+    if (error) {
+      console.error('[getCampagneProgrammazione] Query error:', error)
+      return { data: null, error }
+    }
 
-  return { data: (transformedData as unknown) as CampagnaProgrammazione[], error }
+    if (!data || data.length === 0) {
+      return { data: [], error: null }
+    }
+
+    // Fetch all counts in a single batch query using IN clause
+    const campagnaIds = data.map((item: any) => item.id)
+    
+    // Get counts for all campagne at once
+    const { data: countsData, error: countsError } = await supabase
+      .from('programmazioni')
+      .select('campagna_programmazione_id')
+      .in('campagna_programmazione_id', campagnaIds)
+
+    // Create a map of counts
+    const countsMap = new Map<string, number>()
+    if (countsData && !countsError) {
+      countsData.forEach((item: any) => {
+        const id = item.campagna_programmazione_id
+        countsMap.set(id, (countsMap.get(id) || 0) + 1)
+      })
+    } else if (countsError) {
+      console.error('[getCampagneProgrammazione] Counts query error:', countsError)
+    }
+
+    // Transform data with counts
+    const transformedData = data.map((item: any) => ({
+      ...item,
+      programmazioni_count: countsMap.get(item.id) || 0
+    }))
+
+    return { data: (transformedData as unknown) as CampagnaProgrammazione[], error: null }
+  } catch (error: any) {
+    console.error('[getCampagneProgrammazione] Unexpected error:', error)
+    return { 
+      data: null, 
+      error: error instanceof Error ? error : new Error(String(error))
+    }
+  }
 }
 
 export const createCampagnaProgrammazione = async (payload: CampagnaProgrammazionePayload) => {
@@ -415,59 +451,107 @@ export interface ProgrammazioniHealth {
 }
 
 export const getProgrammazioniHealth = async (campagnaId: string) => {
-  const totalRes = await supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
+  try {
+    // Execute all count queries in parallel for better performance
+    const [
+      totalRes,
+      processedRes,
+      unprocessedRes,
+      missingTitleRes,
+      missingDurationRes,
+      errorsRes,
+      rangeRes
+    ] = await Promise.all([
+      supabase
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId),
+      supabase
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId)
+        .eq('processato', true),
+      supabase
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId)
+        .eq('processato', false),
+      supabase
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId)
+        .is('titolo', null),
+      supabase
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId)
+        .is('durata_minuti', null),
+      supabase
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId)
+        .not('errori_processamento', 'is', null),
+      supabase
+        .from('programmazioni' as any)
+        .select('data_trasmissione')
+        .eq('campagna_programmazione_id', campagnaId)
+        .order('data_trasmissione', { ascending: true })
+        .limit(1)
+    ])
 
-  const processedRes = await supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-    .eq('processato', true)
+    // Check for errors
+    const errors = [
+      totalRes.error,
+      processedRes.error,
+      unprocessedRes.error,
+      missingTitleRes.error,
+      missingDurationRes.error,
+      errorsRes.error,
+      rangeRes.error
+    ].filter(Boolean)
 
-  const unprocessedRes = await supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-    .eq('processato', false)
+    if (errors.length > 0) {
+      console.error('[getProgrammazioniHealth] Query errors:', errors)
+      return { data: null, error: errors[0] }
+    }
 
-  const missingTitleRes = await supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-    .is('titolo', null)
+    // Get date range from first and last records
+    let date_min: string | undefined = undefined
+    let date_max: string | undefined = undefined
 
-  const missingDurationRes = await supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-    .is('durata_minuti', null)
+    if (rangeRes.data && rangeRes.data.length > 0) {
+      date_min = rangeRes.data[0].data_trasmissione
+      
+      // Get max date
+      const maxRes = await supabase
+        .from('programmazioni' as any)
+        .select('data_trasmissione')
+        .eq('campagna_programmazione_id', campagnaId)
+        .order('data_trasmissione', { ascending: false })
+        .limit(1)
+      
+      if (maxRes.data && maxRes.data.length > 0) {
+        date_max = maxRes.data[0].data_trasmissione
+      }
+    }
 
-  const errorsRes = await supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-    .not('errori_processamento', 'is', null)
+    const health: ProgrammazioniHealth = {
+      total: totalRes.count || 0,
+      processed: processedRes.count || 0,
+      unprocessed: unprocessedRes.count || 0,
+      missing_title: missingTitleRes.count || 0,
+      missing_duration: missingDurationRes.count || 0,
+      errors_count: errorsRes.count || 0,
+      date_min,
+      date_max,
+    }
 
-  const rangeRes = await supabase
-    .from('programmazioni' as any)
-    .select('min:data_trasmissione.min,max:data_trasmissione.max')
-    .eq('campagna_programmazione_id', campagnaId)
-    .limit(1)
-
-  const rangeRow = (rangeRes.data as any)?.[0] || {}
-
-  const health: ProgrammazioniHealth = {
-    total: totalRes.count || 0,
-    processed: processedRes.count || 0,
-    unprocessed: unprocessedRes.count || 0,
-    missing_title: missingTitleRes.count || 0,
-    missing_duration: missingDurationRes.count || 0,
-    errors_count: errorsRes.count || 0,
-    date_min: rangeRow?.min || undefined,
-    date_max: rangeRow?.max || undefined,
+    return { data: health, error: null }
+  } catch (error: any) {
+    console.error('[getProgrammazioniHealth] Unexpected error:', error)
+    return { 
+      data: null, 
+      error: error instanceof Error ? error : new Error(String(error))
+    }
   }
-
-  return { data: health, error: totalRes.error || processedRes.error || unprocessedRes.error || missingTitleRes.error || missingDurationRes.error || errorsRes.error || rangeRes.error }
 }

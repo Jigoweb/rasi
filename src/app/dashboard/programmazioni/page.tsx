@@ -636,10 +636,26 @@ export default function ProgrammazioniPage() {
     try {
       const { data, error } = await getCampagneProgrammazione()
 
-      if (error) throw error
+      if (error) {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : typeof error === 'object' && error !== null
+          ? JSON.stringify(error)
+          : String(error)
+        console.error('Error fetching campagne:', errorMessage, error)
+        // Still set empty array to prevent UI from breaking
+        setCampagne([])
+        return
+      }
       setCampagne(data || [])
     } catch (error) {
-      console.error('Error fetching campagne:', error)
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+      console.error('Error fetching campagne:', errorMessage, error)
+      setCampagne([])
     } finally {
       setLoading(false)
     }

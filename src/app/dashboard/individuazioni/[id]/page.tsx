@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { 
@@ -12,6 +12,9 @@ import {
   Individuazione,
   SearchField 
 } from '@/features/individuazioni/services/individuazioni.service'
+import { useExportProcess } from '@/shared/contexts/export-process-context'
+import { supabase } from '@/shared/lib/supabase'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/shared/components/ui/alert-dialog'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -47,108 +50,277 @@ export default function IndividuazioneDetailPage() {
   const [individuazioni, setIndividuazioni] = useState<Individuazione[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
-  const [exporting, setExporting] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [showTimeEstimateDialog, setShowTimeEstimateDialog] = useState(false)
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'xlsx' | null>(null)
+  const [estimatedTime, setEstimatedTime] = useState<number | null>(null)
+  const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false)
+  const exportButtonRef = useRef<HTMLButtonElement>(null)
+  const { startExport, state: exportState } = useExportProcess()
   
   // Pagination & filters
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [searchField, setSearchField] = useState<SearchField>('titolo')
   const [statoFilter, setStatoFilter] = useState<string>('all')
   const pageSize = 50
 
+  // Debounce search term
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setPage(1) // Reset to first page on search change
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Load campagna on mount
+  useEffect(() => {
+    if (!campagnaId) return
+    
+    const loadCampagna = async () => {
+      setLoading(true)
+      try {
+        const { data, error } = await getCampagnaIndividuazione(campagnaId)
+        if (error) {
+          const errorMessage = error instanceof Error 
+            ? error.message 
+            : typeof error === 'object' && error !== null
+            ? JSON.stringify(error)
+            : String(error)
+          console.error('Errore caricamento campagna:', errorMessage, error)
+          setCampagna(null)
+          return
+        }
+        if (data) {
+          setCampagna(data)
+        } else {
+          setCampagna(null)
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : typeof error === 'object' && error !== null
+          ? JSON.stringify(error)
+          : String(error)
+        console.error('Errore caricamento campagna:', errorMessage, error)
+        setCampagna(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
     loadCampagna()
   }, [campagnaId])
 
+  // Load individuazioni when campagna is loaded and filters change
   useEffect(() => {
-    if (campagna) {
-      loadIndividuazioni()
-    }
-  }, [campagna, page, searchTerm, searchField, statoFilter])
-
-  const loadCampagna = async () => {
-    setLoading(true)
-    const { data, error } = await getCampagnaIndividuazione(campagnaId)
-    if (data) {
-      setCampagna(data)
-    }
-    if (error) {
-      console.error('Errore caricamento campagna:', error)
-    }
-    setLoading(false)
-  }
+    if (!campagna) return
+    
+    loadIndividuazioni()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campagna, page, debouncedSearchTerm, searchField, statoFilter])
 
   const loadIndividuazioni = async () => {
     setLoadingData(true)
-    const { data, error, count, totalPages: pages } = await getIndividuazioni(campagnaId, {
-      page,
-      pageSize,
-      search: searchTerm || undefined,
-      searchField,
-      stato: statoFilter !== 'all' ? statoFilter : undefined
-    })
-    if (data) {
-      setIndividuazioni(data)
-      setTotalPages(pages)
-      setTotalCount(count || 0)
+    try {
+      const { data, error, count, totalPages: pages } = await getIndividuazioni(campagnaId, {
+        page,
+        pageSize,
+        search: debouncedSearchTerm || undefined,
+        searchField,
+        stato: statoFilter !== 'all' ? statoFilter : undefined
+      })
+      if (error) {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : typeof error === 'object' && error !== null
+          ? JSON.stringify(error)
+          : String(error)
+        console.error('Errore caricamento individuazioni:', errorMessage, error)
+        setIndividuazioni([])
+        setTotalPages(0)
+        setTotalCount(0)
+        return
+      }
+      if (data) {
+        setIndividuazioni(data)
+        setTotalPages(pages)
+        setTotalCount(count || 0)
+      } else {
+        setIndividuazioni([])
+        setTotalPages(0)
+        setTotalCount(0)
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+      console.error('Errore caricamento individuazioni:', errorMessage, error)
+      setIndividuazioni([])
+      setTotalPages(0)
+      setTotalCount(0)
+    } finally {
+      setLoadingData(false)
     }
-    if (error) {
-      console.error('Errore caricamento individuazioni:', error)
-    }
-    setLoadingData(false)
   }
 
   const handleSearch = useCallback((value: string) => {
     setSearchTerm(value)
-    setPage(1)
+    // Page reset is handled by debounce effect
   }, [])
 
-  const handleExport = async (format: 'csv' | 'xlsx') => {
-    setExporting(true)
+  // Estimate export time based on record count
+  const estimateExportTime = useCallback(async (): Promise<number> => {
     try {
-      const { data, error } = await getIndividuazioniForExport(campagnaId)
-      
-      if (error) {
-        console.error('Errore export:', error)
-        alert('Errore durante l\'export')
-        return
-      }
+      const { count } = await (supabase as any)
+        .from('individuazioni')
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_individuazioni_id', campagnaId)
 
-      if (!data || data.length === 0) {
-        alert('Nessun dato da esportare')
-        return
-      }
+      const total = count || 0
+      if (total === 0) return 0
 
-      const formattedData = formatIndividuazioniForExport(data)
-      const worksheet = XLSX.utils.json_to_sheet(formattedData)
-      const workbook = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Individuazioni')
+      // Estimate: ~100 records per second for fetching, plus formatting overhead
+      // For large datasets, estimate more conservatively
+      const fetchTime = total / 100 // seconds
+      const formatTime = total / 1000 // seconds for formatting
+      const totalTime = fetchTime + formatTime + 5 // add 5s buffer
 
-      // Auto-size columns
-      const maxWidth = 50
-      const colWidths = Object.keys(formattedData[0] || {}).map(key => ({
-        wch: Math.min(maxWidth, Math.max(key.length, 
-          ...formattedData.map(row => String(row[key as keyof typeof row] || '').length)
-        ))
-      }))
-      worksheet['!cols'] = colWidths
-
-      const fileName = `individuazioni_${campagna?.nome?.replace(/[^a-z0-9]/gi, '_') || campagnaId}_${new Date().toISOString().split('T')[0]}`
-      
-      if (format === 'csv') {
-        XLSX.writeFile(workbook, `${fileName}.csv`, { bookType: 'csv' })
-      } else {
-        XLSX.writeFile(workbook, `${fileName}.xlsx`, { bookType: 'xlsx' })
-      }
-    } catch (err) {
-      console.error('Errore export:', err)
-      alert('Errore durante l\'export')
-    } finally {
-      setExporting(false)
+      return Math.ceil(totalTime)
+    } catch (error) {
+      console.error('Error estimating export time:', error)
+      return 60 // Default estimate: 1 minute
     }
+  }, [campagnaId])
+
+  const handleFormatSelect = async (format: 'csv' | 'xlsx') => {
+    setSelectedFormat(format)
+    setShowExportDialog(false)
+    setIsCalculatingEstimate(true)
+    
+    try {
+      // Calculate time estimate
+      const time = await estimateExportTime()
+      setEstimatedTime(time)
+      setShowTimeEstimateDialog(true)
+    } catch (error) {
+      console.error('Error calculating estimate:', error)
+      setEstimatedTime(60) // Default fallback
+      setShowTimeEstimateDialog(true)
+    } finally {
+      setIsCalculatingEstimate(false)
+    }
+  }
+
+  const handleConfirmExport = async () => {
+    if (!selectedFormat || !campagna) return
+
+    const format = selectedFormat // Capture format in closure
+    setShowTimeEstimateDialog(false)
+
+    await startExport(
+      campagnaId,
+      campagna.nome || 'Campagna',
+      format,
+      async (onProgress, signal) => {
+        try {
+          // Fetch data with progress callback
+          const { data, error } = await getIndividuazioniForExport(campagnaId, (progress) => {
+            onProgress({
+              fetched: progress.fetched,
+              total: progress.total,
+              percentage: progress.percentage,
+              phase: progress.phase,
+              estimatedTimeRemaining: progress.estimatedTimeRemaining
+            })
+          }, signal)
+
+          if (signal.aborted) {
+            throw new Error('Export cancelled')
+          }
+
+          if (error) {
+            throw error
+          }
+
+          if (!data || data.length === 0) {
+            throw new Error('Nessun dato da esportare')
+          }
+
+          // Update progress: formatting data
+          onProgress({
+            fetched: data.length,
+            total: data.length,
+            percentage: 90,
+            phase: 'formatting'
+          })
+
+          // Format data (this can be slow for large datasets)
+          const formattedData = formatIndividuazioniForExport(data)
+
+          if (signal.aborted) {
+            throw new Error('Export cancelled')
+          }
+
+          // Update progress: creating workbook
+          onProgress({
+            fetched: data.length,
+            total: data.length,
+            percentage: 95,
+            phase: 'generating'
+          })
+
+          const worksheet = XLSX.utils.json_to_sheet(formattedData)
+          const workbook = XLSX.utils.book_new()
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Individuazioni')
+
+          // Auto-size columns
+          const maxWidth = 50
+          const colWidths = Object.keys(formattedData[0] || {}).map(key => ({
+            wch: Math.min(maxWidth, Math.max(key.length, 
+              ...formattedData.map(row => String(row[key as keyof typeof row] || '').length)
+            ))
+          }))
+          worksheet['!cols'] = colWidths
+
+          const fileName = `individuazioni_${campagna.nome?.replace(/[^a-z0-9]/gi, '_') || campagnaId}_${new Date().toISOString().split('T')[0]}`
+
+          if (signal.aborted) {
+            throw new Error('Export cancelled')
+          }
+
+          // Update progress: writing file
+          onProgress({
+            fetched: data.length,
+            total: data.length,
+            percentage: 100,
+            phase: 'done'
+          })
+
+          if (format === 'csv') {
+            XLSX.writeFile(workbook, `${fileName}.csv`, { bookType: 'csv' })
+          } else {
+            XLSX.writeFile(workbook, `${fileName}.xlsx`, { bookType: 'xlsx' })
+          }
+        } catch (error: any) {
+          if (error.message === 'Export cancelled' || signal.aborted) {
+            throw error
+          }
+          const errorMessage = error instanceof Error 
+            ? error.message 
+            : typeof error === 'object' && error !== null
+            ? JSON.stringify(error)
+            : String(error)
+          throw new Error(errorMessage)
+        }
+      }
+    )
   }
 
   const formatNumber = (num: number | undefined) => {
@@ -238,17 +410,24 @@ export default function IndividuazioneDetailPage() {
           )}
         </div>
         
-        <Button
-          onClick={() => setShowExportDialog(true)}
-          disabled={exporting}
-        >
-          {exporting ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4 mr-2" />
-          )}
-          Esporta Individuazioni
-        </Button>
+        <div ref={exportButtonRef}>
+          <Button
+            onClick={() => setShowExportDialog(true)}
+            disabled={isCalculatingEstimate}
+          >
+            {isCalculatingEstimate ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Calcolo stima...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Esporta Individuazioni
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -461,7 +640,11 @@ export default function IndividuazioneDetailPage() {
       </Card>
 
       {/* Export Dialog */}
-      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+      <Dialog open={showExportDialog} onOpenChange={(open) => {
+        if (!isCalculatingEstimate && exportState.status === 'idle') {
+          setShowExportDialog(open)
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Esporta Individuazioni</DialogTitle>
@@ -473,11 +656,7 @@ export default function IndividuazioneDetailPage() {
             <Button
               variant="outline"
               className="h-24 flex-col gap-2"
-              disabled={exporting}
-              onClick={() => {
-                setShowExportDialog(false)
-                handleExport('csv')
-              }}
+              onClick={() => handleFormatSelect('csv')}
             >
               <FileText className="h-8 w-8" />
               <span>CSV</span>
@@ -485,11 +664,7 @@ export default function IndividuazioneDetailPage() {
             <Button
               variant="outline"
               className="h-24 flex-col gap-2"
-              disabled={exporting}
-              onClick={() => {
-                setShowExportDialog(false)
-                handleExport('xlsx')
-              }}
+              onClick={() => handleFormatSelect('xlsx')}
             >
               <FileSpreadsheet className="h-8 w-8" />
               <span>Excel</span>
@@ -500,6 +675,46 @@ export default function IndividuazioneDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Time Estimate Dialog */}
+      <AlertDialog open={showTimeEstimateDialog} onOpenChange={setShowTimeEstimateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Conferma Esportazione</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-3 mt-2">
+            <p className="text-sm text-muted-foreground">
+              Stai per esportare <strong>{formatNumber(campagna?.statistiche?.individuazioni_create || 0)}</strong> individuazioni in formato <strong>{selectedFormat?.toUpperCase()}</strong>.
+            </p>
+            {estimatedTime !== null && (
+              <div className="bg-muted/50 rounded-lg p-3">
+                <p className="text-sm font-medium mb-1">Tempo stimato:</p>
+                <p className="text-lg font-semibold text-primary">
+                  {estimatedTime < 60 
+                    ? `~${estimatedTime} secondi` 
+                    : (() => {
+                        const minutes = Math.floor(estimatedTime / 60)
+                        return `~${minutes} ${minutes === 1 ? 'minuto' : 'minuti'}`
+                      })()
+                  }
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Il processo può essere minimizzato e continuerà in background.
+                </p>
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Vuoi procedere con l'esportazione?
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmExport}>
+              Conferma Esportazione
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

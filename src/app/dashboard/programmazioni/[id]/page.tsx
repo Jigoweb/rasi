@@ -23,6 +23,7 @@ export default function CampagnaDettaglioPage() {
   const [health, setHealth] = useState<ProgrammazioniHealth | null>(null)
   const [loadingHealth, setLoadingHealth] = useState(false)
   const [q, setQ] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
   const [processato, setProcessato] = useState<string>('all')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
@@ -33,29 +34,102 @@ export default function CampagnaDettaglioPage() {
     return undefined
   }, [processato])
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQ(q)
+      setCursor(undefined) // Reset cursor on search change
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [q])
+
   const fetchCampagna = useCallback(async () => {
-    const { data } = await getCampagnaProgrammazioneById(campagnaId)
-    setCampagna(data || null)
+    try {
+      const { data, error } = await getCampagnaProgrammazioneById(campagnaId)
+      if (error) {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : typeof error === 'object' && error !== null
+          ? JSON.stringify(error)
+          : String(error)
+        console.error('Errore caricamento campagna:', errorMessage, error)
+        setCampagna(null)
+        return
+      }
+      setCampagna(data || null)
+    } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+      console.error('Errore caricamento campagna:', errorMessage, error)
+      setCampagna(null)
+    }
   }, [campagnaId])
 
   const fetchFirstPage = useCallback(async () => {
     setLoading(true)
-    const { data, nextCursor } = await listProgrammazioniByCampagnaKeyset(
-      campagnaId,
-      200,
-      undefined,
-      { q: q || undefined, processato: typeof processatoBool === 'boolean' ? processatoBool : undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }
-    )
-    setRows(data || [])
-    setCursor(nextCursor)
-    setLoading(false)
-  }, [campagnaId, q, processatoBool, fromDate, toDate])
+    try {
+      const { data, nextCursor, error } = await listProgrammazioniByCampagnaKeyset(
+        campagnaId,
+        200,
+        undefined,
+        { q: debouncedQ || undefined, processato: typeof processatoBool === 'boolean' ? processatoBool : undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }
+      )
+      if (error) {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : typeof error === 'object' && error !== null
+          ? JSON.stringify(error)
+          : String(error)
+        console.error('Errore caricamento programmazioni:', errorMessage, error)
+        setRows([])
+        setCursor(undefined)
+        return
+      }
+      setRows(data || [])
+      setCursor(nextCursor)
+    } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+      console.error('Errore caricamento programmazioni:', errorMessage, error)
+      setRows([])
+      setCursor(undefined)
+    } finally {
+      setLoading(false)
+    }
+  }, [campagnaId, debouncedQ, processatoBool, fromDate, toDate])
 
   const fetchHealth = useCallback(async () => {
     setLoadingHealth(true)
-    const { data } = await getProgrammazioniHealth(campagnaId)
-    setHealth(data || null)
-    setLoadingHealth(false)
+    try {
+      const { data, error } = await getProgrammazioniHealth(campagnaId)
+      if (error) {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : typeof error === 'object' && error !== null
+          ? JSON.stringify(error)
+          : String(error)
+        console.error('Errore caricamento health:', errorMessage, error)
+        setHealth(null)
+        return
+      }
+      setHealth(data || null)
+    } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+      console.error('Errore caricamento health:', errorMessage, error)
+      setHealth(null)
+    } finally {
+      setLoadingHealth(false)
+    }
   }, [campagnaId])
 
   const loadMore = useCallback(async () => {
@@ -72,16 +146,34 @@ export default function CampagnaDettaglioPage() {
     setLoadingMore(false)
   }, [campagnaId, cursor, q, processatoBool, fromDate, toDate])
 
+  // Load campagna, health, and first page in parallel on mount
   useEffect(() => {
     if (!campagnaId) return
-    fetchCampagna()
-    fetchHealth()
-  }, [campagnaId, fetchCampagna])
+    
+    const loadData = async () => {
+      setLoading(true)
+      try {
+        // Load all initial data in parallel
+        await Promise.all([
+          fetchCampagna(),
+          fetchHealth(),
+          fetchFirstPage()
+        ])
+      } catch (error) {
+        console.error('Errore caricamento dati iniziali:', error)
+      }
+    }
+    
+    loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campagnaId])
 
+  // Reload programmazioni when filters change
   useEffect(() => {
     if (!campagnaId) return
     fetchFirstPage()
-  }, [campagnaId, fetchFirstPage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campagnaId, debouncedQ, processatoBool, fromDate, toDate])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT')
@@ -207,12 +299,12 @@ export default function CampagnaDettaglioPage() {
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Input placeholder="Cerca per titolo..." value={q} onChange={(e) => setQ(e.target.value)} />
+                <Input placeholder="Cerca per titolo..." value={q} onChange={(e) => { setQ(e.target.value); setCursor(undefined) }} />
               </div>
             </div>
             <div className="flex gap-2">
               <div className="w-40">
-                <select className="w-full border rounded h-10 px-3" value={processato} onChange={(e) => setProcessato(e.target.value)}>
+                <select className="w-full border rounded h-10 px-3" value={processato} onChange={(e) => { setProcessato(e.target.value); setCursor(undefined) }}>
                   <option value="all">Tutti</option>
                   <option value="true">Processato</option>
                   <option value="false">Non processato</option>
@@ -220,9 +312,8 @@ export default function CampagnaDettaglioPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-400" />
-                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-                <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-                <Button variant="outline" onClick={() => { setCursor(undefined); fetchFirstPage() }}>Applica</Button>
+                <Input type="date" value={fromDate} onChange={(e) => { setFromDate(e.target.value); setCursor(undefined) }} />
+                <Input type="date" value={toDate} onChange={(e) => { setToDate(e.target.value); setCursor(undefined) }} />
               </div>
             </div>
           </div>

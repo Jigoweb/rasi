@@ -79,19 +79,61 @@ export interface Individuazione {
 // ============================================
 
 export const getCampagneIndividuazione = async () => {
-  const { data, error } = await (supabase as any)
-    .from('campagne_individuazione')
-    .select(`
-      *,
-      emittenti(nome),
-      campagne_programmazione(nome),
-      individuazioni_count:individuazioni(count)
-    `)
-    .order('created_at', { ascending: false })
+  try {
+    const { data, error } = await (supabase as any)
+      .from('campagne_individuazione')
+      .select(`
+        *,
+        emittenti(nome),
+        campagne_programmazione(nome)
+      `)
+      .order('created_at', { ascending: false })
 
-  return { 
-    data: (data as unknown) as CampagnaIndividuazione[], 
-    error 
+    if (error) {
+      console.error('[getCampagneIndividuazione] Query error:', error)
+      return { data: null, error }
+    }
+
+    if (!data || data.length === 0) {
+      return { data: [], error: null }
+    }
+
+    // Fetch all counts in a single batch query using IN clause
+    const campagnaIds = data.map((item: any) => item.id)
+    
+    // Get counts for all campagne at once
+    const { data: countsData, error: countsError } = await (supabase as any)
+      .from('individuazioni')
+      .select('campagna_individuazioni_id')
+      .in('campagna_individuazioni_id', campagnaIds)
+
+    // Create a map of counts
+    const countsMap = new Map<string, number>()
+    if (countsData && !countsError) {
+      countsData.forEach((item: any) => {
+        const id = item.campagna_individuazioni_id
+        countsMap.set(id, (countsMap.get(id) || 0) + 1)
+      })
+    } else if (countsError) {
+      console.error('[getCampagneIndividuazione] Counts query error:', countsError)
+    }
+
+    // Transform data with counts
+    const transformedData = data.map((item: any) => ({
+      ...item,
+      individuazioni_count: countsMap.get(item.id) || 0
+    }))
+
+    return { 
+      data: (transformedData as unknown) as CampagnaIndividuazione[], 
+      error: null 
+    }
+  } catch (error: any) {
+    console.error('[getCampagneIndividuazione] Unexpected error:', error)
+    return { 
+      data: null, 
+      error: error instanceof Error ? error : new Error(String(error))
+    }
   }
 }
 
@@ -201,42 +243,139 @@ export const getIndividuazioni = async (
 // EXPORT
 // ============================================
 
-export const getIndividuazioniForExport = async (campagnaId: string) => {
-  // Fetch all records without pagination for export
-  const { data, error } = await (supabase as any)
-    .from('individuazioni')
-    .select(`
-      canale,
-      emittente,
-      tipo,
-      titolo,
-      titolo_originale,
-      numero_episodio,
-      titolo_episodio,
-      titolo_episodio_originale,
-      numero_stagione,
-      anno,
-      production,
-      regia,
-      data_trasmissione,
-      ora_inizio,
-      ora_fine,
-      durata_minuti,
-      data_inizio,
-      data_fine,
-      retail_price,
-      sales_month,
-      track_price_local_currency,
-      views,
-      total_net_ad_revenue,
-      total_revenue,
-      artisti(nome, cognome, nome_arte),
-      ruoli_tipologie(nome)
-    `)
-    .eq('campagna_individuazioni_id', campagnaId)
-    .order('data_trasmissione', { ascending: true })
+// Helper function to add delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-  return { data, error }
+export const getIndividuazioniForExport = async (
+  campagnaId: string,
+  onProgress?: (progress: { fetched: number; total: number; percentage: number; phase: 'fetching' | 'formatting' | 'generating' | 'done'; estimatedTimeRemaining?: number }) => void,
+  signal?: AbortSignal
+) => {
+  try {
+    // Check if cancelled
+    if (signal?.aborted) {
+      throw new Error('Export cancelled')
+    }
+
+    // First, get total count
+    const { count: totalCount, error: countError } = await (supabase as any)
+      .from('individuazioni')
+      .select('*', { count: 'exact', head: true })
+      .eq('campagna_individuazioni_id', campagnaId)
+
+    if (countError) {
+      return { data: null, error: countError }
+    }
+
+    const total = totalCount || 0
+    if (total === 0) {
+      return { data: [], error: null }
+    }
+
+    // Use cursor-based pagination instead of OFFSET for better performance
+    // Smaller batch size to avoid timeout (500 instead of 1000)
+    const batchSize = 500
+    const allData: any[] = []
+    let lastId: string | null = null
+    let hasMore = true
+    const startTime = Date.now()
+
+    while (hasMore) {
+      // Check if cancelled
+      if (signal?.aborted) {
+        throw new Error('Export cancelled')
+      }
+
+      let query = (supabase as any)
+        .from('individuazioni')
+        .select(`
+          id,
+          canale,
+          emittente,
+          tipo,
+          titolo,
+          titolo_originale,
+          numero_episodio,
+          titolo_episodio,
+          titolo_episodio_originale,
+          numero_stagione,
+          anno,
+          production,
+          regia,
+          data_trasmissione,
+          ora_inizio,
+          ora_fine,
+          durata_minuti,
+          data_inizio,
+          data_fine,
+          retail_price,
+          sales_month,
+          track_price_local_currency,
+          views,
+          total_net_ad_revenue,
+          total_revenue,
+          artisti(nome, cognome, nome_arte),
+          ruoli_tipologie(nome)
+        `)
+        .eq('campagna_individuazioni_id', campagnaId)
+        .order('id', { ascending: true })
+        .limit(batchSize)
+
+      // Use cursor instead of OFFSET
+      if (lastId) {
+        query = query.gt('id', lastId)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        return { data: null, error }
+      }
+
+      if (data && data.length > 0) {
+        allData.push(...data)
+        lastId = data[data.length - 1].id
+        hasMore = data.length === batchSize
+
+        // Calculate estimated time remaining
+        const elapsed = (Date.now() - startTime) / 1000 // seconds
+        const rate = allData.length / elapsed // records per second
+        const remaining = total - allData.length
+        const estimatedTimeRemaining = rate > 0 ? Math.round(remaining / rate) : undefined
+
+        // Report progress
+        if (onProgress) {
+          const fetched = allData.length
+          const percentage = total > 0 ? Math.round((fetched / total) * 100) : 0
+          onProgress({ 
+            fetched, 
+            total, 
+            percentage, 
+            phase: 'fetching',
+            estimatedTimeRemaining
+          })
+        }
+
+        // Add small delay between batches to avoid overwhelming the database
+        if (hasMore) {
+          await delay(100) // 100ms delay between batches
+        }
+      } else {
+        hasMore = false
+      }
+    }
+
+    return { data: allData, error: null }
+  } catch (error: any) {
+    if (error.message === 'Export cancelled' || signal?.aborted) {
+      throw error
+    }
+    console.error('[getIndividuazioniForExport] Unexpected error:', error)
+    return { 
+      data: null, 
+      error: error instanceof Error ? error : new Error(String(error))
+    }
+  }
 }
 
 export const formatIndividuazioniForExport = (individuazioni: any[]) => {

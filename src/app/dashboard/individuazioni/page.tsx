@@ -74,14 +74,35 @@ export default function IndividuazioniPage() {
 
   const loadCampagne = async () => {
     setLoading(true)
-    const { data, error } = await getCampagneIndividuazione()
-    if (data) {
-      setCampagne(data)
+    try {
+      const { data, error } = await getCampagneIndividuazione()
+      if (error) {
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : typeof error === 'object' && error !== null
+          ? JSON.stringify(error)
+          : String(error)
+        console.error('Errore caricamento campagne:', errorMessage, error)
+        // Still set empty array to prevent UI from breaking
+        setCampagne([])
+        return
+      }
+      if (data) {
+        setCampagne(data)
+      } else {
+        setCampagne([])
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : typeof error === 'object' && error !== null
+        ? JSON.stringify(error)
+        : String(error)
+      console.error('Errore caricamento campagne:', errorMessage, error)
+      setCampagne([])
+    } finally {
+      setLoading(false)
     }
-    if (error) {
-      console.error('Errore caricamento campagne:', error)
-    }
-    setLoading(false)
   }
 
   // Fetch processing progress for a specific campaign
