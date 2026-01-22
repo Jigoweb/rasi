@@ -1,10 +1,11 @@
 'use client'
 
-import { useAuth } from '@/shared/contexts/auth-context'
+import { useAuth, AVAILABLE_ROLES } from '@/shared/contexts/auth-context'
 import { IndividuazioneProcessProvider } from '@/shared/contexts/individuazione-process-context'
 import { FloatingProgressIndicator, IndividuazioneProgressDialog } from '@/shared/components/individuazione-progress-indicator'
 import { Button } from '@/shared/components/ui/button'
 import { Separator } from '@/shared/components/ui/separator'
+import { Badge } from '@/shared/components/ui/badge'
 import { 
   Users, 
   FileText, 
@@ -17,7 +18,8 @@ import {
   Database,
   Menu,
   X,
-  Sparkles
+  Sparkles,
+  Shield
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -31,8 +33,47 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const { user, loading, signOut } = useAuth()
+  const { user, loading, signOut, userRole, isAdmin, canManageUsers } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // Menu items di base disponibili a tutti
+  const baseMenuItems = [
+    { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
+    { name: 'Artisti', href: '/dashboard/artisti', icon: Users },
+    { name: 'Opere', href: '/dashboard/opere', icon: FileText },
+    { name: 'Programmazioni', href: '/dashboard/programmazioni', icon: Calendar },
+    { name: 'Individuazioni', href: '/dashboard/individuazioni', icon: Sparkles },
+    { name: 'Campagne', href: '/dashboard/campagne', icon: Search },
+    { name: 'Query', href: '/dashboard/query', icon: Database },
+    { name: 'Report', href: '/dashboard/report', icon: FileText },
+  ]
+
+  // Menu item per admin e operatori (chi può gestire utenti)
+  const userManagementMenuItems = [
+    { name: 'Utenti', href: '/dashboard/utenti', icon: Shield },
+  ]
+
+  // Combina i menu in base ai permessi
+  const menuItems = canManageUsers 
+    ? [...baseMenuItems, ...userManagementMenuItems] 
+    : baseMenuItems
+
+  // Helper per ottenere l'etichetta del ruolo
+  const getRoleLabel = () => {
+    return AVAILABLE_ROLES.find(r => r.value === userRole)?.label || 'Artista'
+  }
+  
+  // Helper per ottenere il colore del ruolo
+  const getRoleColor = () => {
+    const role = AVAILABLE_ROLES.find(r => r.value === userRole)
+    switch (role?.color) {
+      case 'blue': return 'bg-blue-100 text-blue-800'
+      case 'purple': return 'bg-purple-100 text-purple-800'
+      case 'green': return 'bg-green-100 text-green-800'
+      case 'orange': return 'bg-orange-100 text-orange-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
 
   if (loading) {
     return (
@@ -85,16 +126,7 @@ export default function DashboardLayout({
 
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1">
-            {[
-              { name: 'Dashboard', href: '/dashboard', icon: BarChart3 },
-              { name: 'Artisti', href: '/dashboard/artisti', icon: Users },
-              { name: 'Opere', href: '/dashboard/opere', icon: FileText },
-              { name: 'Programmazioni', href: '/dashboard/programmazioni', icon: Calendar },
-              { name: 'Individuazioni', href: '/dashboard/individuazioni', icon: Sparkles },
-              { name: 'Campagne', href: '/dashboard/campagne', icon: Search },
-              { name: 'Query', href: '/dashboard/query', icon: Database },
-              { name: 'Report', href: '/dashboard/report', icon: FileText },
-            ].map((item) => {
+            {menuItems.map((item) => {
               const isActive = pathname === item.href
               return (
                 <Link
@@ -117,7 +149,7 @@ export default function DashboardLayout({
           {/* User section */}
           <div className="p-4 border-t">
             <div className="flex items-center gap-3 mb-3">
-              <div className="bg-gray-200 rounded-full h-8 w-8 flex items-center justify-center">
+              <div className={`rounded-full h-8 w-8 flex items-center justify-center ${getRoleColor()}`}>
                 <span className="text-sm font-medium">
                   {user.email?.charAt(0).toUpperCase()}
                 </span>
@@ -126,7 +158,11 @@ export default function DashboardLayout({
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {user.email}
                 </p>
-                <p className="text-xs text-gray-500">Online</p>
+                <Badge 
+                  className={`text-xs mt-1 ${getRoleColor()}`}
+                >
+                  {getRoleLabel()}
+                </Badge>
               </div>
             </div>
             

@@ -73,3 +73,5 @@ console.log('✅ Imposta default true per tutti gli artisti esistenti\n')
 
 process.exit(0)
 
+
+
