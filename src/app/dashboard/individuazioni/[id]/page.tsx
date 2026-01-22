@@ -55,7 +55,7 @@ export default function IndividuazioneDetailPage() {
   const [selectedFormat, setSelectedFormat] = useState<'csv' | 'xlsx' | null>(null)
   const [estimatedTime, setEstimatedTime] = useState<number | null>(null)
   const [isCalculatingEstimate, setIsCalculatingEstimate] = useState(false)
-  const exportButtonRef = useRef<HTMLButtonElement>(null)
+  const exportButtonRef = useRef<HTMLDivElement>(null)
   const { startExport, state: exportState } = useExportProcess()
   
   // Pagination & filters
