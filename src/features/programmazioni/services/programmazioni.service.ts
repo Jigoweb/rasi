@@ -520,7 +520,8 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
     let date_max: string | undefined = undefined
 
     if (rangeRes.data && rangeRes.data.length > 0) {
-      date_min = rangeRes.data[0].data_trasmissione
+      const firstRecord = rangeRes.data[0] as any
+      date_min = firstRecord.data_trasmissione
       
       // Get max date
       const maxRes = await supabase
@@ -531,7 +532,8 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
         .limit(1)
       
       if (maxRes.data && maxRes.data.length > 0) {
-        date_max = maxRes.data[0].data_trasmissione
+        const lastRecord = maxRes.data[0] as any
+        date_max = lastRecord.data_trasmissione
       }
     }
 
