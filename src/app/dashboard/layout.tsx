@@ -92,7 +92,7 @@ export default function DashboardLayout({
   return (
     <IndividuazioneProcessProvider>
       <ExportProcessProvider>
-        <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Mobile menu overlay */}
       {sidebarOpen && (
         <div 
@@ -226,7 +226,7 @@ export default function DashboardLayout({
       {/* Global Export Process Components */}
       <FloatingExportIndicator />
       <ExportProgressDialog />
-        </div>
+    </div>
       </ExportProcessProvider>
     </IndividuazioneProcessProvider>
   )

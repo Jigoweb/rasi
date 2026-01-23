@@ -80,11 +80,11 @@ export default function IndividuazioneDetailPage() {
   // Load campagna on mount
   useEffect(() => {
     if (!campagnaId) return
-    
-    const loadCampagna = async () => {
-      setLoading(true)
+
+  const loadCampagna = async () => {
+    setLoading(true)
       try {
-        const { data, error } = await getCampagnaIndividuazione(campagnaId)
+    const { data, error } = await getCampagnaIndividuazione(campagnaId)
         if (error) {
           const errorMessage = error instanceof Error 
             ? error.message 
@@ -95,8 +95,8 @@ export default function IndividuazioneDetailPage() {
           setCampagna(null)
           return
         }
-        if (data) {
-          setCampagna(data)
+    if (data) {
+      setCampagna(data)
         } else {
           setCampagna(null)
         }
@@ -109,8 +109,8 @@ export default function IndividuazioneDetailPage() {
         console.error('Errore caricamento campagna:', errorMessage, error)
         setCampagna(null)
       } finally {
-        setLoading(false)
-      }
+    setLoading(false)
+  }
     }
     
     loadCampagna()
@@ -127,13 +127,13 @@ export default function IndividuazioneDetailPage() {
   const loadIndividuazioni = async () => {
     setLoadingData(true)
     try {
-      const { data, error, count, totalPages: pages } = await getIndividuazioni(campagnaId, {
-        page,
-        pageSize,
+    const { data, error, count, totalPages: pages } = await getIndividuazioni(campagnaId, {
+      page,
+      pageSize,
         search: debouncedSearchTerm || undefined,
-        searchField,
-        stato: statoFilter !== 'all' ? statoFilter : undefined
-      })
+      searchField,
+      stato: statoFilter !== 'all' ? statoFilter : undefined
+    })
       if (error) {
         const errorMessage = error instanceof Error 
           ? error.message 
@@ -146,10 +146,10 @@ export default function IndividuazioneDetailPage() {
         setTotalCount(0)
         return
       }
-      if (data) {
-        setIndividuazioni(data)
-        setTotalPages(pages)
-        setTotalCount(count || 0)
+    if (data) {
+      setIndividuazioni(data)
+      setTotalPages(pages)
+      setTotalCount(count || 0)
       } else {
         setIndividuazioni([])
         setTotalPages(0)
@@ -166,7 +166,7 @@ export default function IndividuazioneDetailPage() {
       setTotalPages(0)
       setTotalCount(0)
     } finally {
-      setLoadingData(false)
+    setLoadingData(false)
     }
   }
 
@@ -244,12 +244,12 @@ export default function IndividuazioneDetailPage() {
           if (signal.aborted) {
             throw new Error('Export cancelled')
           }
-
-          if (error) {
+      
+      if (error) {
             throw error
-          }
+      }
 
-          if (!data || data.length === 0) {
+      if (!data || data.length === 0) {
             throw new Error('Nessun dato da esportare')
           }
 
@@ -262,7 +262,7 @@ export default function IndividuazioneDetailPage() {
           })
 
           // Format data (this can be slow for large datasets)
-          const formattedData = formatIndividuazioniForExport(data)
+      const formattedData = formatIndividuazioniForExport(data)
 
           if (signal.aborted) {
             throw new Error('Export cancelled')
@@ -276,18 +276,18 @@ export default function IndividuazioneDetailPage() {
             phase: 'generating'
           })
 
-          const worksheet = XLSX.utils.json_to_sheet(formattedData)
-          const workbook = XLSX.utils.book_new()
-          XLSX.utils.book_append_sheet(workbook, worksheet, 'Individuazioni')
+      const worksheet = XLSX.utils.json_to_sheet(formattedData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Individuazioni')
 
-          // Auto-size columns
-          const maxWidth = 50
-          const colWidths = Object.keys(formattedData[0] || {}).map(key => ({
-            wch: Math.min(maxWidth, Math.max(key.length, 
-              ...formattedData.map(row => String(row[key as keyof typeof row] || '').length)
-            ))
-          }))
-          worksheet['!cols'] = colWidths
+      // Auto-size columns
+      const maxWidth = 50
+      const colWidths = Object.keys(formattedData[0] || {}).map(key => ({
+        wch: Math.min(maxWidth, Math.max(key.length, 
+          ...formattedData.map(row => String(row[key as keyof typeof row] || '').length)
+        ))
+      }))
+      worksheet['!cols'] = colWidths
 
           const fileName = `individuazioni_${campagna.nome?.replace(/[^a-z0-9]/gi, '_') || campagnaId}_${new Date().toISOString().split('T')[0]}`
 
@@ -302,12 +302,12 @@ export default function IndividuazioneDetailPage() {
             percentage: 100,
             phase: 'done'
           })
-
-          if (format === 'csv') {
-            XLSX.writeFile(workbook, `${fileName}.csv`, { bookType: 'csv' })
-          } else {
-            XLSX.writeFile(workbook, `${fileName}.xlsx`, { bookType: 'xlsx' })
-          }
+      
+      if (format === 'csv') {
+        XLSX.writeFile(workbook, `${fileName}.csv`, { bookType: 'csv' })
+      } else {
+        XLSX.writeFile(workbook, `${fileName}.xlsx`, { bookType: 'xlsx' })
+      }
         } catch (error: any) {
           if (error.message === 'Export cancelled' || signal.aborted) {
             throw error
@@ -318,7 +318,7 @@ export default function IndividuazioneDetailPage() {
             ? JSON.stringify(error)
             : String(error)
           throw new Error(errorMessage)
-        }
+    }
       }
     )
   }
@@ -411,22 +411,22 @@ export default function IndividuazioneDetailPage() {
         </div>
         
         <div ref={exportButtonRef}>
-          <Button
-            onClick={() => setShowExportDialog(true)}
+        <Button
+          onClick={() => setShowExportDialog(true)}
             disabled={isCalculatingEstimate}
-          >
+        >
             {isCalculatingEstimate ? (
               <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Calcolo stima...
               </>
-            ) : (
+          ) : (
               <>
-                <Download className="h-4 w-4 mr-2" />
+            <Download className="h-4 w-4 mr-2" />
                 Esporta Individuazioni
               </>
-            )}
-          </Button>
+          )}
+        </Button>
         </div>
       </div>
 

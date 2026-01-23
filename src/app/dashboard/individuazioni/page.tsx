@@ -75,7 +75,7 @@ export default function IndividuazioniPage() {
   const loadCampagne = async () => {
     setLoading(true)
     try {
-      const { data, error } = await getCampagneIndividuazione()
+    const { data, error } = await getCampagneIndividuazione()
       if (error) {
         const errorMessage = error instanceof Error 
           ? error.message 
@@ -87,8 +87,8 @@ export default function IndividuazioniPage() {
         setCampagne([])
         return
       }
-      if (data) {
-        setCampagne(data)
+    if (data) {
+      setCampagne(data)
       } else {
         setCampagne([])
       }
@@ -101,7 +101,7 @@ export default function IndividuazioniPage() {
       console.error('Errore caricamento campagne:', errorMessage, error)
       setCampagne([])
     } finally {
-      setLoading(false)
+    setLoading(false)
     }
   }
 

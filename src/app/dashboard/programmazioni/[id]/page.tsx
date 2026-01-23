@@ -56,7 +56,7 @@ export default function CampagnaDettaglioPage() {
         setCampagna(null)
         return
       }
-      setCampagna(data || null)
+    setCampagna(data || null)
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
@@ -72,11 +72,11 @@ export default function CampagnaDettaglioPage() {
     setLoading(true)
     try {
       const { data, nextCursor, error } = await listProgrammazioniByCampagnaKeyset(
-        campagnaId,
-        200,
-        undefined,
+      campagnaId,
+      200,
+      undefined,
         { q: debouncedQ || undefined, processato: typeof processatoBool === 'boolean' ? processatoBool : undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }
-      )
+    )
       if (error) {
         const errorMessage = error instanceof Error 
           ? error.message 
@@ -88,8 +88,8 @@ export default function CampagnaDettaglioPage() {
         setCursor(undefined)
         return
       }
-      setRows(data || [])
-      setCursor(nextCursor)
+    setRows(data || [])
+    setCursor(nextCursor)
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
@@ -100,7 +100,7 @@ export default function CampagnaDettaglioPage() {
       setRows([])
       setCursor(undefined)
     } finally {
-      setLoading(false)
+    setLoading(false)
     }
   }, [campagnaId, debouncedQ, processatoBool, fromDate, toDate])
 
@@ -118,7 +118,7 @@ export default function CampagnaDettaglioPage() {
         setHealth(null)
         return
       }
-      setHealth(data || null)
+    setHealth(data || null)
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
@@ -128,7 +128,7 @@ export default function CampagnaDettaglioPage() {
       console.error('Errore caricamento health:', errorMessage, error)
       setHealth(null)
     } finally {
-      setLoadingHealth(false)
+    setLoadingHealth(false)
     }
   }, [campagnaId])
 

@@ -80,14 +80,14 @@ export interface Individuazione {
 
 export const getCampagneIndividuazione = async () => {
   try {
-    const { data, error } = await (supabase as any)
-      .from('campagne_individuazione')
-      .select(`
-        *,
-        emittenti(nome),
+  const { data, error } = await (supabase as any)
+    .from('campagne_individuazione')
+    .select(`
+      *,
+      emittenti(nome),
         campagne_programmazione(nome)
-      `)
-      .order('created_at', { ascending: false })
+    `)
+    .order('created_at', { ascending: false })
 
     if (error) {
       console.error('[getCampagneIndividuazione] Query error:', error)
@@ -130,7 +130,7 @@ export const getCampagneIndividuazione = async () => {
     }
   } catch (error: any) {
     console.error('[getCampagneIndividuazione] Unexpected error:', error)
-    return { 
+  return { 
       data: null, 
       error: error instanceof Error ? error : new Error(String(error))
     }
@@ -287,37 +287,37 @@ export const getIndividuazioniForExport = async (
       }
 
       let query = (supabase as any)
-        .from('individuazioni')
-        .select(`
+    .from('individuazioni')
+    .select(`
           id,
-          canale,
-          emittente,
-          tipo,
-          titolo,
-          titolo_originale,
-          numero_episodio,
-          titolo_episodio,
-          titolo_episodio_originale,
-          numero_stagione,
-          anno,
-          production,
-          regia,
-          data_trasmissione,
-          ora_inizio,
-          ora_fine,
-          durata_minuti,
-          data_inizio,
-          data_fine,
-          retail_price,
-          sales_month,
-          track_price_local_currency,
-          views,
-          total_net_ad_revenue,
-          total_revenue,
-          artisti(nome, cognome, nome_arte),
-          ruoli_tipologie(nome)
-        `)
-        .eq('campagna_individuazioni_id', campagnaId)
+      canale,
+      emittente,
+      tipo,
+      titolo,
+      titolo_originale,
+      numero_episodio,
+      titolo_episodio,
+      titolo_episodio_originale,
+      numero_stagione,
+      anno,
+      production,
+      regia,
+      data_trasmissione,
+      ora_inizio,
+      ora_fine,
+      durata_minuti,
+      data_inizio,
+      data_fine,
+      retail_price,
+      sales_month,
+      track_price_local_currency,
+      views,
+      total_net_ad_revenue,
+      total_revenue,
+      artisti(nome, cognome, nome_arte),
+      ruoli_tipologie(nome)
+    `)
+    .eq('campagna_individuazioni_id', campagnaId)
         .order('id', { ascending: true })
         .limit(batchSize)
 
