@@ -28,10 +28,10 @@ export interface CampagnaProgrammazione {
 
 export const getCampagneProgrammazione = async () => {
   try {
-    const { data, error } = await supabase
-      .from('campagne_programmazione' as any)
+  const { data, error } = await supabase
+    .from('campagne_programmazione' as any)
       .select('*, emittenti(nome)')
-      .order('created_at', { ascending: false })
+    .order('created_at', { ascending: false })
 
     if (error) {
       console.error('[getCampagneProgrammazione] Query error:', error)
@@ -42,8 +42,10 @@ export const getCampagneProgrammazione = async () => {
       return { data: [], error: null }
     }
 
-    // Fetch all counts using individual count queries (more reliable than batch select)
+    // Fetch all counts using individual count queries in parallel (more reliable than batch select)
     const campagnaIds = data.map((item: any) => item.id)
+    
+    // Create a map of counts
     const countsMap = new Map<string, number>()
     
     // Use Promise.all to fetch all counts in parallel
@@ -472,33 +474,33 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
       rangeRes
     ] = await Promise.all([
       supabase
-        .from('programmazioni' as any)
-        .select('*', { count: 'exact', head: true })
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
         .eq('campagna_programmazione_id', campagnaId),
       supabase
-        .from('programmazioni' as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('campagna_programmazione_id', campagnaId)
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
         .eq('processato', true),
       supabase
-        .from('programmazioni' as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('campagna_programmazione_id', campagnaId)
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
         .eq('processato', false),
       supabase
-        .from('programmazioni' as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('campagna_programmazione_id', campagnaId)
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
         .is('titolo', null),
       supabase
-        .from('programmazioni' as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('campagna_programmazione_id', campagnaId)
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
         .is('durata_minuti', null),
       supabase
-        .from('programmazioni' as any)
-        .select('*', { count: 'exact', head: true })
-        .eq('campagna_programmazione_id', campagnaId)
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
         .not('errori_processamento', 'is', null),
       supabase
         .from('programmazioni' as any)
@@ -534,28 +536,28 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
       
       // Get max date
       const maxRes = await supabase
-        .from('programmazioni' as any)
+    .from('programmazioni' as any)
         .select('data_trasmissione')
-        .eq('campagna_programmazione_id', campagnaId)
+    .eq('campagna_programmazione_id', campagnaId)
         .order('data_trasmissione', { ascending: false })
-        .limit(1)
-      
+    .limit(1)
+
       if (maxRes.data && maxRes.data.length > 0) {
         const lastRecord = maxRes.data[0] as any
         date_max = lastRecord.data_trasmissione
       }
     }
 
-    const health: ProgrammazioniHealth = {
-      total: totalRes.count || 0,
-      processed: processedRes.count || 0,
-      unprocessed: unprocessedRes.count || 0,
-      missing_title: missingTitleRes.count || 0,
-      missing_duration: missingDurationRes.count || 0,
-      errors_count: errorsRes.count || 0,
+  const health: ProgrammazioniHealth = {
+    total: totalRes.count || 0,
+    processed: processedRes.count || 0,
+    unprocessed: unprocessedRes.count || 0,
+    missing_title: missingTitleRes.count || 0,
+    missing_duration: missingDurationRes.count || 0,
+    errors_count: errorsRes.count || 0,
       date_min,
       date_max,
-    }
+  }
 
     return { data: health, error: null }
   } catch (error: any) {
