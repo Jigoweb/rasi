@@ -737,10 +737,39 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
     const handleToggleDiritto = (nome: string) => {
       const current = form.getValues('diritti_attivi') || []
-      if (current.includes(nome)) {
-        form.setValue('diritti_attivi', current.filter((n: string) => n !== nome))
+      const allDirittiNome = 'ALL (Tutti i diritti)'
+      const tuttiDirittiNomi = dirittiData.diritti.map(d => d.nome)
+      
+      if (nome === allDirittiNome) {
+        // Gestione speciale per "ALL (Tutti i diritti)"
+        if (current.includes(allDirittiNome)) {
+          // Deseleziona "ALL" e tutti gli altri
+          form.setValue('diritti_attivi', [])
+        } else {
+          // Seleziona "ALL" e tutti gli altri diritti
+          form.setValue('diritti_attivi', tuttiDirittiNomi)
+        }
       } else {
-        form.setValue('diritti_attivi', [...current, nome])
+        // Gestione normale per gli altri diritti
+        if (current.includes(nome)) {
+          // Deseleziona il diritto
+          const newDiritti = current.filter((n: string) => n !== nome)
+          // Se "ALL" era selezionato, rimuovilo anche
+          form.setValue('diritti_attivi', newDiritti.filter((n: string) => n !== allDirittiNome))
+        } else {
+          // Seleziona il diritto
+          const newDiritti = [...current, nome]
+          // Se "ALL" era selezionato, rimuovilo (perché ora non tutti sono selezionati)
+          const dirittiSenzaAll = newDiritti.filter((n: string) => n !== allDirittiNome)
+          // Verifica se ora tutti i diritti sono selezionati
+          const tuttiSelezionati = tuttiDirittiNomi.every(n => dirittiSenzaAll.includes(n))
+          if (tuttiSelezionati) {
+            // Se tutti sono selezionati, aggiungi anche "ALL"
+            form.setValue('diritti_attivi', [...dirittiSenzaAll, allDirittiNome])
+          } else {
+            form.setValue('diritti_attivi', dirittiSenzaAll)
+          }
+        }
       }
     }
 
@@ -766,11 +795,6 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
                     />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium">{diritto.nome}</div>
-                      {diritto.descrizione && (
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {diritto.descrizione}
-                        </div>
-                      )}
                     </div>
                   </label>
                 ))}
