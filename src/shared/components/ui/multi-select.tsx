@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { createPortal } from "react-dom"
 import { ChevronsUpDown, X } from "lucide-react"
 import { cn } from "@/shared/lib/utils"
 import { Button } from "@/shared/components/ui/button"
@@ -22,6 +23,7 @@ interface MultiSelectProps {
   className?: string
   maxCount?: number
   groupByCategory?: boolean
+  disabled?: boolean
 }
 
 export function MultiSelect({
@@ -32,6 +34,7 @@ export function MultiSelect({
   className,
   maxCount,
   groupByCategory = false,
+  disabled = false,
 }: MultiSelectProps) {
   const [open, setOpen] = React.useState(false)
   const triggerRef = React.useRef<HTMLButtonElement>(null)
@@ -41,16 +44,17 @@ export function MultiSelect({
     onChange(selected.filter((s) => s !== value))
   }
 
-  const handleToggle = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter((s) => s !== value))
-    } else {
-      if (maxCount && selected.length >= maxCount) {
-        return
-      }
-      onChange([...selected, value])
+  const handleToggle = React.useCallback((value: string) => {
+    const newSelected = selected.includes(value)
+      ? selected.filter((s) => s !== value)
+      : maxCount && selected.length >= maxCount
+      ? selected
+      : [...selected, value]
+    
+    if (JSON.stringify(newSelected) !== JSON.stringify(selected)) {
+      onChange(newSelected)
     }
-  }
+  }, [selected, onChange, maxCount])
 
   const selectedOptions = options.filter((opt) => selected.includes(opt.value))
 
@@ -68,21 +72,28 @@ export function MultiSelect({
 
   // Gestisci click fuori per chiudere
   React.useEffect(() => {
+    if (!open) return
+
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
       if (
-        open &&
         contentRef.current &&
         triggerRef.current &&
-        !contentRef.current.contains(event.target as Node) &&
-        !triggerRef.current.contains(event.target as Node)
+        !contentRef.current.contains(target) &&
+        !triggerRef.current.contains(target)
       ) {
         setOpen(false)
       }
     }
 
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
+    // Usa un piccolo delay per evitare che il click che apre chiuda immediatamente
+    const timer = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside, true)
+    }, 0)
+
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('click', handleClickOutside, true)
     }
   }, [open])
 
@@ -135,10 +146,18 @@ export function MultiSelect({
     <div className="relative w-full">
       <Button
         ref={triggerRef}
+        type="button"
         variant="outline"
         role="combobox"
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onMouseDown={(e) => {
+          if (!disabled) {
+            e.preventDefault()
+            e.stopPropagation()
+            setOpen((prev) => !prev)
+          }
+        }}
+        disabled={disabled}
         className={cn(
           "w-full justify-between min-h-10 h-auto",
           className
@@ -185,42 +204,63 @@ export function MultiSelect({
         <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
       </Button>
       
-      {open && (
-        <>
-          {position && (
-            <div
-              ref={contentRef}
-              className="fixed z-[100] rounded-md border bg-popover text-popover-foreground shadow-md flex flex-col"
-              style={{
-                top: `${position.top}px`,
-                left: `${position.left}px`,
-                width: `${position.width}px`,
-                maxHeight: '400px',
-              }}
-            >
-            <div 
-              className="overflow-y-auto overflow-x-hidden flex-1 p-2"
-              style={{ 
-                WebkitOverflowScrolling: 'touch',
-              }}
-            >
-              {groupByCategory && groupedOptions ? (
-                Object.entries(groupedOptions).map(([category, opts]) => (
-                  <div key={category} className="mb-4 last:mb-0">
-                    <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground sticky top-0 bg-popover z-10 mb-2 border-b">
-                      {category}
-                    </div>
-                    {opts.map((option) => (
+      {open && !disabled && typeof window !== 'undefined' && (position || triggerRef.current) ? createPortal(
+        <div
+          ref={contentRef}
+          className="fixed z-[9999] rounded-md border bg-popover text-popover-foreground shadow-lg flex flex-col"
+          style={position ? {
+            top: `${position.top}px`,
+            left: `${position.left}px`,
+            width: `${position.width}px`,
+            maxHeight: '400px',
+          } : triggerRef.current ? {
+            top: `${triggerRef.current.getBoundingClientRect().bottom + 4}px`,
+            left: `${triggerRef.current.getBoundingClientRect().left}px`,
+            width: `${triggerRef.current.getBoundingClientRect().width}px`,
+            maxHeight: '400px',
+          } : {
+            display: 'none'
+          }}
+        >
+          <div 
+            className="overflow-y-auto overflow-x-hidden flex-1 p-2"
+            style={{ 
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {groupByCategory && groupedOptions ? (
+              Object.entries(groupedOptions).map(([category, opts]) => (
+                <div key={category} className="mb-4 last:mb-0">
+                  <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground sticky top-0 bg-popover z-10 mb-2 border-b">
+                    {category}
+                  </div>
+                  {opts.map((option) => {
+                    const isSelected = selected.includes(option.value)
+                    return (
                       <div
                         key={option.value}
                         className="flex items-start space-x-2 rounded-sm px-2 py-1.5 hover:bg-accent cursor-pointer transition-colors"
-                        onClick={() => handleToggle(option.value)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggle(option.value)
+                        }}
                       >
-                        <Checkbox
-                          checked={selected.includes(option.value)}
-                          onCheckedChange={() => handleToggle(option.value)}
+                        <div
                           className="mt-0.5"
-                        />
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleToggle(option.value)
+                          }}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              if (checked !== isSelected) {
+                                handleToggle(option.value)
+                              }
+                            }}
+                          />
+                        </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium break-words">{option.label}</div>
                           {option.description && (
@@ -230,42 +270,59 @@ export function MultiSelect({
                           )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ))
-              ) : (
-                options.map((option) => (
+                    )
+                  })}
+                </div>
+              ))
+            ) : (
+              options.map((option) => {
+                const isSelected = selected.includes(option.value)
+                return (
                   <div
                     key={option.value}
                     className="flex items-start space-x-2 rounded-sm px-2 py-1.5 hover:bg-accent cursor-pointer transition-colors"
-                    onClick={() => handleToggle(option.value)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleToggle(option.value)
+                    }}
                   >
-                    <Checkbox
-                      checked={selected.includes(option.value)}
-                      onCheckedChange={() => handleToggle(option.value)}
+                    <div
                       className="mt-0.5"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium break-words">{option.label}</div>
-                      {option.description && (
-                        <div className="text-xs text-muted-foreground mt-0.5 break-words">
-                          {option.description}
-                        </div>
-                      )}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleToggle(option.value)
+                      }}
+                    >
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          if (checked !== isSelected) {
+                            handleToggle(option.value)
+                          }
+                        }}
+                      />
                     </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium break-words">{option.label}</div>
+                    {option.description && (
+                      <div className="text-xs text-muted-foreground mt-0.5 break-words">
+                        {option.description}
+                      </div>
+                    )}
                   </div>
-                ))
-              )}
-            </div>
-            {maxCount && (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground border-t flex-shrink-0">
-                {selected.length} / {maxCount} selezionati
-              </div>
+                </div>
+                )
+              })
             )}
+          </div>
+          {maxCount && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground border-t flex-shrink-0">
+              {selected.length} / {maxCount} selezionati
             </div>
           )}
-        </>
-      )}
+        </div>,
+        document.body
+      ) : null}
     </div>
   )
 }

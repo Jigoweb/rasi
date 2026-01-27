@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Badge } from '@/shared/components/ui/badge'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { CountryMultiSelect } from '@/shared/components/ui/country-multi-select'
 // Import diritti data - in Next.js, i file JSON in public devono essere caricati a runtime
 const loadDirittiData = async () => {
   try {
@@ -21,6 +22,17 @@ const loadDirittiData = async () => {
   } catch (error) {
     console.error('Error loading diritti data:', error)
     return { diritti: [], categorie: [] }
+  }
+}
+
+// Import codici paesi ISO 3166-1 alpha-3
+const loadCodiciPaesiData = async () => {
+  try {
+    const response = await fetch('/codici-paesi-iso3166-alpha3.json')
+    return await response.json()
+  } catch (error) {
+    console.error('Error loading codici paesi data:', error)
+    return { paesi: [] }
   }
 }
 
@@ -50,6 +62,7 @@ const artistaSchema = z.object({
   tipologia: z.string().optional().or(z.literal('')),
   stato: z.string().optional().or(z.literal('attivo')),
   data_inizio_mandato: z.string().optional().or(z.literal('')),
+  data_fine_mandato: z.string().optional().or(z.literal('')),
   is_rasi: z.boolean().optional(),
   
   // Contatti (salvati come JSONB in 'contatti')
@@ -69,7 +82,7 @@ const artistaSchema = z.object({
   ragione_sociale: z.string().optional().or(z.literal('')),
   forma_giuridica: z.string().optional().or(z.literal('')),
   partita_iva: z.string().optional().or(z.literal('')), // bigint come stringa
-  codice_paese: z.string().optional().or(z.literal('')),
+  codice_paese: z.array(z.string()).optional(),
   componente_stabile_gruppo_orchestra: z.string().optional().or(z.literal('')),
   
   // Diritti attivi
@@ -100,14 +113,24 @@ interface Categoria {
   descrizione: string
 }
 
+interface Paese {
+  codice: string
+  nome: string
+}
+
 export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: ArtistaFormMultistepProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [dirittiData, setDirittiData] = useState<{ diritti: Diritto[], categorie: Categoria[] }>({ diritti: [], categorie: [] })
+  const [codiciPaesiData, setCodiciPaesiData] = useState<{ paesi: Paese[] }>({ paesi: [] })
 
   useEffect(() => {
     // Carica i diritti dal file JSON
     loadDirittiData().then((data) => {
       setDirittiData(data)
+    })
+    // Carica i codici paesi dal file JSON
+    loadCodiciPaesiData().then((data) => {
+      setCodiciPaesiData(data)
     })
   }, [])
 
@@ -133,6 +156,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       tipologia: artista?.tipologia || '',
       stato: artista?.stato || 'attivo',
       data_inizio_mandato: toDateInput(artista?.data_inizio_mandato) || new Date().toISOString().split('T')[0],
+      data_fine_mandato: toDateInput(artista?.data_fine_mandato) || '',
       is_rasi: artista?.is_rasi ?? true,
       email: (artista?.contatti as any)?.email || '',
       telefono: (artista?.contatti as any)?.number || (artista?.contatti as any)?.telefono || '',
@@ -146,7 +170,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       ragione_sociale: artista?.ragione_sociale || '',
       forma_giuridica: artista?.forma_giuridica || '',
       partita_iva: artista?.partita_iva ? String(artista.partita_iva) : '',
-      codice_paese: artista?.codice_paese || '',
+      codice_paese: artista?.codice_paese ? artista.codice_paese.split('/').filter(Boolean) : [],
       componente_stabile_gruppo_orchestra: artista?.componente_stabile_gruppo_orchestra || '',
       diritti_attivi: [],
     },
@@ -181,6 +205,14 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       form.setValue('diritti_attivi', dirittiArray)
     }
   }, [artista, dirittiData.diritti.length, form])
+
+  // Reset data_fine_mandato quando lo stato cambia da "cessato" a altro
+  const stato = form.watch('stato')
+  useEffect(() => {
+    if (stato !== 'cessato') {
+      form.setValue('data_fine_mandato', '')
+    }
+  }, [stato, form])
 
   const handleNext = async () => {
     const fieldsToValidate = getFieldsForStep(currentStep)
@@ -229,6 +261,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       tipologia: data.tipologia || null,
       stato: data.stato || 'attivo',
       data_inizio_mandato: data.data_inizio_mandato || new Date().toISOString().split('T')[0],
+      data_fine_mandato: data.data_fine_mandato || null,
       is_rasi: data.is_rasi ?? true,
       contatti: {
         email: data.email || null,
@@ -246,7 +279,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       ragione_sociale: data.ragione_sociale || null,
       forma_giuridica: data.forma_giuridica || null,
       partita_iva: data.partita_iva ? Number(data.partita_iva) : null,
-      codice_paese: data.codice_paese || null,
+      codice_paese: data.codice_paese && data.codice_paese.length > 0 ? data.codice_paese.join('/') : null,
       componente_stabile_gruppo_orchestra: data.componente_stabile_gruppo_orchestra || null,
       diritti_attivi: (data.diritti_attivi && data.diritti_attivi.length > 0) ? data.diritti_attivi : null,
     } as ArtistaInsert
@@ -430,6 +463,30 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
           )}
         />
         <FormField
+          key="tipologia"
+          control={form.control}
+          name="tipologia"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tipologia</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || ''}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona tipologia" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="AIE">AIE</SelectItem>
+                  <SelectItem value="PRODUTTORE">Produttore</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField
           key="data_inizio_mandato"
           control={form.control}
           name="data_inizio_mandato"
@@ -443,29 +500,32 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
             </FormItem>
           )}
         />
+        <FormField
+          key="data_fine_mandato"
+          control={form.control}
+          name="data_fine_mandato"
+          render={({ field }) => {
+            const stato = form.watch('stato')
+            const isDisabled = stato !== 'cessato'
+            
+            return (
+              <FormItem>
+                <FormLabel>Data Fine Mandato</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="date" 
+                    {...field} 
+                    value={field.value || ''} 
+                    disabled={isDisabled}
+                    className={isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )
+          }}
+        />
       </div>
-      <FormField
-        key="tipologia"
-        control={form.control}
-        name="tipologia"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Tipologia</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value || ''}>
-              <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona tipologia" />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                <SelectItem value="AIE">AIE</SelectItem>
-                <SelectItem value="PRODUTTORE">Produttore</SelectItem>
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
       <FormField
         key="imdb_nconst"
         control={form.control}
@@ -638,10 +698,11 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
             <FormItem>
               <FormLabel className={!isCodiciPaesiEnabled ? 'text-muted-foreground' : ''}>Codici Paesi</FormLabel>
               <FormControl>
-                <Input 
-                  {...field} 
-                  value={field.value || ''}
-                  placeholder={isCodiciPaesiEnabled ? "ES, FR, DE..." : "Seleziona ITA+ o WW- per abilitare"}
+                <CountryMultiSelect
+                  options={codiciPaesiData.paesi}
+                  selected={field.value || []}
+                  onChange={isCodiciPaesiEnabled ? field.onChange : () => {}}
+                  placeholder={isCodiciPaesiEnabled ? "Seleziona paesi..." : "Seleziona territorio..."}
                   disabled={!isCodiciPaesiEnabled}
                 />
               </FormControl>
@@ -845,7 +906,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
     // Dati aggiuntivi valorizzati
     const datiAggiuntivi = [
       hasValue(formData.territorio) && { label: 'Territorio', value: formData.territorio },
-      hasValue(formData.codice_paese) && { label: 'Codici Paesi', value: formData.codice_paese },
+      formData.codice_paese && formData.codice_paese.length > 0 && { label: 'Codici Paesi', value: formData.codice_paese.join(', ') },
       hasValue(formData.ragione_sociale) && { label: 'Ragione Sociale', value: formData.ragione_sociale },
       hasValue(formData.forma_giuridica) && { label: 'Forma Giuridica', value: formData.forma_giuridica },
       hasValue(formData.partita_iva) && { label: 'Partita IVA', value: formData.partita_iva },

@@ -28,6 +28,7 @@ export type Database = {
           contatti: Json | null
           created_at: string | null
           created_by: string | null
+          data_fine_mandato: string | null
           data_inizio_mandato: string
           data_nascita: string | null
           diritti_attivi: Json | null
@@ -58,6 +59,7 @@ export type Database = {
           contatti?: Json | null
           created_at?: string | null
           created_by?: string | null
+          data_fine_mandato?: string | null
           data_inizio_mandato?: string
           data_nascita?: string | null
           diritti_attivi?: Json | null
@@ -88,6 +90,7 @@ export type Database = {
           contatti?: Json | null
           created_at?: string | null
           created_by?: string | null
+          data_fine_mandato?: string | null
           data_inizio_mandato?: string
           data_nascita?: string | null
           diritti_attivi?: Json | null
