@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie } from '@/features/opere/services/opere.service'
+import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
 import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
@@ -83,6 +83,19 @@ export default function OperaDetailPage() {
   const [selectedPartecipazioniIds, setSelectedPartecipazioniIds] = useState<Set<string>>(new Set())
   const [showBulkDeletePartecipazioniDialog, setShowBulkDeletePartecipazioniDialog] = useState(false)
   const [isBulkDeletingPartecipazioni, setIsBulkDeletingPartecipazioni] = useState(false)
+
+  // Episodi Edit State
+  const [showEditEpisodioDialog, setShowEditEpisodioDialog] = useState(false)
+  const [selectedEpisodio, setSelectedEpisodio] = useState<any>(null)
+  const [editEpisodioForm, setEditEpisodioForm] = useState({
+    titolo_episodio: '',
+    descrizione: '',
+    durata_minuti: '',
+    data_prima_messa_in_onda: '',
+    imdb_tconst: '',
+    codice_isan: ''
+  })
+  const [isSavingEpisodio, setIsSavingEpisodio] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -245,6 +258,49 @@ export default function OperaDetailPage() {
       alert('Errore durante l\'eliminazione: ' + (e?.message || 'Errore sconosciuto'))
     } finally {
       setIsBulkDeletingPartecipazioni(false)
+    }
+  }
+
+  // Episodio handlers
+  const openEditEpisodioDialog = (e: any) => {
+    setSelectedEpisodio(e)
+    setEditEpisodioForm({
+      titolo_episodio: e.titolo_episodio || '',
+      descrizione: e.descrizione || '',
+      durata_minuti: e.durata_minuti ? String(e.durata_minuti) : '',
+      data_prima_messa_in_onda: e.data_prima_messa_in_onda || '',
+      imdb_tconst: e.imdb_tconst || '',
+      codice_isan: e.codice_isan || ''
+    })
+    setShowEditEpisodioDialog(true)
+  }
+
+  const handleSaveEpisodio = async () => {
+    if (!selectedEpisodio) return
+    
+    setIsSavingEpisodio(true)
+    try {
+      const updates: any = {
+        titolo_episodio: editEpisodioForm.titolo_episodio || null,
+        descrizione: editEpisodioForm.descrizione || null,
+        durata_minuti: editEpisodioForm.durata_minuti ? parseInt(editEpisodioForm.durata_minuti) : null,
+        data_prima_messa_in_onda: editEpisodioForm.data_prima_messa_in_onda || null,
+        imdb_tconst: editEpisodioForm.imdb_tconst || null,
+        codice_isan: editEpisodioForm.codice_isan || null
+      }
+      
+      const { error } = await updateEpisodio(selectedEpisodio.id, updates)
+      
+      if (error) {
+        throw new Error(error.message || 'Errore durante l\'aggiornamento')
+      }
+      
+      setShowEditEpisodioDialog(false)
+      fetchData()
+    } catch (e: any) {
+      alert('Errore durante l\'aggiornamento: ' + (e?.message || 'Errore sconosciuto'))
+    } finally {
+      setIsSavingEpisodio(false)
     }
   }
 
@@ -904,11 +960,6 @@ export default function OperaDetailPage() {
                             <Badge className="bg-primary/10 text-primary border-0 hover:bg-primary/10 text-xs">
                               {p.ruoli_tipologie?.nome || 'Ruolo'}
                             </Badge>
-                            {p.personaggio && (
-                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
-                                &quot;{p.personaggio}&quot;
-                              </Badge>
-                            )}
                             {getValidationBadge(p.stato_validazione)}
                           </div>
                           
@@ -934,8 +985,8 @@ export default function OperaDetailPage() {
                           </DropdownMenu>
                         </div>
                         
-                        {/* Riga 2: Nome d'arte / Episodio */}
-                        {(p.artisti?.nome_arte || p.episodi) && (
+                        {/* Riga 2: Nome d'arte / Episodio / Personaggio */}
+                        {(p.artisti?.nome_arte || p.episodi || p.personaggio) && (
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground mt-1">
                             {p.artisti?.nome_arte && (
                               <span>{p.artisti.nome_arte}</span>
@@ -945,6 +996,11 @@ export default function OperaDetailPage() {
                                 <Tv className="h-3 w-3" />
                                 S{p.episodi.numero_stagione || '?'}E{p.episodi.numero_episodio || '?'}
                                 {p.episodi.titolo_episodio && ` – ${p.episodi.titolo_episodio}`}
+                              </span>
+                            )}
+                            {p.personaggio && (
+                              <span>
+                                Personaggio: &quot;{p.personaggio}&quot;
                               </span>
                             )}
                           </div>
@@ -1134,13 +1190,15 @@ export default function OperaDetailPage() {
                     <TableHead className="py-3 px-4">Titolo</TableHead>
                     <TableHead className="py-3 px-4">Data</TableHead>
                     <TableHead className="py-3 px-4">Durata</TableHead>
-                    <TableHead className="py-3 px-4 pr-6">IMDb tconst</TableHead>
+                    <TableHead className="py-3 px-4">IMDb tconst</TableHead>
+                    <TableHead className="py-3 px-4">Codice ISAN</TableHead>
+                    <TableHead className="py-3 px-4 pr-6 w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(episodi || []).length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nessun episodio associato</TableCell>
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nessun episodio associato</TableCell>
                     </TableRow>
                   ) : (
                     episodi.map((e: any) => (
@@ -1150,7 +1208,7 @@ export default function OperaDetailPage() {
                         <TableCell className="py-4 px-4">{e.titolo_episodio || '—'}</TableCell>
                         <TableCell className="py-4 px-4">{e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}</TableCell>
                         <TableCell className="py-4 px-4">{e.durata_minuti ? `${e.durata_minuti} min` : '—'}</TableCell>
-                        <TableCell className="py-4 px-4 pr-6 font-mono text-sm">
+                        <TableCell className="py-4 px-4 font-mono text-sm">
                           {e.imdb_tconst ? (
                             <a 
                               href={`https://www.imdb.com/title/${e.imdb_tconst}`}
@@ -1164,6 +1222,19 @@ export default function OperaDetailPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
+                        <TableCell className="py-4 px-4 font-mono text-sm">
+                          {e.codice_isan || <span className="text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="py-4 px-4 pr-6">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => openEditEpisodioDialog(e)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -1176,23 +1247,44 @@ export default function OperaDetailPage() {
               ) : (
                 episodi.map((e: any) => (
                   <Card key={e.id}>
-                    <CardContent className="p-4 space-y-1">
-                      <div className="font-medium">S{e.numero_stagione} E{e.numero_episodio}</div>
-                      <div className="text-sm">{e.titolo_episodio || '—'}</div>
+                    <CardContent className="p-4 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium">S{e.numero_stagione} E{e.numero_episodio}</div>
+                          <div className="text-sm">{e.titolo_episodio || '—'}</div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => openEditEpisodioDialog(e)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
                       <div className="text-xs text-muted-foreground">
                         {e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}
                         {e.durata_minuti && ` • ${e.durata_minuti} min`}
                       </div>
-                      {e.imdb_tconst && (
-                        <div className="text-xs">
-                          <a 
-                            href={`https://www.imdb.com/title/${e.imdb_tconst}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:underline font-mono"
-                          >
-                            IMDb: {e.imdb_tconst}
-                          </a>
+                      {(e.imdb_tconst || e.codice_isan) && (
+                        <div className="text-xs space-y-1">
+                          {e.imdb_tconst && (
+                            <div>
+                              <a 
+                                href={`https://www.imdb.com/title/${e.imdb_tconst}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline font-mono"
+                              >
+                                IMDb: {e.imdb_tconst}
+                              </a>
+                            </div>
+                          )}
+                          {e.codice_isan && (
+                            <div className="font-mono text-muted-foreground">
+                              ISAN: {e.codice_isan}
+                            </div>
+                          )}
                         </div>
                       )}
                     </CardContent>
@@ -1763,6 +1855,95 @@ export default function OperaDetailPage() {
                   <Trash2 className="h-4 w-4 mr-2" />
                   Elimina {selectedPartecipazioniIds.size}
                 </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Episodio Dialog */}
+      <Dialog open={showEditEpisodioDialog} onOpenChange={setShowEditEpisodioDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Modifica Episodio</DialogTitle>
+            <DialogDescription>
+              Modifica i dettagli dell&apos;episodio S{selectedEpisodio?.numero_stagione}E{selectedEpisodio?.numero_episodio}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="titolo_episodio">Titolo Episodio</Label>
+              <Input
+                id="titolo_episodio"
+                value={editEpisodioForm.titolo_episodio}
+                onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, titolo_episodio: e.target.value })}
+                placeholder="Titolo dell'episodio"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="descrizione">Descrizione</Label>
+              <Textarea
+                id="descrizione"
+                value={editEpisodioForm.descrizione}
+                onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, descrizione: e.target.value })}
+                placeholder="Descrizione dell'episodio"
+                rows={4}
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="durata_minuti">Durata (minuti)</Label>
+                <Input
+                  id="durata_minuti"
+                  type="number"
+                  value={editEpisodioForm.durata_minuti}
+                  onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, durata_minuti: e.target.value })}
+                  placeholder="Durata in minuti"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="data_prima_messa_in_onda">Data Prima Messa in Onda</Label>
+                <Input
+                  id="data_prima_messa_in_onda"
+                  type="date"
+                  value={editEpisodioForm.data_prima_messa_in_onda}
+                  onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, data_prima_messa_in_onda: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="imdb_tconst">IMDb tconst</Label>
+                <Input
+                  id="imdb_tconst"
+                  value={editEpisodioForm.imdb_tconst}
+                  onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, imdb_tconst: e.target.value })}
+                  placeholder="tt1234567"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="codice_isan">Codice ISAN</Label>
+                <Input
+                  id="codice_isan"
+                  value={editEpisodioForm.codice_isan}
+                  onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, codice_isan: e.target.value })}
+                  placeholder="Codice ISAN"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditEpisodioDialog(false)}>
+              Annulla
+            </Button>
+            <Button onClick={handleSaveEpisodio} disabled={isSavingEpisodio}>
+              {isSavingEpisodio ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvataggio...
+                </>
+              ) : (
+                'Salva Modifiche'
               )}
             </Button>
           </DialogFooter>

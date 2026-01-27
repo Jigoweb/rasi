@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation';
-import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple } from '@/features/artisti/services/artisti.service';
+import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, updateArtista } from '@/features/artisti/services/artisti.service';
 import { getRuoliTipologie } from '@/features/opere/services/opere.service';
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -14,9 +14,10 @@ import { Label } from '@/shared/components/ui/label'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User, MoreHorizontal, Edit, Trash2, Loader2, Tv, Clapperboard, ExternalLink, Theater, CheckSquare, Square, X } from 'lucide-react'
+import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User, MoreHorizontal, Edit, Trash2, Loader2, Tv, Clapperboard, ExternalLink, Theater, CheckSquare, Square, X, Pencil } from 'lucide-react'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import Link from 'next/link'
+import { ArtistaFormMultistep } from '@/app/dashboard/artisti/components/artista-form-multistep'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -86,6 +87,10 @@ export default function ArtistaProfiloPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+
+  // Edit artista state
+  const [showEditArtistaDialog, setShowEditArtistaDialog] = useState(false)
+  const [isSavingArtista, setIsSavingArtista] = useState(false)
 
   const fetchArtistaData = useCallback(async () => {
     try {
@@ -331,21 +336,27 @@ export default function ArtistaProfiloPage() {
     <div className="container mx-auto p-6 space-y-4 lg:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <Button onClick={() => router.back()} variant="outline" size="sm" className="w-fit">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna Indietro
-          </Button>
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-3">
             <h1 className="text-xl lg:text-3xl font-bold">
               {artista.nome} {artista.cognome}
             </h1>
-            {artista.nome_arte && (
-              <p className="text-lg text-muted-foreground">({artista.nome_arte})</p>
-            )}
+            {getStatusBadge(artista.stato)}
           </div>
+          {artista.nome_arte && (
+            <p className="text-lg text-muted-foreground">({artista.nome_arte})</p>
+          )}
         </div>
-        {getStatusBadge(artista.stato)}
+        <div className="flex items-center gap-2">
+          <Button onClick={() => router.back()} variant="outline" size="sm">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Torna Indietro
+          </Button>
+          <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
+            <Pencil className="mr-2 h-4 w-4" />
+            Modifica
+          </Button>
+        </div>
       </div>
 
       {/* Dettagli Artista */}
@@ -494,11 +505,6 @@ export default function ArtistaProfiloPage() {
                             <Badge className="bg-primary/10 text-primary border-0 hover:bg-primary/10 text-xs">
                               {partecipazione.ruoli_tipologie?.nome || 'Ruolo'}
                             </Badge>
-                            {partecipazione.personaggio && (
-                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
-                                &quot;{partecipazione.personaggio}&quot;
-                              </Badge>
-                            )}
                             {getValidationBadge(partecipazione.stato_validazione)}
                           </div>
                           
@@ -524,7 +530,7 @@ export default function ArtistaProfiloPage() {
                           </DropdownMenu>
                         </div>
                         
-                        {/* Riga 2: Titolo originale / Codice / Episodio / Data */}
+                        {/* Riga 2: Titolo originale / Codice / Episodio / Personaggio / Data */}
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground mt-1">
                           {partecipazione.opere?.titolo_originale && 
                            partecipazione.opere.titolo_originale !== partecipazione.opere.titolo && (
@@ -535,6 +541,11 @@ export default function ArtistaProfiloPage() {
                             <span className="flex items-center gap-1">
                               <Tv className="h-3 w-3" />
                               S{partecipazione.episodi.numero_stagione || '?'}E{partecipazione.episodi.numero_episodio || '?'}
+                            </span>
+                          )}
+                          {partecipazione.personaggio && (
+                            <span>
+                              Personaggio: &quot;{partecipazione.personaggio}&quot;
                             </span>
                           )}
                           <span>{formatDate(partecipazione.created_at)}</span>
@@ -721,6 +732,39 @@ export default function ArtistaProfiloPage() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Artista Dialog */}
+      <Dialog open={showEditArtistaDialog} onOpenChange={setShowEditArtistaDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Modifica Artista</DialogTitle>
+            <DialogDescription>
+              Modifica le informazioni dell&apos;artista {artista.nome} {artista.cognome}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <ArtistaFormMultistep
+              mode="edit"
+              artista={artista}
+              onSubmit={async (data) => {
+                setIsSavingArtista(true)
+                try {
+                  const { error } = await updateArtista(artista.id, data)
+                  if (error) throw error
+                  
+                  setShowEditArtistaDialog(false)
+                  fetchArtistaData()
+                } catch (e: any) {
+                  alert('Errore durante l\'aggiornamento: ' + (e?.message || 'Errore sconosciuto'))
+                } finally {
+                  setIsSavingArtista(false)
+                }
+              }}
+              onCancel={() => setShowEditArtistaDialog(false)}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>
