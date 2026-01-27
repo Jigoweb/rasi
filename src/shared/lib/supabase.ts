@@ -34,6 +34,7 @@ export type Database = {
           forma_giuridica: string | null
           id: string
           imdb_nconst: string | null
+          indirizzo: Json | null
           is_rasi: boolean
           luogo_nascita: string | null
           nome: string
@@ -63,6 +64,7 @@ export type Database = {
           forma_giuridica?: string | null
           id?: string
           imdb_nconst?: string | null
+          indirizzo?: Json | null
           is_rasi?: boolean
           luogo_nascita?: string | null
           nome: string
@@ -92,6 +94,7 @@ export type Database = {
           forma_giuridica?: string | null
           id?: string
           imdb_nconst?: string | null
+          indirizzo?: Json | null
           is_rasi?: boolean
           luogo_nascita?: string | null
           nome?: string
@@ -226,8 +229,8 @@ export type Database = {
           importo_totale_disponibile?: number | null
           is_individuated?: boolean
           nome?: string
-          periodo_riferimento_fine?: string | null
           periodo_riferimento_inizio?: string | null
+          periodo_riferimento_fine?: string | null
           processing_by?: string | null
           processing_started_at?: string | null
           statistiche?: Json | null
@@ -267,7 +270,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           data_approvazione?: string | null
-          data_calcolo?: string | null
+          data_calcolo?: Json
           data_distribuzione?: string | null
           descrizione?: string | null
           id?: string
@@ -284,7 +287,7 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           data_approvazione?: string | null
-          data_calcolo?: string | null
+          data_calcolo?: Json
           data_distribuzione?: string | null
           descrizione?: string | null
           id?: string
@@ -1204,7 +1207,7 @@ export type Database = {
         | "uploading"
         | "deleting"
         | "error"
-        | "in_review"
+               | "in_review"
       stato_individuazione: "individuato" | "validato" | "respinto" | "dubbioso"
       stato_iscrizione: "attivo" | "sospeso" | "cessato"
       stato_ripartizione:

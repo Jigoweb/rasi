@@ -413,6 +413,50 @@ export default function ArtistaProfiloPage() {
               <div className="font-medium">{formatDate(artista.updated_at)}</div>
             </div>
           </div>
+          
+          {/* Contatti e Indirizzo */}
+          {((artista.contatti as any)?.email || (artista.contatti as any)?.number || artista.indirizzo) && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="text-sm font-semibold mb-4">Contatti e Residenza</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+                {(artista.contatti as any)?.email && (
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <User className="mr-2 h-4 w-4" />
+                      Email
+                    </div>
+                    <div className="font-medium break-all">{(artista.contatti as any).email}</div>
+                  </div>
+                )}
+                {(artista.contatti as any)?.number && (
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <User className="mr-2 h-4 w-4" />
+                      Telefono
+                    </div>
+                    <div className="font-medium">{(artista.contatti as any).number}</div>
+                  </div>
+                )}
+                {artista.indirizzo && (
+                  <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Hash className="mr-2 h-4 w-4" />
+                      Indirizzo
+                    </div>
+                    <div className="font-medium">
+                      {[
+                        (artista.indirizzo as any)?.via,
+                        (artista.indirizzo as any)?.civico,
+                        (artista.indirizzo as any)?.cap,
+                        (artista.indirizzo as any)?.citta,
+                        (artista.indirizzo as any)?.provincia
+                      ].filter(Boolean).join(', ') || '—'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

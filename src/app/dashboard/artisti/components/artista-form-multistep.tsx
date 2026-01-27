@@ -56,6 +56,13 @@ const artistaSchema = z.object({
   email: z.string().email().optional().or(z.literal('')),
   telefono: z.string().optional().or(z.literal('')),
   
+  // Indirizzo (salvato come JSONB in 'indirizzo')
+  indirizzo_via: z.string().optional().or(z.literal('')),
+  indirizzo_civico: z.string().optional().or(z.literal('')),
+  indirizzo_cap: z.string().optional().or(z.literal('')),
+  indirizzo_citta: z.string().optional().or(z.literal('')),
+  indirizzo_provincia: z.string().optional().or(z.literal('')),
+  
   // Dati aggiuntivi
   imdb_nconst: z.string().max(15).optional().or(z.literal('')),
   codici_esterni: z.record(z.any()).optional(),
@@ -74,7 +81,7 @@ type ArtistaFormData = z.infer<typeof artistaSchema>
 const STEPS = [
   { id: 1, title: 'Dati Anagrafici', description: 'Informazioni personali base' },
   { id: 2, title: 'Dati Professionali', description: 'Informazioni sulla carriera' },
-  { id: 3, title: 'Contatti', description: 'Informazioni di contatto' },
+  { id: 3, title: 'Contatti e Residenza', description: 'Informazioni di contatto e indirizzo' },
   { id: 4, title: 'Dati Aggiuntivi', description: 'Informazioni supplementari' },
   { id: 5, title: 'Diritti Attivi', description: 'Selezione diritti associati' },
   { id: 6, title: 'Riepilogo', description: 'Verifica e conferma' },
@@ -129,6 +136,11 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       is_rasi: artista?.is_rasi ?? true,
       email: (artista?.contatti as any)?.email || '',
       telefono: (artista?.contatti as any)?.number || (artista?.contatti as any)?.telefono || '',
+      indirizzo_via: (artista?.indirizzo as any)?.via || '',
+      indirizzo_civico: (artista?.indirizzo as any)?.civico || '',
+      indirizzo_cap: (artista?.indirizzo as any)?.cap || '',
+      indirizzo_citta: (artista?.indirizzo as any)?.citta || '',
+      indirizzo_provincia: (artista?.indirizzo as any)?.provincia || '',
       imdb_nconst: artista?.imdb_nconst || '',
       codici_esterni: artista?.codici_esterni || {},
       ragione_sociale: artista?.ragione_sociale || '',
@@ -222,6 +234,13 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
         email: data.email || null,
         number: data.telefono || null,
       },
+      indirizzo: (data.indirizzo_via || data.indirizzo_civico || data.indirizzo_cap || data.indirizzo_citta || data.indirizzo_provincia) ? {
+        via: data.indirizzo_via || null,
+        civico: data.indirizzo_civico || null,
+        cap: data.indirizzo_cap || null,
+        citta: data.indirizzo_citta || null,
+        provincia: data.indirizzo_provincia || null,
+      } : null,
       imdb_nconst: data.imdb_nconst || null,
       codici_esterni: data.codici_esterni || {},
       ragione_sociale: data.ragione_sociale || null,
@@ -466,34 +485,117 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
   const renderStep3 = () => (
     <div className="space-y-4 w-full">
-      <FormField
-        key="email"
-        control={form.control}
-        name="email"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Email</FormLabel>
-            <FormControl>
-              <Input type="email" {...field} value={field.value || ''} placeholder="artista@example.com" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-      <FormField
-        key="telefono"
-        control={form.control}
-        name="telefono"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Telefono</FormLabel>
-            <FormControl>
-              <Input {...field} value={field.value || ''} placeholder="+39 123 456 7890" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Contatti</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            key="email"
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input type="email" {...field} value={field.value || ''} placeholder="artista@example.com" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="telefono"
+            control={form.control}
+            name="telefono"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Telefono</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="+39 123 456 7890" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+      
+      <div className="space-y-4 pt-4 border-t">
+        <h3 className="text-lg font-semibold">Indirizzo di Residenza</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FormField
+            key="indirizzo_via"
+            control={form.control}
+            name="indirizzo_via"
+            render={({ field }) => (
+              <FormItem className="md:col-span-2">
+                <FormLabel>Via</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="Via Roma" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="indirizzo_civico"
+            control={form.control}
+            name="indirizzo_civico"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Civico</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="123" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FormField
+            key="indirizzo_cap"
+            control={form.control}
+            name="indirizzo_cap"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>CAP</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="00100" maxLength={5} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="indirizzo_citta"
+            control={form.control}
+            name="indirizzo_citta"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Città</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="Roma" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="indirizzo_provincia"
+            control={form.control}
+            name="indirizzo_provincia"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Provincia</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="RM" maxLength={2} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
     </div>
   )
 
