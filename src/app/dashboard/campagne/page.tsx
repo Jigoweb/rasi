@@ -106,7 +106,8 @@ export default function CampagnePage() {
 
 
 
-  const getStatusBadge = (stato: string) => {
+  const getStatusBadge = (stato: string | null) => {
+    if (!stato) return null
     switch (stato) {
       case 'pianificata':
         return (
