@@ -89,7 +89,7 @@ export default function OperePage() {
       }
 
       if (typeFilter !== 'all') {
-        query = query.eq('tipo', typeFilter)
+        query = query.eq('tipo', typeFilter as 'film' | 'serie_tv' | 'documentario' | 'cartoon' | 'altro')
       }
 
       // Filtro per tconst (IMDB ID)

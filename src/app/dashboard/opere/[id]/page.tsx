@@ -644,7 +644,7 @@ export default function OperaDetailPage() {
   useEffect(() => {
     if (opera && showEditForm) {
       form.reset({
-        codice_opera: opera.codice_opera,
+        codice_opera: opera.codice_opera || undefined,
         titolo: opera.titolo,
         tipo: opera.tipo as any,
         titolo_originale: opera.titolo_originale || '',

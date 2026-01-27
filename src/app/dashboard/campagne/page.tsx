@@ -518,22 +518,22 @@ export default function CampagnePage() {
                     <p className="text-sm text-gray-700 mt-1">{selectedCampagna.descrizione}</p>
                   </div>
                 )}
-                {selectedCampagna.tipo_campagna === 'individuazione' && 'parametri_individuazione' in selectedCampagna && selectedCampagna.parametri_individuazione && (
+                {selectedCampagna.tipo_campagna === 'individuazione' && 'configurazione_matching' in selectedCampagna && selectedCampagna.configurazione_matching && (
                   <div className="col-span-2">
                     <label className="text-sm font-medium text-gray-500">Parametri Individuazione</label>
                     <div className="mt-1 p-3 bg-gray-50 rounded-lg">
                       <pre className="text-xs text-gray-700 whitespace-pre-wrap">
-                        {JSON.stringify(selectedCampagna.parametri_individuazione, null, 2)}
+                        {JSON.stringify(selectedCampagna.configurazione_matching, null, 2)}
                       </pre>
                     </div>
                   </div>
                 )}
-                {selectedCampagna.tipo_campagna === 'ripartizione' && 'parametri_ripartizione' in selectedCampagna && selectedCampagna.parametri_ripartizione && (
+                {selectedCampagna.tipo_campagna === 'ripartizione' && 'configurazione_calcolo' in selectedCampagna && selectedCampagna.configurazione_calcolo && (
                   <div className="col-span-2">
                     <label className="text-sm font-medium text-gray-500">Parametri Ripartizione</label>
                     <div className="mt-1 p-3 bg-gray-50 rounded-lg">
                       <pre className="text-xs text-gray-700 whitespace-pre-wrap">
-                        {JSON.stringify(selectedCampagna.parametri_ripartizione, null, 2)}
+                        {JSON.stringify(selectedCampagna.configurazione_calcolo, null, 2)}
                       </pre>
                     </div>
                   </div>

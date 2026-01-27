@@ -23,7 +23,7 @@ export const getOpere = async (filters?: { search?: string; tipo?: string }) => 
   }
 
   if (filters?.tipo && filters.tipo !== 'all') {
-    query = query.eq('tipo', filters.tipo)
+    query = query.eq('tipo', filters.tipo as 'film' | 'serie_tv' | 'documentario' | 'cartoon' | 'altro')
   }
 
   const { data, error } = await query
@@ -127,7 +127,10 @@ export const updatePartecipazione = async (
 ) => {
   const { data, error } = await supabase
     .from('partecipazioni')
-    .update(payload)
+    .update({
+      ...payload,
+      stato_validazione: payload.stato_validazione as 'validato' | 'respinto' | 'da_validare' | null | undefined
+    })
     .eq('id', id)
     .select('*')
     .single()

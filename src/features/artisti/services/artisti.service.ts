@@ -13,7 +13,7 @@ export const getArtisti = async (filters?: { search?: string; stato?: string; is
 
   // Apply status filter
   if (filters?.stato && filters.stato !== 'all') {
-    query = query.eq('stato', filters.stato)
+    query = query.eq('stato', filters.stato as 'attivo' | 'sospeso' | 'cessato')
   }
 
   // Apply is_rasi filter
