@@ -185,17 +185,19 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       
       if (Array.isArray(artista.diritti_attivi)) {
         // Se è già un array, potrebbe contenere codici o nomi
-        dirittiArray = artista.diritti_attivi.map((item: string) => {
-          // Verifica se è un codice
-          const diritto = dirittiData.diritti.find(d => d.codice === item)
-          if (diritto) {
-            // È un codice, convertilo in nome
-            return diritto.nome
-          }
-          // Verifica se è già un nome
-          const dirittoPerNome = dirittiData.diritti.find(d => d.nome === item)
-          return dirittoPerNome ? dirittoPerNome.nome : item
-        })
+        dirittiArray = artista.diritti_attivi
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => {
+            // Verifica se è un codice
+            const diritto = dirittiData.diritti.find(d => d.codice === item)
+            if (diritto) {
+              // È un codice, convertilo in nome
+              return diritto.nome
+            }
+            // Verifica se è già un nome
+            const dirittoPerNome = dirittiData.diritti.find(d => d.nome === item)
+            return dirittoPerNome ? dirittoPerNome.nome : item
+          })
       } else {
         // Se è un oggetto legacy, converti le chiavi (codici) in nomi
         dirittiArray = Object.keys(artista.diritti_attivi as Record<string, any>).map(codice => {
