@@ -795,13 +795,17 @@ export default function ArtistaProfiloPage() {
               onSubmit={async (data) => {
                 setIsSavingArtista(true)
                 try {
-                  const { error } = await updateArtista(artista.id, data)
-                  if (error) throw error
+                  const { data: updatedData, error } = await updateArtista(artista.id, data)
+                  if (error) {
+                    console.error('Errore Supabase:', error)
+                    throw new Error(error.message || JSON.stringify(error))
+                  }
                   
                   setShowEditArtistaDialog(false)
                   fetchArtistaData()
                 } catch (e: any) {
-                  alert('Errore durante l\'aggiornamento: ' + (e?.message || 'Errore sconosciuto'))
+                  console.error('Errore durante l\'aggiornamento:', e)
+                  alert('Errore durante l\'aggiornamento: ' + (e?.message || JSON.stringify(e) || 'Errore sconosciuto'))
                 } finally {
                   setIsSavingArtista(false)
                 }

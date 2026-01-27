@@ -248,8 +248,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
   const onFormSubmit = async (data: ArtistaFormData) => {
     // Costruisci il payload per Supabase - allineato con lo schema reale
-    // Usiamo Partial<ArtistaInsert> perché alcuni campi sono opzionali nel form
-    const payload = {
+    const payload: ArtistaInsert = {
       codice_ipn: data.codice_ipn || null,
       nome: data.nome,
       cognome: data.cognome,
@@ -263,10 +262,10 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       data_inizio_mandato: data.data_inizio_mandato || new Date().toISOString().split('T')[0],
       data_fine_mandato: data.data_fine_mandato || null,
       is_rasi: data.is_rasi ?? true,
-      contatti: {
-        email: data.email || null,
-        number: data.telefono || null,
-      },
+      contatti: (data.email || data.telefono) ? {
+        email: data.email || '',
+        number: data.telefono || '',
+      } : null,
       indirizzo: (data.indirizzo_via || data.indirizzo_civico || data.indirizzo_cap || data.indirizzo_citta || data.indirizzo_provincia) ? {
         via: data.indirizzo_via || null,
         civico: data.indirizzo_civico || null,
@@ -282,9 +281,18 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codice_paese: data.codice_paese && data.codice_paese.length > 0 ? data.codice_paese.join('/') : null,
       componente_stabile_gruppo_orchestra: data.componente_stabile_gruppo_orchestra || null,
       diritti_attivi: (data.diritti_attivi && data.diritti_attivi.length > 0) ? data.diritti_attivi : null,
-    } as ArtistaInsert
+    }
 
-    await onSubmit(payload)
+    console.log('Payload da inviare:', JSON.stringify(payload, null, 2))
+    console.log('diritti_attivi:', payload.diritti_attivi)
+    console.log('codice_paese:', payload.codice_paese)
+
+    try {
+      await onSubmit(payload)
+    } catch (error) {
+      console.error('Errore nel submit del form:', error)
+      throw error
+    }
   }
 
   const renderStepContent = () => {
