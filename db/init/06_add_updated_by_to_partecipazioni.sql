@@ -28,3 +28,4 @@ COMMENT ON COLUMN partecipazioni.updated_by IS 'Utente che ha effettuato l''ulti
 
 
 
+
