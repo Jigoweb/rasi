@@ -166,7 +166,9 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       indirizzo_citta: (artista?.indirizzo as any)?.citta || '',
       indirizzo_provincia: (artista?.indirizzo as any)?.provincia || '',
       imdb_nconst: artista?.imdb_nconst || '',
-      codici_esterni: artista?.codici_esterni || {},
+      codici_esterni: (artista?.codici_esterni && typeof artista.codici_esterni === 'object' && !Array.isArray(artista.codici_esterni)) 
+        ? (artista.codici_esterni as { [x: string]: any }) 
+        : {},
       ragione_sociale: artista?.ragione_sociale || '',
       forma_giuridica: artista?.forma_giuridica || '',
       partita_iva: artista?.partita_iva ? String(artista.partita_iva) : '',
