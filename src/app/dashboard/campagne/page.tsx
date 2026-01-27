@@ -510,7 +510,7 @@ export default function CampagnePage() {
                 )}
                 <div>
                   <label className="text-sm font-medium text-gray-500">Data Creazione</label>
-                  <p>{new Date(selectedCampagna.created_at).toLocaleString('it-IT')}</p>
+                  <p>{selectedCampagna.created_at ? new Date(selectedCampagna.created_at).toLocaleString('it-IT') : '—'}</p>
                 </div>
                 {selectedCampagna.descrizione && (
                   <div className="col-span-2">
