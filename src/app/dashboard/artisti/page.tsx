@@ -66,7 +66,8 @@ export default function ArtistiPage() {
     }
   }
 
-  const getStatusBadge = (stato: string) => {
+  const getStatusBadge = (stato: string | null) => {
+    if (!stato) return null
     switch (stato) {
       case 'attivo':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Attivo</Badge>
