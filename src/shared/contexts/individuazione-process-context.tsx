@@ -136,18 +136,35 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
 
       return result
     } catch (error: any) {
+      // Estrai il messaggio di errore in modo più robusto
+      let errorMessage = 'Errore inatteso'
+      if (error?.message) {
+        errorMessage = error.message
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error?.error) {
+        errorMessage = error.error
+      } else if (typeof error === 'object') {
+        errorMessage = JSON.stringify(error)
+      }
+
+      // Normalizza messaggi di errore comuni
+      if (errorMessage.includes('schema cache') || errorMessage.includes('Could not query the database')) {
+        errorMessage = 'Errore di connessione al database (schema cache). Il sistema sta tentando di riconnettersi automaticamente.'
+      }
+
       setState(prev => ({
         ...prev,
         status: 'error',
         result: {
           success: false,
-          error: error.message || 'Errore inatteso'
+          error: errorMessage
         }
       }))
 
       return {
         success: false,
-        error: error.message || 'Errore inatteso'
+        error: errorMessage
       }
     }
   }, [])

@@ -14,6 +14,16 @@ export const supabaseServer = createClient<Database>(supabaseUrl, supabaseServic
   auth: {
     autoRefreshToken: false,
     persistSession: false
+  },
+  db: {
+    schema: 'public'
+  },
+  global: {
+    // Disabilita la cache dello schema per evitare errori "Could not query the database for the schema cache"
+    // La cache viene gestita manualmente o non è necessaria per operazioni server-side
+    headers: {
+      'x-client-info': 'rasi-server'
+    }
   }
 })
 
