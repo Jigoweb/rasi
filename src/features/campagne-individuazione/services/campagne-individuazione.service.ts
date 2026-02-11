@@ -148,11 +148,15 @@ export const initCampagnaIndividuazione = async (
 }
 
 /**
- * Processa un chunk di programmazioni
+ * Processa un chunk di programmazioni con retry automatico per errori 500/502
  */
 export const processChunk = async (
-  request: ProcessChunkRequest
+  request: ProcessChunkRequest,
+  retryCount = 0
 ): Promise<ProcessChunkResponse> => {
+  const maxRetries = 3
+  const baseDelayMs = 1000
+
   try {
     const response = await fetch('/api/campagne-individuazione/process-chunk', {
       method: 'POST',
@@ -160,19 +164,93 @@ export const processChunk = async (
       body: JSON.stringify(request),
     })
 
-    const data = await response.json()
+    // Verifica se la risposta è HTML (errore Cloudflare) invece di JSON
+    const contentType = response.headers.get('content-type') || ''
+    const isHtml = contentType.includes('text/html') || !contentType.includes('application/json')
 
-    if (!response.ok) {
+    if (isHtml) {
+      // Se riceviamo HTML, significa che Cloudflare ha restituito una pagina di errore
+      const text = await response.text()
+      const isRetryable = response.status === 500 || response.status === 502 || response.status === 503
+      
+      if (isRetryable && retryCount < maxRetries) {
+        const delayMs = baseDelayMs * Math.pow(2, retryCount)
+        console.log(`[processChunk] Received HTML error page (${response.status}), retrying in ${delayMs}ms (attempt ${retryCount + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+        return processChunk(request, retryCount + 1)
+      }
+
+      // Estrai informazioni utili dall'HTML se possibile
+      const cloudflareRayMatch = text.match(/Cloudflare Ray ID[^<]*<strong[^>]*>([^<]+)<\/strong>/i)
+      const rayId = cloudflareRayMatch ? cloudflareRayMatch[1] : 'unknown'
+      
+      return {
+        success: false,
+        error: `Errore del server (${response.status}). Cloudflare Ray ID: ${rayId}. ${isRetryable ? 'Tentativo di riconnessione fallito.' : 'Riprova più tardi.'}`
+      }
+    }
+
+    // Prova a parsare come JSON
+    let data: any
+    try {
+      data = await response.json()
+    } catch (jsonError) {
+      // Se anche il parsing JSON fallisce, potrebbe essere un errore di rete
+      const isRetryable = response.status >= 500 && retryCount < maxRetries
+      if (isRetryable) {
+        const delayMs = baseDelayMs * Math.pow(2, retryCount)
+        console.log(`[processChunk] Failed to parse JSON, retrying in ${delayMs}ms (attempt ${retryCount + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+        return processChunk(request, retryCount + 1)
+      }
       return { 
         success: false, 
-        error: data.error || 'Errore durante il processamento',
+        error: `Errore di comunicazione con il server (${response.status}). Impossibile parsare la risposta.`
+      }
+    }
+
+    if (!response.ok) {
+      // Verifica se l'errore è retryable
+      const isRetryable = 
+        (response.status === 500 || response.status === 502 || response.status === 503) &&
+        retryCount < maxRetries &&
+        (data.retryable !== false) // Rispetta il flag retryable dal backend se presente
+
+      if (isRetryable) {
+        const delayMs = baseDelayMs * Math.pow(2, retryCount)
+        console.log(`[processChunk] Server error ${response.status}, retrying in ${delayMs}ms (attempt ${retryCount + 1}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+        return processChunk(request, retryCount + 1)
+      }
+
+      return { 
+        success: false, 
+        error: data.error || `Errore durante il processamento (${response.status})`,
         partial: data.partial
       }
     }
 
     return data as ProcessChunkResponse
   } catch (error: any) {
-    return { success: false, error: error.message || 'Errore di connessione' }
+    // Errori di rete o altri errori
+    const isRetryable = retryCount < maxRetries && (
+      error.message?.includes('Failed to fetch') ||
+      error.message?.includes('NetworkError') ||
+      error.message?.includes('ECONNRESET') ||
+      error.message?.includes('ETIMEDOUT')
+    )
+
+    if (isRetryable) {
+      const delayMs = baseDelayMs * Math.pow(2, retryCount)
+      console.log(`[processChunk] Network error, retrying in ${delayMs}ms (attempt ${retryCount + 1}/${maxRetries}):`, error.message)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
+      return processChunk(request, retryCount + 1)
+    }
+
+    return { 
+      success: false, 
+      error: error.message || 'Errore di connessione'
+    }
   }
 }
 
@@ -350,7 +428,12 @@ export const processCampagnaIndividuazioneBatch = async (
       console.log(`[Batch] Chunk ${chunkIndex + 1} result:`, chunkResult.success ? 'success' : 'failed', chunkResult.data || chunkResult.error)
 
       if (!chunkResult.success) {
-        throw new Error(chunkResult.error || `Errore nel chunk ${chunkIndex + 1}`)
+        // Costruisci un messaggio di errore più dettagliato
+        const errorMessage = chunkResult.error || `Errore nel chunk ${chunkIndex + 1}`
+        const enhancedError = new Error(
+          `${errorMessage} (Chunk ${chunkIndex + 1}/${totalChunks}, ${programmazione_ids.length} programmazioni)`
+        )
+        throw enhancedError
       }
 
       progress = {

@@ -147,6 +147,80 @@ export const deletePartecipazione = async (id: string) => {
   return { error }
 }
 
+/** Individuazione info per partecipazione (campagne in cui è usata) */
+export interface IndividuazionePerPartecipazione {
+  id: string
+  campagna_individuazioni_id: string
+  campagne_individuazione?: { nome: string } | null
+}
+
+/**
+ * Recupera le individuazioni collegate a una partecipazione, con i nomi delle campagne.
+ * Usato per avvisare l'utente prima della cancellazione.
+ */
+export const getIndividuazioniByPartecipazioneId = async (partecipazioneId: string) => {
+  const { data, error } = await supabase
+    .from('individuazioni')
+    .select(`
+      id,
+      campagna_individuazioni_id,
+      campagne_individuazione(nome)
+    `)
+    .eq('partecipazione_id', partecipazioneId)
+
+  return { data: data as IndividuazionePerPartecipazione[] | null, error }
+}
+
+/**
+ * Elimina tutte le individuazioni collegate a una partecipazione.
+ * Va chiamato prima di deletePartecipazione quando esistono individuazioni (FK RESTRICT).
+ */
+export const deleteIndividuazioniByPartecipazioneId = async (partecipazioneId: string) => {
+  const { error } = await supabase
+    .from('individuazioni')
+    .delete()
+    .eq('partecipazione_id', partecipazioneId)
+
+  return { error }
+}
+
+/** Individuazione con partecipazione_id per bulk fetch */
+export interface IndividuazionePerPartecipazioneBulk extends IndividuazionePerPartecipazione {
+  partecipazione_id: string
+}
+
+/**
+ * Recupera le individuazioni collegate a più partecipazioni (per bulk delete).
+ * Restituisce un array con partecipazione_id per raggruppare.
+ */
+export const getIndividuazioniByPartecipazioneIds = async (partecipazioneIds: string[]) => {
+  if (partecipazioneIds.length === 0) return { data: [] as IndividuazionePerPartecipazioneBulk[], error: null }
+  const { data, error } = await supabase
+    .from('individuazioni')
+    .select(`
+      id,
+      partecipazione_id,
+      campagna_individuazioni_id,
+      campagne_individuazione(nome)
+    `)
+    .in('partecipazione_id', partecipazioneIds)
+
+  return { data: (data || []) as IndividuazionePerPartecipazioneBulk[], error }
+}
+
+/**
+ * Elimina tutte le individuazioni collegate a più partecipazioni.
+ */
+export const deleteIndividuazioniByPartecipazioneIds = async (partecipazioneIds: string[]) => {
+  if (partecipazioneIds.length === 0) return { error: null }
+  const { error } = await supabase
+    .from('individuazioni')
+    .delete()
+    .in('partecipazione_id', partecipazioneIds)
+
+  return { error }
+}
+
 export const deletePartecipazioniMultiple = async (ids: string[]) => {
   const { error } = await supabase
     .from('partecipazioni')

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation';
 import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, updateArtista } from '@/features/artisti/services/artisti.service';
-import { getRuoliTipologie } from '@/features/opere/services/opere.service';
+import { getRuoliTipologie, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service';
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
@@ -82,6 +82,10 @@ export default function ArtistaProfiloPage() {
   })
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [partecipazioneIndividuazioni, setPartecipazioneIndividuazioni] = useState<{ id: string; campagna_individuazioni_id: string; campagne_individuazione?: { nome: string } | null }[]>([])
+  const [deleteIndividuazioniToo, setDeleteIndividuazioniToo] = useState(true)
+  const [bulkPartecipazioneIndividuazioni, setBulkPartecipazioneIndividuazioni] = useState<{ id: string; partecipazione_id: string; campagna_individuazioni_id: string; campagne_individuazione?: { nome: string } | null }[]>([])
+  const [bulkDeleteIndividuazioniToo, setBulkDeleteIndividuazioniToo] = useState(false)
   
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -161,6 +165,18 @@ export default function ArtistaProfiloPage() {
     })
   }, [artistaId, fetchArtistaData])
 
+  // Fetch individuazioni quando si apre il dialog bulk delete
+  useEffect(() => {
+    if (showBulkDeleteDialog && selectedIds.size > 0) {
+      setBulkDeleteIndividuazioniToo(false)
+      getIndividuazioniByPartecipazioneIds(Array.from(selectedIds)).then(({ data }) => {
+        setBulkPartecipazioneIndividuazioni(data || [])
+      })
+    } else {
+      setBulkPartecipazioneIndividuazioni([])
+    }
+  }, [showBulkDeleteDialog, selectedIds])
+
   const getStatusBadge = (stato: string | null) => {
     if (!stato) return null
     switch (stato) {
@@ -205,9 +221,13 @@ export default function ArtistaProfiloPage() {
     setShowEditDialog(true)
   }
 
-  const openDeleteDialog = (partecipazione: Partecipazione) => {
+  const openDeleteDialog = async (partecipazione: Partecipazione) => {
     setSelectedPartecipazione(partecipazione)
+    setPartecipazioneIndividuazioni([])
+    setDeleteIndividuazioniToo(false)
     setShowDeleteDialog(true)
+    const { data } = await getIndividuazioniByPartecipazioneId(partecipazione.id)
+    setPartecipazioneIndividuazioni(data || [])
   }
 
   const handleSaveEdit = async () => {
@@ -238,16 +258,24 @@ export default function ArtistaProfiloPage() {
   const handleDelete = async () => {
     if (!selectedPartecipazione) return
     
+    const hasIndividuazioni = partecipazioneIndividuazioni.length > 0
+    const shouldDeleteIndividuazioni = hasIndividuazioni && deleteIndividuazioniToo
+    
     setIsDeleting(true)
     try {
-      const { error } = await deletePartecipazione(selectedPartecipazione.id)
+      if (shouldDeleteIndividuazioni) {
+        const { error: indErr } = await deleteIndividuazioniByPartecipazioneId(selectedPartecipazione.id)
+        if (indErr) throw indErr
+      }
       
+      const { error } = await deletePartecipazione(selectedPartecipazione.id)
       if (error) throw error
       
       setShowDeleteDialog(false)
-      fetchArtistaData() // Refresh data
-    } catch (e) {
+      fetchArtistaData()
+    } catch (e: any) {
       console.error('Error deleting partecipazione:', e)
+      alert('Errore durante l\'eliminazione: ' + (e?.message || 'Errore sconosciuto'))
     } finally {
       setIsDeleting(false)
     }
@@ -280,13 +308,21 @@ export default function ArtistaProfiloPage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return
-    
+
+    const ids = Array.from(selectedIds)
+    const hasIndividuazioni = bulkPartecipazioneIndividuazioni.length > 0
+    const shouldDeleteIndividuazioni = hasIndividuazioni && bulkDeleteIndividuazioniToo
+
     setIsBulkDeleting(true)
     try {
-      const { error } = await deletePartecipazioniMultiple(Array.from(selectedIds))
-      
+      if (shouldDeleteIndividuazioni) {
+        const { error: indErr } = await deleteIndividuazioniByPartecipazioneIds(ids)
+        if (indErr) throw indErr
+      }
+
+      const { error } = await deletePartecipazioniMultiple(ids)
       if (error) throw error
-      
+
       setShowBulkDeleteDialog(false)
       setSelectedIds(new Set())
       fetchArtistaData()
@@ -703,7 +739,7 @@ export default function ArtistaProfiloPage() {
               Sei sicuro di voler eliminare questa partecipazione?
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <div className="p-4 bg-muted rounded-md space-y-2">
               <p><strong>Opera:</strong> {selectedPartecipazione?.opere?.titolo}</p>
               <p><strong>Ruolo:</strong> {selectedPartecipazione?.ruoli_tipologie?.nome}</p>
@@ -711,7 +747,32 @@ export default function ArtistaProfiloPage() {
                 <p><strong>Personaggio:</strong> {selectedPartecipazione.personaggio}</p>
               )}
             </div>
-            <p className="mt-4 text-sm text-red-600">
+            {partecipazioneIndividuazioni.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-md space-y-3">
+                <p className="text-sm font-medium text-amber-800">
+                  Attenzione: questa partecipazione è stata usata per {partecipazioneIndividuazioni.length} individuazion{partecipazioneIndividuazioni.length === 1 ? 'e' : 'i'} nelle seguenti campagne:
+                </p>
+                <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                  {[...new Set(partecipazioneIndividuazioni.map(i => i.campagne_individuazione?.nome || 'Campagna senza nome'))].map((nome, idx) => (
+                    <li key={idx}>{nome}</li>
+                  ))}
+                </ul>
+                <p className="text-sm text-amber-800">
+                  Per eliminare la partecipazione dovrai eliminare anche le individuazioni associate.
+                </p>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="delete-individuazioni"
+                    checked={deleteIndividuazioniToo}
+                    onCheckedChange={(checked) => setDeleteIndividuazioniToo(!!checked)}
+                  />
+                  <Label htmlFor="delete-individuazioni" className="text-sm font-normal cursor-pointer">
+                    Elimina anche le individuazioni generate da questa partecipazione
+                  </Label>
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
               Questa azione non può essere annullata.
             </p>
           </div>
@@ -742,7 +803,7 @@ export default function ArtistaProfiloPage() {
               Sei sicuro di voler eliminare {selectedIds.size} partecipazion{selectedIds.size === 1 ? 'e' : 'i'}?
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <div className="p-4 bg-muted rounded-md max-h-48 overflow-y-auto space-y-2">
               {partecipazioni
                 .filter(p => selectedIds.has(p.id))
@@ -755,7 +816,32 @@ export default function ArtistaProfiloPage() {
                 ))
               }
             </div>
-            <p className="mt-4 text-sm text-red-600">
+            {bulkPartecipazioneIndividuazioni.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-md space-y-3">
+                <p className="text-sm font-medium text-amber-800">
+                  Attenzione: alcune partecipazioni selezionate sono state usate per {bulkPartecipazioneIndividuazioni.length} individuazion{bulkPartecipazioneIndividuazioni.length === 1 ? 'e' : 'i'} nelle seguenti campagne:
+                </p>
+                <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                  {[...new Set(bulkPartecipazioneIndividuazioni.map(i => i.campagne_individuazione?.nome || 'Campagna senza nome'))].map((nome, idx) => (
+                    <li key={idx}>{nome}</li>
+                  ))}
+                </ul>
+                <p className="text-sm text-amber-800">
+                  Puoi eliminare le partecipazioni mantenendo le individuazioni (rimarranno con il riferimento alla partecipazione annullato) oppure eliminare anche le individuazioni.
+                </p>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="bulk-delete-individuazioni"
+                    checked={bulkDeleteIndividuazioniToo}
+                    onCheckedChange={(checked) => setBulkDeleteIndividuazioniToo(!!checked)}
+                  />
+                  <Label htmlFor="bulk-delete-individuazioni" className="text-sm font-normal cursor-pointer">
+                    Elimina anche le individuazioni generate da queste partecipazioni
+                  </Label>
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
               Questa azione non può essere annullata.
             </p>
           </div>

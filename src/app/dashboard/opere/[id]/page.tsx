@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio } from '@/features/opere/services/opere.service'
+import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
 import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2 } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
@@ -78,6 +78,10 @@ export default function OperaDetailPage() {
   })
   const [isSavingPartecipazione, setIsSavingPartecipazione] = useState(false)
   const [isDeletingPartecipazione, setIsDeletingPartecipazione] = useState(false)
+  const [partecipazioneIndividuazioni, setPartecipazioneIndividuazioni] = useState<{ id: string; campagna_individuazioni_id: string; campagne_individuazione?: { nome: string } | null }[]>([])
+  const [deleteIndividuazioniToo, setDeleteIndividuazioniToo] = useState(false)
+  const [bulkPartecipazioneIndividuazioni, setBulkPartecipazioneIndividuazioni] = useState<{ id: string; partecipazione_id: string; campagna_individuazioni_id: string; campagne_individuazione?: { nome: string } | null }[]>([])
+  const [bulkDeleteIndividuazioniToo, setBulkDeleteIndividuazioniToo] = useState(false)
   
   // Multi-select state for partecipazioni
   const [selectedPartecipazioniIds, setSelectedPartecipazioniIds] = useState<Set<string>>(new Set())
@@ -157,6 +161,18 @@ export default function OperaDetailPage() {
     })
   }, [operaId, fetchData])
 
+  // Fetch individuazioni quando si apre il dialog bulk delete
+  useEffect(() => {
+    if (showBulkDeletePartecipazioniDialog && selectedPartecipazioniIds.size > 0) {
+      setBulkDeleteIndividuazioniToo(false)
+      getIndividuazioniByPartecipazioneIds(Array.from(selectedPartecipazioniIds)).then(({ data }) => {
+        setBulkPartecipazioneIndividuazioni(data || [])
+      })
+    } else {
+      setBulkPartecipazioneIndividuazioni([])
+    }
+  }, [showBulkDeletePartecipazioniDialog, selectedPartecipazioniIds])
+
   // Partecipazione handlers
   const openEditPartecipazioneDialog = (p: any) => {
     setSelectedPartecipazione(p)
@@ -169,9 +185,13 @@ export default function OperaDetailPage() {
     setShowEditPartecipazioneDialog(true)
   }
 
-  const openDeletePartecipazioneDialog = (p: any) => {
+  const openDeletePartecipazioneDialog = async (p: any) => {
     setSelectedPartecipazione(p)
+    setPartecipazioneIndividuazioni([])
+    setDeleteIndividuazioniToo(false)
     setShowDeletePartecipazioneDialog(true)
+    const { data } = await getIndividuazioniByPartecipazioneId(p.id)
+    setPartecipazioneIndividuazioni(data || [])
   }
 
   const handleSavePartecipazione = async () => {
@@ -202,16 +222,24 @@ export default function OperaDetailPage() {
   const handleDeletePartecipazione = async () => {
     if (!selectedPartecipazione) return
     
+    const hasIndividuazioni = partecipazioneIndividuazioni.length > 0
+    const shouldDeleteIndividuazioni = hasIndividuazioni && deleteIndividuazioniToo
+    
     setIsDeletingPartecipazione(true)
     try {
-      const { error } = await deletePartecipazione(selectedPartecipazione.id)
+      if (shouldDeleteIndividuazioni) {
+        const { error: indErr } = await deleteIndividuazioniByPartecipazioneId(selectedPartecipazione.id)
+        if (indErr) throw indErr
+      }
       
+      const { error } = await deletePartecipazione(selectedPartecipazione.id)
       if (error) throw error
       
       setShowDeletePartecipazioneDialog(false)
       fetchData()
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error deleting partecipazione:', e)
+      alert('Errore durante l\'eliminazione: ' + (e?.message || 'Errore sconosciuto'))
     } finally {
       setIsDeletingPartecipazione(false)
     }
@@ -244,13 +272,21 @@ export default function OperaDetailPage() {
 
   const handleBulkDeletePartecipazioni = async () => {
     if (selectedPartecipazioniIds.size === 0) return
-    
+
+    const ids = Array.from(selectedPartecipazioniIds)
+    const hasIndividuazioni = bulkPartecipazioneIndividuazioni.length > 0
+    const shouldDeleteIndividuazioni = hasIndividuazioni && bulkDeleteIndividuazioniToo
+
     setIsBulkDeletingPartecipazioni(true)
     try {
-      const { error } = await deletePartecipazioniMultiple(Array.from(selectedPartecipazioniIds))
-      
+      if (shouldDeleteIndividuazioni) {
+        const { error: indErr } = await deleteIndividuazioniByPartecipazioneIds(ids)
+        if (indErr) throw indErr
+      }
+
+      const { error } = await deletePartecipazioniMultiple(ids)
       if (error) throw error
-      
+
       setShowBulkDeletePartecipazioniDialog(false)
       setSelectedPartecipazioniIds(new Set())
       fetchData()
@@ -1784,7 +1820,7 @@ export default function OperaDetailPage() {
               Sei sicuro di voler eliminare questa partecipazione?
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <div className="p-4 bg-muted rounded-md space-y-2">
               <p><strong>Artista:</strong> {selectedPartecipazione?.artisti?.nome} {selectedPartecipazione?.artisti?.cognome}</p>
               <p><strong>Ruolo:</strong> {selectedPartecipazione?.ruoli_tipologie?.nome}</p>
@@ -1792,7 +1828,32 @@ export default function OperaDetailPage() {
                 <p><strong>Personaggio:</strong> {selectedPartecipazione.personaggio}</p>
               )}
             </div>
-            <p className="mt-4 text-sm text-red-600">
+            {partecipazioneIndividuazioni.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-md space-y-3">
+                <p className="text-sm font-medium text-amber-800">
+                  Attenzione: questa partecipazione è stata usata per {partecipazioneIndividuazioni.length} individuazion{partecipazioneIndividuazioni.length === 1 ? 'e' : 'i'} nelle seguenti campagne:
+                </p>
+                <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                  {[...new Set(partecipazioneIndividuazioni.map(i => i.campagne_individuazione?.nome || 'Campagna senza nome'))].map((nome, idx) => (
+                    <li key={idx}>{nome}</li>
+                  ))}
+                </ul>
+                <p className="text-sm text-amber-800">
+                  Puoi eliminare la partecipazione mantenendo le individuazioni (rimarranno con il riferimento alla partecipazione annullato) oppure eliminare anche le individuazioni.
+                </p>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="delete-individuazioni"
+                    checked={deleteIndividuazioniToo}
+                    onCheckedChange={(checked) => setDeleteIndividuazioniToo(!!checked)}
+                  />
+                  <Label htmlFor="delete-individuazioni" className="text-sm font-normal cursor-pointer">
+                    Elimina anche le individuazioni generate da questa partecipazione
+                  </Label>
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
               Questa azione non può essere annullata.
             </p>
           </div>
@@ -1823,7 +1884,7 @@ export default function OperaDetailPage() {
               Sei sicuro di voler eliminare {selectedPartecipazioniIds.size} partecipazion{selectedPartecipazioniIds.size === 1 ? 'e' : 'i'}?
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <div className="p-4 bg-muted rounded-md max-h-48 overflow-y-auto space-y-2">
               {partecipazioni
                 .filter((p: any) => selectedPartecipazioniIds.has(p.id))
@@ -1836,7 +1897,32 @@ export default function OperaDetailPage() {
                 ))
               }
             </div>
-            <p className="mt-4 text-sm text-red-600">
+            {bulkPartecipazioneIndividuazioni.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-md space-y-3">
+                <p className="text-sm font-medium text-amber-800">
+                  Attenzione: alcune partecipazioni selezionate sono state usate per {bulkPartecipazioneIndividuazioni.length} individuazion{bulkPartecipazioneIndividuazioni.length === 1 ? 'e' : 'i'} nelle seguenti campagne:
+                </p>
+                <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                  {[...new Set(bulkPartecipazioneIndividuazioni.map(i => i.campagne_individuazione?.nome || 'Campagna senza nome'))].map((nome, idx) => (
+                    <li key={idx}>{nome}</li>
+                  ))}
+                </ul>
+                <p className="text-sm text-amber-800">
+                  Puoi eliminare le partecipazioni mantenendo le individuazioni (rimarranno con il riferimento alla partecipazione annullato) oppure eliminare anche le individuazioni.
+                </p>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="bulk-delete-individuazioni"
+                    checked={bulkDeleteIndividuazioniToo}
+                    onCheckedChange={(checked) => setBulkDeleteIndividuazioniToo(!!checked)}
+                  />
+                  <Label htmlFor="bulk-delete-individuazioni" className="text-sm font-normal cursor-pointer">
+                    Elimina anche le individuazioni generate da queste partecipazioni
+                  </Label>
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
               Questa azione non può essere annullata.
             </p>
           </div>
