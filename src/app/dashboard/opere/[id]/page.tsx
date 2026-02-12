@@ -617,7 +617,7 @@ export default function OperaDetailPage() {
     setImdbEpisodesData(null)
     setSelectedSeasons({})
     setExpandedSeasons({})
-    setImportEpisodesResult(null)
+    setImportResult(null)
     
     try {
       const { ok, result } = await getTitleById(imdbId)
