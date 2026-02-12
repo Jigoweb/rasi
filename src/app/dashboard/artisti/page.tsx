@@ -37,14 +37,17 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
   const [statoValue, setStatoValue] = useState<string>('')
   const [tipologiaValue, setTipologiaValue] = useState<string>('')
 
+  const hasValueFields = ['nome_arte', 'codice_fiscale', 'imdb_nconst', 'data_nascita', 'luogo_nascita', 'territorio'] as const
+  type HasValueField = (typeof hasValueFields)[number]
+
   const handleAdd = () => {
     if (!field) return
     if (field === 'stato' && statoValue) {
       onAdd({ field: 'stato', value: statoValue as 'attivo' | 'sospeso' | 'cessato' })
     } else if (field === 'tipologia' && tipologiaValue) {
       onAdd({ field: 'tipologia', value: tipologiaValue as 'AIE' | 'PRODUTTORE' })
-    } else if (!['stato', 'tipologia'].includes(field)) {
-      onAdd({ field: field as ArtistaFieldFilter['field'], hasValue })
+    } else if (hasValueFields.includes(field as HasValueField)) {
+      onAdd({ field: field as HasValueField, hasValue })
     }
     setOpen(false)
     setField('')
