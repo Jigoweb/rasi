@@ -631,11 +631,14 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           dettagli_serie: Json | null
+          durata_minuti: number | null
+          has_episodes: boolean
           id: string
           imdb_tconst: string | null
           metadati: Json | null
           regista: string[] | null
           search_vector: unknown
+          stato_validazione: Database["public"]["Enums"]["stato_validazione"] | null
           tipo: Database["public"]["Enums"]["tipo_opera"]
           titolo: string
           titolo_originale: string | null
@@ -651,11 +654,14 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           dettagli_serie?: Json | null
+          durata_minuti?: number | null
+          has_episodes?: boolean
           id?: string
           imdb_tconst?: string | null
           metadati?: Json | null
           regista?: string[] | null
           search_vector?: unknown
+          stato_validazione?: Database["public"]["Enums"]["stato_validazione"] | null
           tipo: Database["public"]["Enums"]["tipo_opera"]
           titolo: string
           titolo_originale?: string | null
@@ -671,11 +677,14 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           dettagli_serie?: Json | null
+          durata_minuti?: number | null
+          has_episodes?: boolean
           id?: string
           imdb_tconst?: string | null
           metadati?: Json | null
           regista?: string[] | null
           search_vector?: unknown
+          stato_validazione?: Database["public"]["Enums"]["stato_validazione"] | null
           tipo?: Database["public"]["Enums"]["tipo_opera"]
           titolo?: string
           titolo_originale?: string | null
@@ -1221,7 +1230,7 @@ export type Database = {
       stato_validazione: "da_validare" | "validato" | "respinto"
       territorio_enum: "WW" | "WW-" | "ITA" | "ITA+"
       tipo_emittente: "tv_generalista" | "tv_tematica" | "streaming" | "pay_tv"
-      tipo_opera: "film" | "serie_tv" | "documentario" | "cartoon" | "altro"
+      tipo_opera: "film" | "serie_tv" | "animazione"
       tipo_trasmissione: "prima_visione" | "replica" | "ripetizione"
       tipologia_enum: "AIE" | "PRODUTTORE"
     }
@@ -1390,7 +1399,7 @@ export const Constants = {
       stato_validazione: ["da_validare", "validato", "respinto"],
       territorio_enum: ["WW", "WW-", "ITA", "ITA+"],
       tipo_emittente: ["tv_generalista", "tv_tematica", "streaming", "pay_tv"],
-      tipo_opera: ["film", "serie_tv", "documentario", "cartoon", "altro"],
+      tipo_opera: ["film", "serie_tv", "animazione"],
       tipo_trasmissione: ["prima_visione", "replica", "ripetizione"],
       tipologia_enum: ["AIE", "PRODUTTORE"],
     },

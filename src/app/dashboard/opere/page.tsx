@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -9,18 +9,97 @@ import { supabase } from '@/shared/lib/supabase-client'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
+import { SearchInput } from '@/shared/components/search-input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
+import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 
 type Opera = Database['public']['Tables']['opere']['Row']
+
+/** Filtro per campo valorizzato/non valorizzato */
+type FieldFilter = {
+  field: 'titolo_originale' | 'regista' | 'imdb_tconst' | 'codice_isan' | 'codice_opera' | 'anno_produzione' | 'has_episodes'
+  hasValue: boolean
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  titolo_originale: 'Titolo Originale',
+  regista: 'Regia',
+  imdb_tconst: 'IMDB tconst',
+  codice_isan: 'Codice ISAN',
+  codice_opera: 'Codice Opera',
+  anno_produzione: 'Anno',
+  has_episodes: 'Episodi',
+}
+
+function FilterPopover({ onAdd }: { onAdd: (f: FieldFilter) => void }) {
+  const [open, setOpen] = useState(false)
+  const [field, setField] = useState<string>('')
+  const [hasValue, setHasValue] = useState<boolean>(true)
+
+  const handleAdd = () => {
+    if (field) {
+      onAdd({ field: field as FieldFilter['field'], hasValue })
+      setOpen(false)
+      setField('')
+      setHasValue(true)
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full sm:w-auto">
+          <Filter className="h-4 w-4 mr-2" />
+          Aggiungi filtro
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72" align="end">
+        <div className="space-y-4">
+          <h4 className="font-medium text-sm">Filtra per campo</h4>
+          <Select value={field} onValueChange={setField}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleziona campo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="titolo_originale">Titolo Originale</SelectItem>
+              <SelectItem value="regista">Regia</SelectItem>
+              <SelectItem value="imdb_tconst">IMDB tconst</SelectItem>
+              <SelectItem value="codice_isan">Codice ISAN</SelectItem>
+              <SelectItem value="codice_opera">Codice Opera</SelectItem>
+              <SelectItem value="anno_produzione">Anno</SelectItem>
+              <SelectItem value="has_episodes">Episodi</SelectItem>
+            </SelectContent>
+          </Select>
+          {field ? (
+            <Select value={hasValue ? 'si' : 'no'} onValueChange={(v) => setHasValue(v === 'si')}>
+              <SelectTrigger>
+                <SelectValue placeholder="Stato" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="si">Valorizzato</SelectItem>
+                <SelectItem value="no">Non valorizzato</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null}
+          <Button onClick={handleAdd} disabled={!field} className="w-full">
+            Aggiungi
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 export default function OperePage() {
   const router = useRouter()
@@ -30,14 +109,13 @@ export default function OperePage() {
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
-  const [tconstFilter, setTconstFilter] = useState<'all' | 'with' | 'without'>('all')
+  const [filters, setFilters] = useState<FieldFilter[]>([])
   const [selectedOpera, setSelectedOpera] = useState<Opera | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   const [isLoadingImdb, setIsLoadingImdb] = useState(false)
   const [imdbError, setImdbError] = useState<string | null>(null)
-  const searchInputRef = useRef<HTMLInputElement>(null)
   
   // Delete confirmation states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -48,14 +126,9 @@ export default function OperePage() {
   
   
 
-  // Server-side filtering with debounce
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchOpere()
-    }, 300)
-
-    return () => clearTimeout(timer)
-  }, [searchQuery, typeFilter, tconstFilter])
+    fetchOpere()
+  }, [searchQuery, typeFilter, filters])
 
   useEffect(() => {
     const editId = searchParams?.get('edit')
@@ -69,36 +142,63 @@ export default function OperePage() {
     }
   }, [searchParams, showForm])
 
+  const applyFiltersToQuery = (query: ReturnType<typeof supabase.from>) => {
+    let q = query
+    if (typeFilter !== 'all') {
+      q = q.eq('tipo', typeFilter as 'film' | 'serie_tv' | 'animazione')
+    }
+    for (const f of filters) {
+      const hasValue = f.hasValue
+      switch (f.field) {
+        case 'titolo_originale':
+            if (hasValue) q = q.not('titolo_originale', 'is', null).neq('titolo_originale', '')
+            else q = q.or('titolo_originale.is.null,titolo_originale.eq.')
+            break
+          case 'regista':
+            if (hasValue) q = q.not('regista', 'is', null).neq('regista', '{}')
+            else q = q.or('regista.is.null,regista.eq.{}')
+            break
+          case 'imdb_tconst':
+            if (hasValue) q = q.not('imdb_tconst', 'is', null).neq('imdb_tconst', '')
+            else q = q.or('imdb_tconst.is.null,imdb_tconst.eq.')
+            break
+          case 'codice_isan':
+            if (hasValue) q = q.not('codice_isan', 'is', null).neq('codice_isan', '')
+            else q = q.or('codice_isan.is.null,codice_isan.eq.')
+            break
+          case 'codice_opera':
+            if (hasValue) q = q.not('codice_opera', 'is', null).neq('codice_opera', '')
+            else q = q.or('codice_opera.is.null,codice_opera.eq.')
+            break
+          case 'anno_produzione':
+            if (hasValue) q = q.not('anno_produzione', 'is', null)
+            else q = q.is('anno_produzione', null)
+            break
+        case 'has_episodes':
+          q = q.eq('has_episodes', hasValue)
+          break
+      }
+    }
+    return q
+  }
+
   const fetchOpere = async () => {
     try {
-      // Usa isSearching invece di loading per evitare rerender durante il typing
       setIsSearching(true)
-      const isInitialLoad = opere.length === 0 && !searchQuery && typeFilter === 'all' && tconstFilter === 'all'
-      if (isInitialLoad) {
-        setLoading(true)
-      }
+      const isInitialLoad = opere.length === 0 && !searchQuery && typeFilter === 'all' && filters.length === 0
+      if (isInitialLoad) setLoading(true)
 
       let query = supabase
         .from('opere')
         .select('*')
         .order('anno_produzione', { ascending: false })
-        .limit(100) // Limit results for performance, rely on search to find specific items
+        .limit(100)
 
       if (searchQuery.trim()) {
         query = query.or(`titolo.ilike.%${searchQuery.trim()}%,codice_opera.ilike.%${searchQuery.trim()}%,titolo_originale.ilike.%${searchQuery.trim()}%`)
       }
 
-      if (typeFilter !== 'all') {
-        query = query.eq('tipo', typeFilter as 'film' | 'serie_tv' | 'documentario' | 'cartoon' | 'altro')
-      }
-
-      // Filtro per tconst (IMDB ID)
-      if (tconstFilter === 'with') {
-        query = query.not('imdb_tconst', 'is', null)
-      } else if (tconstFilter === 'without') {
-        query = query.or('imdb_tconst.is.null,imdb_tconst.eq.')
-      }
-
+      query = applyFiltersToQuery(query)
       const { data, error } = await query
 
       if (error) throw error
@@ -110,6 +210,19 @@ export default function OperePage() {
       setIsSearching(false)
     }
   }
+
+  const addFilter = (filter: FieldFilter) => {
+    setFilters(prev => {
+      const without = prev.filter(x => x.field !== filter.field)
+      return [...without, filter]
+    })
+  }
+
+  const removeFilter = (field: string) => {
+    setFilters(prev => prev.filter(f => f.field !== field))
+  }
+
+  const hasActiveFilters = searchQuery || typeFilter !== 'all' || filters.length > 0
 
   const getTypeBadge = (tipo: string) => {
     switch (tipo) {
@@ -127,18 +240,11 @@ export default function OperePage() {
             Serie TV
           </Badge>
         )
-      case 'documentario':
+      case 'animazione':
         return (
           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-            <FileText className="h-3 w-3 mr-1" />
-            Documentario
-          </Badge>
-        )
-      case 'cartoon':
-        return (
-          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
             <Film className="h-3 w-3 mr-1" />
-            Cartoon
+            Animazione
           </Badge>
         )
       default:
@@ -152,12 +258,13 @@ export default function OperePage() {
 
   const exportData = () => {
     const csvContent = [
-      ['Codice', 'Titolo', 'Titolo Originale', 'Tipo', 'Anno'].join(','),
+      ['Titolo', 'Titolo Originale', 'Regia', 'Tipo', 'Episodi', 'Anno'].join(','),
       ...opere.map(opera => [
-        opera.codice_opera,
         `"${opera.titolo}"`,
         `"${opera.titolo_originale || ''}"`,
+        `"${Array.isArray(opera.regista) ? opera.regista.join(', ') : ''}"`,
         opera.tipo,
+        operaHaEpisodi(opera) ? 'Sì' : 'No',
         opera.anno_produzione
       ].join(','))
     ].join('\n')
@@ -176,9 +283,10 @@ export default function OperePage() {
     titolo: z.string().min(1, 'Titolo obbligatorio'),
     titolo_originale: z.string().optional().or(z.literal('')),
     alias_titoli: z.string().optional().or(z.literal('')), // Comma-separated, will be converted to array
-    tipo: z.enum(['film', 'serie_tv', 'documentario', 'cartoon', 'altro'], {
+    tipo: z.enum(['film', 'serie_tv', 'animazione'], {
       required_error: 'Tipo obbligatorio'
     }),
+    has_episodes: z.boolean().optional(),
     anno_produzione: z
       .union([z.string(), z.number()])
       .optional()
@@ -200,6 +308,7 @@ export default function OperePage() {
       titolo_originale: '',
       alias_titoli: '',
       tipo: undefined as any,
+      has_episodes: false,
       anno_produzione: undefined,
       regista: '',
       codice_isan: '',
@@ -217,6 +326,7 @@ export default function OperePage() {
       titolo_originale: '',
       alias_titoli: '',
       tipo: undefined as any,
+      has_episodes: false,
       anno_produzione: undefined,
       regista: '',
       codice_isan: '',
@@ -235,6 +345,7 @@ export default function OperePage() {
       titolo_originale: opera.titolo_originale || '',
       alias_titoli: Array.isArray(opera.alias_titoli) ? opera.alias_titoli.join(', ') : '',
       tipo: opera.tipo as any,
+      has_episodes: opera.has_episodes ?? (opera.tipo === 'serie_tv'),
       anno_produzione: opera.anno_produzione ?? undefined,
       regista: Array.isArray(opera.regista) ? opera.regista.join(', ') : '',
       codice_isan: opera.codice_isan || '',
@@ -299,12 +410,14 @@ export default function OperePage() {
         ? values.regista.split(',').map(s => s.trim()).filter(Boolean) 
         : null
 
+      const hasEpisodes = values.has_episodes ?? (values.tipo === 'serie_tv')
       const payload = {
         codice_opera: values.codice_opera || null,
         titolo: values.titolo,
         titolo_originale: values.titolo_originale || null,
         alias_titoli: aliasArray && aliasArray.length > 0 ? aliasArray : null,
         tipo: values.tipo,
+        has_episodes: hasEpisodes,
         anno_produzione: values.anno_produzione ?? null,
         regista: registaArray && registaArray.length > 0 ? registaArray : null,
         codice_isan: values.codice_isan || null,
@@ -360,17 +473,18 @@ export default function OperePage() {
         id: result.id 
       })
       
-      // Map IMDb type to our type
-      let tipoValue: 'film' | 'serie_tv' | 'documentario' | 'cartoon' | 'altro' = 'altro'
+      // Map IMDb type to our type (film, serie_tv, animazione)
+      let tipoValue: 'film' | 'serie_tv' | 'animazione' = 'film'
       const imdbType = (result.type || '').toLowerCase()
       if (imdbType.includes('movie') || imdbType === 'film') tipoValue = 'film'
       else if (imdbType.includes('series') || imdbType.includes('tv')) tipoValue = 'serie_tv'
-      else if (imdbType.includes('documentary')) tipoValue = 'documentario'
+      else if (imdbType.includes('documentary') || imdbType.includes('animation') || imdbType.includes('cartoon')) tipoValue = 'animazione'
       
       // Set values - always use defined values, never undefined
       form.setValue('titolo', mapped.titolo || '', { shouldValidate: true })
       form.setValue('titolo_originale', mapped.titolo_originale || '', { shouldValidate: true })
       form.setValue('tipo', tipoValue, { shouldValidate: true })
+      form.setValue('has_episodes', tipoValue === 'serie_tv', { shouldValidate: true })
       form.setValue('anno_produzione', mapped.anno_produzione ?? undefined, { shouldValidate: true })
       form.setValue('imdb_tconst', mapped.imdb_tconst || '', { shouldValidate: true })
       
@@ -444,26 +558,11 @@ export default function OperePage() {
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  ref={searchInputRef}
-                  placeholder="Cerca per titolo, codice opera, titolo originale..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-10"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label="Cancella ricerca"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
+              <SearchInput
+                onSearch={setSearchQuery}
+                initialValue={searchQuery}
+                placeholder="Cerca per titolo, titolo originale..."
+              />
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
               <SelectTrigger className="w-full sm:w-48">
@@ -474,74 +573,45 @@ export default function OperePage() {
                 <SelectItem value="all">Tutti i tipi</SelectItem>
                 <SelectItem value="film">Film</SelectItem>
                 <SelectItem value="serie_tv">Serie TV</SelectItem>
-                <SelectItem value="documentario">Documentario</SelectItem>
-                <SelectItem value="cartoon">Cartoon</SelectItem>
-                <SelectItem value="altro">Altro</SelectItem>
+                <SelectItem value="animazione">Animazione</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={tconstFilter} onValueChange={(v) => setTconstFilter(v as 'all' | 'with' | 'without')}>
-              <SelectTrigger className="w-full sm:w-48">
-                <DatabaseIcon className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filtra per IMDB" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutte le opere</SelectItem>
-                <SelectItem value="with">Con IMDB tconst</SelectItem>
-                <SelectItem value="without">Senza IMDB tconst</SelectItem>
-              </SelectContent>
-            </Select>
+            <FilterPopover onAdd={addFilter} />
             <Button 
               variant="outline" 
-              onClick={() => { 
-                setSearchQuery(''); 
-                setTypeFilter('all');
-                setTconstFilter('all');
-              }}
-              disabled={!searchQuery && typeFilter === 'all' && tconstFilter === 'all'}
+              onClick={() => { setSearchQuery(''); setTypeFilter('all'); setFilters([]) }}
+              disabled={!hasActiveFilters}
             >
               Reset
             </Button>
           </div>
           {/* Filter Chips */}
-          {(searchQuery || typeFilter !== 'all' || tconstFilter !== 'all') && (
+          {hasActiveFilters && (
             <div className="mt-3 flex flex-wrap gap-2">
               {searchQuery && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setSearchQuery('')}
-                  className="h-8"
-                >
+                <Button variant="outline" size="sm" onClick={() => setSearchQuery('')} className="h-8">
                   Ricerca: {searchQuery}
                   <X className="h-3 w-3 ml-2" />
                 </Button>
               )}
               {typeFilter !== 'all' && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setTypeFilter('all')}
-                  className="h-8"
-                >
-                  Tipo: {
-                    typeFilter === 'serie_tv' ? 'Serie TV' :
-                    typeFilter === 'cartoon' ? 'Cartoon' :
-                    typeFilter
-                  }
+                <Button variant="outline" size="sm" onClick={() => setTypeFilter('all')} className="h-8">
+                  Tipo: {typeFilter === 'serie_tv' ? 'Serie TV' : typeFilter === 'animazione' ? 'Animazione' : typeFilter}
                   <X className="h-3 w-3 ml-2" />
                 </Button>
               )}
-              {tconstFilter !== 'all' && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={() => setTconstFilter('all')}
+              {filters.map((f) => (
+                <Button
+                  key={f.field}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => removeFilter(f.field)}
                   className="h-8"
                 >
-                  {tconstFilter === 'with' ? 'Con IMDB tconst' : 'Senza IMDB tconst'}
+                  {FIELD_LABELS[f.field]}: {f.hasValue ? 'Valorizzato' : 'Non valorizzato'}
                   <X className="h-3 w-3 ml-2" />
                 </Button>
-              )}
+              ))}
             </div>
           )}
           <div className="mt-4 text-sm text-muted-foreground">
@@ -550,7 +620,7 @@ export default function OperePage() {
             ) : (
               <span>
                 {opere.length === 0 ? (
-                  searchQuery || typeFilter !== 'all' || tconstFilter !== 'all' ? (
+                  hasActiveFilters ? (
                     <>Nessun risultato trovato con i filtri selezionati</>
                   ) : (
                     <>Nessuna opera nel catalogo</>
@@ -572,18 +642,19 @@ export default function OperePage() {
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
-                <TableHead className="py-3 px-4 pl-6 w-32">Codice</TableHead>
-                <TableHead className="py-3 px-4">Titolo</TableHead>
-                <TableHead className="py-3 px-4">Titolo Originale</TableHead>
+                <TableHead className="py-3 px-4 pl-6">Titolo</TableHead>
+                <TableHead className="py-3 px-4">Regia</TableHead>
                 <TableHead className="py-3 px-4 w-32">Tipo</TableHead>
+                <TableHead className="py-3 px-4 w-20 text-center">Episodi</TableHead>
                 <TableHead className="py-3 px-4 w-20 text-center">Anno</TableHead>
+                <TableHead className="py-3 px-4">Titolo Originale</TableHead>
                 <TableHead className="py-3 px-4 pr-6 text-right sticky right-0 bg-background z-10 w-[1%]">Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {opere.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Nessuna opera trovata con i criteri di ricerca attuali
                   </TableCell>
                 </TableRow>
@@ -605,15 +676,12 @@ export default function OperePage() {
                       }
                     }}
                   >
-                    <TableCell className="py-4 px-4 pl-6 font-mono text-sm">
-                      {opera.codice_opera}
-                    </TableCell>
-                    <TableCell className="py-4 px-4">
+                    <TableCell className="py-4 px-4 pl-6">
                       <div className="font-medium">{opera.titolo}</div>
                     </TableCell>
                     <TableCell className="py-4 px-4">
-                      {opera.titolo_originale ? (
-                        <span className="text-muted-foreground italic">{opera.titolo_originale}</span>
+                      {Array.isArray(opera.regista) && opera.regista.length > 0 ? (
+                        <span className="text-muted-foreground">{opera.regista.join(', ')}</span>
                       ) : (
                         <span className="text-muted-foreground/50">—</span>
                       )}
@@ -621,8 +689,22 @@ export default function OperePage() {
                     <TableCell className="py-4 px-4">
                       {getTypeBadge(opera.tipo)}
                     </TableCell>
+                    <TableCell className="py-4 px-4 text-center">
+                      {operaHaEpisodi(opera) ? (
+                        <Badge variant="secondary" className="text-xs">Sì</Badge>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="py-4 px-4 text-center font-mono text-muted-foreground">
                       {opera.anno_produzione || '—'}
+                    </TableCell>
+                    <TableCell className="py-4 px-4">
+                      {opera.titolo_originale ? (
+                        <span className="text-muted-foreground italic">{opera.titolo_originale}</span>
+                      ) : (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="py-4 px-4 pr-6 sticky right-0 bg-background z-10 w-[1%]">
                       <DropdownMenu>
@@ -684,13 +766,18 @@ export default function OperePage() {
                       {opera.titolo_originale && (
                         <div className="text-xs text-gray-600 italic">{opera.titolo_originale}</div>
                       )}
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
                         {getTypeBadge(opera.tipo)}
                         <span className="text-xs text-gray-600">{opera.anno_produzione || '—'}</span>
+                        {operaHaEpisodi(opera) && (
+                          <Badge variant="secondary" className="text-xs">Episodi</Badge>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-600 mt-1">
-                        Codice: <span className="font-mono">{opera.codice_opera}</span>
-                      </div>
+                      {Array.isArray(opera.regista) && opera.regista.length > 0 && (
+                        <div className="text-xs text-gray-600 mt-1">
+                          Regia: {opera.regista.join(', ')}
+                        </div>
+                      )}
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -912,23 +999,31 @@ export default function OperePage() {
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground">Informazioni</h3>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4 items-start">
                   <FormField
                     control={form.control}
                     name="tipo"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Tipo *</FormLabel>
-                        <Select value={field.value} onValueChange={field.onChange}>
-                          <SelectTrigger>
+                        <Select
+                          value={field.value}
+                          onValueChange={(v) => {
+                            field.onChange(v)
+                            if (v === 'serie_tv') {
+                              form.setValue('has_episodes', true)
+                            } else {
+                              form.setValue('has_episodes', false)
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-10 w-full">
                             <SelectValue placeholder="Seleziona" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="film">Film</SelectItem>
                             <SelectItem value="serie_tv">Serie TV</SelectItem>
-                            <SelectItem value="documentario">Documentario</SelectItem>
-                            <SelectItem value="cartoon">Cartoon</SelectItem>
-                            <SelectItem value="altro">Altro</SelectItem>
+                            <SelectItem value="animazione">Animazione</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -937,19 +1032,18 @@ export default function OperePage() {
                   />
                   <FormField
                     control={form.control}
-                    name="anno_produzione"
+                    name="has_episodes"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Anno</FormLabel>
+                        <FormLabel className="invisible">Ha episodi</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            {...field} 
-                            value={field.value ?? ''} 
-                            placeholder="es. 2024" 
-                            min={1900} 
-                            max={2030} 
-                          />
+                          <label className="flex h-10 w-full cursor-pointer items-center gap-2.5 rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors hover:bg-accent/50 hover:border-accent-foreground/20">
+                            <Checkbox
+                              checked={field.value ?? false}
+                              onCheckedChange={field.onChange}
+                            />
+                            <span>Ha episodi?</span>
+                          </label>
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -967,6 +1061,26 @@ export default function OperePage() {
                         <Input {...field} value={field.value || ''} placeholder="es. Francis Ford Coppola" />
                       </FormControl>
                       <p className="text-xs text-muted-foreground">Per più registi, separa con virgola</p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="anno_produzione"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Anno</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          {...field}
+                          value={field.value ?? ''}
+                          placeholder="es. 2024"
+                          min={1900}
+                          max={2030}
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

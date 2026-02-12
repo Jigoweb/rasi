@@ -1,24 +1,67 @@
 import { supabase } from '@/shared/lib/supabase-client'
 
+export type ArtistaFieldFilter =
+  | { field: 'nome_arte' | 'codice_fiscale' | 'imdb_nconst' | 'data_nascita' | 'luogo_nascita' | 'territorio'; hasValue: boolean }
+  | { field: 'stato'; value: 'attivo' | 'sospeso' | 'cessato' }
+  | { field: 'tipologia'; value: 'AIE' | 'PRODUTTORE' }
+
 /**
  * Fetches a list of artists with optional filtering.
- * @param filters - Optional filters for search, status, and is_rasi.
+ * @param filters - Optional filters for search, is_rasi (tipologia), and field filters.
  * @returns An object with data and error properties.
  */
-export const getArtisti = async (filters?: { search?: string; stato?: string; is_rasi?: boolean | 'all' }) => {
+export const getArtisti = async (filters?: {
+  search?: string
+  is_rasi?: boolean | 'all'
+  fieldFilters?: ArtistaFieldFilter[]
+}) => {
   let query = supabase
     .from('artisti')
     .select('*')
     .order('cognome', { ascending: true })
 
-  // Apply status filter
-  if (filters?.stato && filters.stato !== 'all') {
-    query = query.eq('stato', filters.stato as 'attivo' | 'sospeso' | 'cessato')
-  }
-
-  // Apply is_rasi filter
+  // Apply is_rasi (tipologia RASI/Esterni) filter
   if (filters?.is_rasi !== undefined && filters.is_rasi !== 'all') {
     query = query.eq('is_rasi', filters.is_rasi === true)
+  }
+
+  // Apply field filters
+  if (filters?.fieldFilters?.length) {
+    for (const f of filters.fieldFilters) {
+      if (f.field === 'stato' && 'value' in f) {
+        query = query.eq('stato', f.value)
+      } else if (f.field === 'tipologia' && 'value' in f) {
+        query = query.eq('tipologia', f.value)
+      } else if ('hasValue' in f) {
+        const hasValue = f.hasValue
+        switch (f.field) {
+          case 'nome_arte':
+            if (hasValue) query = query.not('nome_arte', 'is', null).neq('nome_arte', '')
+            else query = query.or('nome_arte.is.null,nome_arte.eq.')
+            break
+          case 'codice_fiscale':
+            if (hasValue) query = query.not('codice_fiscale', 'is', null).neq('codice_fiscale', '')
+            else query = query.or('codice_fiscale.is.null,codice_fiscale.eq.')
+            break
+          case 'imdb_nconst':
+            if (hasValue) query = query.not('imdb_nconst', 'is', null).neq('imdb_nconst', '')
+            else query = query.or('imdb_nconst.is.null,imdb_nconst.eq.')
+            break
+          case 'data_nascita':
+            if (hasValue) query = query.not('data_nascita', 'is', null)
+            else query = query.is('data_nascita', null)
+            break
+          case 'luogo_nascita':
+            if (hasValue) query = query.not('luogo_nascita', 'is', null).neq('luogo_nascita', '')
+            else query = query.or('luogo_nascita.is.null,luogo_nascita.eq.')
+            break
+          case 'territorio':
+            if (hasValue) query = query.not('territorio', 'is', null)
+            else query = query.is('territorio', null)
+            break
+        }
+      }
+    }
   }
 
   // Apply search filter using pure ILIKE approach
@@ -71,7 +114,6 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
       id,
       personaggio,
       note,
-      stato_validazione,
       created_at,
       artista_id,
       opera_id,
@@ -83,6 +125,7 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         titolo,
         titolo_originale,
         tipo,
+        has_episodes,
         anno_produzione
       ),
       ruoli_tipologie (
@@ -156,4 +199,11 @@ export const deleteArtista = async (id: string) => {
 }
 
 // Re-export partecipazioni functions from opere service for convenience
-export { updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple } from '@/features/opere/services/opere.service'
+export { 
+  updatePartecipazione, 
+  deletePartecipazione, 
+  deletePartecipazioniMultiple,
+  createPartecipazione,
+  createPartecipazioniMultiple,
+  checkPartecipazioniDuplicate
+} from '@/features/opere/services/opere.service'

@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-// Form logic moved to ArtistaFormMultistep component
 import { useRouter } from 'next/navigation'
-import { getArtisti, getPartecipazioniCountByArtistaId, deleteArtista } from '@/features/artisti/services/artisti.service'
+import { getArtisti, getPartecipazioniCountByArtistaId, deleteArtista, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
@@ -12,20 +11,126 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, AlertTriangle, Loader2 } from 'lucide-react'
-import { SearchInput } from './components/search-input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, AlertTriangle, Loader2, Filter, X } from 'lucide-react'
+import { SearchInput } from '@/shared/components/search-input'
 import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
 import { ArtistaFormMultistep } from './components/artista-form-multistep'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
+
+const ARTISTI_FIELD_LABELS: Record<string, string> = {
+  nome_arte: 'Nome d\'arte',
+  codice_fiscale: 'Codice Fiscale',
+  imdb_nconst: 'IMDB nconst',
+  data_nascita: 'Data nascita',
+  luogo_nascita: 'Luogo nascita',
+  territorio: 'Territorio',
+  stato: 'Stato',
+  tipologia: 'Tipologia (AIE/Produttore)',
+}
+
+function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => void }) {
+  const [open, setOpen] = useState(false)
+  const [field, setField] = useState<string>('')
+  const [hasValue, setHasValue] = useState<boolean>(true)
+  const [statoValue, setStatoValue] = useState<string>('')
+  const [tipologiaValue, setTipologiaValue] = useState<string>('')
+
+  const handleAdd = () => {
+    if (!field) return
+    if (field === 'stato' && statoValue) {
+      onAdd({ field: 'stato', value: statoValue as 'attivo' | 'sospeso' | 'cessato' })
+    } else if (field === 'tipologia' && tipologiaValue) {
+      onAdd({ field: 'tipologia', value: tipologiaValue as 'AIE' | 'PRODUTTORE' })
+    } else if (!['stato', 'tipologia'].includes(field)) {
+      onAdd({ field: field as ArtistaFieldFilter['field'], hasValue })
+    }
+    setOpen(false)
+    setField('')
+    setStatoValue('')
+    setTipologiaValue('')
+    setHasValue(true)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full sm:w-auto">
+          <Filter className="h-4 w-4 mr-2" />
+          Aggiungi filtro
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72" align="end">
+        <div className="space-y-4">
+          <h4 className="font-medium text-sm">Filtra per campo</h4>
+          <Select value={field} onValueChange={(v) => { setField(v); setStatoValue(''); setTipologiaValue('') }}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleziona campo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="nome_arte">Nome d&apos;arte</SelectItem>
+              <SelectItem value="codice_fiscale">Codice Fiscale</SelectItem>
+              <SelectItem value="imdb_nconst">IMDB nconst</SelectItem>
+              <SelectItem value="data_nascita">Data nascita</SelectItem>
+              <SelectItem value="luogo_nascita">Luogo nascita</SelectItem>
+              <SelectItem value="territorio">Territorio</SelectItem>
+              <SelectItem value="stato">Stato</SelectItem>
+              <SelectItem value="tipologia">Tipologia (AIE/Produttore)</SelectItem>
+            </SelectContent>
+          </Select>
+          {field === 'stato' ? (
+            <Select value={statoValue} onValueChange={setStatoValue}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona stato" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="attivo">Attivo</SelectItem>
+                <SelectItem value="sospeso">Sospeso</SelectItem>
+                <SelectItem value="cessato">Cessato</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : field === 'tipologia' ? (
+            <Select value={tipologiaValue} onValueChange={setTipologiaValue}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona tipologia" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="AIE">AIE</SelectItem>
+                <SelectItem value="PRODUTTORE">Produttore</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : field ? (
+            <Select value={hasValue ? 'si' : 'no'} onValueChange={(v) => setHasValue(v === 'si')}>
+              <SelectTrigger>
+                <SelectValue placeholder="Stato" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="si">Valorizzato</SelectItem>
+                <SelectItem value="no">Non valorizzato</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : null}
+          <Button
+            onClick={handleAdd}
+            disabled={!field || (field === 'stato' ? !statoValue : field === 'tipologia' ? !tipologiaValue : false)}
+            className="w-full"
+          >
+            Aggiungi
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 export default function ArtistiPage() {
   const router = useRouter()
   const [artisti, setArtisti] = useState<Artista[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [isRasiFilter, setIsRasiFilter] = useState<boolean | 'all'>('all')
+  const [tipologiaFilter, setTipologiaFilter] = useState<'all' | true | false>('all')
+  const [filters, setFilters] = useState<ArtistaFieldFilter[]>([])
   const [selectedArtist, setSelectedArtist] = useState<Artista | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -40,23 +145,18 @@ export default function ArtistiPage() {
   const [partecipazioniCount, setPartecipazioniCount] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
   
-  // Fetch when search query, status or is_rasi filter changes (debounce is now handled in SearchInput)
   useEffect(() => {
     fetchArtisti()
-  }, [searchQuery, statusFilter, isRasiFilter])
+  }, [searchQuery, tipologiaFilter, filters])
 
   const fetchArtisti = async () => {
-    // Only show loading on initial load or if explicitly needed
-    // Avoiding full page loading state for search updates to keep UI responsive
-    if (artisti.length === 0) setLoading(true)
-    
+    if (artisti.length === 0 && !searchQuery && tipologiaFilter === 'all' && filters.length === 0) setLoading(true)
     try {
       const { data, error } = await getArtisti({
         search: searchQuery,
-        stato: statusFilter,
-        is_rasi: isRasiFilter
+        is_rasi: tipologiaFilter,
+        fieldFilters: filters,
       })
-
       if (error) throw error
       setArtisti(data || [])
     } catch (error) {
@@ -66,6 +166,19 @@ export default function ArtistiPage() {
     }
   }
 
+  const addFilter = (filter: ArtistaFieldFilter) => {
+    setFilters(prev => {
+      const without = prev.filter(x => x.field !== filter.field)
+      return [...without, filter]
+    })
+  }
+
+  const removeFilter = (field: string) => {
+    setFilters(prev => prev.filter(f => f.field !== field))
+  }
+
+  const hasActiveFilters = searchQuery || tipologiaFilter !== 'all' || filters.length > 0
+
   const getStatusBadge = (stato: string | null) => {
     if (!stato) return null
     switch (stato) {
@@ -73,8 +186,8 @@ export default function ArtistiPage() {
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Attivo</Badge>
       case 'sospeso':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Sospeso</Badge>
-      case 'inattivo':
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Inattivo</Badge>
+      case 'cessato':
+        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Cessato</Badge>
       default:
         return <Badge variant="outline">Sconosciuto</Badge>
     }
@@ -220,54 +333,84 @@ export default function ArtistiPage() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="p-4 lg:p-6">
-          <div className="flex flex-col gap-4">
+        <CardContent>
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
-              <SearchInput 
-                onSearch={setSearchQuery}
-                initialValue={searchQuery}
-              />
+              <SearchInput onSearch={setSearchQuery} initialValue={searchQuery} placeholder="Cerca per nome, cognome o codice artista..." />
             </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Stato" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti gli stati</SelectItem>
-                  <SelectItem value="attivo">Attivo</SelectItem>
-                  <SelectItem value="inattivo">Inattivo</SelectItem>
-                  <SelectItem value="sospeso">Sospeso</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select 
-                value={isRasiFilter === 'all' ? 'all' : isRasiFilter ? 'true' : 'false'} 
-                onValueChange={(value) => {
-                  if (value === 'all') setIsRasiFilter('all')
-                  else setIsRasiFilter(value === 'true')
-                }}
-              >
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Tipologia" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutte le tipologie</SelectItem>
-                  <SelectItem value="true">RASI</SelectItem>
-                  <SelectItem value="false">Esterni</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={() => {
-                  setSearchQuery('')
-                  setStatusFilter('all')
-                  setIsRasiFilter('all')
-                }}
-              >
-                Reset
-              </Button>
+            <Select
+              value={tipologiaFilter === 'all' ? 'all' : tipologiaFilter ? 'true' : 'false'}
+              onValueChange={(v) => {
+                if (v === 'all') setTipologiaFilter('all')
+                else setTipologiaFilter(v === 'true')
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-48">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtra per tipologia" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutte le tipologie</SelectItem>
+                <SelectItem value="true">RASI</SelectItem>
+                <SelectItem value="false">Esterni</SelectItem>
+              </SelectContent>
+            </Select>
+            <ArtistiFilterPopover onAdd={addFilter} />
+            <Button
+              variant="outline"
+              onClick={() => { setSearchQuery(''); setTipologiaFilter('all'); setFilters([]) }}
+              disabled={!hasActiveFilters}
+            >
+              Reset
+            </Button>
+          </div>
+          {/* Filter Chips */}
+          {hasActiveFilters && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {searchQuery && (
+                <Button variant="outline" size="sm" onClick={() => setSearchQuery('')} className="h-8">
+                  Ricerca: {searchQuery}
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              )}
+              {tipologiaFilter !== 'all' && (
+                <Button variant="outline" size="sm" onClick={() => setTipologiaFilter('all')} className="h-8">
+                  Tipologia: {tipologiaFilter ? 'RASI' : 'Esterni'}
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              )}
+              {filters.map((f) => (
+                <Button
+                  key={f.field}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => removeFilter(f.field)}
+                  className="h-8"
+                >
+                  {'value' in f
+                    ? `${ARTISTI_FIELD_LABELS[f.field]}: ${f.field === 'stato' ? (f.value === 'attivo' ? 'Attivo' : f.value === 'sospeso' ? 'Sospeso' : 'Cessato') : f.value}`
+                    : `${ARTISTI_FIELD_LABELS[f.field]}: ${f.hasValue ? 'Valorizzato' : 'Non valorizzato'}`}
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              ))}
             </div>
+          )}
+          <div className="mt-4 text-sm text-muted-foreground">
+            {loading ? (
+              <span className="animate-pulse">Caricamento...</span>
+            ) : (
+              <span>
+                {artisti.length === 0 ? (
+                  hasActiveFilters ? (
+                    <>Nessun risultato trovato con i filtri selezionati</>
+                  ) : (
+                    <>Nessun artista nel catalogo</>
+                  )
+                ) : (
+                  <>Mostrando <strong>{artisti.length}</strong> {artisti.length === 1 ? 'risultato' : 'risultati'}</>
+                )}
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>

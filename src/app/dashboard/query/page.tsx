@@ -46,7 +46,7 @@ ORDER BY cognome, nome;`
   COUNT(*) as numero_opere,
   COUNT(CASE WHEN tipo = 'film' THEN 1 END) as film,
   COUNT(CASE WHEN tipo = 'serie_tv' THEN 1 END) as serie_tv,
-  COUNT(CASE WHEN tipo = 'documentario' THEN 1 END) as documentari
+  COUNT(CASE WHEN tipo = 'animazione' THEN 1 END) as animazione
 FROM opere 
 GROUP BY anno_produzione 
 ORDER BY anno_produzione DESC;`
