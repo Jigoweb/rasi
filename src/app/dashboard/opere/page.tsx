@@ -116,6 +116,7 @@ export default function OperePage() {
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   const [isLoadingImdb, setIsLoadingImdb] = useState(false)
   const [imdbError, setImdbError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
   
   // Delete confirmation states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -320,6 +321,7 @@ export default function OperePage() {
     setFormMode('create')
     setSelectedOpera(null)
     setImdbError(null)
+    setFormError(null)
     form.reset({
       codice_opera: '',
       titolo: '',
@@ -339,6 +341,7 @@ export default function OperePage() {
     setFormMode('edit')
     setSelectedOpera(opera)
     setImdbError(null)
+    setFormError(null)
     form.reset({
       codice_opera: opera.codice_opera || '',
       titolo: opera.titolo,
@@ -402,6 +405,7 @@ export default function OperePage() {
 
   const onSubmit = async (values: z.infer<typeof schema>) => {
     try {
+      setFormError(null)
       // Convert comma-separated strings to arrays
       const aliasArray = values.alias_titoli 
         ? values.alias_titoli.split(',').map(s => s.trim()).filter(Boolean) 
@@ -434,7 +438,9 @@ export default function OperePage() {
       }
       setShowForm(false)
       fetchOpere()
-    } catch (e) {
+    } catch (e: any) {
+      const msg = e?.message || e?.details || 'Errore nel salvataggio dell\'opera'
+      setFormError(msg)
       console.error('Errore salvataggio opera', e)
     }
   }
@@ -894,6 +900,11 @@ export default function OperePage() {
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {formError && (
+                <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                  {formError}
+                </div>
+              )}
               
               {/* Sezione: Caricamento rapido da IMDB */}
               <div className="p-4 rounded-lg border bg-muted/30 space-y-3">

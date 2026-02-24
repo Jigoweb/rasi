@@ -15,9 +15,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service'
+import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
-import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2, Clock } from 'lucide-react'
+import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2, Clock, Building2 } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Textarea } from '@/shared/components/ui/textarea'
@@ -40,6 +40,7 @@ export default function OperaDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showEditForm, setShowEditForm] = useState(false)
+  const [updatedByEmail, setUpdatedByEmail] = useState<string | null>(null)
   
   // IMDb Integration State
   const [showImdbSearch, setShowImdbSearch] = useState(false)
@@ -151,6 +152,10 @@ export default function OperaDetailPage() {
         throw oErr
       }
       setOpera(oData || null)
+
+      if (oData?.updated_by) {
+        getUserEmailById(oData.updated_by).then(email => setUpdatedByEmail(email))
+      }
 
       const { data: pData, error: pErr } = await getPartecipazioniByOperaId(operaId)
       if (pErr) throw pErr
@@ -957,8 +962,8 @@ export default function OperaDetailPage() {
         <CardContent className="p-4 lg:p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
             <div className="space-y-2">
-              <div className="flex items-center text-sm text-muted-foreground"><Hash className="mr-2 h-4 w-4" />Codice Opera</div>
-              <div className="font-medium break-all">{opera.codice_opera}</div>
+              <div className="flex items-center text-sm text-muted-foreground"><Hash className="mr-2 h-4 w-4" />Codice ISAN</div>
+              <div className="font-medium font-mono break-all">{opera.codice_isan ?? <span className="text-muted-foreground italic font-normal">Non assegnato</span>}</div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground"><Calendar className="mr-2 h-4 w-4" />Anno Produzione</div>
@@ -979,6 +984,12 @@ export default function OperaDetailPage() {
                 ) : '-'}
               </div>
             </div>
+            {(opera.metadati as any)?.produttore_ragione_sociale && (
+              <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+                <div className="flex items-center text-sm text-muted-foreground"><Building2 className="mr-2 h-4 w-4" />Produttore</div>
+                <div className="font-medium">{(opera.metadati as any).produttore_ragione_sociale}</div>
+              </div>
+            )}
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground"><Clapperboard className="mr-2 h-4 w-4" />Regia</div>
               <div className="font-medium">
@@ -1018,15 +1029,26 @@ export default function OperaDetailPage() {
               </div>
             )}
           </div>
-          <div className="mt-6 pt-4 border-t flex gap-2">
-            <Button variant="outline" onClick={handleSearchImdb}>
-              <Search className="mr-2 h-4 w-4" />
-              Ricerca su IMDb
-            </Button>
-            <Button onClick={() => setShowEditForm(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Modifica
-            </Button>
+          <div className="mt-6 pt-4 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleSearchImdb}>
+                <Search className="mr-2 h-4 w-4" />
+                Ricerca su IMDb
+              </Button>
+              <Button onClick={() => setShowEditForm(true)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifica
+              </Button>
+            </div>
+            {opera.updated_at && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                <span>
+                  Aggiornato il {new Date(opera.updated_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {updatedByEmail && <span> da <span className="font-medium">{updatedByEmail}</span></span>}
+                </span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

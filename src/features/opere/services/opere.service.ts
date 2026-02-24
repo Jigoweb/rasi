@@ -40,6 +40,15 @@ export const getOperaById = async (id: string) => {
   return { data, error }
 }
 
+export const getUserEmailById = async (userId: string): Promise<string | null> => {
+  const { data, error } = await supabase.rpc('get_user_email_by_id', { user_id: userId })
+  if (error) {
+    console.error('Error fetching user email:', error)
+    return null
+  }
+  return data as string | null
+}
+
 export const createOpera = async (
   payload: import('@/shared/lib/supabase').Database['public']['Tables']['opere']['Insert']
 ) => {
