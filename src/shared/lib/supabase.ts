@@ -1071,6 +1071,7 @@ export type Database = {
         Returns: Json
       }
       get_user_artista_id: { Args: never; Returns: string }
+      get_user_email_by_id: { Args: { user_id: string }; Returns: string }
       get_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["ruolo_utente"]
