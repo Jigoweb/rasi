@@ -53,9 +53,8 @@ BEGIN
             COALESCE(array_to_string(NEW.generi, ' '), '')
         );
     ELSIF TG_TABLE_NAME = 'programmazioni' THEN
-        NEW.search_vector := to_tsvector('italian', 
-            COALESCE(NEW.titolo, '') || ' ' || 
-            COALESCE(NEW.descrizione, '')
+        NEW.search_vector := to_tsvector('italian',
+            COALESCE(NEW.titolo, '')
         );
     END IF;
     RETURN NEW;
