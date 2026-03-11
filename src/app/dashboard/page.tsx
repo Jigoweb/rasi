@@ -102,7 +102,7 @@ export default function DashboardPage() {
           supabase.from('artisti').select('id').or('codice_ipn.is.null,codice_ipn.eq.'),
           supabase.from('artisti').select('id').or('nome.is.null,nome.eq.'),
           supabase.from('artisti').select('id').or('cognome.is.null,cognome.eq.'),
-          supabase.from('artisti').select('id').or('stato.is.null,stato.eq.'),
+          supabase.from('artisti').select('id').is('stato', null),
           supabase.from('artisti').select('id').or('imdb_nconst.is.null,imdb_nconst.eq.'),
           supabase.from('artisti').select('id').is('data_nascita', null),
           supabase.from('artisti').select('id').or('codice_fiscale.is.null,codice_fiscale.eq.'),
@@ -115,7 +115,7 @@ export default function DashboardPage() {
 
         const [oTitolo, oTipo, oAnno, oTconst, oOrig] = await Promise.all([
           supabase.from('opere').select('id').or('titolo.is.null,titolo.eq.'),
-          supabase.from('opere').select('id').or('tipo.is.null,tipo.eq.'),
+          supabase.from('opere').select('id').is('tipo', null),
           supabase.from('opere').select('id').is('anno_produzione', null),
           supabase.from('opere').select('id').or('imdb_tconst.is.null,imdb_tconst.eq.'),
           supabase.from('opere').select('id').or('titolo_originale.is.null,titolo_originale.eq.'),
@@ -130,7 +130,7 @@ export default function DashboardPage() {
           supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_ipn.is.null,codice_ipn.eq.').then(r => r.count || 0),
           supabase.from('artisti').select('id', { count: 'exact', head: true }).or('nome.is.null,nome.eq.').then(r => r.count || 0),
           supabase.from('artisti').select('id', { count: 'exact', head: true }).or('cognome.is.null,cognome.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('stato.is.null,stato.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('stato', null).then(r => r.count || 0),
           supabase.from('artisti').select('id', { count: 'exact', head: true }).or('imdb_nconst.is.null,imdb_nconst.eq.').then(r => r.count || 0),
           supabase.from('artisti').select('id', { count: 'exact', head: true }).is('data_nascita', null).then(r => r.count || 0),
           supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_fiscale.is.null,codice_fiscale.eq.').then(r => r.count || 0),
@@ -138,7 +138,7 @@ export default function DashboardPage() {
 
         const opereMissing = await Promise.all([
           supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo.is.null,titolo.eq.').then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or('tipo.is.null,tipo.eq.').then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).is('tipo', null).then(r => r.count || 0),
           supabase.from('opere').select('id', { count: 'exact', head: true }).is('anno_produzione', null).then(r => r.count || 0),
           supabase.from('opere').select('id', { count: 'exact', head: true }).or('imdb_tconst.is.null,imdb_tconst.eq.').then(r => r.count || 0),
           supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo_originale.is.null,titolo_originale.eq.').then(r => r.count || 0),
