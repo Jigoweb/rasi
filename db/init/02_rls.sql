@@ -94,13 +94,46 @@ CREATE POLICY "ruoli_tipologie_write_policy" ON ruoli_tipologie
 -- POLICIES PER PARTECIPAZIONI
 -- ====================================
 
--- Lettura: Dipende dalla validazione e ruolo
+-- Lettura: Dipende dalla validazione dell'opera/artista e ruolo
 CREATE POLICY "partecipazioni_select_policy" ON partecipazioni
     FOR SELECT
     USING (
-        stato_validazione = 'validato'
-        OR get_user_role() IN ('admin', 'operatore')
-        OR (get_user_role() = 'artista' AND artista_id = get_user_artista_id())
+        -- Gli admin e operatori vedono tutto
+        get_user_role() = ANY (ARRAY['admin'::ruolo_utente, 'operatore'::ruolo_utente])
+        OR
+        -- Gli artisti vedono le proprie partecipazioni se l'opera o l'artista sono validati
+        (
+            get_user_role() = 'artista'::ruolo_utente 
+            AND artista_id = get_user_artista_id()
+            AND (
+                EXISTS (
+                    SELECT 1 FROM opere o 
+                    WHERE o.id = partecipazioni.opera_id 
+                    AND o.stato_validazione = 'validato'::stato_validazione
+                )
+                OR
+                EXISTS (
+                    SELECT 1 FROM artisti a 
+                    WHERE a.id = partecipazioni.artista_id 
+                    AND a.stato_validazione = 'validato'::stato_validazione
+                )
+            )
+        )
+        OR
+        -- Gli utenti pubblici vedono solo le partecipazioni di opere/artisti validati
+        (
+            EXISTS (
+                SELECT 1 FROM opere o 
+                WHERE o.id = partecipazioni.opera_id 
+                AND o.stato_validazione = 'validato'::stato_validazione
+            )
+            OR
+            EXISTS (
+                SELECT 1 FROM artisti a 
+                WHERE a.id = partecipazioni.artista_id 
+                AND a.stato_validazione = 'validato'::stato_validazione
+            )
+        )
     );
 
 -- Insert/Update: Admin e operatori
@@ -177,15 +210,29 @@ CREATE POLICY "campagne_individuazione_write_policy" ON campagne_individuazione
 CREATE POLICY "individuazioni_select_policy" ON individuazioni
     FOR SELECT
     USING (
-        stato IN ('validato', 'individuato')
-        OR get_user_role() IN ('admin', 'operatore')
-        OR (
-            get_user_role() = 'artista' 
+        -- Gli admin e operatori vedono tutto
+        get_user_role() = ANY (ARRAY['admin'::ruolo_utente, 'operatore'::ruolo_utente])
+        OR
+        -- Gli artisti vedono le individuazioni se l'opera è validata e hanno una partecipazione
+        (
+            get_user_role() = 'artista'::ruolo_utente 
             AND EXISTS (
-                SELECT 1 FROM partecipazioni p 
+                SELECT 1 
+                FROM partecipazioni p
+                JOIN opere o ON o.id = p.opera_id
                 WHERE p.opera_id = individuazioni.opera_id 
-                AND p.artista_id = get_user_artista_id()
-                AND p.stato_validazione = 'validato'
+                    AND p.artista_id = get_user_artista_id()
+                    AND o.stato_validazione = 'validato'::stato_validazione
+            )
+        )
+        OR
+        -- Gli utenti pubblici vedono solo le individuazioni di opere validati
+        (
+            stato = ANY (ARRAY['validato'::stato_individuazione, 'individuato'::stato_individuazione])
+            AND EXISTS (
+                SELECT 1 FROM opere o 
+                WHERE o.id = individuazioni.opera_id 
+                AND o.stato_validazione = 'validato'::stato_validazione
             )
         )
     );

@@ -71,7 +71,7 @@ export default function CampagnePage() {
       const { data: individuazioneData, error: individuazioneError } = await (supabase as any)
         .from('campagne_individuazione')
         .select('*')
-        .order('data_inizio', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (individuazioneError) throw individuazioneError
 
@@ -79,7 +79,7 @@ export default function CampagnePage() {
       const { data: ripartizioneData, error: ripartizioneError } = await supabase
         .from('campagne_ripartizione')
         .select('*')
-        .order('data_inizio', { ascending: false })
+        .order('created_at', { ascending: false })
 
       if (ripartizioneError) throw ripartizioneError
 
@@ -89,8 +89,12 @@ export default function CampagnePage() {
 
       const allCampagne: Campagna[] = [...individuazioneCampagne, ...ripartizioneCampagne];
 
-      // Sort by date
-      allCampagne.sort((a, b) => new Date(b.data_inizio).getTime() - new Date(a.data_inizio).getTime())
+      // Sort by created_at date
+      allCampagne.sort((a, b) => {
+        const dateA = a.created_at ? new Date(a.created_at).getTime() : 0
+        const dateB = b.created_at ? new Date(b.created_at).getTime() : 0
+        return dateB - dateA
+      })
 
       setCampagne(allCampagne)
     } catch (error) {
@@ -102,7 +106,8 @@ export default function CampagnePage() {
 
 
 
-  const getStatusBadge = (stato: string) => {
+  const getStatusBadge = (stato: string | null) => {
+    if (!stato) return null
     switch (stato) {
       case 'pianificata':
         return (
@@ -171,15 +176,21 @@ export default function CampagnePage() {
 
   const exportData = () => {
     const csvContent = [
-      ['Nome', 'Tipo', 'Stato', 'Data Inizio', 'Data Fine', 'Descrizione'].join(','),
-      ...filteredCampagne.map(campagna => [
-        `"${campagna.nome}"`,
-        campagna.tipo_campagna,
-        campagna.stato,
-        formatDate(campagna.data_inizio),
-        campagna.data_fine ? formatDate(campagna.data_fine) : '',
-        `"${campagna.descrizione || ''}"`
-      ].join(','))
+      ['Nome', 'Tipo', 'Stato', 'Data Creazione', 'Periodo', 'Descrizione'].join(','),
+      ...filteredCampagne.map(campagna => {
+        const dataCreazione = campagna.created_at ? formatDate(campagna.created_at) : ''
+        const periodo = campagna.tipo_campagna === 'ripartizione' && 'periodo_riferimento_inizio' in campagna
+          ? `${campagna.periodo_riferimento_inizio || ''} - ${campagna.periodo_riferimento_fine || ''}`
+          : ''
+        return [
+          `"${campagna.nome}"`,
+          campagna.tipo_campagna,
+          campagna.stato || '',
+          dataCreazione,
+          periodo,
+          `"${campagna.descrizione || ''}"`
+        ].join(',')
+      })
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv' })
@@ -352,11 +363,15 @@ export default function CampagnePage() {
                       {getStatusBadge(campagna.stato)}
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">{formatDate(campagna.data_inizio)}</div>
+                      <div className="text-sm">
+                        {campagna.tipo_campagna === 'ripartizione' && 'periodo_riferimento_inizio' in campagna
+                          ? formatDate(campagna.periodo_riferimento_inizio)
+                          : campagna.created_at ? formatDate(campagna.created_at) : '—'}
+                      </div>
                     </TableCell>
                     <TableCell>
-                      {campagna.data_fine ? (
-                        <div className="text-sm">{formatDate(campagna.data_fine)}</div>
+                      {campagna.tipo_campagna === 'ripartizione' && 'periodo_riferimento_fine' in campagna && campagna.periodo_riferimento_fine ? (
+                        <div className="text-sm">{formatDate(campagna.periodo_riferimento_fine)}</div>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
@@ -420,7 +435,9 @@ export default function CampagnePage() {
                         {getStatusBadge(campagna.stato)}
                       </div>
                       <div className="mt-1 text-xs text-gray-600">
-                        Inizio {formatDate(campagna.data_inizio)}{campagna.data_fine ? ` · Fine ${formatDate(campagna.data_fine)}` : ''}
+                        {campagna.tipo_campagna === 'ripartizione' && 'periodo_riferimento_inizio' in campagna
+                          ? `Periodo: ${campagna.periodo_riferimento_inizio || ''} - ${campagna.periodo_riferimento_fine || ''}`
+                          : campagna.created_at ? `Creato: ${formatDate(campagna.created_at)}` : ''}
                       </div>
                       {campagna.descrizione && (
                         <div className="text-sm text-gray-600 mt-1 truncate">{campagna.descrizione}</div>
@@ -472,19 +489,28 @@ export default function CampagnePage() {
                   <label className="text-sm font-medium text-gray-500">Stato</label>
                   <div className="mt-1">{getStatusBadge(selectedCampagna.stato)}</div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Data Inizio</label>
-                  <p>{formatDate(selectedCampagna.data_inizio)}</p>
-                </div>
-                {selectedCampagna.data_fine && (
+                {selectedCampagna.tipo_campagna === 'ripartizione' && 'periodo_riferimento_inizio' in selectedCampagna ? (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Periodo Inizio</label>
+                      <p>{formatDate(selectedCampagna.periodo_riferimento_inizio)}</p>
+                    </div>
+                    {selectedCampagna.periodo_riferimento_fine && (
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Periodo Fine</label>
+                        <p>{formatDate(selectedCampagna.periodo_riferimento_fine)}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <div>
-                    <label className="text-sm font-medium text-gray-500">Data Fine</label>
-                    <p>{formatDate(selectedCampagna.data_fine)}</p>
+                    <label className="text-sm font-medium text-gray-500">Data Creazione</label>
+                    <p>{selectedCampagna.created_at ? formatDate(selectedCampagna.created_at) : '—'}</p>
                   </div>
                 )}
                 <div>
                   <label className="text-sm font-medium text-gray-500">Data Creazione</label>
-                  <p>{new Date(selectedCampagna.created_at).toLocaleString('it-IT')}</p>
+                  <p>{selectedCampagna.created_at ? new Date(selectedCampagna.created_at).toLocaleString('it-IT') : '—'}</p>
                 </div>
                 {selectedCampagna.descrizione && (
                   <div className="col-span-2">
@@ -492,22 +518,22 @@ export default function CampagnePage() {
                     <p className="text-sm text-gray-700 mt-1">{selectedCampagna.descrizione}</p>
                   </div>
                 )}
-                {selectedCampagna.tipo_campagna === 'individuazione' && 'parametri_individuazione' in selectedCampagna && selectedCampagna.parametri_individuazione && (
+                {selectedCampagna.tipo_campagna === 'individuazione' && 'configurazione_matching' in selectedCampagna && selectedCampagna.configurazione_matching && (
                   <div className="col-span-2">
                     <label className="text-sm font-medium text-gray-500">Parametri Individuazione</label>
                     <div className="mt-1 p-3 bg-gray-50 rounded-lg">
                       <pre className="text-xs text-gray-700 whitespace-pre-wrap">
-                        {JSON.stringify(selectedCampagna.parametri_individuazione, null, 2)}
+                        {JSON.stringify(selectedCampagna.configurazione_matching, null, 2)}
                       </pre>
                     </div>
                   </div>
                 )}
-                {selectedCampagna.tipo_campagna === 'ripartizione' && 'parametri_ripartizione' in selectedCampagna && selectedCampagna.parametri_ripartizione && (
+                {selectedCampagna.tipo_campagna === 'ripartizione' && 'configurazione_calcolo' in selectedCampagna && selectedCampagna.configurazione_calcolo && (
                   <div className="col-span-2">
                     <label className="text-sm font-medium text-gray-500">Parametri Ripartizione</label>
                     <div className="mt-1 p-3 bg-gray-50 rounded-lg">
                       <pre className="text-xs text-gray-700 whitespace-pre-wrap">
-                        {JSON.stringify(selectedCampagna.parametri_ripartizione, null, 2)}
+                        {JSON.stringify(selectedCampagna.configurazione_calcolo, null, 2)}
                       </pre>
                     </div>
                   </div>

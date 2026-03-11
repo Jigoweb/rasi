@@ -316,13 +316,42 @@ export function IndividuazioneProgressDialog() {
               </div>
             ) : (
               // Generic error
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-800 font-medium mb-1">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-2">
+                <p className="text-sm text-red-800 font-medium">
                   Si è verificato un errore durante il processamento.
                 </p>
-                <p className="text-xs text-red-600 font-mono">
+                <p className="text-xs text-red-600 font-mono break-words">
                   {state.result?.error}
                 </p>
+                {/* Suggerimenti per errori comuni */}
+                {state.result?.error?.includes('schema cache') && (
+                  <div className="mt-3 pt-3 border-t border-red-200">
+                    <p className="text-xs text-red-700 font-medium mb-1">
+                      💡 Suggerimento:
+                    </p>
+                    <p className="text-xs text-red-600">
+                      Questo errore indica un problema temporaneo di connessione con il database. 
+                      Il sistema sta già tentando di riconnettersi automaticamente. 
+                      Se il problema persiste, prova a:
+                    </p>
+                    <ul className="text-xs text-red-600 list-disc list-inside mt-1 space-y-0.5">
+                      <li>Attendere qualche secondo e riprovare</li>
+                      <li>Ricaricare la pagina</li>
+                      <li>Verificare la connessione internet</li>
+                    </ul>
+                  </div>
+                )}
+                {state.result?.error?.includes('502') || state.result?.error?.includes('incomplete') ? (
+                  <div className="mt-3 pt-3 border-t border-red-200">
+                    <p className="text-xs text-red-700 font-medium mb-1">
+                      💡 Suggerimento:
+                    </p>
+                    <p className="text-xs text-red-600">
+                      Errore di connessione temporaneo. Il sistema ha tentato automaticamente di riconnettersi. 
+                      Se il problema persiste, prova a ridurre la dimensione del batch o riprova più tardi.
+                    </p>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

@@ -42,36 +42,75 @@ export const getCampagneProgrammazione = async () => {
       return { data: [], error: null }
     }
 
-    // Fetch all counts using individual count queries in parallel (more reliable than batch select)
+    // Fetch all counts using batch query (more efficient than individual queries)
     const campagnaIds = data.map((item: any) => item.id)
     
     // Create a map of counts
     const countsMap = new Map<string, number>()
     
-    // Use Promise.all to fetch all counts in parallel
-    const countPromises = campagnaIds.map(async (campagnaId: string) => {
-      try {
-        const { count, error } = await supabase
-          .from('programmazioni')
-          .select('*', { count: 'exact', head: true })
-          .eq('campagna_programmazione_id', campagnaId)
-        
-        if (error) {
-          console.error(`[getCampagneProgrammazione] Count error for campagna ${campagnaId}:`, error)
-          return { id: campagnaId, count: 0 }
-        }
-        
-        return { id: campagnaId, count: count || 0 }
-      } catch (error) {
-        console.error(`[getCampagneProgrammazione] Unexpected error for campagna ${campagnaId}:`, error)
-        return { id: campagnaId, count: 0 }
-      }
+    // Initialize all counts to 0
+    campagnaIds.forEach((id: string) => {
+      countsMap.set(id, 0)
     })
     
-    const results = await Promise.all(countPromises)
-    results.forEach(({ id, count }) => {
-      countsMap.set(id, count)
-    })
+    // Fetch all programmazioni for these campagne in a single query
+    if (campagnaIds.length > 0) {
+      try {
+        const { data: programmazioniData, error: progError } = await supabase
+          .from('programmazioni')
+          .select('campagna_programmazione_id')
+          .in('campagna_programmazione_id', campagnaIds)
+        
+        if (progError) {
+          console.error('[getCampagneProgrammazione] Batch count query error:', progError)
+          // Fallback to individual queries if batch fails
+          const countPromises = campagnaIds.map(async (campagnaId: string) => {
+            try {
+              const { count, error } = await supabase
+                .from('programmazioni')
+                .select('*', { count: 'exact', head: true })
+                .eq('campagna_programmazione_id', campagnaId)
+              
+              if (error) {
+                console.error(`[getCampagneProgrammazione] Count error for campagna ${campagnaId}:`, {
+                  message: error.message,
+                  details: error.details,
+                  hint: error.hint,
+                  code: error.code
+                })
+                return { id: campagnaId, count: 0 }
+              }
+              
+              return { id: campagnaId, count: count || 0 }
+            } catch (error: any) {
+              console.error(`[getCampagneProgrammazione] Unexpected error for campagna ${campagnaId}:`, {
+                message: error?.message || String(error),
+                stack: error?.stack
+              })
+              return { id: campagnaId, count: 0 }
+            }
+          })
+          
+          const results = await Promise.all(countPromises)
+          results.forEach(({ id, count }) => {
+            countsMap.set(id, count)
+          })
+        } else if (programmazioniData) {
+          // Count programmazioni per campagna
+          programmazioniData.forEach((item: any) => {
+            const id = item.campagna_programmazione_id
+            if (id) {
+              countsMap.set(id, (countsMap.get(id) || 0) + 1)
+            }
+          })
+        }
+      } catch (error: any) {
+        console.error('[getCampagneProgrammazione] Unexpected error in batch count:', {
+          message: error?.message || String(error),
+          stack: error?.stack
+        })
+      }
+    }
 
     // Transform data with counts
     const transformedData = data.map((item: any) => ({

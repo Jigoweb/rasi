@@ -23,7 +23,7 @@ export const getOpere = async (filters?: { search?: string; tipo?: string }) => 
   }
 
   if (filters?.tipo && filters.tipo !== 'all') {
-    query = query.eq('tipo', filters.tipo)
+    query = query.eq('tipo', filters.tipo as 'film' | 'serie_tv' | 'animazione')
   }
 
   const { data, error } = await query
@@ -38,6 +38,15 @@ export const getOperaById = async (id: string) => {
     .single()
 
   return { data, error }
+}
+
+export const getUserEmailById = async (userId: string): Promise<string | null> => {
+  const { data, error } = await supabase.rpc('get_user_email_by_id', { user_id: userId })
+  if (error) {
+    console.error('Error fetching user email:', error)
+    return null
+  }
+  return data as string | null
 }
 
 export const createOpera = async (
@@ -99,7 +108,6 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
       id,
       personaggio,
       note,
-      stato_validazione,
       created_at,
       artista_id,
       opera_id,
@@ -121,7 +129,6 @@ export const updatePartecipazione = async (
     ruolo_id?: string
     personaggio?: string | null
     note?: string | null
-    stato_validazione?: string | null
     episodio_id?: string | null
   }
 ) => {
@@ -144,6 +151,80 @@ export const deletePartecipazione = async (id: string) => {
   return { error }
 }
 
+/** Individuazione info per partecipazione (campagne in cui è usata) */
+export interface IndividuazionePerPartecipazione {
+  id: string
+  campagna_individuazioni_id: string
+  campagne_individuazione?: { nome: string } | null
+}
+
+/**
+ * Recupera le individuazioni collegate a una partecipazione, con i nomi delle campagne.
+ * Usato per avvisare l'utente prima della cancellazione.
+ */
+export const getIndividuazioniByPartecipazioneId = async (partecipazioneId: string) => {
+  const { data, error } = await supabase
+    .from('individuazioni')
+    .select(`
+      id,
+      campagna_individuazioni_id,
+      campagne_individuazione(nome)
+    `)
+    .eq('partecipazione_id', partecipazioneId)
+
+  return { data: data as IndividuazionePerPartecipazione[] | null, error }
+}
+
+/**
+ * Elimina tutte le individuazioni collegate a una partecipazione.
+ * Va chiamato prima di deletePartecipazione quando esistono individuazioni (FK RESTRICT).
+ */
+export const deleteIndividuazioniByPartecipazioneId = async (partecipazioneId: string) => {
+  const { error } = await supabase
+    .from('individuazioni')
+    .delete()
+    .eq('partecipazione_id', partecipazioneId)
+
+  return { error }
+}
+
+/** Individuazione con partecipazione_id per bulk fetch */
+export interface IndividuazionePerPartecipazioneBulk extends IndividuazionePerPartecipazione {
+  partecipazione_id: string
+}
+
+/**
+ * Recupera le individuazioni collegate a più partecipazioni (per bulk delete).
+ * Restituisce un array con partecipazione_id per raggruppare.
+ */
+export const getIndividuazioniByPartecipazioneIds = async (partecipazioneIds: string[]) => {
+  if (partecipazioneIds.length === 0) return { data: [] as IndividuazionePerPartecipazioneBulk[], error: null }
+  const { data, error } = await supabase
+    .from('individuazioni')
+    .select(`
+      id,
+      partecipazione_id,
+      campagna_individuazioni_id,
+      campagne_individuazione(nome)
+    `)
+    .in('partecipazione_id', partecipazioneIds)
+
+  return { data: (data || []) as IndividuazionePerPartecipazioneBulk[], error }
+}
+
+/**
+ * Elimina tutte le individuazioni collegate a più partecipazioni.
+ */
+export const deleteIndividuazioniByPartecipazioneIds = async (partecipazioneIds: string[]) => {
+  if (partecipazioneIds.length === 0) return { error: null }
+  const { error } = await supabase
+    .from('individuazioni')
+    .delete()
+    .in('partecipazione_id', partecipazioneIds)
+
+  return { error }
+}
+
 export const deletePartecipazioniMultiple = async (ids: string[]) => {
   const { error } = await supabase
     .from('partecipazioni')
@@ -153,10 +234,131 @@ export const deletePartecipazioniMultiple = async (ids: string[]) => {
   return { error }
 }
 
+/**
+ * Crea una singola partecipazione
+ */
+export const createPartecipazione = async (payload: {
+  artista_id: string
+  opera_id: string
+  episodio_id?: string | null
+  ruolo_id: string
+  personaggio?: string | null
+  note?: string | null
+}) => {
+  const { data, error } = await supabase
+    .from('partecipazioni')
+    .insert(payload)
+    .select('*')
+    .single()
+
+  return { data, error }
+}
+
+/**
+ * Crea multiple partecipazioni in batch
+ * Gestisce automaticamente i duplicati (ignora quelli che violano il constraint UNIQUE)
+ */
+export const createPartecipazioniMultiple = async (
+  partecipazioni: Array<{
+    artista_id: string
+    opera_id: string
+    episodio_id?: string | null
+    ruolo_id: string
+    personaggio?: string | null
+    note?: string | null
+  }>
+) => {
+  if (partecipazioni.length === 0) {
+    return { data: [], error: null, duplicates: [] }
+  }
+
+  // Tentativo di inserimento batch
+  const { data, error } = await supabase
+    .from('partecipazioni')
+    .insert(partecipazioni)
+    .select('*')
+
+  // Se c'è un errore di constraint unique, proviamo a inserire una alla volta
+  // per identificare quali sono i duplicati
+  if (error && error.code === '23505') {
+    const results: any[] = []
+    const duplicates: Array<{ index: number; partecipazione: typeof partecipazioni[0] }> = []
+    
+    for (let i = 0; i < partecipazioni.length; i++) {
+      const { data: singleData, error: singleError } = await supabase
+        .from('partecipazioni')
+        .insert(partecipazioni[i])
+        .select('*')
+        .single()
+      
+      if (singleError) {
+        if (singleError.code === '23505') {
+          duplicates.push({ index: i, partecipazione: partecipazioni[i] })
+        } else {
+          // Altro errore, lo restituiamo
+          return { data: results, error: singleError, duplicates }
+        }
+      } else if (singleData) {
+        results.push(singleData)
+      }
+    }
+    
+    return { data: results, error: duplicates.length > 0 ? null : error, duplicates }
+  }
+
+  return { data: data || [], error, duplicates: [] }
+}
+
+/**
+ * Verifica se esistono già partecipazioni duplicate
+ * Restituisce gli indici delle partecipazioni che sono duplicate
+ */
+export const checkPartecipazioniDuplicate = async (
+  partecipazioni: Array<{
+    artista_id: string
+    opera_id: string
+    episodio_id?: string | null
+    ruolo_id: string
+  }>
+) => {
+  if (partecipazioni.length === 0) {
+    return []
+  }
+
+  const duplicateIndices: number[] = []
+
+  // Per ogni partecipazione, verifichiamo se esiste già
+  // Questo approccio è più semplice e affidabile con PostgREST
+  for (let i = 0; i < partecipazioni.length; i++) {
+    const p = partecipazioni[i]
+    
+    let query = supabase
+      .from('partecipazioni')
+      .select('id')
+      .eq('artista_id', p.artista_id)
+      .eq('opera_id', p.opera_id)
+      .eq('ruolo_id', p.ruolo_id)
+    
+    if (p.episodio_id) {
+      query = query.eq('episodio_id', p.episodio_id)
+    } else {
+      query = query.is('episodio_id', null)
+    }
+
+    const { data, error } = await query.limit(1)
+
+    if (!error && data && data.length > 0) {
+      duplicateIndices.push(i)
+    }
+  }
+
+  return duplicateIndices
+}
+
 export const getEpisodiByOperaId = async (operaId: string) => {
   const { data, error } = await supabase
     .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, metadati')
+    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
     .eq('opera_id', operaId)
     .order('numero_stagione', { ascending: true })
     .order('numero_episodio', { ascending: true })
@@ -188,6 +390,15 @@ export const updateEpisodio = async (
     .single()
 
   return { data, error }
+}
+
+export const deleteEpisodio = async (id: string) => {
+  const { error } = await supabase
+    .from('episodi')
+    .delete()
+    .eq('id', id)
+
+  return { error }
 }
 
 // Upsert batch di episodi - trova per opera_id + numero_stagione + numero_episodio

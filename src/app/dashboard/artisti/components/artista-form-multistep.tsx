@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Badge } from '@/shared/components/ui/badge'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { CountryMultiSelect } from '@/shared/components/ui/country-multi-select'
 // Import diritti data - in Next.js, i file JSON in public devono essere caricati a runtime
 const loadDirittiData = async () => {
   try {
@@ -21,6 +22,17 @@ const loadDirittiData = async () => {
   } catch (error) {
     console.error('Error loading diritti data:', error)
     return { diritti: [], categorie: [] }
+  }
+}
+
+// Import codici paesi ISO 3166-1 alpha-3
+const loadCodiciPaesiData = async () => {
+  try {
+    const response = await fetch('/codici-paesi-iso3166-alpha3.json')
+    return await response.json()
+  } catch (error) {
+    console.error('Error loading codici paesi data:', error)
+    return { paesi: [] }
   }
 }
 
@@ -50,11 +62,19 @@ const artistaSchema = z.object({
   tipologia: z.string().optional().or(z.literal('')),
   stato: z.string().optional().or(z.literal('attivo')),
   data_inizio_mandato: z.string().optional().or(z.literal('')),
+  data_fine_mandato: z.string().optional().or(z.literal('')),
   is_rasi: z.boolean().optional(),
   
   // Contatti (salvati come JSONB in 'contatti')
   email: z.string().email().optional().or(z.literal('')),
   telefono: z.string().optional().or(z.literal('')),
+  
+  // Indirizzo (salvato come JSONB in 'indirizzo')
+  indirizzo_via: z.string().optional().or(z.literal('')),
+  indirizzo_civico: z.string().optional().or(z.literal('')),
+  indirizzo_cap: z.string().optional().or(z.literal('')),
+  indirizzo_citta: z.string().optional().or(z.literal('')),
+  indirizzo_provincia: z.string().optional().or(z.literal('')),
   
   // Dati aggiuntivi
   imdb_nconst: z.string().max(15).optional().or(z.literal('')),
@@ -62,7 +82,7 @@ const artistaSchema = z.object({
   ragione_sociale: z.string().optional().or(z.literal('')),
   forma_giuridica: z.string().optional().or(z.literal('')),
   partita_iva: z.string().optional().or(z.literal('')), // bigint come stringa
-  codice_paese: z.string().optional().or(z.literal('')),
+  codice_paese: z.array(z.string()).optional(),
   componente_stabile_gruppo_orchestra: z.string().optional().or(z.literal('')),
   
   // Diritti attivi
@@ -74,7 +94,7 @@ type ArtistaFormData = z.infer<typeof artistaSchema>
 const STEPS = [
   { id: 1, title: 'Dati Anagrafici', description: 'Informazioni personali base' },
   { id: 2, title: 'Dati Professionali', description: 'Informazioni sulla carriera' },
-  { id: 3, title: 'Contatti', description: 'Informazioni di contatto' },
+  { id: 3, title: 'Contatti e Residenza', description: 'Informazioni di contatto e indirizzo' },
   { id: 4, title: 'Dati Aggiuntivi', description: 'Informazioni supplementari' },
   { id: 5, title: 'Diritti Attivi', description: 'Selezione diritti associati' },
   { id: 6, title: 'Riepilogo', description: 'Verifica e conferma' },
@@ -93,14 +113,24 @@ interface Categoria {
   descrizione: string
 }
 
+interface Paese {
+  codice: string
+  nome: string
+}
+
 export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: ArtistaFormMultistepProps) {
   const [currentStep, setCurrentStep] = useState(1)
   const [dirittiData, setDirittiData] = useState<{ diritti: Diritto[], categorie: Categoria[] }>({ diritti: [], categorie: [] })
+  const [codiciPaesiData, setCodiciPaesiData] = useState<{ paesi: Paese[] }>({ paesi: [] })
 
   useEffect(() => {
     // Carica i diritti dal file JSON
     loadDirittiData().then((data) => {
       setDirittiData(data)
+    })
+    // Carica i codici paesi dal file JSON
+    loadCodiciPaesiData().then((data) => {
+      setCodiciPaesiData(data)
     })
   }, [])
 
@@ -126,15 +156,23 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       tipologia: artista?.tipologia || '',
       stato: artista?.stato || 'attivo',
       data_inizio_mandato: toDateInput(artista?.data_inizio_mandato) || new Date().toISOString().split('T')[0],
+      data_fine_mandato: toDateInput(artista?.data_fine_mandato) || '',
       is_rasi: artista?.is_rasi ?? true,
       email: (artista?.contatti as any)?.email || '',
       telefono: (artista?.contatti as any)?.number || (artista?.contatti as any)?.telefono || '',
+      indirizzo_via: (artista?.indirizzo as any)?.via || '',
+      indirizzo_civico: (artista?.indirizzo as any)?.civico || '',
+      indirizzo_cap: (artista?.indirizzo as any)?.cap || '',
+      indirizzo_citta: (artista?.indirizzo as any)?.citta || '',
+      indirizzo_provincia: (artista?.indirizzo as any)?.provincia || '',
       imdb_nconst: artista?.imdb_nconst || '',
-      codici_esterni: artista?.codici_esterni || {},
+      codici_esterni: (artista?.codici_esterni && typeof artista.codici_esterni === 'object' && !Array.isArray(artista.codici_esterni)) 
+        ? (artista.codici_esterni as { [x: string]: any }) 
+        : {},
       ragione_sociale: artista?.ragione_sociale || '',
       forma_giuridica: artista?.forma_giuridica || '',
       partita_iva: artista?.partita_iva ? String(artista.partita_iva) : '',
-      codice_paese: artista?.codice_paese || '',
+      codice_paese: artista?.codice_paese ? artista.codice_paese.split('/').filter(Boolean) : [],
       componente_stabile_gruppo_orchestra: artista?.componente_stabile_gruppo_orchestra || '',
       diritti_attivi: [],
     },
@@ -147,17 +185,19 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       
       if (Array.isArray(artista.diritti_attivi)) {
         // Se è già un array, potrebbe contenere codici o nomi
-        dirittiArray = artista.diritti_attivi.map((item: string) => {
-          // Verifica se è un codice
-          const diritto = dirittiData.diritti.find(d => d.codice === item)
-          if (diritto) {
-            // È un codice, convertilo in nome
-            return diritto.nome
-          }
-          // Verifica se è già un nome
-          const dirittoPerNome = dirittiData.diritti.find(d => d.nome === item)
-          return dirittoPerNome ? dirittoPerNome.nome : item
-        })
+        dirittiArray = artista.diritti_attivi
+          .filter((item): item is string => typeof item === 'string')
+          .map((item) => {
+            // Verifica se è un codice
+            const diritto = dirittiData.diritti.find(d => d.codice === item)
+            if (diritto) {
+              // È un codice, convertilo in nome
+              return diritto.nome
+            }
+            // Verifica se è già un nome
+            const dirittoPerNome = dirittiData.diritti.find(d => d.nome === item)
+            return dirittoPerNome ? dirittoPerNome.nome : item
+          })
       } else {
         // Se è un oggetto legacy, converti le chiavi (codici) in nomi
         dirittiArray = Object.keys(artista.diritti_attivi as Record<string, any>).map(codice => {
@@ -169,6 +209,14 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       form.setValue('diritti_attivi', dirittiArray)
     }
   }, [artista, dirittiData.diritti.length, form])
+
+  // Reset data_fine_mandato quando lo stato cambia da "cessato" a altro
+  const stato = form.watch('stato')
+  useEffect(() => {
+    if (stato !== 'cessato') {
+      form.setValue('data_fine_mandato', '')
+    }
+  }, [stato, form])
 
   const handleNext = async () => {
     const fieldsToValidate = getFieldsForStep(currentStep)
@@ -204,8 +252,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
   const onFormSubmit = async (data: ArtistaFormData) => {
     // Costruisci il payload per Supabase - allineato con lo schema reale
-    // Usiamo Partial<ArtistaInsert> perché alcuni campi sono opzionali nel form
-    const payload = {
+    const payload: ArtistaInsert = {
       codice_ipn: data.codice_ipn || null,
       nome: data.nome,
       cognome: data.cognome,
@@ -213,26 +260,43 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codice_fiscale: data.codice_fiscale || null,
       data_nascita: data.data_nascita || null,
       luogo_nascita: data.luogo_nascita || null,
-      territorio: data.territorio || 'ITA',
-      tipologia: data.tipologia || null,
-      stato: data.stato || 'attivo',
+      territorio: (data.territorio as Database['public']['Enums']['territorio_enum'] | null | undefined) || 'ITA',
+      tipologia: (data.tipologia as Database['public']['Enums']['tipologia_enum'] | null | undefined) || null,
+      stato: (data.stato as Database['public']['Enums']['stato_iscrizione'] | null | undefined) || 'attivo',
       data_inizio_mandato: data.data_inizio_mandato || new Date().toISOString().split('T')[0],
+      data_fine_mandato: data.data_fine_mandato || null,
       is_rasi: data.is_rasi ?? true,
-      contatti: {
-        email: data.email || null,
-        number: data.telefono || null,
-      },
+      contatti: (data.email || data.telefono) ? {
+        email: data.email || '',
+        number: data.telefono || '',
+      } : null,
+      indirizzo: (data.indirizzo_via || data.indirizzo_civico || data.indirizzo_cap || data.indirizzo_citta || data.indirizzo_provincia) ? {
+        via: data.indirizzo_via || null,
+        civico: data.indirizzo_civico || null,
+        cap: data.indirizzo_cap || null,
+        citta: data.indirizzo_citta || null,
+        provincia: data.indirizzo_provincia || null,
+      } : null,
       imdb_nconst: data.imdb_nconst || null,
       codici_esterni: data.codici_esterni || {},
       ragione_sociale: data.ragione_sociale || null,
       forma_giuridica: data.forma_giuridica || null,
       partita_iva: data.partita_iva ? Number(data.partita_iva) : null,
-      codice_paese: data.codice_paese || null,
+      codice_paese: data.codice_paese && data.codice_paese.length > 0 ? data.codice_paese.join('/') : null,
       componente_stabile_gruppo_orchestra: data.componente_stabile_gruppo_orchestra || null,
       diritti_attivi: (data.diritti_attivi && data.diritti_attivi.length > 0) ? data.diritti_attivi : null,
-    } as ArtistaInsert
+    }
 
-    await onSubmit(payload)
+    console.log('Payload da inviare:', JSON.stringify(payload, null, 2))
+    console.log('diritti_attivi:', payload.diritti_attivi)
+    console.log('codice_paese:', payload.codice_paese)
+
+    try {
+      await onSubmit(payload)
+    } catch (error) {
+      console.error('Errore nel submit del form:', error)
+      throw error
+    }
   }
 
   const renderStepContent = () => {
@@ -411,6 +475,30 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
           )}
         />
         <FormField
+          key="tipologia"
+          control={form.control}
+          name="tipologia"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tipologia</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || ''}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona tipologia" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="AIE">AIE</SelectItem>
+                  <SelectItem value="PRODUTTORE">Produttore</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <FormField
           key="data_inizio_mandato"
           control={form.control}
           name="data_inizio_mandato"
@@ -424,29 +512,32 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
             </FormItem>
           )}
         />
+        <FormField
+          key="data_fine_mandato"
+          control={form.control}
+          name="data_fine_mandato"
+          render={({ field }) => {
+            const stato = form.watch('stato')
+            const isDisabled = stato !== 'cessato'
+            
+            return (
+              <FormItem>
+                <FormLabel>Data Fine Mandato</FormLabel>
+                <FormControl>
+                  <Input 
+                    type="date" 
+                    {...field} 
+                    value={field.value || ''} 
+                    disabled={isDisabled}
+                    className={isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )
+          }}
+        />
       </div>
-      <FormField
-        key="tipologia"
-        control={form.control}
-        name="tipologia"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Tipologia</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value || ''}>
-              <FormControl>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona tipologia" />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                <SelectItem value="AIE">AIE</SelectItem>
-                <SelectItem value="PRODUTTORE">Produttore</SelectItem>
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
       <FormField
         key="imdb_nconst"
         control={form.control}
@@ -466,34 +557,117 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
   const renderStep3 = () => (
     <div className="space-y-4 w-full">
-      <FormField
-        key="email"
-        control={form.control}
-        name="email"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Email</FormLabel>
-            <FormControl>
-              <Input type="email" {...field} value={field.value || ''} placeholder="artista@example.com" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-      <FormField
-        key="telefono"
-        control={form.control}
-        name="telefono"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Telefono</FormLabel>
-            <FormControl>
-              <Input {...field} value={field.value || ''} placeholder="+39 123 456 7890" />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Contatti</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            key="email"
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Email</FormLabel>
+                <FormControl>
+                  <Input type="email" {...field} value={field.value || ''} placeholder="artista@example.com" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="telefono"
+            control={form.control}
+            name="telefono"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Telefono</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="+39 123 456 7890" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
+      
+      <div className="space-y-4 pt-4 border-t">
+        <h3 className="text-lg font-semibold">Indirizzo di Residenza</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FormField
+            key="indirizzo_via"
+            control={form.control}
+            name="indirizzo_via"
+            render={({ field }) => (
+              <FormItem className="md:col-span-2">
+                <FormLabel>Via</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="Via Roma" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="indirizzo_civico"
+            control={form.control}
+            name="indirizzo_civico"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Civico</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="123" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <FormField
+            key="indirizzo_cap"
+            control={form.control}
+            name="indirizzo_cap"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>CAP</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="00100" maxLength={5} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="indirizzo_citta"
+            control={form.control}
+            name="indirizzo_citta"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Città</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="Roma" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="indirizzo_provincia"
+            control={form.control}
+            name="indirizzo_provincia"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Provincia</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="RM" maxLength={2} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
     </div>
   )
 
@@ -536,10 +710,11 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
             <FormItem>
               <FormLabel className={!isCodiciPaesiEnabled ? 'text-muted-foreground' : ''}>Codici Paesi</FormLabel>
               <FormControl>
-                <Input 
-                  {...field} 
-                  value={field.value || ''}
-                  placeholder={isCodiciPaesiEnabled ? "ES, FR, DE..." : "Seleziona ITA+ o WW- per abilitare"}
+                <CountryMultiSelect
+                  options={codiciPaesiData.paesi}
+                  selected={field.value || []}
+                  onChange={isCodiciPaesiEnabled ? field.onChange : () => {}}
+                  placeholder={isCodiciPaesiEnabled ? "Seleziona paesi..." : "Seleziona territorio..."}
                   disabled={!isCodiciPaesiEnabled}
                 />
               </FormControl>
@@ -635,10 +810,39 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
     const handleToggleDiritto = (nome: string) => {
       const current = form.getValues('diritti_attivi') || []
-      if (current.includes(nome)) {
-        form.setValue('diritti_attivi', current.filter((n: string) => n !== nome))
+      const allDirittiNome = 'ALL (Tutti i diritti)'
+      const tuttiDirittiNomi = dirittiData.diritti.map(d => d.nome)
+      
+      if (nome === allDirittiNome) {
+        // Gestione speciale per "ALL (Tutti i diritti)"
+        if (current.includes(allDirittiNome)) {
+          // Deseleziona "ALL" e tutti gli altri
+          form.setValue('diritti_attivi', [])
+        } else {
+          // Seleziona "ALL" e tutti gli altri diritti
+          form.setValue('diritti_attivi', tuttiDirittiNomi)
+        }
       } else {
-        form.setValue('diritti_attivi', [...current, nome])
+        // Gestione normale per gli altri diritti
+        if (current.includes(nome)) {
+          // Deseleziona il diritto
+          const newDiritti = current.filter((n: string) => n !== nome)
+          // Se "ALL" era selezionato, rimuovilo anche
+          form.setValue('diritti_attivi', newDiritti.filter((n: string) => n !== allDirittiNome))
+        } else {
+          // Seleziona il diritto
+          const newDiritti = [...current, nome]
+          // Se "ALL" era selezionato, rimuovilo (perché ora non tutti sono selezionati)
+          const dirittiSenzaAll = newDiritti.filter((n: string) => n !== allDirittiNome)
+          // Verifica se ora tutti i diritti sono selezionati
+          const tuttiSelezionati = tuttiDirittiNomi.every(n => dirittiSenzaAll.includes(n))
+          if (tuttiSelezionati) {
+            // Se tutti sono selezionati, aggiungi anche "ALL"
+            form.setValue('diritti_attivi', [...dirittiSenzaAll, allDirittiNome])
+          } else {
+            form.setValue('diritti_attivi', dirittiSenzaAll)
+          }
+        }
       }
     }
 
@@ -664,11 +868,6 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
                     />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium">{diritto.nome}</div>
-                      {diritto.descrizione && (
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {diritto.descrizione}
-                        </div>
-                      )}
                     </div>
                   </label>
                 ))}
@@ -719,7 +918,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
     // Dati aggiuntivi valorizzati
     const datiAggiuntivi = [
       hasValue(formData.territorio) && { label: 'Territorio', value: formData.territorio },
-      hasValue(formData.codice_paese) && { label: 'Codici Paesi', value: formData.codice_paese },
+      formData.codice_paese && formData.codice_paese.length > 0 && { label: 'Codici Paesi', value: formData.codice_paese.join(', ') },
       hasValue(formData.ragione_sociale) && { label: 'Ragione Sociale', value: formData.ragione_sociale },
       hasValue(formData.forma_giuridica) && { label: 'Forma Giuridica', value: formData.forma_giuridica },
       hasValue(formData.partita_iva) && { label: 'Partita IVA', value: formData.partita_iva },

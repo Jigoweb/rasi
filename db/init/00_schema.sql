@@ -157,6 +157,7 @@ CREATE TABLE opere (
     
     -- Classificazione
     tipo tipo_opera NOT NULL,
+    has_episodes BOOLEAN NOT NULL DEFAULT false,
     generi VARCHAR(100)[],
     tags VARCHAR(50)[],
     

@@ -12,10 +12,9 @@ export async function searchTitles(term: string, year?: number | string, type?: 
   
   if (normalizedType === 'film') imdbType = 'MOVIE'
   else if (normalizedType === 'serie_tv' || normalizedType === 'serietv') imdbType = 'TV_SERIES'
-  else if (normalizedType === 'documentario') imdbType = 'TV_SPECIAL'
+  else if (normalizedType === 'animazione') imdbType = 'MOVIE' // animazione può essere film o serie, usiamo MOVIE come default
   
-  // Only set type parameter if we have a valid mapping. 
-  // Passing 'altro' or unknown types causes the API to return 0 results or unexpected behavior.
+  // Only set type parameter if we have a valid mapping.
   if (imdbType) params.set('type', imdbType)
   
   const { ok, data } = await fetchJson<{ results: Array<{ title: string; year: number | null; type: string | null; id: string | null; directors: string | null }> }>(`/api/imdb/search?${params.toString()}`)
@@ -62,7 +61,7 @@ export function mapImdbToOpera(imdb: { title: string; originalTitle: string | nu
   return {
     titolo: imdb.title,
     titolo_originale: imdb.originalTitle || null,
-    tipo: imdb.type || 'altro',
+    tipo: imdb.type || 'film',
     anno_produzione: imdb.year ?? null,
     imdb_tconst: imdb.id,
     codici_esterni: { imdb: imdb.id },

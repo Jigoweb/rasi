@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation';
-import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple } from '@/features/artisti/services/artisti.service';
-import { getRuoliTipologie } from '@/features/opere/services/opere.service';
+import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, updateArtista } from '@/features/artisti/services/artisti.service';
+import { getRuoliTipologie, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service';
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
@@ -14,9 +14,12 @@ import { Label } from '@/shared/components/ui/label'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User, MoreHorizontal, Edit, Trash2, Loader2, Tv, Clapperboard, ExternalLink, Theater, CheckSquare, Square, X } from 'lucide-react'
+import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User, MoreHorizontal, Edit, Trash2, Loader2, Tv, Clapperboard, PenTool, ExternalLink, Theater, CheckSquare, Square, X, Pencil, Plus, Search } from 'lucide-react'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import Link from 'next/link'
+import { ArtistaFormMultistep } from '@/app/dashboard/artisti/components/artista-form-multistep'
+import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
+import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -31,7 +34,6 @@ interface Partecipazione {
   id: string
   personaggio: string | null
   note: string | null
-  stato_validazione: string | null
   created_at: string | null
   artista_id?: string
   opera_id?: string
@@ -76,16 +78,30 @@ export default function ArtistaProfiloPage() {
   const [editForm, setEditForm] = useState({
     ruolo_id: '',
     personaggio: '',
-    note: '',
-    stato_validazione: ''
+    note: ''
   })
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [partecipazioneIndividuazioni, setPartecipazioneIndividuazioni] = useState<{ id: string; campagna_individuazioni_id: string; campagne_individuazione?: { nome: string } | null }[]>([])
+  const [deleteIndividuazioniToo, setDeleteIndividuazioniToo] = useState(true)
+  const [bulkPartecipazioneIndividuazioni, setBulkPartecipazioneIndividuazioni] = useState<{ id: string; partecipazione_id: string; campagna_individuazioni_id: string; campagne_individuazione?: { nome: string } | null }[]>([])
+  const [bulkDeleteIndividuazioniToo, setBulkDeleteIndividuazioniToo] = useState(false)
   
   // Multi-select state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false)
   const [isBulkDeleting, setIsBulkDeleting] = useState(false)
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterTipo, setFilterTipo] = useState<string>('')
+  const [filterRuolo, setFilterRuolo] = useState<string>('')
+
+  // Edit artista state
+  const [showEditArtistaDialog, setShowEditArtistaDialog] = useState(false)
+  const [isSavingArtista, setIsSavingArtista] = useState(false)
+  
+  // Add partecipazione dialog state
+  const [showAddPartecipazioneDialog, setShowAddPartecipazioneDialog] = useState(false)
 
   const fetchArtistaData = useCallback(async () => {
     try {
@@ -156,7 +172,20 @@ export default function ArtistaProfiloPage() {
     })
   }, [artistaId, fetchArtistaData])
 
-  const getStatusBadge = (stato: string) => {
+  // Fetch individuazioni quando si apre il dialog bulk delete
+  useEffect(() => {
+    if (showBulkDeleteDialog && selectedIds.size > 0) {
+      setBulkDeleteIndividuazioniToo(false)
+      getIndividuazioniByPartecipazioneIds(Array.from(selectedIds)).then(({ data }) => {
+        setBulkPartecipazioneIndividuazioni(data || [])
+      })
+    } else {
+      setBulkPartecipazioneIndividuazioni([])
+    }
+  }, [showBulkDeleteDialog, selectedIds])
+
+  const getStatusBadge = (stato: string | null) => {
+    if (!stato) return null
     switch (stato) {
       case 'attivo':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Attivo</Badge>
@@ -193,15 +222,18 @@ export default function ArtistaProfiloPage() {
     setEditForm({
       ruolo_id: partecipazione.ruolo_id || partecipazione.ruoli_tipologie?.id || '',
       personaggio: partecipazione.personaggio || '',
-      note: partecipazione.note || '',
-      stato_validazione: partecipazione.stato_validazione || 'da_validare'
+      note: partecipazione.note || ''
     })
     setShowEditDialog(true)
   }
 
-  const openDeleteDialog = (partecipazione: Partecipazione) => {
+  const openDeleteDialog = async (partecipazione: Partecipazione) => {
     setSelectedPartecipazione(partecipazione)
+    setPartecipazioneIndividuazioni([])
+    setDeleteIndividuazioniToo(false)
     setShowDeleteDialog(true)
+    const { data } = await getIndividuazioniByPartecipazioneId(partecipazione.id)
+    setPartecipazioneIndividuazioni(data || [])
   }
 
   const handleSaveEdit = async () => {
@@ -212,8 +244,7 @@ export default function ArtistaProfiloPage() {
       const { error } = await updatePartecipazione(selectedPartecipazione.id, {
         ruolo_id: editForm.ruolo_id,
         personaggio: editForm.personaggio || null,
-        note: editForm.note || null,
-        stato_validazione: editForm.stato_validazione
+        note: editForm.note || null
       })
       
       if (error) {
@@ -232,20 +263,57 @@ export default function ArtistaProfiloPage() {
   const handleDelete = async () => {
     if (!selectedPartecipazione) return
     
+    const hasIndividuazioni = partecipazioneIndividuazioni.length > 0
+    const shouldDeleteIndividuazioni = hasIndividuazioni && deleteIndividuazioniToo
+    
     setIsDeleting(true)
     try {
-      const { error } = await deletePartecipazione(selectedPartecipazione.id)
+      if (shouldDeleteIndividuazioni) {
+        const { error: indErr } = await deleteIndividuazioniByPartecipazioneId(selectedPartecipazione.id)
+        if (indErr) throw indErr
+      }
       
+      const { error } = await deletePartecipazione(selectedPartecipazione.id)
       if (error) throw error
       
       setShowDeleteDialog(false)
-      fetchArtistaData() // Refresh data
-    } catch (e) {
+      fetchArtistaData()
+    } catch (e: any) {
       console.error('Error deleting partecipazione:', e)
+      alert('Errore durante l\'eliminazione: ' + (e?.message || 'Errore sconosciuto'))
     } finally {
       setIsDeleting(false)
     }
   }
+
+  // Filtra partecipazioni in base alla ricerca e filtri
+  const filteredPartecipazioni = partecipazioni.filter((p) => {
+    // Filtro ricerca testuale
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      const matchesSearch = (
+        p.opere?.titolo?.toLowerCase().includes(query) ||
+        p.opere?.titolo_originale?.toLowerCase().includes(query) ||
+        p.opere?.codice_opera?.toLowerCase().includes(query) ||
+        p.ruoli_tipologie?.nome?.toLowerCase().includes(query) ||
+        p.personaggio?.toLowerCase().includes(query) ||
+        p.note?.toLowerCase().includes(query)
+      )
+      if (!matchesSearch) return false
+    }
+    
+    // Filtro tipo opera
+    if (filterTipo && p.opere?.tipo !== filterTipo) {
+      return false
+    }
+    
+    // Filtro ruolo
+    if (filterRuolo && p.ruoli_tipologie?.id !== filterRuolo) {
+      return false
+    }
+    
+    return true
+  })
 
   // Multi-select handlers
   const toggleSelect = (id: string) => {
@@ -261,26 +329,35 @@ export default function ArtistaProfiloPage() {
   }
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === partecipazioni.length) {
+    if (selectedIds.size === filteredPartecipazioni.length) {
       setSelectedIds(new Set())
     } else {
-      setSelectedIds(new Set(partecipazioni.map(p => p.id)))
+      setSelectedIds(new Set(filteredPartecipazioni.map(p => p.id)))
     }
   }
 
   const clearSelection = () => {
     setSelectedIds(new Set())
+    setIsSelectionMode(false)
   }
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return
-    
+
+    const ids = Array.from(selectedIds)
+    const hasIndividuazioni = bulkPartecipazioneIndividuazioni.length > 0
+    const shouldDeleteIndividuazioni = hasIndividuazioni && bulkDeleteIndividuazioniToo
+
     setIsBulkDeleting(true)
     try {
-      const { error } = await deletePartecipazioniMultiple(Array.from(selectedIds))
-      
+      if (shouldDeleteIndividuazioni) {
+        const { error: indErr } = await deleteIndividuazioniByPartecipazioneIds(ids)
+        if (indErr) throw indErr
+      }
+
+      const { error } = await deletePartecipazioniMultiple(ids)
       if (error) throw error
-      
+
       setShowBulkDeleteDialog(false)
       setSelectedIds(new Set())
       fetchArtistaData()
@@ -331,21 +408,27 @@ export default function ArtistaProfiloPage() {
     <div className="container mx-auto p-6 space-y-4 lg:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <Button onClick={() => router.back()} variant="outline" size="sm" className="w-fit">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna Indietro
-          </Button>
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-3">
             <h1 className="text-xl lg:text-3xl font-bold">
               {artista.nome} {artista.cognome}
             </h1>
-            {artista.nome_arte && (
-              <p className="text-lg text-muted-foreground">({artista.nome_arte})</p>
-            )}
+            {getStatusBadge(artista.stato)}
           </div>
+          {artista.nome_arte && (
+            <p className="text-lg text-muted-foreground">({artista.nome_arte})</p>
+          )}
         </div>
-        {getStatusBadge(artista.stato)}
+        <div className="flex items-center gap-2">
+          <Button onClick={() => router.back()} variant="outline" size="sm">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Torna Indietro
+          </Button>
+          <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
+            <Pencil className="mr-2 h-4 w-4" />
+            Modifica
+          </Button>
+        </div>
       </div>
 
       {/* Dettagli Artista */}
@@ -402,6 +485,50 @@ export default function ArtistaProfiloPage() {
               <div className="font-medium">{formatDate(artista.updated_at)}</div>
             </div>
           </div>
+          
+          {/* Contatti e Indirizzo */}
+          {((artista.contatti as any)?.email || (artista.contatti as any)?.number || artista.indirizzo) && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="text-sm font-semibold mb-4">Contatti e Residenza</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+                {(artista.contatti as any)?.email && (
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <User className="mr-2 h-4 w-4" />
+                      Email
+                    </div>
+                    <div className="font-medium break-all">{(artista.contatti as any).email}</div>
+                  </div>
+                )}
+                {(artista.contatti as any)?.number && (
+                  <div className="space-y-2">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <User className="mr-2 h-4 w-4" />
+                      Telefono
+                    </div>
+                    <div className="font-medium">{(artista.contatti as any).number}</div>
+                  </div>
+                )}
+                {artista.indirizzo && (
+                  <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <Hash className="mr-2 h-4 w-4" />
+                      Indirizzo
+                    </div>
+                    <div className="font-medium">
+                      {[
+                        (artista.indirizzo as any)?.via,
+                        (artista.indirizzo as any)?.civico,
+                        (artista.indirizzo as any)?.cap,
+                        (artista.indirizzo as any)?.citta,
+                        (artista.indirizzo as any)?.provincia
+                      ].filter(Boolean).join(', ') || '—'}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -422,66 +549,169 @@ export default function ArtistaProfiloPage() {
           </CardDescription>
         </CardHeader>
         
-        {/* Barra azioni selezione multipla */}
-        {selectedIds.size > 0 && (
-          <div className="px-4 py-3 bg-primary/5 border-b flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <Checkbox 
-                checked={selectedIds.size === partecipazioni.length}
-                onCheckedChange={toggleSelectAll}
+        {/* Header con ricerca, filtri, aggiungi e elimina */}
+        <div className="px-4 py-3 border-b space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* Campo di ricerca - più corto */}
+            <div className="relative max-w-xs">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Cerca partecipazioni..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
               />
-              <span className="text-sm font-medium">
-                {selectedIds.size} {selectedIds.size === 1 ? 'selezionata' : 'selezionate'}
-              </span>
-              <Button variant="ghost" size="sm" onClick={clearSelection}>
-                <X className="h-4 w-4 mr-1" />
-                Deseleziona
+            </div>
+            
+            {/* Filtri */}
+            <Select value={filterTipo || 'all'} onValueChange={(value) => setFilterTipo(value === 'all' ? '' : value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Tipo opera" />
+              </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti i tipi</SelectItem>
+                  <SelectItem value="film">Film</SelectItem>
+                  <SelectItem value="serie_tv">Serie TV</SelectItem>
+                  <SelectItem value="animazione">Animazione</SelectItem>
+                </SelectContent>
+            </Select>
+            
+            <Select value={filterRuolo || 'all'} onValueChange={(value) => setFilterRuolo(value === 'all' ? '' : value)}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Ruolo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti i ruoli</SelectItem>
+                {ruoli.map((ruolo) => (
+                  <SelectItem key={ruolo.id} value={ruolo.id}>
+                    {ruolo.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            {/* Bottoni azioni */}
+            <div className="flex gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAddPartecipazioneDialog(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Aggiungi partecipazione
+              </Button>
+              {!isSelectionMode ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsSelectionMode(true)}
+                  disabled={partecipazioni.length === 0}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Elimina partecipazioni
+                </Button>
+              ) : (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                  disabled={selectedIds.size === 0}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Elimina selezionate
+                </Button>
+              )}
+            </div>
+          </div>
+          
+          {/* Barra azioni selezione multipla - sempre visibile quando in modalità selezione */}
+          {isSelectionMode && (
+            <div className="mx-4 mb-4 mt-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center justify-between gap-4 shadow-sm transition-all">
+              <div className="flex items-center gap-3">
+                <Checkbox 
+                  checked={selectedIds.size === filteredPartecipazioni.length && filteredPartecipazioni.length > 0}
+                  onCheckedChange={() => {
+                    if (selectedIds.size === filteredPartecipazioni.length) {
+                      setSelectedIds(new Set())
+                    } else {
+                      setSelectedIds(new Set(filteredPartecipazioni.map(p => p.id)))
+                    }
+                  }}
+                  disabled={filteredPartecipazioni.length === 0}
+                />
+                <span className="text-sm font-medium text-foreground">
+                  {selectedIds.size === 0 
+                    ? 'Nessuna partecipazione selezionata'
+                    : `${selectedIds.size} ${selectedIds.size === 1 ? 'partecipazione selezionata' : 'partecipazioni selezionate'}`
+                  }
+                </span>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={clearSelection}
+                className="h-8 text-muted-foreground hover:text-foreground hover:bg-background/50"
+              >
+                <X className="h-3.5 w-3.5 mr-1.5" />
+                Annulla selezione
               </Button>
             </div>
-            <Button 
-              variant="destructive" 
-              size="sm"
-              onClick={() => setShowBulkDeleteDialog(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Elimina selezionate
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
         
         <CardContent className="p-0">
-          {partecipazioni.length === 0 ? (
+          {filteredPartecipazioni.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Film className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p>Nessuna partecipazione trovata per questo artista</p>
+              <p>
+                {searchQuery.trim() 
+                  ? 'Nessuna partecipazione trovata per la ricerca' 
+                  : 'Nessuna partecipazione trovata per questo artista'}
+              </p>
             </div>
           ) : (
             <div className="divide-y">
-              {partecipazioni.map((partecipazione) => {
+              {filteredPartecipazioni.map((partecipazione) => {
                 const tipoOpera = (partecipazione.opere?.tipo || '').toLowerCase()
-                const TipoIcon = tipoOpera === 'serie_tv' ? Tv : tipoOpera === 'film' ? Clapperboard : Film
-                const tipoColor = tipoOpera === 'serie_tv' ? 'bg-purple-100 text-purple-700' : tipoOpera === 'film' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
+                const TipoIcon = tipoOpera === 'serie_tv' ? Tv : tipoOpera === 'film' ? Clapperboard : tipoOpera === 'animazione' ? PenTool : Film
+                const tipoColor = tipoOpera === 'serie_tv' ? 'bg-purple-100 text-purple-700' : tipoOpera === 'film' ? 'bg-blue-100 text-blue-700' : tipoOpera === 'animazione' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                 const isSelected = selectedIds.has(partecipazione.id)
                 
                 return (
-                  <div key={partecipazione.id} className={`px-4 py-3 hover:bg-muted/30 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}>
-                    <div className="flex gap-3 items-start">
-                      {/* Checkbox selezione */}
-                      <div className="flex items-center shrink-0 pt-0.5">
-                        <Checkbox 
-                          checked={isSelected}
-                          onCheckedChange={() => toggleSelect(partecipazione.id)}
-                        />
-                      </div>
+                  <div 
+                    key={partecipazione.id} 
+                    className={`px-4 py-3 hover:bg-muted/30 transition-colors ${isSelected ? 'bg-primary/5' : ''} ${isSelectionMode ? 'cursor-pointer' : ''}`}
+                    onClick={() => {
+                      if (isSelectionMode) {
+                        toggleSelect(partecipazione.id)
+                      }
+                    }}
+                  >
+                    <div className="flex gap-3 items-center">
+                      {/* Checkbox selezione - mostrata solo in modalità selezione */}
+                      {isSelectionMode && (
+                        <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox 
+                            checked={isSelected}
+                            onCheckedChange={() => toggleSelect(partecipazione.id)}
+                          />
+                        </div>
+                      )}
                       
                       {/* Contenuto principale */}
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 py-0.5">
                         {/* Riga 1: Titolo, Anno, Badges */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
                             <Link 
                               href={`/dashboard/opere/${partecipazione.opere?.id}`}
                               className="font-semibold hover:text-primary transition-colors truncate"
+                              onClick={(e) => {
+                                if (isSelectionMode) {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                }
+                              }}
                             >
                               {partecipazione.opere?.titolo}
                             </Link>
@@ -494,17 +724,16 @@ export default function ArtistaProfiloPage() {
                             <Badge className="bg-primary/10 text-primary border-0 hover:bg-primary/10 text-xs">
                               {partecipazione.ruoli_tipologie?.nome || 'Ruolo'}
                             </Badge>
-                            {partecipazione.personaggio && (
-                              <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
-                                &quot;{partecipazione.personaggio}&quot;
-                              </Badge>
-                            )}
-                            {getValidationBadge(partecipazione.stato_validazione)}
                           </div>
                           
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -524,7 +753,7 @@ export default function ArtistaProfiloPage() {
                           </DropdownMenu>
                         </div>
                         
-                        {/* Riga 2: Titolo originale / Codice / Episodio / Data */}
+                        {/* Riga 2: Titolo originale / Codice / Episodio / Personaggio / Data */}
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground mt-1">
                           {partecipazione.opere?.titolo_originale && 
                            partecipazione.opere.titolo_originale !== partecipazione.opere.titolo && (
@@ -535,6 +764,11 @@ export default function ArtistaProfiloPage() {
                             <span className="flex items-center gap-1">
                               <Tv className="h-3 w-3" />
                               S{partecipazione.episodi.numero_stagione || '?'}E{partecipazione.episodi.numero_episodio || '?'}
+                            </span>
+                          )}
+                          {partecipazione.personaggio && (
+                            <span>
+                              Personaggio: &quot;{partecipazione.personaggio}&quot;
                             </span>
                           )}
                           <span>{formatDate(partecipazione.created_at)}</span>
@@ -594,22 +828,6 @@ export default function ArtistaProfiloPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="stato_validazione">Stato Validazione</Label>
-              <Select 
-                value={editForm.stato_validazione} 
-                onValueChange={(value) => setEditForm({ ...editForm, stato_validazione: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona stato" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="da_validare">Da Validare</SelectItem>
-                  <SelectItem value="validato">Validato</SelectItem>
-                  <SelectItem value="respinto">Respinto</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
               <Label htmlFor="note">Note</Label>
               <Textarea
                 id="note"
@@ -647,7 +865,7 @@ export default function ArtistaProfiloPage() {
               Sei sicuro di voler eliminare questa partecipazione?
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <div className="p-4 bg-muted rounded-md space-y-2">
               <p><strong>Opera:</strong> {selectedPartecipazione?.opere?.titolo}</p>
               <p><strong>Ruolo:</strong> {selectedPartecipazione?.ruoli_tipologie?.nome}</p>
@@ -655,7 +873,32 @@ export default function ArtistaProfiloPage() {
                 <p><strong>Personaggio:</strong> {selectedPartecipazione.personaggio}</p>
               )}
             </div>
-            <p className="mt-4 text-sm text-red-600">
+            {partecipazioneIndividuazioni.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-md space-y-3">
+                <p className="text-sm font-medium text-amber-800">
+                  Attenzione: questa partecipazione è stata usata per {partecipazioneIndividuazioni.length} individuazion{partecipazioneIndividuazioni.length === 1 ? 'e' : 'i'} nelle seguenti campagne:
+                </p>
+                <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                  {[...new Set(partecipazioneIndividuazioni.map(i => i.campagne_individuazione?.nome || 'Campagna senza nome'))].map((nome, idx) => (
+                    <li key={idx}>{nome}</li>
+                  ))}
+                </ul>
+                <p className="text-sm text-amber-800">
+                  Per eliminare la partecipazione dovrai eliminare anche le individuazioni associate.
+                </p>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="delete-individuazioni"
+                    checked={deleteIndividuazioniToo}
+                    onCheckedChange={(checked) => setDeleteIndividuazioniToo(!!checked)}
+                  />
+                  <Label htmlFor="delete-individuazioni" className="text-sm font-normal cursor-pointer">
+                    Elimina anche le individuazioni generate da questa partecipazione
+                  </Label>
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
               Questa azione non può essere annullata.
             </p>
           </div>
@@ -686,7 +929,7 @@ export default function ArtistaProfiloPage() {
               Sei sicuro di voler eliminare {selectedIds.size} partecipazion{selectedIds.size === 1 ? 'e' : 'i'}?
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <div className="p-4 bg-muted rounded-md max-h-48 overflow-y-auto space-y-2">
               {partecipazioni
                 .filter(p => selectedIds.has(p.id))
@@ -699,7 +942,32 @@ export default function ArtistaProfiloPage() {
                 ))
               }
             </div>
-            <p className="mt-4 text-sm text-red-600">
+            {bulkPartecipazioneIndividuazioni.length > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-md space-y-3">
+                <p className="text-sm font-medium text-amber-800">
+                  Attenzione: alcune partecipazioni selezionate sono state usate per {bulkPartecipazioneIndividuazioni.length} individuazion{bulkPartecipazioneIndividuazioni.length === 1 ? 'e' : 'i'} nelle seguenti campagne:
+                </p>
+                <ul className="text-sm text-amber-700 list-disc list-inside space-y-1">
+                  {[...new Set(bulkPartecipazioneIndividuazioni.map(i => i.campagne_individuazione?.nome || 'Campagna senza nome'))].map((nome, idx) => (
+                    <li key={idx}>{nome}</li>
+                  ))}
+                </ul>
+                <p className="text-sm text-amber-800">
+                  Puoi eliminare le partecipazioni mantenendo le individuazioni (rimarranno con il riferimento alla partecipazione annullato) oppure eliminare anche le individuazioni.
+                </p>
+                <div className="flex items-center space-x-2 pt-2">
+                  <Checkbox
+                    id="bulk-delete-individuazioni"
+                    checked={bulkDeleteIndividuazioniToo}
+                    onCheckedChange={(checked) => setBulkDeleteIndividuazioniToo(!!checked)}
+                  />
+                  <Label htmlFor="bulk-delete-individuazioni" className="text-sm font-normal cursor-pointer">
+                    Elimina anche le individuazioni generate da queste partecipazioni
+                  </Label>
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
               Questa azione non può essere annullata.
             </p>
           </div>
@@ -721,6 +989,60 @@ export default function ArtistaProfiloPage() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Partecipazione Dialog */}
+      <AddPartecipazioneDialog
+        open={showAddPartecipazioneDialog}
+        onOpenChange={setShowAddPartecipazioneDialog}
+        mode="from-artista"
+        artistaId={artistaId}
+        existingPartecipazioni={partecipazioni.map(p => ({
+          artista_id: p.artista_id || artistaId,
+          opera_id: p.opera_id || '',
+          episodio_id: p.episodio_id || null,
+          ruolo_id: p.ruolo_id || ''
+        }))}
+        onSuccess={() => {
+          fetchArtistaData()
+        }}
+      />
+
+      {/* Edit Artista Dialog */}
+      <Dialog open={showEditArtistaDialog} onOpenChange={setShowEditArtistaDialog}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Modifica Artista</DialogTitle>
+            <DialogDescription>
+              Modifica le informazioni dell&apos;artista {artista.nome} {artista.cognome}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto">
+            <ArtistaFormMultistep
+              mode="edit"
+              artista={artista}
+              onSubmit={async (data) => {
+                setIsSavingArtista(true)
+                try {
+                  const { data: updatedData, error } = await updateArtista(artista.id, data)
+                  if (error) {
+                    console.error('Errore Supabase:', error)
+                    throw new Error(error.message || JSON.stringify(error))
+                  }
+                  
+                  setShowEditArtistaDialog(false)
+                  fetchArtistaData()
+                } catch (e: any) {
+                  console.error('Errore durante l\'aggiornamento:', e)
+                  alert('Errore durante l\'aggiornamento: ' + (e?.message || JSON.stringify(e) || 'Errore sconosciuto'))
+                } finally {
+                  setIsSavingArtista(false)
+                }
+              }}
+              onCancel={() => setShowEditArtistaDialog(false)}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>
