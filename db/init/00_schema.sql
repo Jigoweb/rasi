@@ -75,6 +75,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Funzione per ottenere ruolo utente
+-- STABLE: auth.uid() non cambia durante una query → PostgreSQL può
+-- cachare il risultato invece di chiamarla per ogni riga (RLS perf)
 CREATE OR REPLACE FUNCTION get_user_role()
 RETURNS ruolo_utente AS $$
 BEGIN
@@ -83,15 +85,16 @@ BEGIN
         'readonly'
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Funzione per ottenere ID artista collegato
+-- STABLE: stessa motivazione di get_user_role()
 CREATE OR REPLACE FUNCTION get_user_artista_id()
 RETURNS UUID AS $$
 BEGIN
     RETURN (SELECT raw_user_meta_data->>'artista_id' FROM auth.users WHERE id = auth.uid())::UUID;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- ====================================
 -- TABELLE PRINCIPALI
@@ -544,6 +547,7 @@ CREATE INDEX idx_artisti_stato ON artisti(stato);
 CREATE INDEX idx_artisti_codice_fiscale ON artisti(codice_fiscale);
 CREATE INDEX idx_opere_tipo_anno ON opere(tipo, anno_produzione);
 CREATE INDEX idx_programmazioni_data ON programmazioni(data_trasmissione);
+CREATE INDEX idx_programmazioni_created_at ON programmazioni(created_at DESC);
 CREATE INDEX idx_partecipazioni_artista ON partecipazioni(artista_id);
 CREATE INDEX idx_individuazioni_campagna ON individuazioni(campagna_id);
 
