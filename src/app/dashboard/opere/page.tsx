@@ -20,7 +20,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
-import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera } from '@/features/opere/services/opere.service'
+import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport } from '@/features/opere/services/opere.service'
+import { useExportProcess } from '@/shared/contexts/export-process-context'
+import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 
@@ -124,8 +126,8 @@ export default function OperePage() {
   const [deleteCheckStatus, setDeleteCheckStatus] = useState<'idle' | 'checking' | 'can_delete' | 'has_partecipazioni'>('idle')
   const [partecipazioniCount, setPartecipazioniCount] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
-  
-  
+
+  const { startExport } = useExportProcess()
 
   useEffect(() => {
     fetchOpere()
@@ -257,26 +259,51 @@ export default function OperePage() {
     }
   }
 
-  const exportData = () => {
-    const csvContent = [
-      ['Titolo', 'Titolo Originale', 'Regia', 'Tipo', 'Episodi', 'Anno'].join(','),
-      ...opere.map(opera => [
-        `"${opera.titolo}"`,
-        `"${opera.titolo_originale || ''}"`,
-        `"${Array.isArray(opera.regista) ? opera.regista.join(', ') : ''}"`,
-        opera.tipo,
-        operaHaEpisodi(opera) ? 'Sì' : 'No',
-        opera.anno_produzione
-      ].join(','))
-    ].join('\n')
+  const exportData = async () => {
+    await startExport(
+      'opere-export',
+      'Banca Dati Opere',
+      'xlsx',
+      async (onProgress, signal) => {
+        const { data, error } = await getOpereForExport((progress) => {
+          onProgress({
+            fetched: progress.fetched,
+            total: progress.total,
+            percentage: progress.percentage,
+            phase: progress.phase,
+            estimatedTimeRemaining: progress.estimatedTimeRemaining
+          })
+        }, signal)
 
-    const blob = new Blob([csvContent], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `opere_${new Date().toISOString().split('T')[0]}.csv`
-    a.click()
-    window.URL.revokeObjectURL(url)
+        if (signal.aborted) throw new Error('Export cancelled')
+        if (error) throw error
+        if (!data || data.length === 0) throw new Error('Nessun dato da esportare')
+
+        onProgress({ fetched: data.length, total: data.length, percentage: 85, phase: 'formatting' })
+        const formattedData = formatOpereForExport(data)
+
+        if (signal.aborted) throw new Error('Export cancelled')
+
+        onProgress({ fetched: data.length, total: data.length, percentage: 95, phase: 'generating' })
+        const worksheet = XLSX.utils.json_to_sheet(formattedData)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Opere')
+
+        // Auto-size columns
+        const maxWidth = 50
+        const colWidths = Object.keys(formattedData[0] || {}).map(key => ({
+          wch: Math.min(maxWidth, Math.max(key.length,
+            ...formattedData.slice(0, 100).map(row => String(row[key as keyof typeof row] || '').length)
+          ))
+        }))
+        worksheet['!cols'] = colWidths
+
+        onProgress({ fetched: data.length, total: data.length, percentage: 100, phase: 'done' })
+
+        const fileName = `opere_${new Date().toISOString().split('T')[0]}`
+        XLSX.writeFile(workbook, `${fileName}.xlsx`, { bookType: 'xlsx' })
+      }
+    )
   }
 
   const schema = z.object({
@@ -539,7 +566,7 @@ export default function OperePage() {
           <div className="mt-2 flex gap-2 lg:hidden">
             <Button variant="outline" onClick={exportData}>
               <Download className="h-4 w-4 mr-2" />
-              Esporta CSV
+              Esporta Excel
             </Button>
             <Button onClick={openCreateForm}>
               <Plus className="h-4 w-4 mr-2" />
@@ -550,7 +577,7 @@ export default function OperePage() {
         <div className="hidden lg:flex gap-2">
           <Button variant="outline" onClick={exportData}>
             <Download className="h-4 w-4 mr-2" />
-            Esporta CSV
+            Esporta Excel
           </Button>
           <Button onClick={openCreateForm}>
             <Plus className="h-4 w-4 mr-2" />

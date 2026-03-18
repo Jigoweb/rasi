@@ -1,5 +1,184 @@
 import { supabase } from '@/shared/lib/supabase-client'
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * Fetches all opere with their episodi for full export, using cursor-based pagination.
+ * Denormalizes: opere without episodes = 1 row, opere with episodes = N rows (one per episode).
+ */
+export const getOpereForExport = async (
+  onProgress?: (progress: { fetched: number; total: number; percentage: number; phase: 'fetching' | 'formatting' | 'generating' | 'done'; estimatedTimeRemaining?: number }) => void,
+  signal?: AbortSignal
+) => {
+  try {
+    if (signal?.aborted) throw new Error('Export cancelled')
+
+    // Count total opere
+    const { count: totalOpere, error: countError } = await supabase
+      .from('opere')
+      .select('*', { count: 'exact', head: true })
+
+    if (countError) return { data: null, error: countError }
+
+    const total = totalOpere || 0
+    if (total === 0) return { data: [], error: null }
+
+    // Fetch all opere with cursor-based pagination
+    const batchSize = 500
+    const allOpere: any[] = []
+    let lastId: string | null = null
+    let hasMore = true
+    const startTime = Date.now()
+
+    while (hasMore) {
+      if (signal?.aborted) throw new Error('Export cancelled')
+
+      let query = supabase
+        .from('opere')
+        .select('id, codice_opera, titolo, titolo_originale, alias_titoli, tipo, has_episodes, anno_produzione, regista, codice_isan, imdb_tconst, stato_validazione, dettagli_serie, created_at, updated_at')
+        .order('id', { ascending: true })
+        .limit(batchSize)
+
+      if (lastId) {
+        query = query.gt('id', lastId)
+      }
+
+      const { data, error } = await query
+      if (error) return { data: null, error }
+
+      if (data && data.length > 0) {
+        allOpere.push(...data)
+        lastId = data[data.length - 1].id
+        hasMore = data.length === batchSize
+
+        const elapsed = (Date.now() - startTime) / 1000
+        const rate = allOpere.length / elapsed
+        const remaining = total - allOpere.length
+        const estimatedTimeRemaining = rate > 0 ? Math.round(remaining / rate) : undefined
+
+        onProgress?.({
+          fetched: allOpere.length,
+          total,
+          percentage: Math.round((allOpere.length / total) * 70), // 0-70% for opere fetch
+          phase: 'fetching',
+          estimatedTimeRemaining
+        })
+
+        if (hasMore) await delay(100)
+      } else {
+        hasMore = false
+      }
+    }
+
+    if (signal?.aborted) throw new Error('Export cancelled')
+
+    // Fetch all episodi for opere that have episodes
+    const opereConEpisodi = allOpere.filter(o => o.has_episodes).map(o => o.id)
+    const allEpisodi: any[] = []
+
+    if (opereConEpisodi.length > 0) {
+      let epLastId: string | null = null
+      let epHasMore = true
+
+      while (epHasMore) {
+        if (signal?.aborted) throw new Error('Export cancelled')
+
+        let epQuery = supabase
+          .from('episodi')
+          .select('id, opera_id, numero_stagione, numero_episodio, titolo_episodio, durata_minuti, data_prima_messa_in_onda, codice_isan, imdb_tconst')
+          .order('id', { ascending: true })
+          .limit(batchSize)
+
+        if (epLastId) {
+          epQuery = epQuery.gt('id', epLastId)
+        }
+
+        const { data: epData, error: epError } = await epQuery
+        if (epError) return { data: null, error: epError }
+
+        if (epData && epData.length > 0) {
+          allEpisodi.push(...epData)
+          epLastId = epData[epData.length - 1].id
+          epHasMore = epData.length === batchSize
+
+          onProgress?.({
+            fetched: allOpere.length,
+            total,
+            percentage: 70 + Math.round((allEpisodi.length / Math.max(allEpisodi.length, 1)) * 10), // 70-80%
+            phase: 'fetching'
+          })
+
+          if (epHasMore) await delay(100)
+        } else {
+          epHasMore = false
+        }
+      }
+    }
+
+    // Build episodi lookup by opera_id
+    const episodiByOpera = new Map<string, any[]>()
+    for (const ep of allEpisodi) {
+      const list = episodiByOpera.get(ep.opera_id) || []
+      list.push(ep)
+      episodiByOpera.set(ep.opera_id, list)
+    }
+
+    // Denormalize: opera senza episodi = 1 row, opera con episodi = N rows
+    const rows: any[] = []
+    for (const opera of allOpere) {
+      const episodi = episodiByOpera.get(opera.id)
+      if (episodi && episodi.length > 0) {
+        // Sort episodes
+        episodi.sort((a: any, b: any) =>
+          a.numero_stagione !== b.numero_stagione
+            ? a.numero_stagione - b.numero_stagione
+            : a.numero_episodio - b.numero_episodio
+        )
+        for (const ep of episodi) {
+          rows.push({ ...opera, _episodio: ep })
+        }
+      } else {
+        rows.push({ ...opera, _episodio: null })
+      }
+    }
+
+    return { data: rows, error: null }
+  } catch (error: any) {
+    if (error.message === 'Export cancelled' || signal?.aborted) throw error
+    console.error('[getOpereForExport] Unexpected error:', error)
+    return { data: null, error: error instanceof Error ? error : new Error(String(error)) }
+  }
+}
+
+export const formatOpereForExport = (rows: any[]) => {
+  return rows.map(row => {
+    const ep = row._episodio
+    return {
+      'Codice Opera': row.codice_opera || '',
+      'Titolo': row.titolo || '',
+      'Titolo Originale': row.titolo_originale || '',
+      'Alias Titoli': Array.isArray(row.alias_titoli) ? row.alias_titoli.join('; ') : '',
+      'Tipo': row.tipo || '',
+      'Ha Episodi': row.has_episodes ? 'Sì' : 'No',
+      'Anno Produzione': row.anno_produzione ?? '',
+      'Regia': Array.isArray(row.regista) ? row.regista.join(', ') : '',
+      'Codice ISAN': row.codice_isan || '',
+      'IMDB ID': row.imdb_tconst || '',
+      'Stato Validazione': row.stato_validazione || '',
+      'Dettagli Serie': row.dettagli_serie ? JSON.stringify(row.dettagli_serie) : '',
+      'Stagione': ep?.numero_stagione ?? '',
+      'Episodio': ep?.numero_episodio ?? '',
+      'Titolo Episodio': ep?.titolo_episodio || '',
+      'Durata Episodio (min)': ep?.durata_minuti ?? '',
+      'Data Prima Messa in Onda': ep?.data_prima_messa_in_onda || '',
+      'ISAN Episodio': ep?.codice_isan || '',
+      'IMDB Episodio': ep?.imdb_tconst || '',
+      'Data Creazione': row.created_at ? new Date(row.created_at).toLocaleDateString('it-IT') : '',
+      'Ultimo Aggiornamento': row.updated_at ? new Date(row.updated_at).toLocaleDateString('it-IT') : '',
+    }
+  })
+}
+
 export const getRuoliTipologie = async () => {
   const { data, error } = await supabase
     .from('ruoli_tipologie')
