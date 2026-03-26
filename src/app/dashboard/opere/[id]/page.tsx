@@ -2689,7 +2689,6 @@ export default function OperaDetailPage() {
             <DialogDescription>
               Sei sicuro di voler eliminare l&apos;episodio S{episodioToDelete?.numero_stagione}E{episodioToDelete?.numero_episodio}
               {episodioToDelete?.titolo_episodio ? ` - ${episodioToDelete.titolo_episodio}` : ''}?
-              Le partecipazioni associate a questo episodio verranno eliminate.
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-red-600">

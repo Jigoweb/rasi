@@ -64,23 +64,52 @@ Il processo di individuazione parte da una **campagna_programmazione** e genera 
 
 **Logica Matching**:
 
+#### Scoring (max 100 punti)
+
+| Criterio | Punti | Tipo |
+|---|---|---|
+| Titolo | 50 punti base | OBBLIGATORIO (similarity >= 70%) |
+| Titolo originale | 10 punti bonus | BONUS |
+| Anno produzione | 15 punti (discriminante) | DISCRIMINANTE con penalita |
+| Regia | 10 punti (discriminante) | DISCRIMINANTE con penalita |
+| Episodio (serie) | 15 punti | OBBLIGATORIO per serie TV |
+
+**Soglia minima finale**: 35 punti (esclude match con penalita pesanti)
+
 #### Per FILM (nessun dato episodio nella programmazione):
 - **Titolo** (OBBLIGATORIO): similarity >= 70% tra:
   - `programmazioni.titolo` vs `opere.titolo`
   - `programmazioni.titolo` vs `opere.titolo_originale`
   - `programmazioni.titolo` vs `opere.alias_titoli[]`
-- **Titolo originale** (BONUS): se presente in entrambi
-- **Anno** (BONUS): +10 punti se uguale, +5 se diff <= 1 anno
+- **Titolo originale** (BONUS): se presente in entrambi, +10 punti
+- **Anno** (DISCRIMINANTE): quando entrambi presenti:
+  - Esatto: +15 punti
+  - +-1 anno: +10.5 punti
+  - +-2 anni: +4.5 punti
+  - >2 anni: **-19.5 punti (PENALITA)**
+  - Uno mancante: 0 (neutro)
+- **Regia** (DISCRIMINANTE): `programmazioni.regia` (TEXT) vs `opere.regista` (VARCHAR[]):
+  - Match fuzzy (similarity >= 0.7): +10 punti
+  - Match parziale (similarity >= 0.4): +5 punti
+  - No match: **-15 punti (PENALITA)**
+  - Uno mancante: 0 (neutro)
 
 #### Per SERIE TV (almeno un campo episodio valorizzato):
 - **Titolo serie** (OBBLIGATORIO): come sopra
+- **Anno + Regia** (DISCRIMINANTI): come sopra
 - **Episodio** (OBBLIGATORIO, almeno uno deve matchare):
-  - `numero_stagione` + `numero_episodio` → match esatto
-  - OPPURE `titolo_episodio` → similarity >= 60%
-  - OPPURE `titolo_episodio_originale` → similarity >= 60%
-- Se episodio NON trovato → **NO individuazione**
+  - `numero_stagione` + `numero_episodio` -> match esatto
+  - OPPURE `titolo_episodio` -> similarity >= 60%
+  - OPPURE `titolo_episodio_originale` -> similarity >= 60%
+- Se episodio NON trovato -> **NO individuazione**
 
 **Note**: Tutti i confronti sono **case insensitive**
+
+#### Esempio discriminanti (omonimia reale)
+
+Programmazione: "48 ORE", anno=1982, regia="HILL WALTER"
+- Opera "48 ORE" (1982, Walter Hill): titolo 50 + anno +15 + regia +10 = **75 punti** (MATCH)
+- Opera "48 ORE" (2006, Eros Puglielli): titolo 50 + anno -19.5 + regia -15 = **15.5 punti** (ESCLUSO, < 35)
 
 ---
 
@@ -256,16 +285,33 @@ La configurazione del matching è in `campagne_individuazione.configurazione_mat
 ```json
 {
   "soglia_titolo": 0.7,
-  "algoritmo": "similarity_v2",
+  "algoritmo": "similarity_v3_discriminanti",
   "case_insensitive": true,
-  "serie_richiede_episodio": true
+  "serie_richiede_episodio": true,
+  "soglia_minima_punteggio": 35,
+  "discriminanti": {
+    "anno": {
+      "peso": 15,
+      "penalita_mismatch": -19.5,
+      "tolleranza_anni": 2
+    },
+    "regia": {
+      "peso": 10,
+      "penalita_mismatch": -15,
+      "soglia_match": 0.7,
+      "soglia_parziale": 0.4
+    }
+  }
 }
 ```
 
 **Parametri**:
 - `soglia_titolo`: Similarity minima per match titolo (0.7 = 70%)
+- `soglia_minima_punteggio`: Score totale minimo per accettare un match (35 punti)
 - `case_insensitive`: Tutti i confronti ignorano maiuscole/minuscole
 - `serie_richiede_episodio`: Se true, le serie TV devono matchare l'episodio specifico
+- `discriminanti.anno`: Penalizza match quando l'anno differisce >2 anni
+- `discriminanti.regia`: Penalizza match quando regia presente in entrambi ma non corrisponde
 
 ---
 
