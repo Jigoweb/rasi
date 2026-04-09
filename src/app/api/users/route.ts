@@ -62,13 +62,13 @@ async function verifyAdminUser(req: NextRequest): Promise<{ isAdmin: boolean; us
 
 /**
  * GET /api/users
- * Lista tutti gli utenti (solo admin)
+ * Lista tutti gli utenti (admin e operatori)
  */
 export async function GET(req: NextRequest) {
   try {
-    const { isAdmin, error } = await verifyAdminUser(req)
-    
-    if (!isAdmin) {
+    const { error } = await verifyAdminUser(req)
+
+    if (error) {
       return NextResponse.json({ success: false, error }, { status: 403 })
     }
 
@@ -90,12 +90,17 @@ export async function GET(req: NextRequest) {
       if (!ruolo || !validRoles.includes(ruolo)) {
         ruolo = 'artista'
       }
+      // Un utente si considera "verificato" solo se ha effettivamente
+      // accettato l'invito/confermato la mail (last_sign_in_at presente),
+      // oppure se non è un invitato (nessun invited_at).
+      const isPendingInvite = !!u.invited_at && !u.last_sign_in_at
       return {
         id: u.id,
         email: u.email,
         ruolo,
         artista_id: u.user_metadata?.artista_id || null,
-        email_verified: u.email_confirmed_at !== null,
+        email_verified: u.email_confirmed_at !== null && !isPendingInvite,
+        invited_at: u.invited_at || null,
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
       }
@@ -128,7 +133,34 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { email, artista_id } = body
+    const { email, artista_id, action, userId: targetUserId } = body
+
+    // Reinvio invito
+    if (action === 'resend_invite') {
+      if (!targetUserId) {
+        return NextResponse.json({ success: false, error: 'userId è obbligatorio per reinvio' }, { status: 400 })
+      }
+      const adminClient = getSupabaseAdmin()
+      const { data: { user: targetUser }, error: getUserError } = await adminClient.auth.admin.getUserById(targetUserId)
+      if (getUserError || !targetUser) {
+        return NextResponse.json({ success: false, error: 'Utente non trovato' }, { status: 404 })
+      }
+      if (!targetUser.email) {
+        return NextResponse.json({ success: false, error: 'Utente senza email' }, { status: 400 })
+      }
+      // generateLink con tipo invite per reinviare
+      const { error: linkError } = await adminClient.auth.admin.inviteUserByEmail(
+        targetUser.email,
+        {
+          data: targetUser.user_metadata,
+          redirectTo: `${req.headers.get('origin') || 'http://localhost:3000'}/auth/callback`
+        }
+      )
+      if (linkError) {
+        return NextResponse.json({ success: false, error: linkError.message }, { status: 500 })
+      }
+      return NextResponse.json({ success: true })
+    }
 
     if (!email || !artista_id) {
       return NextResponse.json(
@@ -211,53 +243,69 @@ export async function POST(req: NextRequest) {
 
 /**
  * PATCH /api/users
- * Aggiorna il ruolo di un utente (solo admin)
- * Body: { userId: string, ruolo: 'admin' | 'operatore' | 'utente' }
+ * Aggiorna ruolo o email di un utente.
+ * - Cambio ruolo: solo admin
+ * - Cambio email: admin e operatori
+ * Body: { userId: string, ruolo?: string, email?: string }
  */
 export async function PATCH(req: NextRequest) {
   try {
     const { isAdmin, userId: adminUserId, error } = await verifyAdminUser(req)
-    
-    // Solo gli admin possono modificare i ruoli
-    if (!isAdmin) {
-      return NextResponse.json({ 
-        success: false, 
-        error: error || 'Solo gli amministratori possono modificare i ruoli degli utenti' 
-      }, { status: 403 })
+
+    // Blocca utenti senza permessi (non admin/operatore)
+    if (error) {
+      return NextResponse.json({ success: false, error }, { status: 403 })
     }
 
     const body = await req.json()
-    const { userId, ruolo } = body
+    const { userId, ruolo, email } = body
 
-    if (!userId || !ruolo) {
+    if (!userId) {
       return NextResponse.json(
-        { success: false, error: 'userId e ruolo sono obbligatori' },
+        { success: false, error: 'userId è obbligatorio' },
         { status: 400 }
       )
     }
 
-    // Validate ruolo
-    const validRoles = ['admin', 'operatore', 'collecting', 'artista']
-    if (!validRoles.includes(ruolo)) {
+    if (!ruolo && !email) {
       return NextResponse.json(
-        { success: false, error: `Ruolo non valido. Ruoli disponibili: ${validRoles.join(', ')}` },
+        { success: false, error: 'Specificare almeno ruolo o email da aggiornare' },
         { status: 400 }
       )
     }
 
-    // Prevent admin from removing their own admin role
-    if (userId === adminUserId && ruolo !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Non puoi rimuovere il tuo stesso ruolo di amministratore' },
-        { status: 400 }
-      )
+    // Il cambio ruolo è riservato agli admin
+    if (ruolo && !isAdmin) {
+      return NextResponse.json({
+        success: false,
+        error: 'Solo gli amministratori possono modificare i ruoli degli utenti'
+      }, { status: 403 })
     }
 
-    // Update user metadata with the new role
+    if (ruolo) {
+      const validRoles = ['admin', 'operatore', 'collecting', 'artista']
+      if (!validRoles.includes(ruolo)) {
+        return NextResponse.json(
+          { success: false, error: `Ruolo non valido. Ruoli disponibili: ${validRoles.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      if (userId === adminUserId && ruolo !== 'admin') {
+        return NextResponse.json(
+          { success: false, error: 'Non puoi rimuovere il tuo stesso ruolo di amministratore' },
+          { status: 400 }
+        )
+      }
+    }
+
     const adminClient = getSupabaseAdmin()
+    const updates: Record<string, unknown> = {}
+    if (ruolo) updates.user_metadata = { ruolo }
+    if (email) updates.email = email
+
     const { data: updatedUser, error: updateError } = await adminClient.auth.admin.updateUserById(
       userId,
-      { user_metadata: { ruolo } }
+      updates
     )
 
     if (updateError) {
@@ -270,12 +318,61 @@ export async function PATCH(req: NextRequest) {
       data: {
         id: updatedUser.user.id,
         email: updatedUser.user.email,
-        ruolo: updatedUser.user.user_metadata?.ruolo || 'utente',
+        ruolo: updatedUser.user.user_metadata?.ruolo || 'artista',
       }
     })
 
   } catch (error: any) {
     console.error('Errore inatteso PATCH /api/users:', error)
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/users
+ * Elimina un utente (solo admin, non può eliminare se stesso)
+ * Body: { userId: string }
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const { isAdmin, userId: adminUserId, error } = await verifyAdminUser(req)
+
+    if (!isAdmin) {
+      return NextResponse.json({
+        success: false,
+        error: error || 'Solo gli amministratori possono eliminare utenti'
+      }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const { userId } = body
+
+    if (!userId) {
+      return NextResponse.json(
+        { success: false, error: 'userId è obbligatorio' },
+        { status: 400 }
+      )
+    }
+
+    if (userId === adminUserId) {
+      return NextResponse.json(
+        { success: false, error: 'Non puoi eliminare il tuo stesso account' },
+        { status: 400 }
+      )
+    }
+
+    const adminClient = getSupabaseAdmin()
+    const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId)
+
+    if (deleteError) {
+      console.error('Errore deleteUser:', deleteError)
+      return NextResponse.json({ success: false, error: deleteError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+
+  } catch (error: any) {
+    console.error('Errore inatteso DELETE /api/users:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }

@@ -31,20 +31,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { 
-  Users, 
-  Shield, 
-  AlertCircle, 
-  CheckCircle2, 
-  Loader2, 
-  Mail, 
-  Calendar, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
+import {
+  Users,
+  Shield,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Mail,
+  Calendar,
   Clock,
   Search,
   X,
   UserCog,
   Building2,
-  Music2
+  Music2,
+  MoreHorizontal,
+  Pencil,
+  RefreshCw,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react'
 
 interface UserData {
@@ -53,6 +65,7 @@ interface UserData {
   ruolo: UserRole
   artista_id: string | null
   email_verified: boolean
+  invited_at: string | null
   created_at: string
   last_sign_in_at: string | null
 }
@@ -86,6 +99,23 @@ export default function UtentiPage() {
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [inviteSuccess, setInviteSuccess] = useState(false)
   const [searchingArtisti, setSearchingArtisti] = useState(false)
+
+  // State for change email dialog
+  const [changeEmailDialogOpen, setChangeEmailDialogOpen] = useState(false)
+  const [changeEmailTarget, setChangeEmailTarget] = useState<UserData | null>(null)
+  const [newEmail, setNewEmail] = useState('')
+  const [changingEmail, setChangingEmail] = useState(false)
+  const [changeEmailError, setChangeEmailError] = useState<string | null>(null)
+  const [changeEmailSuccess, setChangeEmailSuccess] = useState(false)
+
+  // State for delete dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<UserData | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  // Resend invite loading state
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null)
 
   // Redirect users without permission
   useEffect(() => {
@@ -151,7 +181,7 @@ export default function UtentiPage() {
     }
   }
 
-  // Ricerca artisti per invito
+  // Ricerca artisti per invito — supporta ricerca multi-parola (es. "Matteo Foroni")
   async function searchArtistiForInvite(term: string) {
     if (!term || term.length < 2) {
       setInviteArtistaResults([])
@@ -159,14 +189,25 @@ export default function UtentiPage() {
     }
     setSearchingArtisti(true)
     try {
-      const { data } = await supabase
-        .from('artisti')
-        .select('id, nome, cognome, nome_arte, codice_ipn, codice_fiscale')
-        .or(`nome.ilike.%${term}%,cognome.ilike.%${term}%,nome_arte.ilike.%${term}%,codice_ipn.ilike.%${term}%,codice_fiscale.ilike.%${term}%`)
-        .order('cognome')
-        .limit(20)
+      // Divide il termine in token per gestire "Nome Cognome" con spazi
+      const tokens = term.trim().split(/\s+/).filter(t => t.length > 0)
 
-      // Filtra artisti gia collegati a un utente
+      let query = supabase
+        .from('artisti')
+        .select('id, nome, cognome, nome_arte, codice_ipn, codice_fiscale, contatti')
+
+      // Per ogni token applica un filtro OR su tutti i campi testuali —
+      // i filtri concatenati sono AND tra loro, quindi "Matteo Foroni" richiede
+      // che entrambe le parole siano presenti (in campi diversi).
+      for (const token of tokens) {
+        query = query.or(
+          `nome.ilike.%${token}%,cognome.ilike.%${token}%,nome_arte.ilike.%${token}%,codice_ipn.ilike.%${token}%,codice_fiscale.ilike.%${token}%`
+        )
+      }
+
+      const { data } = await query.order('cognome').limit(20)
+
+      // Filtra artisti già collegati a un utente
       const linkedArtistaIds = new Set(users.filter(u => u.artista_id).map(u => u.artista_id))
       setInviteArtistaResults((data || []).filter((a: any) => !linkedArtistaIds.has(a.id)))
     } catch {
@@ -220,6 +261,83 @@ export default function UtentiPage() {
       setInviteError(err.message)
     } finally {
       setInviting(false)
+    }
+  }
+
+  async function handleChangeEmail() {
+    if (!changeEmailTarget || !newEmail) return
+    setChangingEmail(true)
+    setChangeEmailError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setChangeEmailError('Sessione scaduta'); return }
+
+      const response = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: changeEmailTarget.id, email: newEmail }),
+      })
+      const result = await response.json()
+      if (!result.success) throw new Error(result.error)
+
+      setUsers(prev => prev.map(u => u.id === changeEmailTarget.id ? { ...u, email: newEmail } : u))
+      setChangeEmailSuccess(true)
+      setTimeout(() => {
+        setChangeEmailDialogOpen(false)
+        setChangeEmailSuccess(false)
+        setNewEmail('')
+        setChangeEmailTarget(null)
+      }, 1500)
+    } catch (err: any) {
+      setChangeEmailError(err.message)
+    } finally {
+      setChangingEmail(false)
+    }
+  }
+
+  async function handleResendInvite(userData: UserData) {
+    setResendingInvite(userData.id)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend_invite', userId: userData.id }),
+      })
+      const result = await response.json()
+      if (!result.success) throw new Error(result.error)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setResendingInvite(null)
+    }
+  }
+
+  async function handleDeleteUser() {
+    if (!deleteTarget) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setDeleteError('Sessione scaduta'); return }
+
+      const response = await fetch('/api/users', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: deleteTarget.id }),
+      })
+      const result = await response.json()
+      if (!result.success) throw new Error(result.error)
+
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id))
+      setDeleteDialogOpen(false)
+      setDeleteTarget(null)
+    } catch (err: any) {
+      setDeleteError(err.message)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -326,6 +444,11 @@ export default function UtentiPage() {
   }
 
   const hasActiveFilters = searchEmail !== '' || filterRole !== 'all'
+
+  // Avviso mismatch email: quando l'artista selezionato ha una email nei contatti
+  // diversa da quella inserita nel campo invito
+  const artistaContactEmail = (selectedArtista?.contatti as any)?.email as string | undefined
+  const emailMismatch = !!(selectedArtista && inviteEmail && artistaContactEmail && artistaContactEmail !== inviteEmail)
 
   // Loading or no permission
   if (authLoading || !canManageUsers) {
@@ -528,7 +651,7 @@ export default function UtentiPage() {
                   <TableHead>Email Verificata</TableHead>
                   <TableHead>Registrazione</TableHead>
                   <TableHead>Ultimo Accesso</TableHead>
-                  {canEditRoles && <TableHead className="text-right">Azioni</TableHead>}
+                  {canManageUsers && <TableHead className="text-right">Azioni</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -586,17 +709,61 @@ export default function UtentiPage() {
                         {formatDate(userData.last_sign_in_at)}
                       </div>
                     </TableCell>
-                    {canEditRoles && (
+                    {canManageUsers && (
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openRoleDialog(userData)}
-                          disabled={userData.id === user?.id}
-                        >
-                          <Shield className="h-4 w-4 mr-1" />
-                          Modifica Ruolo
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" disabled={userData.id === user?.id}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {canEditRoles && (
+                              <DropdownMenuItem onClick={() => openRoleDialog(userData)}>
+                                <Shield className="h-4 w-4 mr-2" />
+                                Modifica Ruolo
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => {
+                              setChangeEmailTarget(userData)
+                              setNewEmail(userData.email)
+                              setChangeEmailError(null)
+                              setChangeEmailSuccess(false)
+                              setChangeEmailDialogOpen(true)
+                            }}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Modifica Email
+                            </DropdownMenuItem>
+                            {userData.ruolo === 'artista' && !userData.last_sign_in_at && (
+                              <DropdownMenuItem
+                                onClick={() => handleResendInvite(userData)}
+                                disabled={resendingInvite === userData.id}
+                              >
+                                {resendingInvite === userData.id
+                                  ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  : <RefreshCw className="h-4 w-4 mr-2" />
+                                }
+                                Reinvia Invito
+                              </DropdownMenuItem>
+                            )}
+                            {canEditRoles && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-red-600 focus:text-red-600"
+                                  onClick={() => {
+                                    setDeleteTarget(userData)
+                                    setDeleteError(null)
+                                    setDeleteDialogOpen(true)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Elimina Utente
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     )}
                   </TableRow>
@@ -788,6 +955,13 @@ export default function UtentiPage() {
                   )}
                 </div>
 
+                {emailMismatch && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                    <AlertTriangle className="h-4 w-4 inline mr-1" />
+                    L&apos;email inserita è diversa da quella registrata per questo artista ({artistaContactEmail}). Puoi procedere ugualmente se l&apos;artista intende usare un indirizzo diverso.
+                  </div>
+                )}
+
                 {inviteError && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                     <AlertCircle className="h-4 w-4 inline mr-1" />
@@ -819,6 +993,115 @@ export default function UtentiPage() {
               </DialogFooter>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Email Dialog */}
+      <Dialog open={changeEmailDialogOpen} onOpenChange={setChangeEmailDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Modifica Email
+            </DialogTitle>
+            <DialogDescription>
+              Stai modificando l&apos;email per: <strong>{changeEmailTarget?.email}</strong>
+            </DialogDescription>
+          </DialogHeader>
+
+          {changeEmailSuccess ? (
+            <div className="flex items-center justify-center py-8 text-green-600">
+              <CheckCircle2 className="h-12 w-12" />
+              <span className="ml-3 text-lg font-medium">Email aggiornata!</span>
+            </div>
+          ) : (
+            <>
+              <div className="py-4 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nuova email
+                  </label>
+                  <Input
+                    type="email"
+                    value={newEmail}
+                    onChange={e => setNewEmail(e.target.value)}
+                    placeholder="nuova@email.com"
+                  />
+                </div>
+                {changeEmailError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                    <AlertCircle className="h-4 w-4 inline mr-1" />
+                    {changeEmailError}
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setChangeEmailDialogOpen(false)} disabled={changingEmail}>
+                  Annulla
+                </Button>
+                <Button
+                  onClick={handleChangeEmail}
+                  disabled={changingEmail || !newEmail || newEmail === changeEmailTarget?.email}
+                >
+                  {changingEmail ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Aggiornamento...</>
+                  ) : (
+                    'Salva Email'
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              Elimina Utente
+            </DialogTitle>
+            <DialogDescription>
+              Questa operazione è irreversibile. L&apos;account verrà eliminato definitivamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm font-medium text-red-800">
+                Stai per eliminare l&apos;account di:
+              </p>
+              <p className="mt-1 font-bold text-red-900">{deleteTarget?.email}</p>
+              {deleteTarget?.artista_id && (
+                <p className="mt-1 text-xs text-red-700">
+                  Questo utente è collegato a un record artista. Il record artista non verrà eliminato.
+                </p>
+              )}
+            </div>
+            {deleteError && (
+              <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                <AlertCircle className="h-4 w-4 inline mr-1" />
+                {deleteError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteUser}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Eliminazione...</>
+              ) : (
+                <><Trash2 className="h-4 w-4 mr-2" />Elimina Definitivamente</>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
