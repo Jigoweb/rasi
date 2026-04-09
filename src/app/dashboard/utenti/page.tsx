@@ -51,6 +51,7 @@ interface UserData {
   id: string
   email: string
   ruolo: UserRole
+  artista_id: string | null
   email_verified: boolean
   created_at: string
   last_sign_in_at: string | null
@@ -74,6 +75,17 @@ export default function UtentiPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [updateSuccess, setUpdateSuccess] = useState(false)
+
+  // State for invite dialog
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteArtistaSearch, setInviteArtistaSearch] = useState('')
+  const [inviteArtistaResults, setInviteArtistaResults] = useState<any[]>([])
+  const [selectedArtista, setSelectedArtista] = useState<any>(null)
+  const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [inviteSuccess, setInviteSuccess] = useState(false)
+  const [searchingArtisti, setSearchingArtisti] = useState(false)
 
   // Redirect users without permission
   useEffect(() => {
@@ -136,6 +148,78 @@ export default function UtentiPage() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Ricerca artisti per invito
+  async function searchArtistiForInvite(term: string) {
+    if (!term || term.length < 2) {
+      setInviteArtistaResults([])
+      return
+    }
+    setSearchingArtisti(true)
+    try {
+      const { data } = await supabase
+        .from('artisti')
+        .select('id, nome, cognome, nome_arte, codice_ipn, codice_fiscale')
+        .or(`nome.ilike.%${term}%,cognome.ilike.%${term}%,nome_arte.ilike.%${term}%,codice_ipn.ilike.%${term}%,codice_fiscale.ilike.%${term}%`)
+        .order('cognome')
+        .limit(20)
+
+      // Filtra artisti gia collegati a un utente
+      const linkedArtistaIds = new Set(users.filter(u => u.artista_id).map(u => u.artista_id))
+      setInviteArtistaResults((data || []).filter((a: any) => !linkedArtistaIds.has(a.id)))
+    } catch {
+      setInviteArtistaResults([])
+    } finally {
+      setSearchingArtisti(false)
+    }
+  }
+
+  async function handleInvite() {
+    if (!inviteEmail || !selectedArtista) return
+    setInviting(true)
+    setInviteError(null)
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        setInviteError('Sessione scaduta')
+        return
+      }
+
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: inviteEmail,
+          artista_id: selectedArtista.id,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error)
+      }
+
+      setInviteSuccess(true)
+      fetchUsers()
+      setTimeout(() => {
+        setInviteDialogOpen(false)
+        setInviteSuccess(false)
+        setInviteEmail('')
+        setSelectedArtista(null)
+        setInviteArtistaSearch('')
+        setInviteArtistaResults([])
+      }, 2000)
+    } catch (err: any) {
+      setInviteError(err.message)
+    } finally {
+      setInviting(false)
     }
   }
 
@@ -265,10 +349,27 @@ export default function UtentiPage() {
             Visualizza {canEditRoles ? 'e gestisci ' : ''}gli account utente e i relativi ruoli
           </p>
         </div>
-        <Button onClick={fetchUsers} variant="outline" disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-          Aggiorna
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => {
+              setInviteDialogOpen(true)
+              setInviteError(null)
+              setInviteSuccess(false)
+              setInviteEmail('')
+              setSelectedArtista(null)
+              setInviteArtistaSearch('')
+              setInviteArtistaResults([])
+            }}
+            disabled={loading}
+          >
+            <Mail className="h-4 w-4 mr-2" />
+            Invita Artista
+          </Button>
+          <Button onClick={fetchUsers} variant="outline" disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Aggiorna
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards - Grid con tutte le card dei ruoli */}
@@ -446,10 +547,22 @@ export default function UtentiPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={`${getRoleBadgeClass(userData.ruolo)} flex items-center gap-1 w-fit`}>
-                        {getRoleIcon(userData.ruolo)}
-                        {getRoleLabel(userData.ruolo)}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={`${getRoleBadgeClass(userData.ruolo)} flex items-center gap-1 w-fit`}>
+                          {getRoleIcon(userData.ruolo)}
+                          {getRoleLabel(userData.ruolo)}
+                        </Badge>
+                        {userData.artista_id && (
+                          <Badge variant="outline" className="text-xs text-blue-600 border-blue-200">
+                            Collegato
+                          </Badge>
+                        )}
+                        {userData.ruolo === 'artista' && !userData.last_sign_in_at && (
+                          <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-200">
+                            In attesa
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {userData.email_verified ? (
@@ -567,6 +680,140 @@ export default function UtentiPage() {
                     </>
                   ) : (
                     'Salva Modifiche'
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite Artist Dialog */}
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5" />
+              Invita Artista
+            </DialogTitle>
+            <DialogDescription>
+              Invia un invito via email per creare un account artista collegato a un record esistente.
+            </DialogDescription>
+          </DialogHeader>
+
+          {inviteSuccess ? (
+            <div className="py-6 text-center">
+              <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
+              <p className="text-lg font-medium">Invito inviato!</p>
+              <p className="text-sm text-gray-500 mt-1">L&apos;artista ricevera un&apos;email con il link per completare la registrazione.</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                {/* Email */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Email</label>
+                  <Input
+                    type="email"
+                    placeholder="artista@email.com"
+                    value={inviteEmail}
+                    onChange={e => setInviteEmail(e.target.value)}
+                    className="mt-1"
+                  />
+                </div>
+
+                {/* Artista search */}
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Artista da collegare</label>
+                  {selectedArtista ? (
+                    <div className="mt-1 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div>
+                        <p className="font-medium">{selectedArtista.nome} {selectedArtista.cognome}</p>
+                        <p className="text-sm text-gray-500">
+                          {selectedArtista.codice_ipn && `IPN: ${selectedArtista.codice_ipn}`}
+                          {selectedArtista.nome_arte && ` - ${selectedArtista.nome_arte}`}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedArtista(null)
+                          setInviteArtistaSearch('')
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative mt-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                          placeholder="Cerca per nome, cognome, IPN o CF..."
+                          value={inviteArtistaSearch}
+                          onChange={e => {
+                            setInviteArtistaSearch(e.target.value)
+                            searchArtistiForInvite(e.target.value)
+                          }}
+                          className="pl-9"
+                        />
+                        {searchingArtisti && (
+                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                        )}
+                      </div>
+                      {inviteArtistaResults.length > 0 && (
+                        <div className="mt-1 border rounded-lg max-h-48 overflow-y-auto">
+                          {inviteArtistaResults.map((a: any) => (
+                            <button
+                              key={a.id}
+                              className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b last:border-b-0 text-sm"
+                              onClick={() => {
+                                setSelectedArtista(a)
+                                setInviteArtistaSearch('')
+                                setInviteArtistaResults([])
+                              }}
+                            >
+                              <span className="font-medium">{a.nome} {a.cognome}</span>
+                              {a.nome_arte && <span className="text-gray-500 ml-1">({a.nome_arte})</span>}
+                              {a.codice_ipn && <span className="text-gray-400 ml-2">IPN: {a.codice_ipn}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {inviteArtistaSearch.length >= 2 && !searchingArtisti && inviteArtistaResults.length === 0 && (
+                        <p className="text-sm text-gray-500 mt-1">Nessun artista trovato (o gia collegato a un utente).</p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {inviteError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                    <AlertCircle className="h-4 w-4 inline mr-1" />
+                    {inviteError}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setInviteDialogOpen(false)} disabled={inviting}>
+                  Annulla
+                </Button>
+                <Button
+                  onClick={handleInvite}
+                  disabled={inviting || !inviteEmail || !selectedArtista}
+                >
+                  {inviting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Invio in corso...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="h-4 w-4 mr-2" />
+                      Invia Invito
+                    </>
                   )}
                 </Button>
               </DialogFooter>

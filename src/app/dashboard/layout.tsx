@@ -35,7 +35,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const { user, loading, signOut, userRole, isAdmin, canManageUsers } = useAuth()
+  const { user, loading, signOut, userRole, isAdmin, isArtista, canManageUsers } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Menu items di base disponibili a tutti
@@ -87,6 +87,44 @@ export default function DashboardLayout({
 
   if (!user) {
     return null
+  }
+
+  // Walled garden layout per artisti
+  if (isArtista) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white border-b shadow-sm">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-600 p-2 rounded-lg">
+                <Music className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold">RASI</h1>
+                <p className="text-xs text-gray-500">Area Artista</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm text-gray-700 truncate max-w-[200px]">{user.email}</p>
+                <Badge className="text-xs bg-orange-100 text-orange-800">Artista</Badge>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={signOut}
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          {children}
+        </main>
+      </div>
+    )
   }
 
   return (

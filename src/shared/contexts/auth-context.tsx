@@ -20,8 +20,10 @@ interface AuthContextType {
   user: User | null
   loading: boolean
   userRole: UserRole
+  artistaId: string | null
   isAdmin: boolean
   isOperatore: boolean
+  isArtista: boolean
   canManageUsers: boolean // admin o operatore possono vedere utenti
   canEditRoles: boolean   // solo admin può modificare ruoli
   signOut: () => Promise<void>
@@ -31,8 +33,10 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   userRole: 'artista',
+  artistaId: null,
   isAdmin: false,
   isOperatore: false,
+  isArtista: false,
   canManageUsers: false,
   canEditRoles: false,
   signOut: async () => {}
@@ -52,6 +56,14 @@ function getUserRole(user: User | null): UserRole {
   return 'artista' // Default role
 }
 
+/**
+ * Estrae l'artista_id dall'utente Supabase.
+ * L'artista_id è memorizzato in raw_user_meta_data.artista_id
+ */
+function getUserArtistaId(user: User | null): string | null {
+  return user?.user_metadata?.artista_id || null
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -59,8 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Calcola ruolo e permessi dall'utente
   const userRole = useMemo(() => getUserRole(user), [user])
+  const artistaId = useMemo(() => getUserArtistaId(user), [user])
   const isAdmin = userRole === 'admin'
   const isOperatore = userRole === 'operatore'
+  const isArtista = userRole === 'artista'
   const canManageUsers = userRole === 'admin' || userRole === 'operatore'
   const canEditRoles = userRole === 'admin'
 
@@ -99,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, userRole, isAdmin, isOperatore, canManageUsers, canEditRoles, signOut }}>
+    <AuthContext.Provider value={{ user, loading, userRole, artistaId, isAdmin, isOperatore, isArtista, canManageUsers, canEditRoles, signOut }}>
       {children}
     </AuthContext.Provider>
   )

@@ -94,6 +94,7 @@ export async function GET(req: NextRequest) {
         id: u.id,
         email: u.email,
         ruolo,
+        artista_id: u.user_metadata?.artista_id || null,
         email_verified: u.email_confirmed_at !== null,
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
@@ -107,6 +108,103 @@ export async function GET(req: NextRequest) {
 
   } catch (error: any) {
     console.error('Errore inatteso GET /api/users:', error)
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+}
+
+/**
+ * POST /api/users
+ * Invita un artista via email, collegandolo a un record artisti esistente
+ * Body: { email: string, artista_id: string }
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const { isAdmin, userId: requestingUserId, error } = await verifyAdminUser(req)
+
+    // verifyAdminUser restituisce error solo se non è admin/operatore
+    // isAdmin=false + no error = è un operatore (canManageUsers=true)
+    if (error) {
+      return NextResponse.json({ success: false, error }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const { email, artista_id } = body
+
+    if (!email || !artista_id) {
+      return NextResponse.json(
+        { success: false, error: 'email e artista_id sono obbligatori' },
+        { status: 400 }
+      )
+    }
+
+    const adminClient = getSupabaseAdmin()
+
+    // Verifica che l'artista_id esista nella tabella artisti
+    const { data: artista, error: artistaError } = await adminClient
+      .from('artisti')
+      .select('id, nome, cognome, codice_ipn')
+      .eq('id', artista_id)
+      .single()
+
+    if (artistaError || !artista) {
+      return NextResponse.json(
+        { success: false, error: 'Record artista non trovato' },
+        { status: 404 }
+      )
+    }
+
+    // Verifica che nessun altro utente abbia già questo artista_id
+    const { data: { users: existingUsers } } = await adminClient.auth.admin.listUsers()
+    const alreadyLinked = existingUsers.find(
+      u => u.user_metadata?.artista_id === artista_id
+    )
+
+    if (alreadyLinked) {
+      return NextResponse.json(
+        { success: false, error: `Questo artista è già collegato all'utente ${alreadyLinked.email}` },
+        { status: 409 }
+      )
+    }
+
+    // Verifica che l'email non sia già registrata
+    const existingEmail = existingUsers.find(u => u.email === email)
+    if (existingEmail) {
+      return NextResponse.json(
+        { success: false, error: `L'email ${email} è già registrata nel sistema` },
+        { status: 409 }
+      )
+    }
+
+    // Invia invito via Supabase Auth
+    const { data: invitedUser, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
+      email,
+      {
+        data: {
+          ruolo: 'artista',
+          artista_id: artista_id
+        },
+        redirectTo: `${req.headers.get('origin') || 'http://localhost:3000'}/auth/callback`
+      }
+    )
+
+    if (inviteError) {
+      console.error('Errore inviteUserByEmail:', inviteError)
+      return NextResponse.json({ success: false, error: inviteError.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: invitedUser.user.id,
+        email: invitedUser.user.email,
+        ruolo: 'artista',
+        artista_id,
+        artista_nome: `${artista.nome} ${artista.cognome}`,
+      }
+    })
+
+  } catch (error: any) {
+    console.error('Errore inatteso POST /api/users:', error)
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
   }
 }
