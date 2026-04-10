@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         setUser(session?.user || null)
-        if (!session?.user) {
+        if (!session?.user && window.location.pathname.startsWith('/dashboard')) {
           router.push('/auth')
         }
       } catch (error) {
