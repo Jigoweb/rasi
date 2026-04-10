@@ -30,34 +30,58 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // No session -> redirect to /auth
-  if (!user) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/auth'
-    return NextResponse.redirect(redirectUrl)
+  // Route per il login
+  if (pathname.startsWith('/auth')) {
+    if (user) {
+      // Se già loggato e va su /auth, lo mandiamo alla dashboard
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/dashboard'
+      return NextResponse.redirect(redirectUrl)
+    }
+    // Altrimenti lo lasciamo accedere a /auth
+    return supabaseResponse
   }
 
-  const userRole = user.user_metadata?.ruolo
-
-  // Artista role: walled garden - only allow /dashboard/profilo
-  if (userRole === 'artista') {
-    if (!pathname.startsWith('/dashboard/profilo')) {
+  // Tutte le route della dashboard richiedono login
+  if (pathname.startsWith('/dashboard')) {
+    if (!user) {
       const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = '/dashboard/profilo'
+      redirectUrl.pathname = '/auth'
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    const userRole = user.user_metadata?.ruolo
+
+    // Artista role: walled garden - only allow /dashboard/profilo
+    if (userRole === 'artista') {
+      if (!pathname.startsWith('/dashboard/profilo')) {
+        const redirectUrl = request.nextUrl.clone()
+        redirectUrl.pathname = '/dashboard/profilo'
+        return NextResponse.redirect(redirectUrl)
+      }
+    }
+
+    // Non-admin/operatore trying to access /dashboard/utenti
+    if (pathname.startsWith('/dashboard/utenti') && userRole !== 'admin' && userRole !== 'operatore') {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/dashboard'
       return NextResponse.redirect(redirectUrl)
     }
   }
 
-  // Non-admin/operatore trying to access /dashboard/utenti
-  if (pathname.startsWith('/dashboard/utenti') && userRole !== 'admin' && userRole !== 'operatore') {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/dashboard'
-    return NextResponse.redirect(redirectUrl)
-  }
-
+  // Per tutte le altre route (es. landing page "/"), lasciamo passare senza check
   return supabaseResponse
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - images, public folder contents
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 }
