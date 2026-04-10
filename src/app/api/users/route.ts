@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
         targetUser.email,
         {
           data: targetUser.user_metadata,
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || req.headers.get('origin') || 'http://localhost:3000'}/auth/callback`
+          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || req.headers.get('origin') || 'http://localhost:3000'}/auth/callback?invite=true`
         }
       )
       if (linkError) {
@@ -215,7 +215,7 @@ export async function POST(req: NextRequest) {
           ruolo: 'artista',
           artista_id: artista_id
         },
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || req.headers.get('origin') || 'http://localhost:3000'}/auth/callback`
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || req.headers.get('origin') || 'http://localhost:3000'}/auth/callback?invite=true`
       }
     )
 

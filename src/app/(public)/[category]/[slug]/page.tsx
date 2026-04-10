@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-// import { createClient } from "@/shared/lib/supabase-server";
+import { supabaseServer } from "@/shared/lib/supabase-server";
 
-// Simula i template
+// Template components
 function InstitutionalTemplate({ title, content }: { title: string; content: string }) {
   return (
     <article className="max-w-3xl mx-auto py-16 px-4 md:px-6">
@@ -33,33 +33,22 @@ function ServiceTemplate({ title, content }: { title: string; content: string })
 export default async function DynamicPage({ params }: { params: Promise<{ category: string; slug: string }> }) {
   const { category, slug } = await params;
 
-  // MOCK: in produzione farà query a Supabase:
-  // const supabase = createClient();
-  // const { data } = await supabase.from('pages').select('*').eq('category', category).eq('slug', slug).single();
-  
-  // Simuliamo un db lookup
-  const mockDb: Record<string, any> = {
-    "chi-siamo/statuto": {
-      title: "Statuto R.A.S.I.",
-      template_type: "institutional",
-      content: "<p>Il presente statuto regola le attività della Rete Artisti Spettacolo per l'Innovazione...</p><p>Articolo 1: Denominazione e Sede...</p>"
-    },
-    "servizi/award-system": {
-      title: "Award System",
-      template_type: "service",
-      content: "<p>L'Award System è il nostro database informatico proprietario, regolarmente aggiornato, che ci permette di incrociare le opere con i titolari dei diritti connessi in modo trasparente e veloce.</p><ul><li>Massima trasparenza</li><li>Pagamenti trimestrali</li><li>Ricerca avanzata</li></ul>"
-    }
-  };
+  // Interroga il DB di Supabase tramite server client
+  const { data: pageData, error } = await supabaseServer
+    .from('pages')
+    .select('*')
+    .eq('category', category)
+    .eq('slug', slug)
+    .eq('is_published', true)
+    .single();
 
-  const pageKey = `${category}/${slug}`;
-  const pageData = mockDb[pageKey];
-
-  if (!pageData) {
-    // Se la pagina non esiste nel DB, restituiamo 404 (o renderizziamo una pagina placeholder temporanea)
+  if (error || !pageData) {
+    // Pagina non trovata nel DB, mostriamo placeholder (o notFound())
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center text-center px-4">
         <h1 className="font-poppins text-4xl font-bold text-anthropic-dark mb-4">Pagina in allestimento</h1>
         <p className="font-lora text-anthropic-mid-gray">La pagina /{category}/{slug} verrà migrata a breve nel nuovo sistema.</p>
+        <p className="text-xs text-red-500 mt-4">Nota tecnica: {error?.message || 'Record non trovato'}</p>
       </div>
     );
   }
@@ -67,10 +56,10 @@ export default async function DynamicPage({ params }: { params: Promise<{ catego
   // Rendering dinamico in base al template
   switch (pageData.template_type) {
     case "institutional":
-      return <InstitutionalTemplate title={pageData.title} content={pageData.content} />;
+      return <InstitutionalTemplate title={pageData.title} content={pageData.content || ''} />;
     case "service":
-      return <ServiceTemplate title={pageData.title} content={pageData.content} />;
+      return <ServiceTemplate title={pageData.title} content={pageData.content || ''} />;
     default:
-      return <InstitutionalTemplate title={pageData.title} content={pageData.content} />;
+      return <InstitutionalTemplate title={pageData.title} content={pageData.content || ''} />;
   }
 }

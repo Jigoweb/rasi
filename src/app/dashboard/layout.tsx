@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   Sparkles,
-  Shield
+  Shield,
+  Globe
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -51,13 +52,14 @@ export default function DashboardLayout({
   ]
 
   // Menu item per admin e operatori (chi può gestire utenti)
-  const userManagementMenuItems = [
+  const adminMenuItems = [
     { name: 'Utenti', href: '/dashboard/utenti', icon: Shield },
+    { name: 'Sito Pubblico', href: '/dashboard/cms/pages', icon: Globe },
   ]
 
   // Combina i menu in base ai permessi
   const menuItems = canManageUsers 
-    ? [...baseMenuItems, ...userManagementMenuItems] 
+    ? [...baseMenuItems, ...adminMenuItems] 
     : baseMenuItems
 
   // Helper per ottenere l'etichetta del ruolo
