@@ -28,10 +28,12 @@ export default async function CmsDocumentsPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Documenti e Modulistica</h2>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuovo Documento
-        </Button>
+        <Link href="/dashboard/cms/documents/new">
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuovo Documento
+          </Button>
+        </Link>
       </div>
 
       <div className="rounded-md border bg-white">
@@ -57,6 +59,7 @@ export default async function CmsDocumentsPage() {
                     <Badge variant="outline">{doc.category}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
+                    {/* @ts-ignore */}
                     {doc.pages ? doc.pages.title : '-'}
                   </TableCell>
                   <TableCell>
@@ -66,9 +69,11 @@ export default async function CmsDocumentsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon">
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <Link href={`/dashboard/cms/documents/${doc.id}`}>
+                        <Button variant="ghost" size="icon">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </Link>
                       <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700">
                         <Trash2 className="h-4 w-4" />
                       </Button>

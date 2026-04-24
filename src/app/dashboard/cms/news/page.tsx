@@ -1,4 +1,4 @@
-import { createClient } from '@/shared/lib/supabase-server';
+import { supabaseServer } from '@/shared/lib/supabase-server';
 import {
   Table,
   TableBody,
@@ -28,10 +28,12 @@ export default async function CmsNewsPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Bandi e News</h2>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuova Comunicazione
-        </Button>
+        <Link href="/dashboard/cms/news/new">
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuova Comunicazione
+          </Button>
+        </Link>
       </div>
 
       <div className="rounded-md border bg-white">
@@ -40,7 +42,8 @@ export default async function CmsNewsPage() {
             <TableRow>
               <TableHead>Titolo</TableHead>
               <TableHead>Slug</TableHead>
-              <TableHead>Stato</TableHead>
+              <TableHead>Stato Bando</TableHead>
+              <TableHead>Visibilità</TableHead>
               <TableHead>Data Pubblicazione</TableHead>
               <TableHead className="text-right">Azioni</TableHead>
             </TableRow>
@@ -58,14 +61,23 @@ export default async function CmsNewsPage() {
                       {item.status === 'active' ? 'Attivo' : 'Concluso'}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    {item.published_at ? (
+                      <Badge variant="default" className="bg-green-600 hover:bg-green-700">Pubblicato</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-orange-600 border-orange-600">Bozza</Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {item.published_at ? new Date(item.published_at).toLocaleDateString('it-IT') : '-'}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon">
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <Link href={`/dashboard/cms/news/${item.id}`}>
+                        <Button variant="ghost" size="icon">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </Link>
                       <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700">
                         <Trash2 className="h-4 w-4" />
                       </Button>

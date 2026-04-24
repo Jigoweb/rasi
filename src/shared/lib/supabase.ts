@@ -113,6 +113,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bandi_news: {
+        Row: {
+          content: string | null
+          cover_image_url: string | null
+          created_at: string | null
+          id: string
+          published_at: string | null
+          slug: string
+          status: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          content?: string | null
+          cover_image_url?: string | null
+          created_at?: string | null
+          id?: string
+          published_at?: string | null
+          slug: string
+          status: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string | null
+          cover_image_url?: string | null
+          created_at?: string | null
+          id?: string
+          published_at?: string | null
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       campagne_individuazione: {
         Row: {
           anno: number
@@ -303,6 +339,41 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      documents: {
+        Row: {
+          category: string
+          created_at: string | null
+          file_url: string
+          id: string
+          page_id: string | null
+          title: string
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          file_url: string
+          id?: string
+          page_id?: string | null
+          title: string
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          file_url?: string
+          id?: string
+          page_id?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       emittenti: {
         Row: {
@@ -690,6 +761,42 @@ export type Database = {
           titolo_originale?: string | null
           updated_at?: string | null
           updated_by?: string | null
+        }
+        Relationships: []
+      }
+      pages: {
+        Row: {
+          category: string
+          content: string | null
+          created_at: string | null
+          id: string
+          is_published: boolean | null
+          slug: string
+          template_type: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          category: string
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          is_published?: boolean | null
+          slug: string
+          template_type: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          is_published?: boolean | null
+          slug?: string
+          template_type?: string
+          title?: string
+          updated_at?: string | null
         }
         Relationships: []
       }

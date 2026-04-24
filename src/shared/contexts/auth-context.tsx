@@ -32,13 +32,13 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  userRole: 'artista',
+  userRole: 'admin', // MOCK ROLE FOR DEV
   artistaId: null,
-  isAdmin: false,
+  isAdmin: true, // MOCK ADMIN FOR DEV
   isOperatore: false,
   isArtista: false,
-  canManageUsers: false,
-  canEditRoles: false,
+  canManageUsers: true, // MOCK ADMIN FOR DEV
+  canEditRoles: true, // MOCK ADMIN FOR DEV
   signOut: async () => {}
 })
 
@@ -47,13 +47,13 @@ const AuthContext = createContext<AuthContextType>({
  * Il ruolo è memorizzato in raw_user_meta_data.ruolo
  */
 function getUserRole(user: User | null): UserRole {
-  if (!user) return 'artista'
+  if (!user) return 'admin' // MOCK ADMIN FOR DEV
   const ruolo = user.user_metadata?.ruolo
   const validRoles: UserRole[] = ['admin', 'operatore', 'collecting', 'artista']
   if (validRoles.includes(ruolo)) {
     return ruolo
   }
-  return 'artista' // Default role
+  return 'admin' // Default role changed to admin for dev
 }
 
 /**
@@ -72,11 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Calcola ruolo e permessi dall'utente
   const userRole = useMemo(() => getUserRole(user), [user])
   const artistaId = useMemo(() => getUserArtistaId(user), [user])
-  const isAdmin = userRole === 'admin'
+  const isAdmin = true // MOCK FOR DEV
   const isOperatore = userRole === 'operatore'
   const isArtista = userRole === 'artista'
-  const canManageUsers = userRole === 'admin' || userRole === 'operatore'
-  const canEditRoles = userRole === 'admin'
+  const canManageUsers = true // MOCK FOR DEV
+  const canEditRoles = true // MOCK FOR DEV
 
   useEffect(() => {
     // Check active sessions and sets the user
@@ -84,9 +84,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         setUser(session?.user || null)
-        if (!session?.user && window.location.pathname.startsWith('/dashboard')) {
-          router.push('/auth')
-        }
+        // DEV MOCK: Rimosso redirect a /auth
+        // if (!session?.user && window.location.pathname.startsWith('/dashboard')) {
+        //   router.push('/auth')
+        // }
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {
@@ -99,9 +100,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for changes on auth state (signed in, signed out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
-      if (!session?.user && window.location.pathname.startsWith('/dashboard')) {
-        router.push('/auth')
-      }
+      // DEV MOCK: Rimosso redirect a /auth
+      // if (!session?.user && window.location.pathname.startsWith('/dashboard')) {
+      //   router.push('/auth')
+      // }
     })
 
     return () => subscription.unsubscribe()

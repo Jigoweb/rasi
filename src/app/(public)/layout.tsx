@@ -46,7 +46,7 @@ export default function PublicLayout({
             <ul className="space-y-2 text-sm">
               <li><Link href="/chi-siamo/statuto" className="hover:text-anthropic-orange">Statuto</Link></li>
               <li><Link href="/chi-siamo/privacy-policy" className="hover:text-anthropic-orange">Privacy Policy</Link></li>
-              <li><Link href="/chi-siamo/relazione-trasparenza" className="hover:text-anthropic-orange">Trasparenza</Link></li>
+              <li><Link href="/chi-siamo/relazione-di-trasparenza" className="hover:text-anthropic-orange">Trasparenza</Link></li>
             </ul>
           </div>
           <div className="space-y-4">

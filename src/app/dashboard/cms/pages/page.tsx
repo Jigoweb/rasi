@@ -28,10 +28,12 @@ export default async function CmsPagesPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">Elenco Pagine</h2>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuova Pagina
-        </Button>
+        <Link href="/dashboard/cms/pages/new">
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuova Pagina
+          </Button>
+        </Link>
       </div>
 
       <div className="rounded-md border bg-white">
@@ -63,9 +65,11 @@ export default async function CmsPagesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon">
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <Link href={`/dashboard/cms/pages/${page.id}`}>
+                        <Button variant="ghost" size="icon">
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </Link>
                       <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700">
                         <Trash2 className="h-4 w-4" />
                       </Button>

@@ -32,13 +32,16 @@ export async function middleware(request: NextRequest) {
 
   // Route per il login
   if (pathname.startsWith('/auth')) {
+    // /auth/imposta-password richiede sessione attiva: lascia sempre passare
+    if (pathname.startsWith('/auth/imposta-password') || pathname.startsWith('/auth/callback')) {
+      return supabaseResponse
+    }
     if (user) {
-      // Se già loggato e va su /auth, lo mandiamo alla dashboard
+      // Già loggato su /auth → dashboard
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard'
       return NextResponse.redirect(redirectUrl)
     }
-    // Altrimenti lo lasciamo accedere a /auth
     return supabaseResponse
   }
 
@@ -63,6 +66,13 @@ export async function middleware(request: NextRequest) {
 
     // Non-admin/operatore trying to access /dashboard/utenti
     if (pathname.startsWith('/dashboard/utenti') && userRole !== 'admin' && userRole !== 'operatore') {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/dashboard'
+      return NextResponse.redirect(redirectUrl)
+    }
+
+    // Non-admin/operatore trying to access /dashboard/cms
+    if (pathname.startsWith('/dashboard/cms') && userRole !== 'admin' && userRole !== 'operatore') {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard'
       return NextResponse.redirect(redirectUrl)

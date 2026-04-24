@@ -1,30 +1,17 @@
 import Link from "next/link";
 import { Button } from "@/shared/components/ui/button";
+import { supabaseServer } from "@/shared/lib/supabase-server";
 
-export default function NewsPage() {
-  const newsList = [
-    {
-      title: "BANDO R.A.S.I. 2025",
-      date: "Ottobre 2024",
-      status: "Concluso",
-      excerpt: "Il bando tematico per sostenere la produzione artistica e i nuovi progetti teatrali o musicali.",
-      slug: "bando-rasi-2025",
-    },
-    {
-      title: "R.A.S.I. all'Assemblea Generale SCAPR",
-      date: "Maggio 2024",
-      status: "News",
-      excerpt: "R.A.S.I. partecipa a Ljubljana all'Assemblea Generale annuale per definire i nuovi standard dei diritti connessi europei.",
-      slug: "assemblea-scapr-2024",
-    },
-    {
-      title: "Accordo con Netflix firmato",
-      date: "Gennaio 2024",
-      status: "Accordo",
-      excerpt: "Firmato lo storico accordo per la corresponsione dei diritti connessi agli attori e interpreti sulle piattaforme VOD.",
-      slug: "accordo-netflix",
-    }
-  ];
+function stripHtml(html: string) {
+  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export default async function NewsPage() {
+  const { data: newsList } = await supabaseServer
+    .from("bandi_news")
+    .select("id,slug,title,content,status,cover_image_url,published_at,created_at")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false });
 
   return (
     <div className="py-16 md:py-24 container mx-auto px-4 md:px-6">
@@ -38,23 +25,25 @@ export default function NewsPage() {
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {newsList.map((item, i) => (
-          <div key={i} className="flex flex-col h-full bg-anthropic-light-gray/20 rounded-3xl p-8 border border-anthropic-light-gray/50 hover:border-anthropic-orange transition-colors group">
+        {newsList && newsList.length > 0 ? newsList.map((item) => (
+          <div key={item.id} className="flex flex-col h-full bg-anthropic-light-gray/20 rounded-3xl p-8 border border-anthropic-light-gray/50 hover:border-anthropic-orange transition-colors group">
             <div className="flex items-center justify-between mb-6">
               <span className={`text-xs font-poppins font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
-                item.status === 'Concluso' ? 'bg-anthropic-mid-gray/20 text-anthropic-dark' :
-                item.status === 'Accordo' ? 'bg-anthropic-blue/20 text-anthropic-blue' :
+                item.status === 'closed' ? 'bg-anthropic-mid-gray/20 text-anthropic-dark' :
                 'bg-anthropic-green/20 text-anthropic-green'
               }`}>
-                {item.status}
+                {item.status === 'closed' ? 'Concluso' : 'Attivo'}
               </span>
-              <span className="font-poppins text-sm text-anthropic-mid-gray">{item.date}</span>
+              <span className="font-poppins text-sm text-anthropic-mid-gray">
+                {item.published_at ? new Date(item.published_at).toLocaleDateString("it-IT") : ""}
+              </span>
             </div>
             <h3 className="font-poppins text-2xl font-semibold text-anthropic-dark mb-4 group-hover:text-anthropic-orange transition-colors">
               {item.title}
             </h3>
             <p className="font-lora text-anthropic-dark/70 mb-8 flex-grow leading-relaxed">
-              {item.excerpt}
+              {stripHtml(item.content || "").slice(0, 160) || "Aggiornamento in fase di pubblicazione."}
+              {stripHtml(item.content || "").length > 160 ? "…" : ""}
             </p>
             <Link href={`/news/${item.slug}`} className="mt-auto">
               <Button variant="outline" className="w-full font-poppins rounded-full border-anthropic-dark text-anthropic-dark hover:bg-anthropic-dark hover:text-anthropic-light">
@@ -62,7 +51,11 @@ export default function NewsPage() {
               </Button>
             </Link>
           </div>
-        ))}
+        )) : (
+          <div className="col-span-full text-center text-anthropic-mid-gray font-lora py-16">
+            Nessuna news disponibile.
+          </div>
+        )}
       </div>
     </div>
   );
