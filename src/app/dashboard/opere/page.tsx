@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
-import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport } from '@/features/opere/services/opere.service'
+import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId } from '@/features/opere/services/opere.service'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
@@ -123,8 +123,10 @@ export default function OperePage() {
   // Delete confirmation states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [operaToDelete, setOperaToDelete] = useState<Opera | null>(null)
-  const [deleteCheckStatus, setDeleteCheckStatus] = useState<'idle' | 'checking' | 'can_delete' | 'has_partecipazioni'>('idle')
+  const [deleteCheckStatus, setDeleteCheckStatus] = useState<'idle' | 'checking' | 'can_delete' | 'has_partecipazioni' | 'has_individuazioni'>('idle')
   const [partecipazioniCount, setPartecipazioniCount] = useState(0)
+  const [individuazioniCount, setIndividuazioniCount] = useState(0)
+  const [deleteIndividuazioniToo, setDeleteIndividuazioniToo] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
   const { startExport } = useExportProcess()
@@ -387,39 +389,67 @@ export default function OperePage() {
   const openDeleteDialog = async (opera: Opera) => {
     setOperaToDelete(opera)
     setDeleteCheckStatus('checking')
+    setIndividuazioniCount(0)
+    setDeleteIndividuazioniToo(false)
     setShowDeleteDialog(true)
-    
+
     // Check if opera has participations
     const { count, error } = await getPartecipazioniCountByOperaId(opera.id)
-    
+
     if (error) {
       console.error('Error checking partecipazioni:', error)
       setDeleteCheckStatus('idle')
       return
     }
-    
-    setPartecipazioniCount(count)
-    setDeleteCheckStatus(count > 0 ? 'has_partecipazioni' : 'can_delete')
+
+    if (count > 0) {
+      setPartecipazioniCount(count)
+      setDeleteCheckStatus('has_partecipazioni')
+      return
+    }
+
+    // No partecipazioni: check for residual individuazioni (blocked by FK opera_id RESTRICT)
+    const { data: indData, error: indError } = await getIndividuazioniByOperaId(opera.id)
+    if (indError) {
+      console.error('Error checking individuazioni:', indError)
+      setDeleteCheckStatus('can_delete')
+      return
+    }
+    const indCount = indData?.length ?? 0
+    setIndividuazioniCount(indCount)
+    setDeleteCheckStatus(indCount > 0 ? 'has_individuazioni' : 'can_delete')
   }
 
   const handleDeleteOpera = async () => {
     if (!operaToDelete) return
-    
+
     setIsDeleting(true)
-    
+
+    // If there are residual individuazioni and user confirmed deletion, remove them first
+    if (deleteIndividuazioniToo && individuazioniCount > 0) {
+      const { error: indError } = await deleteIndividuazioniByOperaId(operaToDelete.id)
+      if (indError) {
+        console.error('Error deleting individuazioni:', indError)
+        setIsDeleting(false)
+        return
+      }
+    }
+
     const { error } = await deleteOpera(operaToDelete.id)
-    
+
     if (error) {
       console.error('Error deleting opera:', error)
       setIsDeleting(false)
       return
     }
-    
+
     // Refresh list and close dialog
     await fetchOpere()
     setShowDeleteDialog(false)
     setOperaToDelete(null)
     setDeleteCheckStatus('idle')
+    setIndividuazioniCount(0)
+    setDeleteIndividuazioniToo(false)
     setIsDeleting(false)
   }
 
@@ -428,6 +458,8 @@ export default function OperePage() {
     setOperaToDelete(null)
     setDeleteCheckStatus('idle')
     setPartecipazioniCount(0)
+    setIndividuazioniCount(0)
+    setDeleteIndividuazioniToo(false)
   }
 
   const onSubmit = async (values: z.infer<typeof schema>) => {
@@ -1211,6 +1243,34 @@ export default function OperePage() {
               </div>
             )}
 
+            {deleteCheckStatus === 'has_individuazioni' && (
+              <div className="space-y-3">
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="font-medium text-orange-800">Presenti individuazioni storiche</p>
+                      <p className="text-sm text-orange-700 mt-1">
+                        Quest&apos;opera non ha partecipazioni né episodi, ma risulta in{' '}
+                        <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> di campagne precedenti.
+                        Queste individuazioni non hanno più un collegamento alla partecipazione originale.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 pl-1">
+                  <Checkbox
+                    id="delete-individuazioni"
+                    checked={deleteIndividuazioniToo}
+                    onCheckedChange={(v) => setDeleteIndividuazioniToo(!!v)}
+                  />
+                  <label htmlFor="delete-individuazioni" className="text-sm text-gray-700 cursor-pointer leading-snug">
+                    Elimina anche le <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> residue per procedere con la cancellazione
+                  </label>
+                </div>
+              </div>
+            )}
+
             {deleteCheckStatus === 'can_delete' && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <p className="text-sm text-red-700">
@@ -1224,9 +1284,9 @@ export default function OperePage() {
             <Button variant="outline" onClick={closeDeleteDialog}>
               Annulla
             </Button>
-            {deleteCheckStatus === 'can_delete' && (
-              <Button 
-                variant="destructive" 
+            {(deleteCheckStatus === 'can_delete' || (deleteCheckStatus === 'has_individuazioni' && deleteIndividuazioniToo)) && (
+              <Button
+                variant="destructive"
                 onClick={handleDeleteOpera}
                 disabled={isDeleting}
               >

@@ -269,13 +269,52 @@ export const getPartecipazioniCountByOperaId = async (operaId: string) => {
 
 /**
  * Deletes an opera by ID.
- * Note: This will fail if the opera has associated participations due to FK constraints.
+ * Note: This will fail if the opera has associated participations or individuazioni due to FK constraints.
  */
 export const deleteOpera = async (id: string) => {
   const { error } = await supabase
     .from('opere')
     .delete()
     .eq('id', id)
+
+  return { error }
+}
+
+/** Individuazione info per opera (campagne in cui è usata) */
+export interface IndividuazionePerOpera {
+  id: string
+  campagna_individuazioni_id: string
+  campagne_individuazione?: { nome: string } | null
+}
+
+/**
+ * Recupera le individuazioni collegate a un'opera, con i nomi delle campagne.
+ * Usato per avvisare l'utente prima della cancellazione.
+ * Restituisce solo le individuazioni "orfane" (partecipazione_id NULL) che
+ * impediscono la cancellazione ma non sono più visibili nell'interfaccia.
+ */
+export const getIndividuazioniByOperaId = async (operaId: string) => {
+  const { data, error } = await supabase
+    .from('individuazioni')
+    .select(`
+      id,
+      campagna_individuazioni_id,
+      campagne_individuazione(nome)
+    `)
+    .eq('opera_id', operaId)
+
+  return { data: data as IndividuazionePerOpera[] | null, error }
+}
+
+/**
+ * Elimina tutte le individuazioni collegate a un'opera.
+ * Va chiamato prima di deleteOpera quando esistono individuazioni (FK opera_id RESTRICT).
+ */
+export const deleteIndividuazioniByOperaId = async (operaId: string) => {
+  const { error } = await supabase
+    .from('individuazioni')
+    .delete()
+    .eq('opera_id', operaId)
 
   return { error }
 }
