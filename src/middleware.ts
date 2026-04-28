@@ -30,6 +30,20 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
+  // Redirect dalla root '/' verso '/auth' se l'utente non è loggato
+  if (pathname === '/') {
+    if (!user) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/auth'
+      return NextResponse.redirect(redirectUrl)
+    } else {
+      // Se è loggato, possiamo reindirizzarlo alla dashboard
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/dashboard'
+      return NextResponse.redirect(redirectUrl)
+    }
+  }
+
   // Route per il login
   if (pathname.startsWith('/auth')) {
     // /auth/imposta-password richiede sessione attiva: lascia sempre passare
