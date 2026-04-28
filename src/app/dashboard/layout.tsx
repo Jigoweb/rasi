@@ -50,16 +50,26 @@ export default function DashboardLayout({
     { name: 'Query', href: '/dashboard/query', icon: Database },
   ]
 
-  // Menu item per admin e operatori (chi può gestire utenti)
-  const adminMenuItems = [
+  // Menu item per operatori e admin (chi può gestire utenti)
+  const operatorMenuItems = [
     { name: 'Utenti', href: '/dashboard/utenti', icon: Shield },
+  ]
+
+  // Menu item SOLO per admin
+  const adminOnlyMenuItems = [
     { name: 'Sito Pubblico', href: '/dashboard/cms/pages', icon: Globe },
   ]
 
   // Combina i menu in base ai permessi
-  const menuItems = canManageUsers 
-    ? [...baseMenuItems, ...adminMenuItems] 
-    : baseMenuItems
+  let menuItems = [...baseMenuItems]
+  
+  if (canManageUsers) {
+    menuItems = [...menuItems, ...operatorMenuItems]
+  }
+  
+  if (isAdmin) {
+    menuItems = [...menuItems, ...adminOnlyMenuItems]
+  }
 
   // Helper per ottenere l'etichetta del ruolo
   const getRoleLabel = () => {

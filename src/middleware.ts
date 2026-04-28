@@ -85,8 +85,8 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(redirectUrl)
     }
 
-    // Non-admin/operatore trying to access /dashboard/cms
-    if (pathname.startsWith('/dashboard/cms') && userRole !== 'admin' && userRole !== 'operatore') {
+    // Non-admin trying to access /dashboard/cms
+    if (pathname.startsWith('/dashboard/cms') && userRole !== 'admin') {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = '/dashboard'
       return NextResponse.redirect(redirectUrl)
