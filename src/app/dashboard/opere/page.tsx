@@ -1245,15 +1245,20 @@ export default function OperePage() {
 
             {deleteCheckStatus === 'has_individuazioni' && (
               <div className="space-y-3">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-sm text-red-700">
+                    Questa azione è irreversibile. Tutti i dati dell&apos;opera verranno eliminati permanentemente.
+                  </p>
+                </div>
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
                     <div>
                       <p className="font-medium text-orange-800">Presenti individuazioni storiche</p>
                       <p className="text-sm text-orange-700 mt-1">
-                        Quest&apos;opera non ha partecipazioni né episodi, ma risulta in{' '}
+                        Quest&apos;opera è presente in{' '}
                         <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> di campagne precedenti.
-                        Queste individuazioni non hanno più un collegamento alla partecipazione originale.
+                        Le individuazioni verranno mantenute con tutti i dati dello snapshot, ma perderanno il collegamento all&apos;opera nel catalogo.
                       </p>
                     </div>
                   </div>
@@ -1265,7 +1270,7 @@ export default function OperePage() {
                     onCheckedChange={(v) => setDeleteIndividuazioniToo(!!v)}
                   />
                   <label htmlFor="delete-individuazioni" className="text-sm text-gray-700 cursor-pointer leading-snug">
-                    Elimina anche le <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> residue per procedere con la cancellazione
+                    Elimina anche le <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> residue (opzionale)
                   </label>
                 </div>
               </div>
@@ -1284,7 +1289,7 @@ export default function OperePage() {
             <Button variant="outline" onClick={closeDeleteDialog}>
               Annulla
             </Button>
-            {(deleteCheckStatus === 'can_delete' || (deleteCheckStatus === 'has_individuazioni' && deleteIndividuazioniToo)) && (
+            {(deleteCheckStatus === 'can_delete' || deleteCheckStatus === 'has_individuazioni') && (
               <Button
                 variant="destructive"
                 onClick={handleDeleteOpera}
