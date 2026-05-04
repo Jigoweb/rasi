@@ -146,29 +146,21 @@ export default function CampagnaDettaglioPage() {
     setLoadingMore(false)
   }, [campagnaId, cursor, q, processatoBool, fromDate, toDate])
 
-  // Load campagna, health, and first page in parallel on mount
+  // Load campagna metadata and health on mount
   useEffect(() => {
     if (!campagnaId) return
-    
-    const loadData = async () => {
-      setLoading(true)
+    const loadMeta = async () => {
       try {
-        // Load all initial data in parallel
-        await Promise.all([
-          fetchCampagna(),
-          fetchHealth(),
-          fetchFirstPage()
-        ])
+        await Promise.all([fetchCampagna(), fetchHealth()])
       } catch (error) {
-        console.error('Errore caricamento dati iniziali:', error)
+        console.error('Errore caricamento metadati campagna:', error)
       }
     }
-    
-    loadData()
+    loadMeta()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campagnaId])
 
-  // Reload programmazioni when filters change
+  // Load/reload programmazioni on mount and whenever filters change
   useEffect(() => {
     if (!campagnaId) return
     fetchFirstPage()

@@ -464,7 +464,11 @@ export const listProgrammazioniByCampagnaKeyset = async (
     .limit(limit)
 
   if (cursor?.created_at) {
-    query = query.lt('created_at', cursor.created_at)
+    // Compound cursor: (created_at < X) OR (created_at = X AND id < Y)
+    // Handles batches where many rows share the same created_at timestamp
+    query = (query as any).or(
+      `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
+    )
   }
 
   if (options?.q) {
