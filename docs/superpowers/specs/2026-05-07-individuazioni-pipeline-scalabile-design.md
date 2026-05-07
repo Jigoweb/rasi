@@ -116,9 +116,33 @@ function normalizzaData(row: ProgrammazionePayload): string | null {
 }
 ```
 
+#### 1.5 Normalizzazione numero episodio — encoding compatto (auto-detection)
+
+Alcuni emittenti (rilevato su Pluto TV) codificano il numero episodio come `stagione * 100 + episodio_reale`:
+- S17 Ep1701 → episodio reale = 1
+- S7 Ep728 → episodio reale = 28
+
+Il pattern è rilevabile e non ambiguo: nessun emittente con numerazione standard avrebbe l'episodio 1701 in stagione 17.
+
+```typescript
+function normalizzaEpisodio(
+  numero_episodio: number | null,
+  numero_stagione: number | null
+): number | null {
+  if (!numero_episodio || !numero_stagione) return numero_episodio
+  const prefix = numero_stagione * 100
+  // Encoding compatto rilevato: ep in range [s*100+1, s*100+99]
+  if (numero_episodio >= prefix + 1 && numero_episodio <= prefix + 99) {
+    return numero_episodio - prefix
+  }
+  return numero_episodio
+}
+```
+
+Applicato a `numero_episodio` (con `numero_stagione` come contesto), prima dell'insert.
+
 ### Dove non si interviene
 
-- `numero_episodio`, `numero_stagione` — non modificati (il matching gestisce i casi anomali)
 - `regia` — non modificata
 - Campi economici (`views`, `retail_price`, `total_revenue`, ecc.) — passati as-is
 
