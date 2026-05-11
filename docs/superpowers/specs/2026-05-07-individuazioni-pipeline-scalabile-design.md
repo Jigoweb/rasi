@@ -30,9 +30,12 @@ Non viene aggiunto nessun pannello admin, nessun form di configurazione, nessuna
 
 **Motivazione:** Il valore aggiunto di una config per emittente è minore rispetto al costo di mantenerla (UI da costruire, admin che deve impostarla, rischio configurazioni errate). Le stesse regole automatiche coprono tutti i casi rilevati.
 
-### 2. Normalizzazione all'import — solo estetica
+### 2. Normalizzazione all'import — cosmetica + funzionale
 
-Il matching è già case-insensitive (`LOWER()` su entrambi i lati nella funzione SQL). La normalizzazione titlecase viene applicata all'import esclusivamente per migliorare la visualizzazione nella UI.
+Il matching è già case-insensitive (`LOWER()` su entrambi i lati nella funzione SQL):
+- **Title case**: cosmetico, migliora visualizzazione UI senza impattare matching.
+- **Rimozione suffissi** (`(Original)`, `(OV)`, ecc.): funzionale, migliora similarity score quando il DB opera non contiene quei suffissi.
+- **Mapping tipo, fallback data, normalizzazione episodio**: funzionali, abilitano matching corretto.
 
 ### 3. Algoritmo adattivo — usa ciò che c'è, ignora ciò che manca
 
@@ -103,14 +106,51 @@ function normalizzaTipo(tipo: string | null): string | null {
 
 #### 1.4 Date fallback automatico
 
+**Pre-requisito tipo**: cambiare `ProgrammazionePayload.sales_month` da `number` a `string | number` (Excel può portarlo come string `"2024-03"`, numero `202403`, decimale `2024.03`, o serial date Excel come `45352`).
+
 ```typescript
+function parseSalesMonth(value: string | number | undefined | null): string | null {
+  if (value == null || value === '') return null
+  const str = String(value).trim()
+
+  // Formato "YYYY-MM" o "YYYY/MM"
+  let m = str.match(/^(\d{4})[-/](\d{1,2})$/)
+  if (m) {
+    const month = m[2].padStart(2, '0')
+    return `${m[1]}-${month}-01`
+  }
+
+  // Formato "YYYYMM" (es. 202403)
+  m = str.match(/^(\d{4})(\d{2})$/)
+  if (m) return `${m[1]}-${m[2]}-01`
+
+  // Formato decimale "YYYY.MM" (es. 2024.03)
+  m = str.match(/^(\d{4})\.(\d{1,2})$/)
+  if (m) {
+    const month = m[2].padStart(2, '0')
+    return `${m[1]}-${month}-01`
+  }
+
+  // Excel serial date (numero > 30000, < 60000 plausibile range moderno)
+  const n = Number(str)
+  if (Number.isFinite(n) && n > 30000 && n < 60000) {
+    // Excel epoch: 1899-12-30 (con bug 1900-02-29 incluso)
+    const ms = (n - 25569) * 86400 * 1000
+    const d = new Date(ms)
+    if (!isNaN(d.getTime())) {
+      const y = d.getUTCFullYear()
+      const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
+      return `${y}-${mo}-01`
+    }
+  }
+
+  return null
+}
+
 function normalizzaData(row: ProgrammazionePayload): string | null {
   if (row.data_trasmissione) return row.data_trasmissione
-  if (row.sales_month) {
-    // sales_month formato: "2024-03" → "2024-03-01"
-    const match = String(row.sales_month).match(/^(\d{4})-(\d{2})$/)
-    if (match) return `${match[1]}-${match[2]}-01`
-  }
+  const fromSales = parseSalesMonth(row.sales_month)
+  if (fromSales) return fromSales
   if (row.data_inizio) return row.data_inizio
   return null
 }
@@ -175,6 +215,28 @@ CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
 )
 ```
 
+**Aggiornare anche l'overload 1** (delega, riga 17-36) per passare i nuovi default:
+```sql
+CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
+    p_programmazione_id UUID,
+    p_soglia_titolo NUMERIC DEFAULT 0.7
+)
+RETURNS TABLE (...)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT * FROM match_programmazione_to_partecipazioni(
+        p_programmazione_id, p_soglia_titolo, NULL::UUID[], 3, 5
+    );
+END;
+$$ LANGUAGE plpgsql STABLE;
+```
+
+Aggiungere i `DROP FUNCTION IF EXISTS` per la firma vecchia a 3 parametri prima delle nuove `CREATE OR REPLACE`:
+```sql
+DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric, uuid[]);
+```
+
 Logica anno aggiornata:
 ```sql
 -- Se anno assente in programmazione O in opera → skip (punteggio neutro = 0)
@@ -186,51 +248,135 @@ Logica anno aggiornata:
 
 **Motivazione:** Anno di produzione (DB RASI) vs anno di distribuzione (emittente) può differire di 1–5 anni. La penalità attuale -19.5 causa falsi negativi sistematici.
 
-### 2.2 Fix discriminante regia — null-safe
+### 2.2 Discriminante regia — già null-safe (no fix)
 
-**Bug attuale:** Se `v_prog.regia IS NULL`, alcune path nel codice SQL assegnano comunque la penalità -15.
+**Stato attuale:** Il codice è già corretto. Il guard a riga 232:
+```sql
+IF v_prog.regia IS NOT NULL AND LENGTH(TRIM(v_prog.regia)) > 0
+   AND v_opera.regista IS NOT NULL AND array_length(v_opera.regista, 1) > 0 THEN
+    -- penalità -1.5 stanno DENTRO al guard, non si applicano se NULL
+END IF;
+```
+
+Quando regia è NULL su un lato, `v_score_regia` resta 0 (inizializzazione). Nessun bug.
+
+**Cosa cambia in questo design:** il fatto che `v_score_regia = 0` venga applicato senza ricalibrazione della soglia (35 hardcoded) causa falsi negativi quando l'emittente non fornisce regia su molti record. Il fix vero è la **soglia adattiva** (§ 2.3), non il discriminante stesso.
+
+### 2.2bis Fix serie senza dati episodio — CONTINUE prematuro
+
+**Bug attuale (riga 340-342):**
+```sql
+IF v_is_serie THEN
+    -- ... loop episodi ...
+    IF NOT v_episodio_trovato THEN
+        CONTINUE;  -- ❌ scarta l'opera se serie senza match episodio
+    END IF;
+END IF;
+```
+
+`v_is_serie` viene determinato dalla presenza di **uno qualsiasi** tra `numero_episodio`, `numero_stagione`, `titolo_episodio`. Se la programmazione ha `numero_stagione=2` ma `numero_episodio=NULL` (caso comune in alcuni emittenti), e nessun episodio della stagione 2 ha titolo matchabile, viene scartato anche se il titolo opera matcha al 100%.
 
 **Fix:**
 ```sql
--- DISCRIMINANTE REGIA
-IF v_prog.regia IS NOT NULL AND v_prog.regia != '' 
-   AND v_opera.regista IS NOT NULL AND v_opera.regista != '' THEN
-    -- calcola v_score_regia normalmente
-    -- match >= 0.7 → +10, parziale >= 0.4 → +5, no match → -15
-ELSE
-    -- Dati assenti: discriminante non applicato, punteggio neutro
-    v_score_regia := 0;
+-- Sostituire CONTINUE con: skip solo episodio scoring, non l'opera
+IF v_is_serie THEN
+    -- ... loop episodi (invariato) ...
+
+    IF NOT v_episodio_trovato THEN
+        -- Distinguiamo due casi:
+        IF v_prog.numero_episodio IS NOT NULL OR v_prog.titolo_episodio IS NOT NULL THEN
+            -- Caso A: prog ha dati episodio specifici, ma nessun match → scarta
+            CONTINUE;
+        END IF;
+        -- Caso B: prog è "marcata serie" solo per numero_stagione, senza specifici
+        --         → procedi senza episode scoring, soglia adattiva lo gestirà
+        v_score_episodio := 0;
+    ELSE
+        v_score_episodio := v_best_episodio_score;
+    END IF;
 END IF;
 ```
 
 ### 2.3 Ricalibrazione punteggio massimo adattiva
 
-Con discriminanti saltati, il punteggio massimo teorico si abbassa. Per mantenere la soglia minima (35 punti) comparabile, il punteggio viene normalizzato sui discriminanti effettivamente usati:
+Con discriminanti saltati, il punteggio massimo teorico si abbassa. La soglia hardcoded `35` (riga 386) viene **rimossa** e sostituita con una soglia adattiva normalizzata sui discriminanti effettivamente usati.
 
+**Da rimuovere (riga 386):**
 ```sql
+IF v_score_totale < 35 THEN CONTINUE; END IF;
+```
+
+**Sostituire con:**
+```sql
+-- Determina quali discriminanti hanno contribuito (entrambi i lati avevano dato)
+v_anno_disponibile := (v_prog.anno IS NOT NULL AND v_opera.anno_produzione IS NOT NULL);
+v_regia_disponibile := (
+    v_prog.regia IS NOT NULL AND LENGTH(TRIM(v_prog.regia)) > 0
+    AND v_opera.regista IS NOT NULL AND array_length(v_opera.regista, 1) > 0
+);
+v_episodio_applicato := (v_is_serie AND v_episodio_trovato);
+
 -- Calcola peso massimo possibile con i dati disponibili
 v_peso_massimo := 50; -- titolo sempre presente
 IF v_score_titolo_orig > 0 THEN v_peso_massimo := v_peso_massimo + 10; END IF;
 IF v_anno_disponibile THEN v_peso_massimo := v_peso_massimo + 15; END IF;
 IF v_regia_disponibile THEN v_peso_massimo := v_peso_massimo + 10; END IF;
-IF v_episodio_disponibile THEN v_peso_massimo := v_peso_massimo + 15; END IF;
+IF v_episodio_applicato THEN v_peso_massimo := v_peso_massimo + 15; END IF;
 
--- Soglia adattata: 35% del peso massimo disponibile
-v_soglia_adattata := v_peso_massimo * 0.35;
+-- Soglia adattata: 35% del peso massimo disponibile,
+-- con floor a 25 per evitare match troppo deboli quando solo titolo è presente
+v_soglia_adattata := GREATEST(v_peso_massimo * 0.35, 25);
 IF v_score_totale < v_soglia_adattata THEN CONTINUE; END IF;
 ```
 
-**Effetto:** Una programmazione senza regia e senza anno viene giudicata su titolo+episodio con soglia proporzionata, non confrontata con il massimo teorico di 100.
+**Variabili da dichiarare** in sezione `DECLARE` della funzione:
+```sql
+v_anno_disponibile BOOLEAN;
+v_regia_disponibile BOOLEAN;
+v_episodio_applicato BOOLEAN;
+v_peso_massimo NUMERIC;
+v_soglia_adattata NUMERIC;
+```
+
+**Effetto:** Una programmazione senza regia e senza anno viene giudicata su titolo+episodio con soglia proporzionata (es. peso_massimo = 65 → soglia = 25). Floor a 25 previene match di solo titolo a similarity 0.5 (= 25 punti) che sarebbero deboli.
 
 ---
 
-## Componente 3 — Parametri campagna
+## Componente 3 — Wrapper `process_programmazioni_chunk`
 
-### Passaggio tolleranza anno dal frontend
+### Localizzazione attuale
 
-Il frontend (contesto `individuazione-process-context.tsx`) passa i parametri alla campagna. I parametri di default della funzione SQL gestiscono il caso in cui non vengano passati.
+La funzione `process_programmazioni_chunk` **non è in repo** (solo deployata su Supabase). Va decisa una strategia di gestione:
 
-Per un'eventuale futura UI che esponga la tolleranza anno (es. "campagna conservativa" vs "campagna ampia"), i parametri sono già pronti nell'overload della funzione.
+**Opzione scelta: aggiungere al repo**. Creare il file `db/init/03b_process_chunk.sql` (o aggiungere in coda a `03_matching_functions.sql`) con la definizione corrente esportata da Supabase + le modifiche.
+
+**Procedura prima dell'implementazione:**
+1. Esportare la definizione corrente con `pg_get_functiondef('process_programmazioni_chunk'::regproc)` via MCP Supabase.
+2. Salvare in `db/init/`.
+3. Applicare le modifiche di seguito.
+
+### Modifiche a `process_programmazioni_chunk`
+
+Aggiungere parametri tolleranza alla firma e passarli al chiamante interno:
+
+```sql
+CREATE OR REPLACE FUNCTION process_programmazioni_chunk(
+    p_campagne_individuazione_id UUID,
+    p_programmazione_ids UUID[],
+    p_soglia_titolo NUMERIC DEFAULT 0.7,
+    p_artista_ids UUID[] DEFAULT NULL,
+    p_tolleranza_anno_soft INT DEFAULT 3,   -- nuovo
+    p_tolleranza_anno_hard INT DEFAULT 5    -- nuovo
+)
+-- ... internamente chiama match_programmazione_to_partecipazioni(
+--     prog_id, p_soglia_titolo, p_artista_ids,
+--     p_tolleranza_anno_soft, p_tolleranza_anno_hard
+-- )
+```
+
+### Passaggio dal frontend (futuro)
+
+Per un'eventuale UI che esponga la tolleranza anno (es. "campagna conservativa" vs "campagna ampia"), i parametri sono già pronti nella firma. Per ora, il route `process-chunk/route.ts` passa i default 3 e 5.
 
 ---
 
@@ -238,11 +384,22 @@ Per un'eventuale futura UI che esponga la tolleranza anno (es. "campagna conserv
 
 | File | Tipo modifica |
 |------|--------------|
-| `src/features/programmazioni/services/programmazioni.service.ts` | Aggiungere funzioni `toTitleCase`, `normalizzaTipo`, `normalizzaData` + applicarle in `uploadProgrammazioni`. Estendere `ProgrammazionePayload` con `sales_month`, `data_inizio`, `data_fine` se assenti. |
-| `db/init/03_matching_functions.sql` | (1) `match_programmazione_to_partecipazioni`: parametri `p_tolleranza_anno_soft/hard`, fix null-safe regia, soglia adattiva. (2) `process_programmazioni_chunk`: aggiungere e passare i nuovi parametri al chiamante interno. |
-| `src/app/api/campagne-individuazione/process-chunk/route.ts` | Passare `p_tolleranza_anno_soft` e `p_tolleranza_anno_hard` alla RPC `process_programmazioni_chunk` (con valori default 3 e 5). |
+| `src/features/programmazioni/services/programmazioni.service.ts` | Aggiungere `toTitleCase`, `normalizzaTipo`, `parseSalesMonth`, `normalizzaData`, `normalizzaEpisodio`, `SUFFISSI_DA_RIMUOVERE`, `TIPO_MAPPING` + applicarli in `uploadProgrammazioni`. Cambiare `ProgrammazionePayload.sales_month` da `number` a `string \| number`. |
+| `db/init/03_matching_functions.sql` | `match_programmazione_to_partecipazioni`: (1) nuovi parametri `p_tolleranza_anno_soft/hard`, (2) overload 1 delega aggiornata, (3) DROP firma vecchia, (4) fix CONTINUE prematuro per serie senza dati episodio, (5) rimozione soglia hardcoded 35 + soglia adattiva, (6) logica anno con tolleranze parametriche. |
+| `db/init/03b_process_chunk.sql` *(NUOVO)* | Esportare definizione corrente di `process_programmazioni_chunk` da Supabase, aggiungere parametri `p_tolleranza_anno_soft/hard` e propagarli al chiamante interno. |
+| `src/app/api/campagne-individuazione/process-chunk/route.ts` | Passare `p_tolleranza_anno_soft: 3` e `p_tolleranza_anno_hard: 5` alla RPC. |
 
-Nessuna migrazione DB. Nessuna nuova tabella. Nessuna modifica UI.
+### Verifiche pre-implementazione
+
+1. **CHECK constraint su `programmazioni.tipo`**: verificare se schema impone valori specifici. Se sì, allineare output di `TIPO_MAPPING` ai valori accettati. Comando:
+   ```sql
+   SELECT conname, pg_get_constraintdef(oid)
+   FROM pg_constraint
+   WHERE conrelid = 'programmazioni'::regclass AND contype = 'c';
+   ```
+2. **Export `process_programmazioni_chunk`**: prima dell'implementazione, salvare definizione corrente in repo.
+
+Nessuna migrazione di dati. Nessuna nuova tabella. Nessuna modifica UI.
 
 ---
 
@@ -257,7 +414,15 @@ Nessuna migrazione DB. Nessuna nuova tabella. Nessuna modifica UI.
 
 ## Verifica post-implementazione
 
-1. Upload file Pluto TV con titoli ALL CAPS → verificare che in `programmazioni` appaiano in title case
-2. Upload file Paramount con `sales_month` invece di `data_trasmissione` → verificare che `data_trasmissione` venga popolata con primo giorno del mese
-3. Lanciare campagna su Pluto TV senza regia → verificare che il punteggio non penalizzi per regia mancante (confrontare `dettagli_matching` JSONB prima/dopo)
-4. Lanciare campagna con opera DB anno 2020 e programmazione anno 2023 → verificare che non venga scartata (±3 anni soft)
+1. **Title case**: upload Pluto con titoli ALL CAPS → `programmazioni.titolo` in Title Case.
+2. **Suffix removal**: upload Rakuten con titoli `Titolo (Original)` → suffisso strippato in DB.
+3. **Sales month fallback**: upload Paramount con `sales_month` numero/stringa/decimale → `data_trasmissione` = primo del mese.
+4. **Episode encoding**: upload Pluto con `numero_stagione=17, numero_episodio=1701` → in DB `numero_episodio=1`.
+5. **Episode encoding non triggera per dati normali**: prog con `numero_stagione=1, numero_episodio=5` → resta `5`.
+6. **Regia mancante**: campagna Pluto senza regia, opera DB con regia → match non scartato, `dettagli_matching` mostra regia score 0 senza penalità.
+7. **Tolleranza anno**: opera DB anno 2020, programmazione anno 2023 → match accettato (±3 soft).
+8. **Tolleranza anno hard**: opera DB anno 2020, programmazione anno 2026 → match scartato (>5).
+9. **Serie senza episodio**: prog serie con solo `numero_stagione`, no `numero_episodio` → opera matchata su titolo+anno, episode score = 0.
+10. **Serie con episodio non matchato**: prog serie con `numero_episodio=99` su serie che ha solo 10 episodi → scartata correttamente (caso A del fix CONTINUE).
+11. **Soglia adattiva**: prog solo con titolo (no anno, no regia, no episodio) → soglia 25, match accettato solo se similarity titolo > 0.5.
+12. **CHECK constraint tipo**: insert con `tipo='speciale'` non fallisce.
