@@ -86,7 +86,18 @@ export default function ProgrammazioniPage() {
   const [filteredEmittenti, setFilteredEmittenti] = useState<Emittente[]>([])
   const [selectedEmittente, setSelectedEmittente] = useState<Emittente | null>(null)
   const [showEmittenteDetails, setShowEmittenteDetails] = useState(false)
-  
+  const [showEmittenteForm, setShowEmittenteForm] = useState(false)
+  const [emittenteFormMode, setEmittenteFormMode] = useState<'create' | 'edit'>('create')
+  const [emittenteFormData, setEmittenteFormData] = useState({
+    codice: '',
+    nome: '',
+    tipo: 'tv_generalista' as Emittente['tipo'],
+    paese: 'IT',
+    attiva: true,
+  })
+  const [emittenteFormSaving, setEmittenteFormSaving] = useState(false)
+  const [emittenteFormError, setEmittenteFormError] = useState<string | null>(null)
+
   // Watch values to auto-generate name
   const watchedEmittenteId = form.watch('emittente_id')
   const watchedAnno = form.watch('anno')
@@ -658,6 +669,60 @@ export default function ProgrammazioniPage() {
       console.error('Error fetching emittenti:', error)
     } finally {
       setLoadingEmittenti(false)
+    }
+  }
+
+  const openCreateEmittente = () => {
+    const maxN = emittenti.reduce((max, e) => {
+      const m = e.codice.match(/^EMT_(\d+)$/)
+      return m ? Math.max(max, parseInt(m[1], 10)) : max
+    }, 0)
+    const nextCodice = `EMT_${maxN + 1}`
+    setEmittenteFormMode('create')
+    setEmittenteFormData({ codice: nextCodice, nome: '', tipo: 'tv_generalista', paese: 'IT', attiva: true })
+    setEmittenteFormError(null)
+    setShowEmittenteForm(true)
+  }
+
+  const openEditEmittente = (em: Emittente) => {
+    setSelectedEmittente(em)
+    setEmittenteFormMode('edit')
+    setEmittenteFormData({
+      codice: em.codice,
+      nome: em.nome,
+      tipo: em.tipo,
+      paese: em.paese ?? 'IT',
+      attiva: em.attiva ?? true,
+    })
+    setEmittenteFormError(null)
+    setShowEmittenteForm(true)
+  }
+
+  const handleSaveEmittente = async () => {
+    if (!emittenteFormData.codice.trim() || !emittenteFormData.nome.trim()) {
+      setEmittenteFormError('Codice e nome sono obbligatori.')
+      return
+    }
+    setEmittenteFormSaving(true)
+    setEmittenteFormError(null)
+    try {
+      if (emittenteFormMode === 'create') {
+        const { error } = await supabase.from('emittenti' as any).insert(emittenteFormData)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('emittenti' as any)
+          .update(emittenteFormData)
+          .eq('id', selectedEmittente!.id)
+        if (error) throw error
+      }
+      setShowEmittenteForm(false)
+      if (emittenteFormMode === 'edit') setShowEmittenteDetails(false)
+      await fetchEmittenti()
+    } catch (e: any) {
+      setEmittenteFormError(e?.message ?? 'Errore salvataggio')
+    } finally {
+      setEmittenteFormSaving(false)
     }
   }
 
@@ -1307,6 +1372,12 @@ export default function ProgrammazioniPage() {
       {/* Emittenti Content */}
       {currentTab === 'emittenti' && (
         <>
+          <div className="flex justify-end">
+            <Button onClick={openCreateEmittente}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuova Emittente
+            </Button>
+          </div>
           <Card>
             <CardContent>
               <div className="flex flex-col sm:flex-row gap-4">
@@ -1377,12 +1448,17 @@ export default function ProgrammazioniPage() {
                         <TableCell>{emittente.paese || '-'}</TableCell>
                         <TableCell>{getAttivaBadge(emittente.attiva)}</TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm" onClick={() => {
-                            setSelectedEmittente(emittente)
-                            setShowEmittenteDetails(true)
-                          }}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => {
+                              setSelectedEmittente(emittente)
+                              setShowEmittenteDetails(true)
+                            }}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => openEditEmittente(emittente)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -1405,12 +1481,17 @@ export default function ProgrammazioniPage() {
                           </div>
                           <div className="text-xs text-gray-600">{emittente.paese || '—'}</div>
                         </div>
-                        <Button variant="ghost" size="sm" onClick={() => {
-                          setSelectedEmittente(emittente)
-                          setShowEmittenteDetails(true)
-                        }}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => {
+                            setSelectedEmittente(emittente)
+                            setShowEmittenteDetails(true)
+                          }}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEditEmittente(emittente)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </Card>
                   ))
@@ -1468,11 +1549,112 @@ export default function ProgrammazioniPage() {
                 <Button variant="outline" onClick={() => setShowEmittenteDetails(false)}>
                   Chiudi
                 </Button>
+                <Button onClick={() => openEditEmittente(selectedEmittente)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Modifica
+                </Button>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+      {/* Emittente Create/Edit Dialog */}
+      <Dialog open={showEmittenteForm} onOpenChange={v => { if (!v) setShowEmittenteForm(false) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {emittenteFormMode === 'create' ? 'Nuova Emittente' : 'Modifica Emittente'}
+            </DialogTitle>
+            <DialogDescription>
+              {emittenteFormMode === 'create'
+                ? 'Inserisci i dati della nuova emittente.'
+                : `Modifica i dati di "${selectedEmittente?.nome}".`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {emittenteFormError && (
+            <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /> {emittenteFormError}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Codice</label>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm bg-gray-100 rounded px-3 py-2 border border-gray-200">
+                  {emittenteFormData.codice}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {emittenteFormMode === 'create' ? 'assegnato automaticamente' : 'non modificabile'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Nome <span className="text-red-500">*</span></label>
+              <Input
+                placeholder="es. Rai 1, Pluto TV, Paramount Plus"
+                value={emittenteFormData.nome}
+                onChange={e => setEmittenteFormData(prev => ({ ...prev, nome: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Tipo</label>
+              <Select
+                value={emittenteFormData.tipo}
+                onValueChange={v => setEmittenteFormData(prev => ({ ...prev, tipo: v as Emittente['tipo'] }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tv_generalista">TV Generalista</SelectItem>
+                  <SelectItem value="tv_tematica">TV Tematica</SelectItem>
+                  <SelectItem value="streaming">Streaming</SelectItem>
+                  <SelectItem value="pay_tv">Pay TV</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Paese</label>
+              <Input
+                placeholder="IT"
+                value={emittenteFormData.paese}
+                onChange={e => setEmittenteFormData(prev => ({ ...prev, paese: e.target.value.toUpperCase() }))}
+                maxLength={2}
+                className="w-24"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="attiva-check"
+                checked={emittenteFormData.attiva}
+                onCheckedChange={v => setEmittenteFormData(prev => ({ ...prev, attiva: Boolean(v) }))}
+              />
+              <label htmlFor="attiva-check" className="text-sm font-medium cursor-pointer">
+                Emittente attiva
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowEmittenteForm(false)} disabled={emittenteFormSaving}>
+              Annulla
+            </Button>
+            <Button onClick={handleSaveEmittente} disabled={emittenteFormSaving}>
+              {emittenteFormSaving
+                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <Check className="h-4 w-4 mr-2" />}
+              {emittenteFormMode === 'create' ? 'Crea' : 'Salva'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* New Programmazione Modal */}
       <Dialog open={isNewModalOpen} onOpenChange={handleCloseModal}>
         <DialogContent className="max-w-md">
