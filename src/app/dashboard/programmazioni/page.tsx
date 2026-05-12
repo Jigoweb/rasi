@@ -10,6 +10,17 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload, getProcessingProgress, ProcessingProgress } from '@/features/programmazioni/services/programmazioni.service'
+import {
+  decideUploadPath,
+  applyMapping,
+  buildLegacyPayload,
+  saveMapping,
+  type ImportMappingConfig,
+  type UploadDecision,
+  type ColumnDiff,
+} from '@/features/programmazioni/services/import-mapping.service'
+import EmittenteMappingSection from './components/EmittenteMappingSection'
+import MappingWizard from './components/MappingWizard'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { ProcessBlockedDialog } from '@/shared/components/individuazione-progress-indicator'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -83,12 +94,24 @@ export default function ProgrammazioniPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [parsedRows, setParsedRows] = useState<any[]>([])
+  const [parsedColumns, setParsedColumns] = useState<string[]>([])
+  const [uploadDecision, setUploadDecision] = useState<UploadDecision | null>(null)
   const [headerError, setHeaderError] = useState<string | null>(null)
   const [isUploadReady, setIsUploadReady] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [deleteProgress, setDeleteProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // Mapping wizard state (inline durante upload)
+  const [mappingWizardOpen, setMappingWizardOpen] = useState(false)
+  const [mappingWizardInitial, setMappingWizardInitial] = useState<ImportMappingConfig | null>(null)
+  // Format-changed warning dialog
+  const [formatWarning, setFormatWarning] = useState<{
+    mapping: ImportMappingConfig
+    diff: ColumnDiff
+    mappedRemoved: string[]
+  } | null>(null)
   const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, ProcessingProgress | null>>({})
   const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
 
@@ -290,32 +313,42 @@ export default function ProgrammazioniPage() {
         throw new Error('Formato file non supportato. Usa CSV o Excel.')
       }
 
-      const normalize = (s: string) => s.toLowerCase().trim()
-      const requiredHeaders = ['titolo', 'emittente']
-      const headers = rows.length > 0 ? Object.keys(rows[0]).map(normalize) : []
-      const hasRequired = requiredHeaders.every(h => headers.includes(h))
-
-      if (!hasRequired) {
-        const missingHeaders = requiredHeaders.filter(h => !headers.includes(h))
-        setHeaderError(`Header non valido: mancano "${missingHeaders.join('", "')}". Trovati: ${headers.slice(0, 10).join(', ')}${headers.length > 10 ? '...' : ''}`)
+      if (rows.length === 0) {
+        setHeaderError('Il file non contiene righe.')
         setParsedRows([])
+        setParsedColumns([])
+        setUploadDecision(null)
         setIsUploadReady(false)
-      } else {
-        const validRows = rows.filter((r: any) => {
-          const titolo = r.titolo ?? r['Titolo']
-          const emittente = r.emittente ?? r['Emittente']
-          return titolo && emittente
-        })
+        return
+      }
 
-        if (validRows.length === 0) {
-          setHeaderError('Nessuna riga valida con titolo e emittente')
-          setParsedRows([])
-          setIsUploadReady(false)
-        } else {
-          setHeaderError(null)
-          setParsedRows(rows)
-          setIsUploadReady(true)
-        }
+      const columns = Object.keys(rows[0]).map(c => String(c).trim())
+      setParsedRows(rows)
+      setParsedColumns(columns)
+
+      // Decisione upload in base al mapping_import dell'emittente
+      const decision = await decideUploadPath(selectedCampagna.emittente_id, columns)
+      setUploadDecision(decision)
+
+      if (decision.kind === 'need_wizard') {
+        // Apri wizard inline; il salvataggio del wizard farà setUploadDecision('apply_existing')
+        setHeaderError(null)
+        setIsUploadReady(false)
+        setMappingWizardInitial(null)
+        setMappingWizardOpen(true)
+      } else if (decision.kind === 'warn_format_changed') {
+        // Mostra warning e blocca upload finché utente decide
+        setHeaderError(null)
+        setIsUploadReady(false)
+        setFormatWarning({
+          mapping: decision.mapping,
+          diff: decision.diff,
+          mappedRemoved: decision.mappedRemoved,
+        })
+      } else {
+        // legacy_template oppure apply_existing → pronto
+        setHeaderError(null)
+        setIsUploadReady(true)
       }
     } catch (error) {
       console.error('Error uploading file:', error)
@@ -326,130 +359,62 @@ export default function ProgrammazioniPage() {
     }
   }
 
+  // Callback wizard inline: salva mapping e abilita upload
+  const handleWizardSave = async (config: ImportMappingConfig) => {
+    if (!selectedCampagna) return
+    const { error } = await saveMapping(selectedCampagna.emittente_id, config)
+    if (error) throw new Error(error.message ?? 'Errore salvataggio mapping')
+    setUploadDecision({ kind: 'apply_existing', mapping: config })
+    setIsUploadReady(true)
+    setMappingWizardOpen(false)
+  }
+
+  // Procedi nonostante format change (usa mapping corrente)
+  const handleProceedDespiteFormatChange = () => {
+    if (!formatWarning) return
+    setUploadDecision({ kind: 'apply_existing', mapping: formatWarning.mapping })
+    setIsUploadReady(true)
+    setFormatWarning(null)
+  }
+
+  // Apri wizard in modalità modifica dal format-warning
+  const handleUpdateMappingFromWarning = () => {
+    if (!formatWarning) return
+    setMappingWizardInitial(formatWarning.mapping)
+    setFormatWarning(null)
+    setMappingWizardOpen(true)
+  }
+
   const handleUploadDatabase = async () => {
-    if (!selectedCampagna || parsedRows.length === 0) return
+    if (!selectedCampagna || parsedRows.length === 0 || !uploadDecision) return
     setIsUploading(true)
     try {
       setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'uploading' } : c))
       setUploadProgress(prev => ({ ...prev, [selectedCampagna.id]: { done: 0, total: parsedRows.length } }))
       await updateCampagnaStatus(selectedCampagna.id, 'uploading')
-      const allowed = new Set([
-        'canale','emittente','tipo','titolo','titolo_originale','numero_episodio','titolo_episodio','titolo_episodio_originale','numero_stagione','anno','production','regia','data_trasmissione','ora_inizio','ora_fine','durata_minuti','data_inizio','data_fine','retail_price','sales_month','track_price_local_currency','views','total_net_ad_revenue','total_revenue'
-      ])
 
-      const normalizeKey = (k: string) => k.toLowerCase().trim()
-      
-      // Validate and fix time values (must be 00:00:00 - 23:59:59)
-      const validateTime = (timeStr: string): string | undefined => {
-        if (!timeStr) return undefined
-        const str = String(timeStr).trim()
-        // Match HH:MM:SS or HH:MM format
-        const match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
-        if (!match) return str // Return as-is if not a time format
-        
-        let hours = parseInt(match[1])
-        const minutes = parseInt(match[2])
-        const seconds = match[3] ? parseInt(match[3]) : 0
-        
-        // Fix hours >= 24 (wrap around)
-        if (hours >= 24) {
-          hours = hours % 24
-        }
-        
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-      }
-      
-      // Validate and convert date values to YYYY-MM-DD format
-      const validateDate = (dateStr: string): string | undefined => {
-        if (!dateStr) return undefined
-        const str = String(dateStr).trim()
-        
-        // Already in ISO format (YYYY-MM-DD)
-        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
-        
-        // DD/MM/YY or DD/MM/YYYY format
-        const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
-        if (slashMatch) {
-          const day = slashMatch[1].padStart(2, '0')
-          const month = slashMatch[2].padStart(2, '0')
-          let year = slashMatch[3]
-          // Convert 2-digit year to 4-digit
-          if (year.length === 2) {
-            const yearNum = parseInt(year)
-            year = yearNum > 50 ? `19${year}` : `20${year}`
-          }
-          return `${year}-${month}-${day}`
-        }
-        
-        // DD-MM-YY or DD-MM-YYYY format
-        const dashMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/)
-        if (dashMatch) {
-          const day = dashMatch[1].padStart(2, '0')
-          const month = dashMatch[2].padStart(2, '0')
-          let year = dashMatch[3]
-          if (year.length === 2) {
-            const yearNum = parseInt(year)
-            year = yearNum > 50 ? `19${year}` : `20${year}`
-          }
-          return `${year}-${month}-${day}`
-        }
-        
-        // Return as-is if we can't parse it
-        return str
-      }
-      
-      const coerce = (k: string, v: any) => {
-        if (v === undefined || v === null || v === '') return undefined
-        switch (k) {
-          case 'numero_episodio':
-          case 'numero_stagione':
-          case 'anno':
-          case 'sales_month':
-          case 'views':
-          case 'durata_minuti':
-            return parseInt(v as string)
-          case 'retail_price':
-          case 'track_price_local_currency':
-          case 'total_net_ad_revenue':
-          case 'total_revenue':
-            return parseFloat((v as string).toString().replace(',', '.'))
-          case 'ora_inizio':
-          case 'ora_fine':
-            return validateTime(v)
-          case 'data_trasmissione':
-          case 'data_inizio':
-          case 'data_fine':
-            return validateDate(v)
-          default:
-            return v
-        }
+      const ctx = {
+        campagnaProgrammazioneId: selectedCampagna.id,
+        emittenteId: selectedCampagna.emittente_id,
       }
 
-      const buildPayload = (row: any): ProgrammazionePayload => {
-        const payload: any = {
-          campagna_programmazione_id: selectedCampagna.id,
-          emittente_id: selectedCampagna.emittente_id,
+      // Build payload secondo la decisione:
+      // - legacy_template: parser legacy (template canonico)
+      // - apply_existing: applyMapping con la config emittente
+      const buildAll = (rows: any[]): ProgrammazionePayload[] => {
+        if (uploadDecision.kind === 'apply_existing') {
+          return applyMapping(rows, uploadDecision.mapping.mapping, ctx)
         }
-        for (const key of Object.keys(row)) {
-          const nk = normalizeKey(key)
-          if (allowed.has(nk)) {
-            payload[nk] = coerce(nk, row[key])
-          }
-        }
-        // Obbligatori
-        payload.titolo = row.titolo ?? row['Titolo'] ?? ''
-        payload.tipo = row.tipo ?? row['type'] ?? row['Type'] ?? ''
-        return payload as ProgrammazionePayload
+        return buildLegacyPayload(rows, ctx)
       }
 
       const CHUNK_SIZE = 2000
       for (let i = 0; i < parsedRows.length; i += CHUNK_SIZE) {
         const chunk = parsedRows.slice(i, i + CHUNK_SIZE)
-        const programmazioni = chunk.map(buildPayload)
+        const programmazioni = buildAll(chunk)
         const { error } = await uploadProgrammazioni(programmazioni)
         if (error) {
-          // Add context about which rows failed
-          const startRow = i + 2 // +2 because Excel rows start at 1 and first row is header
+          const startRow = i + 2
           const endRow = Math.min(i + CHUNK_SIZE, parsedRows.length) + 1
           const enhancedError = new Error(
             `Errore nelle righe ${startRow}-${endRow}: ${error.message || JSON.stringify(error)}`
@@ -460,6 +425,19 @@ export default function ProgrammazioniPage() {
           const curr = prev[selectedCampagna.id]
           const done = (curr?.done || 0) + chunk.length
           return { ...prev, [selectedCampagna.id]: { done, total: parsedRows.length } }
+        })
+      }
+
+      // Aggiorna colonne_rilevate + ultimo_upload se è stato usato un mapping
+      if (uploadDecision.kind === 'apply_existing' && parsedColumns.length > 0) {
+        const updated: ImportMappingConfig = {
+          ...uploadDecision.mapping,
+          version: 1,
+          colonne_rilevate: parsedColumns,
+          ultimo_upload: new Date().toISOString(),
+        }
+        await saveMapping(selectedCampagna.emittente_id, updated).catch(err => {
+          console.warn('Errore aggiornamento ultimo_upload mapping:', err)
         })
       }
 
@@ -523,9 +501,14 @@ export default function ProgrammazioniPage() {
     form.reset()
     setSelectedFile(null)
     setParsedRows([])
+    setParsedColumns([])
+    setUploadDecision(null)
     setIsUploadReady(false)
     setHeaderError(null)
     setUploadError(null)
+    setMappingWizardOpen(false)
+    setMappingWizardInitial(null)
+    setFormatWarning(null)
   }
 
   const filterCampagne = useCallback(() => {
@@ -1442,14 +1425,14 @@ export default function ProgrammazioniPage() {
 
       {/* Emittenti Details Dialog */}
       <Dialog open={showEmittenteDetails} onOpenChange={setShowEmittenteDetails}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Dettagli Emittente</DialogTitle>
             <DialogDescription>
               Informazioni per &quot;{selectedEmittente?.nome}&quot;
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedEmittente && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
@@ -1478,6 +1461,9 @@ export default function ProgrammazioniPage() {
                   <p>{selectedEmittente.created_at ? new Date(selectedEmittente.created_at).toLocaleString('it-IT') : '-'}</p>
                 </div>
               </div>
+
+              <EmittenteMappingSection emittenteId={selectedEmittente.id} />
+
                <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowEmittenteDetails(false)}>
                   Chiudi
@@ -2053,10 +2039,70 @@ export default function ProgrammazioniPage() {
       </Dialog>
 
       {/* Process Blocked Dialog - shown when trying to start a new process while one is running */}
-      <ProcessBlockedDialog 
-        open={showProcessBlockedDialog} 
-        onClose={() => setShowProcessBlockedDialog(false)} 
+      <ProcessBlockedDialog
+        open={showProcessBlockedDialog}
+        onClose={() => setShowProcessBlockedDialog(false)}
       />
+
+      {/* Mapping Wizard (inline durante upload o modifica da format-warning) */}
+      <MappingWizard
+        open={mappingWizardOpen}
+        onClose={() => setMappingWizardOpen(false)}
+        initialConfig={mappingWizardInitial}
+        prefillFile={selectedFile}
+        onSave={handleWizardSave}
+      />
+
+      {/* Format change warning */}
+      <Dialog open={!!formatWarning} onOpenChange={v => { if (!v) setFormatWarning(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Formato file cambiato</DialogTitle>
+            <DialogDescription>
+              Il file caricato ha colonne diverse rispetto alla mappatura salvata.
+            </DialogDescription>
+          </DialogHeader>
+          {formatWarning && (
+            <div className="space-y-3 py-2 text-sm">
+              {formatWarning.mappedRemoved.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded p-3">
+                  <div className="font-medium text-red-700 mb-1">
+                    Colonne mappate non più presenti ({formatWarning.mappedRemoved.length}):
+                  </div>
+                  <div className="text-xs text-red-600 font-mono">
+                    {formatWarning.mappedRemoved.join(', ')}
+                  </div>
+                </div>
+              )}
+              {formatWarning.diff.added.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                  <div className="font-medium text-blue-700 mb-1">
+                    Nuove colonne nel file ({formatWarning.diff.added.length}):
+                  </div>
+                  <div className="text-xs text-blue-600 font-mono">
+                    {formatWarning.diff.added.join(', ')}
+                  </div>
+                </div>
+              )}
+              <p className="text-gray-600">
+                Vuoi aggiornare la mappatura o procedere con quella corrente?
+                Procedere ignorerà le colonne mancanti — i campi mappati su di esse resteranno vuoti.
+              </p>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setFormatWarning(null)}>
+              Annulla upload
+            </Button>
+            <Button variant="outline" onClick={handleProceedDespiteFormatChange}>
+              Procedi così com'è
+            </Button>
+            <Button onClick={handleUpdateMappingFromWarning}>
+              Aggiorna mapping
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -383,6 +383,7 @@ export type Database = {
           contatti: Json | null
           created_at: string | null
           id: string
+          mapping_import: Json | null
           metadati: Json | null
           nome: string
           paese: string | null
@@ -396,6 +397,7 @@ export type Database = {
           contatti?: Json | null
           created_at?: string | null
           id?: string
+          mapping_import?: Json | null
           metadati?: Json | null
           nome: string
           paese?: string | null
@@ -409,6 +411,7 @@ export type Database = {
           contatti?: Json | null
           created_at?: string | null
           id?: string
+          mapping_import?: Json | null
           metadati?: Json | null
           nome?: string
           paese?: string | null
