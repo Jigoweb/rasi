@@ -146,7 +146,7 @@ export default function MappingWizard({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {initialConfig ? 'Modifica mapping import' : 'Configura mapping import'}
@@ -202,8 +202,8 @@ export default function MappingWizard({
                 </Badge>
               )}
             </div>
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full text-sm min-w-[600px]">
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="text-left px-3 py-2 font-medium">Colonna sorgente</th>
@@ -262,8 +262,8 @@ export default function MappingWizard({
               Verifica la mappatura prima di salvare. Verrà usata per tutti gli upload futuri
               di questo emittente.
             </p>
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full text-sm min-w-[400px]">
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="text-left px-3 py-2 font-medium">Sorgente</th>
