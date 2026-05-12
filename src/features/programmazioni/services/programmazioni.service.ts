@@ -167,7 +167,7 @@ export interface ProgrammazionePayload {
   data_inizio?: string
   data_fine?: string
   retail_price?: number
-  sales_month?: number
+  sales_month?: string | number
   track_price_local_currency?: number
   views?: number
   total_net_ad_revenue?: number
@@ -176,10 +176,192 @@ export interface ProgrammazionePayload {
   emittente?: string
 }
 
+// ============================================
+// NORMALIZZAZIONE IMPORT (zero-config, applicata sempre)
+// ============================================
+
+/**
+ * Converte una stringa in Title Case se rilevata come ALL CAPS.
+ * Se meno del 40% delle lettere sono lowercase, applica title case.
+ * Conserva la stringa originale altrimenti.
+ */
+export function toTitleCase(str: string | null | undefined): string | null | undefined {
+  if (!str || typeof str !== 'string') return str
+  const totalLetters = (str.match(/[a-zA-Z]/g) || []).length
+  const lowerCount = (str.match(/[a-z]/g) || []).length
+  if (totalLetters > 0 && lowerCount / totalLetters < 0.4) {
+    return str.toLowerCase().replace(/(?:^|\s|[-–(])\S/g, c => c.toUpperCase())
+  }
+  return str
+}
+
+/**
+ * Rimuove suffissi ridondanti comuni dai titoli (case-insensitive).
+ * Es: "Casino (Original)" → "Casino"
+ */
+const SUFFISSI_DA_RIMUOVERE: RegExp[] = [
+  /\s*\(original\)/gi,
+  /\s*\(versione italiana\)/gi,
+  /\s*\(ov\)/gi,
+  /\s*\(sub ita\)/gi,
+]
+
+export function stripSuffissi(str: string | null | undefined): string | null | undefined {
+  if (!str || typeof str !== 'string') return str
+  let result = str
+  for (const re of SUFFISSI_DA_RIMUOVERE) {
+    result = result.replace(re, '')
+  }
+  return result.trim()
+}
+
+/**
+ * Pipeline completa per i campi titolo: title case + rimozione suffissi.
+ */
+export function normalizzaTitolo(str: string | null | undefined): string | null | undefined {
+  if (!str || typeof str !== 'string') return str
+  return stripSuffissi(toTitleCase(str))
+}
+
+/**
+ * Dizionario globale di mapping tipo non canonico → canonico.
+ * Output canonico: 'serie', 'film', 'live', 'speciale'.
+ */
+const TIPO_MAPPING: Record<string, string> = {
+  tv: 'serie',
+  series: 'serie',
+  episode: 'serie',
+  episodio: 'serie',
+  serie: 'serie',
+  movie: 'film',
+  film: 'film',
+  feature: 'film',
+  live: 'live',
+  'live tv': 'live',
+  special: 'speciale',
+  speciale: 'speciale',
+}
+
+export function normalizzaTipo(tipo: string | null | undefined): string | null | undefined {
+  if (!tipo || typeof tipo !== 'string') return tipo
+  const key = tipo.toLowerCase().trim()
+  return TIPO_MAPPING[key] ?? key
+}
+
+/**
+ * Parsa `sales_month` dai possibili formati Excel/CSV e restituisce data ISO YYYY-MM-01.
+ * Formati supportati:
+ *  - "2024-03" / "2024/03"
+ *  - "202403"
+ *  - "2024.03"
+ *  - Excel serial number (~30000-60000)
+ */
+export function parseSalesMonth(value: string | number | undefined | null): string | null {
+  if (value == null || value === '') return null
+  const str = String(value).trim()
+  if (!str) return null
+
+  // Formato "YYYY-MM" o "YYYY/MM"
+  let m = str.match(/^(\d{4})[-/](\d{1,2})$/)
+  if (m) {
+    const month = m[2].padStart(2, '0')
+    return `${m[1]}-${month}-01`
+  }
+
+  // Formato "YYYYMM" (es. 202403)
+  m = str.match(/^(\d{4})(\d{2})$/)
+  if (m) return `${m[1]}-${m[2]}-01`
+
+  // Formato decimale "YYYY.MM" (es. 2024.03)
+  m = str.match(/^(\d{4})\.(\d{1,2})$/)
+  if (m) {
+    const month = m[2].padStart(2, '0')
+    return `${m[1]}-${month}-01`
+  }
+
+  // Excel serial date (numero in range plausibile moderno)
+  const n = Number(str)
+  if (Number.isFinite(n) && n > 30000 && n < 60000) {
+    // Excel epoch: 1899-12-30 (compensato il bug 1900-02-29)
+    const ms = (n - 25569) * 86400 * 1000
+    const d = new Date(ms)
+    if (!isNaN(d.getTime())) {
+      const y = d.getUTCFullYear()
+      const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
+      return `${y}-${mo}-01`
+    }
+  }
+
+  return null
+}
+
+/**
+ * Determina la `data_trasmissione` con fallback:
+ *  1. data_trasmissione esplicita
+ *  2. sales_month → primo giorno del mese
+ *  3. data_inizio
+ */
+export function normalizzaData(row: ProgrammazionePayload): string | null {
+  if (row.data_trasmissione) return row.data_trasmissione
+  const fromSales = parseSalesMonth(row.sales_month)
+  if (fromSales) return fromSales
+  if (row.data_inizio) return row.data_inizio
+  return null
+}
+
+/**
+ * Normalizza encoding compatto del numero episodio (rilevato su Pluto TV).
+ * Es: numero_stagione=17, numero_episodio=1701 → episodio_reale=1
+ * Regola: se numero_episodio ∈ [stagione*100+1, stagione*100+99] → sottrai stagione*100
+ * Auto-detection non ambigua: numerazione standard non genera mai questo pattern.
+ */
+export function normalizzaEpisodio(
+  numero_episodio: number | null | undefined,
+  numero_stagione: number | null | undefined
+): number | null | undefined {
+  if (numero_episodio == null || numero_stagione == null) return numero_episodio
+  if (numero_episodio <= 0 || numero_stagione <= 0) return numero_episodio
+  const prefix = numero_stagione * 100
+  if (numero_episodio >= prefix + 1 && numero_episodio <= prefix + 99) {
+    return numero_episodio - prefix
+  }
+  return numero_episodio
+}
+
+/**
+ * Applica tutte le normalizzazioni a una singola riga del payload.
+ * Zero-config, applicata sempre, idempotente.
+ */
+export function normalizzaProgrammazione(row: ProgrammazionePayload): ProgrammazionePayload {
+  const titolo = normalizzaTitolo(row.titolo) as string
+  const titolo_originale = normalizzaTitolo(row.titolo_originale) as string | undefined
+  const titolo_episodio = normalizzaTitolo(row.titolo_episodio) as string | undefined
+  const titolo_episodio_originale = normalizzaTitolo(row.titolo_episodio_originale) as
+    | string
+    | undefined
+  const tipo = normalizzaTipo(row.tipo) as string
+  const numero_episodio = normalizzaEpisodio(row.numero_episodio, row.numero_stagione) as
+    | number
+    | undefined
+  const data_trasmissione = normalizzaData(row) ?? row.data_trasmissione
+
+  return {
+    ...row,
+    titolo,
+    titolo_originale,
+    titolo_episodio,
+    titolo_episodio_originale,
+    tipo,
+    numero_episodio,
+    data_trasmissione,
+  }
+}
+
 export const uploadProgrammazioni = async (programmazioni: ProgrammazionePayload[]) => {
+  const normalized = programmazioni.map(normalizzaProgrammazione)
   const { data, error } = await supabase
     .from('programmazioni')
-    .insert(programmazioni as any)
+    .insert(normalized as any)
     .select()
 
   return { data, error }
