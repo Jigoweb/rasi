@@ -125,6 +125,7 @@ export default function ProgrammazioniPage() {
   } | null>(null)
   const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, ProcessingProgress | null>>({})
   const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
+  const progressFetchedRef = useRef<Set<string>>(new Set())
 
   // Individuazioni - use global context
   const { state: individuazioneState, startProcess, canStartNewProcess } = useIndividuazioneProcess()
@@ -157,6 +158,7 @@ export default function ProgrammazioniPage() {
         .select('id, nome, cognome, nome_arte')
         .order('cognome', { ascending: true })
         .order('nome', { ascending: true })
+        .limit(5000)
       
       if (error) throw error
       setAllArtists(data || [])
@@ -171,9 +173,10 @@ export default function ProgrammazioniPage() {
 
   // Fetch processing progress for a specific campaign
   const fetchProcessingProgress = useCallback(async (campagnaId: string) => {
-    if (loadingProgressMap[campagnaId]) return // Already loading
-    
-    setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: true }))
+    setLoadingProgressMap(prev => {
+      if (prev[campagnaId]) return prev // Already loading, no change
+      return { ...prev, [campagnaId]: true }
+    })
     try {
       const { data, error } = await getProcessingProgress(campagnaId)
       if (error) throw error
@@ -183,7 +186,7 @@ export default function ProgrammazioniPage() {
     } finally {
       setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: false }))
     }
-  }, [loadingProgressMap])
+  }, [])
 
   // Handle starting individuazioni process - show confirmation first
   const handleStartIndividuazioni = (campagna: CampagnaProgrammazione) => {
@@ -545,7 +548,7 @@ export default function ProgrammazioniPage() {
 
     // Filter by anno
     if (annoFilter !== 'all') {
-      filtered = filtered.filter(campagna => campagna.anno.toString() === annoFilter)
+      filtered = filtered.filter(campagna => campagna.anno?.toString() === annoFilter)
     }
 
     setFilteredCampagne(filtered)
@@ -553,8 +556,8 @@ export default function ProgrammazioniPage() {
 
   // Get unique anni from campagne for filter dropdown
   const uniqueAnni = useMemo(() => {
-    const anni = campagne.map(c => c.anno).filter((v, i, a) => a.indexOf(v) === i)
-    return anni.sort((a, b) => b - a) // Sort descending (most recent first)
+    const anni = campagne.map(c => c.anno).filter((v, i, a) => v != null && a.indexOf(v) === i)
+    return anni.sort((a, b) => (b || 0) - (a || 0)) // Sort descending (most recent first)
   }, [campagne])
 
   // Get unique emittenti from campagne for filter dropdown
@@ -595,16 +598,17 @@ export default function ProgrammazioniPage() {
     }
   }, [currentTab])
 
-  // Load processing progress for all in_corso campaigns when campagne are loaded
+  // Load processing progress for all in_corso campaigns when campagne are loaded.
+  // Use a ref to track initiated fetches so the effect only re-runs when `campagne` changes,
+  // not on every map state update (which would cause an infinite loop).
   useEffect(() => {
-    if (campagne.length > 0) {
-      campagne
-        .filter(c => c.stato === 'in_corso' && !processingProgressMap[c.id] && !loadingProgressMap[c.id])
-        .forEach(campagna => {
-          fetchProcessingProgress(campagna.id)
-        })
-    }
-  }, [campagne, processingProgressMap, loadingProgressMap])
+    campagne
+      .filter(c => c.stato === 'in_corso' && !progressFetchedRef.current.has(c.id))
+      .forEach(c => {
+        progressFetchedRef.current.add(c.id)
+        fetchProcessingProgress(c.id)
+      })
+  }, [campagne])
 
   useEffect(() => {
     filterCampagne()
