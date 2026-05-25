@@ -82,7 +82,7 @@ export function normalizeTitle(raw: string | null | undefined): string {
        .replace(EPISODE_TRAIL, '')
        .replace(EPISODIO_IT, '')
        .replace(ROMAN_TRAIL, '')
-       .replace(/['’]/g, "'")
+       .replace(/[‘’]/g, "'")
        .replace(/[“”]/g, '"')
        .replace(/\s+/g, ' ')
        .trim()
