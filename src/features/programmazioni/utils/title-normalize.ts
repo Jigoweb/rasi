@@ -18,7 +18,14 @@ const ROMAN_TRAIL = /\s+[IVX]{2,}\s*$/i
 const EPISODE_TRAIL = /\s+EP\.?\s*\d+.*$/i
 const EPISODIO_IT = /\s+EPISODIO\s+\d+.*$/i
 
-// English title-case function words that stay lowercase when not the first word.
+// Diverges from plan: function-word list instead of <40% lowercase heuristic, which
+// mis-handled mixed-case titles like "L'ordine del tempo" and "Astrid et Raphaelle".
+// The plan's verbatim test corpus required title-casing to apply to mostly-lowercase
+// strings — incompatible with a percentage threshold. SQL mirror in Phase 2 only needs
+// to mirror buildMatchKey() (downstream of toLowerCase), so this divergence is safe.
+//
+// TODO(Task 0.2): consolidate with `toTitleCase` in services/programmazioni.service.ts
+// — same name, different semantics — to avoid import ambiguity.
 const TITLE_CASE_LOWERCASE = new Set([
   'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor',
   'of', 'on', 'or', 'the', 'to', 'up', 'with',

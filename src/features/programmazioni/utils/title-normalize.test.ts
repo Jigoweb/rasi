@@ -1,3 +1,4 @@
+// Jest globals — project uses Jest, not Vitest as plan suggested
 import { normalizeTitle, buildMatchKey, toTitleCase } from './title-normalize'
 
 describe('toTitleCase', () => {
@@ -66,5 +67,18 @@ describe('buildMatchKey', () => {
   })
   it('treats undefined year same as null', () => {
     expect(buildMatchKey('Some Title')).toBe('some title')
+  })
+})
+
+describe('idempotency', () => {
+  it('normalizeTitle is idempotent', () => {
+    for (const x of ['8 1/2 [ED. 2]', 'MIO FRATELLO', "L'ordine del tempo", 'Beautiful XXXIII (R)']) {
+      expect(normalizeTitle(normalizeTitle(x))).toBe(normalizeTitle(x))
+    }
+  })
+  it('toTitleCase is idempotent', () => {
+    for (const x of ['MIO FRATELLO', 'Mio Fratello', 'a tale of two cities']) {
+      expect(toTitleCase(toTitleCase(x))).toBe(toTitleCase(x))
+    }
   })
 })
