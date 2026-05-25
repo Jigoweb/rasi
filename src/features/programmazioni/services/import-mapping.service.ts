@@ -8,6 +8,7 @@ import {
   TEMPLATE_FIELDS_SET,
 } from '../utils/coercion'
 import { normalizeTitle } from '../utils/title-normalize'
+import { applyTransform, type TransformName } from '../utils/transforms'
 import type { ProgrammazionePayload } from './programmazioni.service'
 
 // ============================================
@@ -283,6 +284,57 @@ export function applyMapping(
     result.push(payload as ProgrammazionePayload)
   }
 
+  return result
+}
+
+export interface ApplyMappingV2Config {
+  fields: Record<string, string>
+  transforms: Record<string, TransformName>
+}
+
+/**
+ * Apply mapping + transforms (parser_config v2). For each row:
+ *  1. Look up source column value
+ *  2. Apply transform if configured for that column
+ *  3. Coerce via existing coerce()
+ *  4. Normalize titolo-like fields
+ */
+export function applyMappingWithTransforms(
+  rows: Record<string, any>[],
+  config: ApplyMappingV2Config,
+  context: ApplyMappingContext
+): ProgrammazionePayload[] {
+  const reverseMap: Record<string, string> = {}
+  for (const [source, target] of Object.entries(config.fields)) {
+    if (target && TEMPLATE_FIELDS_SET.has(target)) reverseMap[target] = source
+  }
+
+  const result: ProgrammazionePayload[] = []
+  for (const row of rows) {
+    const payload: any = {
+      campagna_programmazione_id: context.campagnaProgrammazioneId,
+      emittente_id: context.emittenteId,
+    }
+    for (const field of TEMPLATE_FIELDS) {
+      const sourceCol = reverseMap[field]
+      if (!sourceCol) continue
+      const raw = row[sourceCol] ?? row[sourceCol.trim()] ?? row[normalizeKey(sourceCol)]
+      const transformName = config.transforms[sourceCol] || null
+      const transformed = applyTransform(transformName, raw)
+      const coerced = coerce(field, transformed)
+      if (coerced !== undefined && coerced !== null) payload[field] = coerced
+    }
+    for (const f of ['titolo','titolo_originale','titolo_episodio','titolo_episodio_originale'] as const) {
+      if (typeof payload[f] === 'string') {
+        const n = normalizeTitle(payload[f])
+        if (n) payload[f] = n
+        else delete payload[f]
+      }
+    }
+    if (!payload.titolo) continue
+    if (!payload.tipo) payload.tipo = ''
+    result.push(payload as ProgrammazionePayload)
+  }
   return result
 }
 

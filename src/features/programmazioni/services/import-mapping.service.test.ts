@@ -1,4 +1,4 @@
-import { applyMapping } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -45,5 +45,29 @@ describe('applyMapping with title normalization', () => {
     const out = applyMapping(rows, { TITOLO: 'titolo', TIPO: 'tipo' }, ctx)
     expect(out).toHaveLength(1)
     expect(out[0].titolo).toBe('Valid')
+  })
+})
+
+describe('applyMappingWithTransforms', () => {
+  const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
+
+  it('applies transform before coerce', () => {
+    const rows = [{ DURATA: '00:21:56', TITOLO: 'Foo' }]
+    const config = {
+      fields: { TITOLO: 'titolo', DURATA: 'durata_minuti' },
+      transforms: { DURATA: 'hhmmss_to_minutes' as const },
+    }
+    const out = applyMappingWithTransforms(rows, config, ctx)
+    expect(out[0].durata_minuti).toBe(22)
+  })
+
+  it('applies LA7 fractional_hours_to_minutes', () => {
+    const rows = [{ DURATA: 0.454, TITOLO: 'Foo' }]
+    const config = {
+      fields: { TITOLO: 'titolo', DURATA: 'durata_minuti' },
+      transforms: { DURATA: 'fractional_hours_to_minutes' as const },
+    }
+    const out = applyMappingWithTransforms(rows, config, ctx)
+    expect(out[0].durata_minuti).toBe(27)
   })
 })
