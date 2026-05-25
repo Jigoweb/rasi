@@ -28,103 +28,22 @@ export interface CampagnaProgrammazione {
 
 export const getCampagneProgrammazione = async () => {
   try {
-  const { data, error } = await supabase
-    .from('campagne_programmazione' as any)
-      .select('*, emittenti(nome)')
-    .order('created_at', { ascending: false })
-
+    const { data, error } = await (supabase as any).rpc('get_campagne_programmazione_with_counts')
     if (error) {
-      console.error('[getCampagneProgrammazione] Query error:', error)
+      console.error('[getCampagneProgrammazione] RPC error:', error)
       return { data: null, error }
     }
-
     if (!data || data.length === 0) {
       return { data: [], error: null }
     }
-
-    // Fetch all counts using batch query (more efficient than individual queries)
-    const campagnaIds = data.map((item: any) => item.id)
-    
-    // Create a map of counts
-    const countsMap = new Map<string, number>()
-    
-    // Initialize all counts to 0
-    campagnaIds.forEach((id: string) => {
-      countsMap.set(id, 0)
-    })
-    
-    // Fetch all programmazioni for these campagne in a single query
-    if (campagnaIds.length > 0) {
-      try {
-        const { data: programmazioniData, error: progError } = await supabase
-          .from('programmazioni')
-          .select('campagna_programmazione_id')
-          .in('campagna_programmazione_id', campagnaIds)
-        
-        if (progError) {
-          console.error('[getCampagneProgrammazione] Batch count query error:', progError)
-          // Fallback to individual queries if batch fails
-          const countPromises = campagnaIds.map(async (campagnaId: string) => {
-            try {
-              const { count, error } = await supabase
-                .from('programmazioni')
-                .select('*', { count: 'exact', head: true })
-                .eq('campagna_programmazione_id', campagnaId)
-              
-              if (error) {
-                console.error(`[getCampagneProgrammazione] Count error for campagna ${campagnaId}:`, {
-                  message: error.message,
-                  details: error.details,
-                  hint: error.hint,
-                  code: error.code
-                })
-                return { id: campagnaId, count: 0 }
-              }
-              
-              return { id: campagnaId, count: count || 0 }
-            } catch (error: any) {
-              console.error(`[getCampagneProgrammazione] Unexpected error for campagna ${campagnaId}:`, {
-                message: error?.message || String(error),
-                stack: error?.stack
-              })
-              return { id: campagnaId, count: 0 }
-            }
-          })
-          
-          const results = await Promise.all(countPromises)
-          results.forEach(({ id, count }) => {
-            countsMap.set(id, count)
-          })
-        } else if (programmazioniData) {
-          // Count programmazioni per campagna
-          programmazioniData.forEach((item: any) => {
-            const id = item.campagna_programmazione_id
-            if (id) {
-              countsMap.set(id, (countsMap.get(id) || 0) + 1)
-            }
-          })
-        }
-      } catch (error: any) {
-        console.error('[getCampagneProgrammazione] Unexpected error in batch count:', {
-          message: error?.message || String(error),
-          stack: error?.stack
-        })
-      }
-    }
-
-    // Transform data with counts
-    const transformedData = data.map((item: any) => ({
-      ...item,
-      programmazioni_count: countsMap.get(item.id) || 0
+    const transformed = (data as any[]).map(row => ({
+      ...row,
+      emittenti: row.emittente_nome ? { nome: row.emittente_nome } : undefined,
     }))
-
-    return { data: (transformedData as unknown) as CampagnaProgrammazione[], error: null }
+    return { data: transformed as unknown as CampagnaProgrammazione[], error: null }
   } catch (error: any) {
     console.error('[getCampagneProgrammazione] Unexpected error:', error)
-    return { 
-      data: null, 
-      error: error instanceof Error ? error : new Error(String(error))
-    }
+    return { data: null, error: error instanceof Error ? error : new Error(String(error)) }
   }
 }
 
@@ -511,88 +430,27 @@ export interface ProcessingProgress {
  */
 export const getProcessingProgress = async (campagnaId: string): Promise<{ data: ProcessingProgress | null; error: any }> => {
   try {
-    // Get campagna info
-    const { data: campagna, error: campagnaError } = await supabase
-      .from('campagne_programmazione' as any)
-      .select('processing_by, processing_started_at')
-      .eq('id', campagnaId)
-      .single()
-    
-    if (campagnaError) throw campagnaError
-
-    // Get total programmazioni
-    const { count: totale, error: totaleError } = await supabase
-      .from('programmazioni')
-      .select('*', { count: 'exact', head: true })
-      .eq('campagna_programmazione_id', campagnaId)
-    
-    if (totaleError) throw totaleError
-
-    // Get processed programmazioni
-    const { count: processate, error: processateError } = await supabase
-      .from('programmazioni')
-      .select('*', { count: 'exact', head: true })
-      .eq('campagna_programmazione_id', campagnaId)
-      .eq('processato', true)
-    
-    if (processateError) throw processateError
-
-    // Check if there's a campagna individuazione
-    const { data: campagnaInd, error: indError } = await (supabase as any)
-      .from('campagne_individuazione')
-      .select('id')
-      .eq('campagne_programmazione_id', campagnaId)
-      .maybeSingle()
-    
-    if (indError) throw indError
-
-    let individuazioni_create = 0
-    let last_activity_at: string | null = null
-    if (campagnaInd) {
-      const { count, error: countError } = await (supabase as any)
-        .from('individuazioni')
-        .select('*', { count: 'exact', head: true })
-        .eq('campagna_individuazioni_id', campagnaInd.id)
-      
-      if (countError) throw countError
-      individuazioni_create = count || 0
-
-      // Get timestamp of last individuazione created
-      if (individuazioni_create > 0) {
-        const { data: lastInd, error: lastIndError } = await (supabase as any)
-          .from('individuazioni')
-          .select('created_at')
-          .eq('campagna_individuazioni_id', campagnaInd.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-        
-        if (!lastIndError && lastInd) {
-          last_activity_at = lastInd.created_at
-        }
-      }
-    }
-
-    const programmazioni_totali = totale || 0
-    const programmazioni_processate = processate || 0
-    const percentuale = programmazioni_totali > 0 
-      ? Math.round((programmazioni_processate / programmazioni_totali) * 100) 
-      : 0
-
-    const campagnaData = campagna as { processing_by?: string | null; processing_started_at?: string | null } | null
-
+    const { data: raw, error } = await (supabase as any).rpc('get_processing_progress', {
+      p_campagna_id: campagnaId,
+    })
+    if (error) throw error
+    if (!raw) return { data: null, error: null }
+    const programmazioni_totali = Number(raw.programmazioni_totali) || 0
+    const programmazioni_processate = Number(raw.programmazioni_processate) || 0
+    const percentuale = programmazioni_totali > 0
+      ? Math.round((programmazioni_processate / programmazioni_totali) * 100) : 0
     return {
       data: {
-        campagna_individuazione_id: campagnaInd?.id,
+        campagna_individuazione_id: raw.campagna_individuazione_id ?? undefined,
         programmazioni_processate,
         programmazioni_totali,
-        individuazioni_create,
+        individuazioni_create: Number(raw.individuazioni_create) || 0,
         percentuale,
-        processing_by: campagnaData?.processing_by,
-        processing_started_at: campagnaData?.processing_started_at,
-        last_activity_at
+        processing_by: raw.processing_by ?? undefined,
+        processing_started_at: raw.processing_started_at ?? undefined,
+        last_activity_at: raw.last_activity_at ?? null,
       },
-      error: null
+      error: null,
     }
   } catch (error) {
     return { data: null, error }

@@ -71,3 +71,12 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Git worktrees
+.worktrees/
+
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
+# Local scratch / cleanup scripts
+trash_rm_scripts/
