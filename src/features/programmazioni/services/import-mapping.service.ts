@@ -7,6 +7,7 @@ import {
   TEMPLATE_FIELDS,
   TEMPLATE_FIELDS_SET,
 } from '../utils/coercion'
+import { normalizeTitle } from '../utils/title-normalize'
 import type { ProgrammazionePayload } from './programmazioni.service'
 
 // ============================================
@@ -265,6 +266,15 @@ export function applyMapping(
       }
     }
 
+    // Normalize title-like fields after coercion
+    for (const f of ['titolo', 'titolo_originale', 'titolo_episodio', 'titolo_episodio_originale'] as const) {
+      if (typeof payload[f] === 'string') {
+        const normalized = normalizeTitle(payload[f])
+        if (normalized) payload[f] = normalized
+        else delete payload[f]
+      }
+    }
+
     // Validazione minima: titolo deve essere presente
     if (!payload.titolo) continue
     // Default tipo se non mappato
@@ -302,6 +312,15 @@ export function buildLegacyPayload(
     // Obbligatori (compat fallback per "Titolo" / "Type" maiuscoli)
     if (!payload.titolo) payload.titolo = (row as any).titolo ?? (row as any)['Titolo'] ?? ''
     if (!payload.tipo) payload.tipo = (row as any).tipo ?? (row as any)['type'] ?? (row as any)['Type'] ?? ''
+
+    // Normalize title-like fields after coercion
+    for (const f of ['titolo', 'titolo_originale', 'titolo_episodio', 'titolo_episodio_originale'] as const) {
+      if (typeof payload[f] === 'string') {
+        const normalized = normalizeTitle(payload[f])
+        if (normalized) payload[f] = normalized
+        else delete payload[f]
+      }
+    }
 
     if (!payload.titolo) continue
     result.push(payload as ProgrammazionePayload)
