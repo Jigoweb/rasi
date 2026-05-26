@@ -126,3 +126,80 @@ describe('TRANSFORMS registry', () => {
     expect(() => applyTransform('unknown_xyz' as any, 1)).toThrow(/unknown/i)
   })
 })
+
+describe('mojibake_repair', () => {
+  it('repairs cp1252-as-utf8 mojibake (Italian è/é/ì)', () => {
+    expect(applyTransform('mojibake_repair', 'BaarÃ¬a')).toBe('Baarìa')
+    expect(applyTransform('mojibake_repair', "Une robe d'Ã©tÃ©")).toBe("Une robe d'été")
+    expect(applyTransform('mojibake_repair', 'La scuola Ã¨ finita')).toBe('La scuola è finita')
+  })
+  it('repairs em/en-dash mojibake', () => {
+    expect(applyTransform('mojibake_repair', 'Maze Runner â€" La rivelazione'))
+      .toBe('Maze Runner – La rivelazione')
+  })
+  it('leaves clean strings untouched', () => {
+    expect(applyTransform('mojibake_repair', 'Baarìa')).toBe('Baarìa')
+    expect(applyTransform('mojibake_repair', 'House Of The Dragon')).toBe('House Of The Dragon')
+  })
+  it('leaves Ã not followed by mojibake bigram alone', () => {
+    expect(applyTransform('mojibake_repair', 'BÃCH (Vietnamese surname)'))
+      .toBe('BÃCH (Vietnamese surname)')
+  })
+  it('handles null/empty/non-string', () => {
+    expect(applyTransform('mojibake_repair', null)).toBe(null)
+    expect(applyTransform('mojibake_repair', undefined)).toBe(undefined)
+    expect(applyTransform('mojibake_repair', '')).toBe('')
+    expect(applyTransform('mojibake_repair', 123)).toBe(123)
+  })
+})
+
+describe('nbsp_to_space', () => {
+  it('replaces NBSP with regular space', () => {
+    expect(applyTransform('nbsp_to_space', 'foo\xa0bar')).toBe('foo bar')
+    expect(applyTransform('nbsp_to_space', 'a\xa0\xa0b')).toBe('a  b')
+  })
+  it('passes plain strings through', () => {
+    expect(applyTransform('nbsp_to_space', 'foo bar')).toBe('foo bar')
+  })
+  it('handles null/empty/non-string', () => {
+    expect(applyTransform('nbsp_to_space', null)).toBe(null)
+    expect(applyTransform('nbsp_to_space', undefined)).toBe(undefined)
+    expect(applyTransform('nbsp_to_space', '')).toBe('')
+    expect(applyTransform('nbsp_to_space', 123)).toBe(123)
+  })
+})
+
+describe('null_if_dashes', () => {
+  it('returns null for double-dash or single-dash placeholder', () => {
+    expect(applyTransform('null_if_dashes', '--')).toBe(null)
+    expect(applyTransform('null_if_dashes', '-')).toBe(null)
+    expect(applyTransform('null_if_dashes', ' -- ')).toBe(null)
+    expect(applyTransform('null_if_dashes', ' - ')).toBe(null)
+  })
+  it('preserves real values with dashes', () => {
+    expect(applyTransform('null_if_dashes', '12-34')).toBe('12-34')
+    expect(applyTransform('null_if_dashes', 'foo')).toBe('foo')
+    expect(applyTransform('null_if_dashes', '---')).toBe('---')  // triple dash is not the sentinel
+  })
+  it('handles null/empty', () => {
+    expect(applyTransform('null_if_dashes', null)).toBe(null)
+    expect(applyTransform('null_if_dashes', undefined)).toBe(undefined)
+  })
+})
+
+describe('year_range_first', () => {
+  it('extracts first year from range', () => {
+    expect(applyTransform('year_range_first', '1976-1980')).toBe(1976)
+    expect(applyTransform('year_range_first', '2010 - 2015')).toBe(2010)
+  })
+  it('passes single year through as number', () => {
+    expect(applyTransform('year_range_first', '2024')).toBe(2024)
+    expect(applyTransform('year_range_first', 2024)).toBe(2024)
+  })
+  it('returns null for unparseable / placeholder', () => {
+    expect(applyTransform('year_range_first', 'nan')).toBe(null)
+    expect(applyTransform('year_range_first', '')).toBe(null)
+    expect(applyTransform('year_range_first', null)).toBe(null)
+    expect(applyTransform('year_range_first', undefined)).toBe(null)
+  })
+})
