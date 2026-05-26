@@ -1,27 +1,109 @@
 -- pg_trgm is already installed; this migration adds:
---   1. build_match_key(text, integer) SQL helper — mirrors TS buildMatchKey()
---      from src/features/programmazioni/utils/title-normalize.ts step-by-step.
---      Applies all 9 normalization transforms in TS order:
---        1. trim
---        2. EDITION_SQUARE     /\s*\[\s*ED\.?\s*\d+\s*\]/gi
---        3. EDITION_PAREN      /\s*\(\s*ED\.?\s*\d+\s*\)/gi
---        4. REPLICA_PAREN      /\s*\(\s*R(\s+\d+'?)?\s*\)/gi
---        5. SEASON_PAREN       /\s*\(\s*SEASON\s+\d+\s*\)/gi
---        6. SEASON_TRAIL       /\s+S\.?\s*\d+\s*$/i
---        7. EPISODE_TRAIL      /\s+EP\.?\s*\d+.*$/i
---        8. EPISODIO_IT        /\s+EPISODIO\s+\d+.*$/i
---        9. ROMAN_TRAIL        /\s+[IVX]{2,}\s*$/i
---       10. Single typographic quotes (U+2018, U+2019) → ASCII '
---       11. Double typographic quotes (U+201C, U+201D) → ASCII "
---       12. Collapse whitespace
---       13. lower()
---       14. ARTICLES_RX        /^(the|il|la|le|lo|gli|un|uno|una|i)\s+/i
---       15. append ::year when present
---   2. opere.match_key column + trigger + btree index
+--   1. build_match_key_strict(text, integer) SQL helper — mirrors TS
+--      buildMatchKeyStrict() from src/features/programmazioni/utils/title-normalize.ts.
+--      Applies the strict normalization pipeline (preserves Roman/digit/PARTE):
+--        1. NBSP (U+00A0) → space
+--        2. trim
+--        3. EDITION_SQUARE     /\s*\[\s*ED\.?\s*\d+\s*\]/gi
+--        4. EDITION_PAREN      /\s*\(\s*ED\.?\s*\d+\s*\)/gi
+--        5. REPLICA_PAREN      /\s*\(\s*R(\s+\d+'?)?\s*\)/gi
+--        6. SEASON_PAREN       /\s*\(\s*SEASON\s+\d+R?\s*\)/gi
+--        7. SEASON_TRAIL       /\s+(?:S|ST)\.?\s*\d+\s*$/i
+--        8. EPISODE_TRAIL      /\s+EP\.?\s*\d+.*$/i
+--        9. EPISODIO_IT        /\s+EPISODIO\s+\d+.*$/i
+--       10. PUNTATA_TRAIL      /\s+-\s*p\.\s*\d+\s*$/i
+--       11. SUFFIX_TAG_TRAIL   /\s+-\s+(LA SERIE|STAGIONE FINALE|PILOTA|PILLOLE|SPECIALE)\s*$/i
+--       12. SPECIAL_PAREN      /\s*\(\s*(MOVIE|REPEAT VERSION|ONE HOUR REPACK|CHRISTMAS SPECIAL)\s*\)/gi
+--       13. CATEGORY_PREFIX    /^(FILM|DOCUMENTARIO)\s+/   (CASE-SENSITIVE)
+--       14. CHANNEL_PREFIX     /^\(\s*[A-Za-z0-9]+\s*\)\s+/
+--       15. Typographic quotes ‘’“” → ASCII '"
+--       16. Collapse whitespace
+--       17. ARTICLE_TRAIL_PAREN reorder "MADAMA (LA)" → "LA MADAMA"
+--       18. lower()
+--       19. ARTICLES_RX        /^(the|il|la|le|lo|gli|un|uno|una|i)\s+/i
+--       20. append ::year when present
+--   2. build_match_key(text, integer) SQL helper — mirrors TS buildMatchKey()
+--      (loose). Applies all of the above, then additionally strips:
+--        - ROMAN_TRAIL         /\s+[IVX]{2,}\s*$/i
+--        - PARTE_TRAIL         /\s*-?\s*PARTE\s+\d+\s*$/i  (must run before DIGIT_TRAIL)
+--        - DIGIT_TRAIL         /\s+\d{1,3}\s*$/
+--   3. opere.match_key column + trigger + btree index
 -- Programmazioni.match_key follows in a separate migration (Phase 2)
 -- to avoid a long-running UPDATE on the 4M row table in this phase.
 
--- ─── build_match_key SQL helper ────────────────────────────────────────────
+-- ─── build_match_key_strict SQL helper ─────────────────────────────────────
+CREATE OR REPLACE FUNCTION public.build_match_key_strict(t text, y integer)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+AS $$
+  SELECT CASE
+    WHEN t IS NULL OR length(trim(replace(t, E' ', ' '))) = 0 THEN ''
+    ELSE
+      regexp_replace(
+        lower(
+          -- 17. ARTICLE_TRAIL_PAREN reorder "MADAMA (LA)" → "LA MADAMA"
+          regexp_replace(
+            -- 16. collapse whitespace
+            regexp_replace(
+              -- 14. CHANNEL_PREFIX
+              regexp_replace(
+                -- 13. CATEGORY_PREFIX (case-sensitive: no 'i' flag)
+                regexp_replace(
+                  -- 12. SPECIAL_PAREN
+                  regexp_replace(
+                    -- 11. SUFFIX_TAG_TRAIL
+                    regexp_replace(
+                      -- 10. PUNTATA_TRAIL
+                      regexp_replace(
+                        -- 9. EPISODIO_IT
+                        regexp_replace(
+                          -- 8. EPISODE_TRAIL
+                          regexp_replace(
+                            -- 7. SEASON_TRAIL (S or ST)
+                            regexp_replace(
+                              -- 6. SEASON_PAREN (with optional R suffix)
+                              regexp_replace(
+                                -- 5. REPLICA_PAREN
+                                regexp_replace(
+                                  -- 4. EDITION_PAREN
+                                  regexp_replace(
+                                    -- 3. EDITION_SQUARE
+                                    regexp_replace(
+                                      -- 15. typographic double quotes → "
+                                      translate(
+                                        -- 15. typographic single quotes → '
+                                        regexp_replace(
+                                          -- 1+2. NBSP → space, then trim
+                                          trim(replace(t, E' ', ' ')),
+                                          E'[‘’]', '''', 'g'),
+                                        E'“”', '""'),
+                                      '\s*\[\s*ED\.?\s*\d+\s*\]', '', 'gi'),
+                                    '\s*\(\s*ED\.?\s*\d+\s*\)', '', 'gi'),
+                                  '\s*\(\s*R(\s+\d+''?)?\s*\)', '', 'gi'),
+                                '\s*\(\s*SEASON\s+\d+R?\s*\)', '', 'gi'),
+                              '\s+(?:S|ST)\.?\s*\d+\s*$', '', 'i'),
+                            '\s+EP\.?\s*\d+.*$', '', 'i'),
+                          '\s+EPISODIO\s+\d+.*$', '', 'i'),
+                        '\s+-\s*p\.\s*\d+\s*$', '', 'i'),
+                      '\s+-\s+(LA\s+SERIE|STAGIONE\s+FINALE|PILOTA|PILLOLE|SPECIALE)\s*$', '', 'i'),
+                    '\s*\(\s*(MOVIE|REPEAT\s+VERSION|ONE\s+HOUR\s+REPACK|CHRISTMAS\s+SPECIAL)\s*\)', '', 'gi'),
+                  '^(FILM|DOCUMENTARIO)\s+', '', 'g'),
+                '^\(\s*[A-Za-z0-9]+\s*\)\s+', '', 'g'),
+              '\s+', ' ', 'g'),
+            '^(.+?)\s+\((LA|IL|LE|LO|GLI|UN|UNO|UNA|I|THE)\)\s*$', '\2 \1', 'i')
+          ),
+          '^(the|il|la|le|lo|gli|un|uno|una|i)\s+', '', 'i')
+        || COALESCE('::' || y::text, '')
+  END
+$$;
+
+COMMENT ON FUNCTION public.build_match_key_strict IS
+  'Strict match key: preserves trailing Roman/digit/PARTE tokens. Mirrors TS buildMatchKeyStrict() in src/features/programmazioni/utils/title-normalize.ts.';
+
+-- ─── build_match_key SQL helper (loose) ────────────────────────────────────
+-- Reuses build_match_key_strict and additionally strips Roman/digit/PARTE trail.
 CREATE OR REPLACE FUNCTION public.build_match_key(t text, y integer)
 RETURNS text
 LANGUAGE sql
@@ -29,56 +111,25 @@ IMMUTABLE
 PARALLEL SAFE
 AS $$
   SELECT CASE
-    WHEN t IS NULL OR length(trim(t)) = 0 THEN ''
+    WHEN t IS NULL OR length(trim(replace(t, E' ', ' '))) = 0 THEN ''
     ELSE
-      -- normalize → lowercase → strip leading article → append ::year
       regexp_replace(
-        lower(
+        regexp_replace(
           regexp_replace(
-            -- collapse whitespace
-            regexp_replace(
-              -- normalize typographic double quotes → "
-              translate(
-                -- normalize typographic single quotes → '
-                regexp_replace(
-                  -- 9. ROMAN_TRAIL
-                  regexp_replace(
-                    -- 8. EPISODIO_IT
-                    regexp_replace(
-                      -- 7. EPISODE_TRAIL
-                      regexp_replace(
-                        -- 6. SEASON_TRAIL
-                        regexp_replace(
-                          -- 5. SEASON_PAREN
-                          regexp_replace(
-                            -- 4. REPLICA_PAREN
-                            regexp_replace(
-                              -- 3. EDITION_PAREN
-                              regexp_replace(
-                                -- 2. EDITION_SQUARE
-                                regexp_replace(
-                                  trim(t),
-                                  '\s*\[\s*ED\.?\s*\d+\s*\]', '', 'gi'),
-                                '\s*\(\s*ED\.?\s*\d+\s*\)', '', 'gi'),
-                              '\s*\(\s*R(\s+\d+''?)?\s*\)', '', 'gi'),
-                            '\s*\(\s*SEASON\s+\d+\s*\)', '', 'gi'),
-                          '\s+S\.?\s*\d+\s*$', '', 'i'),
-                        '\s+EP\.?\s*\d+.*$', '', 'i'),
-                      '\s+EPISODIO\s+\d+.*$', '', 'i'),
-                    '\s+[IVX]{2,}\s*$', '', 'i'),
-                  -- single typographic → ASCII apostrophe (handles both U+2018 and U+2019)
-                  E'[‘’]', '''', 'g'),
-                -- double typographic → ASCII doublequote (translate is 1:1 mapping)
-                E'“”', '""'),
-              '\s+', ' ', 'g')
-          ),
-          '^(the|il|la|le|lo|gli|un|uno|una|i)\s+', '', 'i')
-        || COALESCE('::' || y::text, '')
+            -- Get the strict normalized string WITHOUT the year suffix.
+            regexp_replace(public.build_match_key_strict(t, NULL), '::.*$', ''),
+            -- ROMAN_TRAIL
+            '\s+[ivx]{2,}\s*$', '', 'i'),
+          -- PARTE_TRAIL (must run before DIGIT_TRAIL)
+          '\s*-?\s*parte\s+\d+\s*$', '', 'i'),
+        -- DIGIT_TRAIL
+        '\s+\d{1,3}\s*$', '', 'g')
+      || COALESCE('::' || y::text, '')
   END
 $$;
 
 COMMENT ON FUNCTION public.build_match_key IS
-  'Deterministic match key for matching programmazioni to opere. Mirrored in TS at src/features/programmazioni/utils/title-normalize.ts (buildMatchKey).';
+  'Loose match key: strict cleanup plus Roman/digit/PARTE trail stripping. Mirrors TS buildMatchKey() in src/features/programmazioni/utils/title-normalize.ts.';
 
 -- ─── opere.match_key column ────────────────────────────────────────────────
 ALTER TABLE public.opere
