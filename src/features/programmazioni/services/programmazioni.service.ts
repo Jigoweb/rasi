@@ -28,103 +28,22 @@ export interface CampagnaProgrammazione {
 
 export const getCampagneProgrammazione = async () => {
   try {
-  const { data, error } = await supabase
-    .from('campagne_programmazione' as any)
-      .select('*, emittenti(nome)')
-    .order('created_at', { ascending: false })
-
+    const { data, error } = await (supabase as any).rpc('get_campagne_programmazione_with_counts')
     if (error) {
-      console.error('[getCampagneProgrammazione] Query error:', error)
+      console.error('[getCampagneProgrammazione] RPC error:', error)
       return { data: null, error }
     }
-
     if (!data || data.length === 0) {
       return { data: [], error: null }
     }
-
-    // Fetch all counts using batch query (more efficient than individual queries)
-    const campagnaIds = data.map((item: any) => item.id)
-    
-    // Create a map of counts
-    const countsMap = new Map<string, number>()
-    
-    // Initialize all counts to 0
-    campagnaIds.forEach((id: string) => {
-      countsMap.set(id, 0)
-    })
-    
-    // Fetch all programmazioni for these campagne in a single query
-    if (campagnaIds.length > 0) {
-      try {
-        const { data: programmazioniData, error: progError } = await supabase
-          .from('programmazioni')
-          .select('campagna_programmazione_id')
-          .in('campagna_programmazione_id', campagnaIds)
-        
-        if (progError) {
-          console.error('[getCampagneProgrammazione] Batch count query error:', progError)
-          // Fallback to individual queries if batch fails
-          const countPromises = campagnaIds.map(async (campagnaId: string) => {
-            try {
-              const { count, error } = await supabase
-                .from('programmazioni')
-                .select('*', { count: 'exact', head: true })
-                .eq('campagna_programmazione_id', campagnaId)
-              
-              if (error) {
-                console.error(`[getCampagneProgrammazione] Count error for campagna ${campagnaId}:`, {
-                  message: error.message,
-                  details: error.details,
-                  hint: error.hint,
-                  code: error.code
-                })
-                return { id: campagnaId, count: 0 }
-              }
-              
-              return { id: campagnaId, count: count || 0 }
-            } catch (error: any) {
-              console.error(`[getCampagneProgrammazione] Unexpected error for campagna ${campagnaId}:`, {
-                message: error?.message || String(error),
-                stack: error?.stack
-              })
-              return { id: campagnaId, count: 0 }
-            }
-          })
-          
-          const results = await Promise.all(countPromises)
-          results.forEach(({ id, count }) => {
-            countsMap.set(id, count)
-          })
-        } else if (programmazioniData) {
-          // Count programmazioni per campagna
-          programmazioniData.forEach((item: any) => {
-            const id = item.campagna_programmazione_id
-            if (id) {
-              countsMap.set(id, (countsMap.get(id) || 0) + 1)
-            }
-          })
-        }
-      } catch (error: any) {
-        console.error('[getCampagneProgrammazione] Unexpected error in batch count:', {
-          message: error?.message || String(error),
-          stack: error?.stack
-        })
-      }
-    }
-
-    // Transform data with counts
-    const transformedData = data.map((item: any) => ({
-      ...item,
-      programmazioni_count: countsMap.get(item.id) || 0
+    const transformed = (data as any[]).map(row => ({
+      ...row,
+      emittenti: row.emittente_nome ? { nome: row.emittente_nome } : undefined,
     }))
-
-    return { data: (transformedData as unknown) as CampagnaProgrammazione[], error: null }
+    return { data: transformed as unknown as CampagnaProgrammazione[], error: null }
   } catch (error: any) {
     console.error('[getCampagneProgrammazione] Unexpected error:', error)
-    return { 
-      data: null, 
-      error: error instanceof Error ? error : new Error(String(error))
-    }
+    return { data: null, error: error instanceof Error ? error : new Error(String(error)) }
   }
 }
 
@@ -167,7 +86,7 @@ export interface ProgrammazionePayload {
   data_inizio?: string
   data_fine?: string
   retail_price?: number
-  sales_month?: number
+  sales_month?: string | number
   track_price_local_currency?: number
   views?: number
   total_net_ad_revenue?: number
@@ -176,10 +95,192 @@ export interface ProgrammazionePayload {
   emittente?: string
 }
 
+// ============================================
+// NORMALIZZAZIONE IMPORT (zero-config, applicata sempre)
+// ============================================
+
+/**
+ * Converte una stringa in Title Case se rilevata come ALL CAPS.
+ * Se meno del 40% delle lettere sono lowercase, applica title case.
+ * Conserva la stringa originale altrimenti.
+ */
+export function toTitleCase(str: string | null | undefined): string | null | undefined {
+  if (!str || typeof str !== 'string') return str
+  const totalLetters = (str.match(/[a-zA-Z]/g) || []).length
+  const lowerCount = (str.match(/[a-z]/g) || []).length
+  if (totalLetters > 0 && lowerCount / totalLetters < 0.4) {
+    return str.toLowerCase().replace(/(?:^|\s|[-–(])\S/g, c => c.toUpperCase())
+  }
+  return str
+}
+
+/**
+ * Rimuove suffissi ridondanti comuni dai titoli (case-insensitive).
+ * Es: "Casino (Original)" → "Casino"
+ */
+const SUFFISSI_DA_RIMUOVERE: RegExp[] = [
+  /\s*\(original\)/gi,
+  /\s*\(versione italiana\)/gi,
+  /\s*\(ov\)/gi,
+  /\s*\(sub ita\)/gi,
+]
+
+export function stripSuffissi(str: string | null | undefined): string | null | undefined {
+  if (!str || typeof str !== 'string') return str
+  let result = str
+  for (const re of SUFFISSI_DA_RIMUOVERE) {
+    result = result.replace(re, '')
+  }
+  return result.trim()
+}
+
+/**
+ * Pipeline completa per i campi titolo: title case + rimozione suffissi.
+ */
+export function normalizzaTitolo(str: string | null | undefined): string | null | undefined {
+  if (!str || typeof str !== 'string') return str
+  return stripSuffissi(toTitleCase(str))
+}
+
+/**
+ * Dizionario globale di mapping tipo non canonico → canonico.
+ * Output canonico: 'serie', 'film', 'live', 'speciale'.
+ */
+const TIPO_MAPPING: Record<string, string> = {
+  tv: 'serie',
+  series: 'serie',
+  episode: 'serie',
+  episodio: 'serie',
+  serie: 'serie',
+  movie: 'film',
+  film: 'film',
+  feature: 'film',
+  live: 'live',
+  'live tv': 'live',
+  special: 'speciale',
+  speciale: 'speciale',
+}
+
+export function normalizzaTipo(tipo: string | null | undefined): string | null | undefined {
+  if (!tipo || typeof tipo !== 'string') return tipo
+  const key = tipo.toLowerCase().trim()
+  return TIPO_MAPPING[key] ?? key
+}
+
+/**
+ * Parsa `sales_month` dai possibili formati Excel/CSV e restituisce data ISO YYYY-MM-01.
+ * Formati supportati:
+ *  - "2024-03" / "2024/03"
+ *  - "202403"
+ *  - "2024.03"
+ *  - Excel serial number (~30000-60000)
+ */
+export function parseSalesMonth(value: string | number | undefined | null): string | null {
+  if (value == null || value === '') return null
+  const str = String(value).trim()
+  if (!str) return null
+
+  // Formato "YYYY-MM" o "YYYY/MM"
+  let m = str.match(/^(\d{4})[-/](\d{1,2})$/)
+  if (m) {
+    const month = m[2].padStart(2, '0')
+    return `${m[1]}-${month}-01`
+  }
+
+  // Formato "YYYYMM" (es. 202403)
+  m = str.match(/^(\d{4})(\d{2})$/)
+  if (m) return `${m[1]}-${m[2]}-01`
+
+  // Formato decimale "YYYY.MM" (es. 2024.03)
+  m = str.match(/^(\d{4})\.(\d{1,2})$/)
+  if (m) {
+    const month = m[2].padStart(2, '0')
+    return `${m[1]}-${month}-01`
+  }
+
+  // Excel serial date (numero in range plausibile moderno)
+  const n = Number(str)
+  if (Number.isFinite(n) && n > 30000 && n < 60000) {
+    // Excel epoch: 1899-12-30 (compensato il bug 1900-02-29)
+    const ms = (n - 25569) * 86400 * 1000
+    const d = new Date(ms)
+    if (!isNaN(d.getTime())) {
+      const y = d.getUTCFullYear()
+      const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
+      return `${y}-${mo}-01`
+    }
+  }
+
+  return null
+}
+
+/**
+ * Determina la `data_trasmissione` con fallback:
+ *  1. data_trasmissione esplicita
+ *  2. sales_month → primo giorno del mese
+ *  3. data_inizio
+ */
+export function normalizzaData(row: ProgrammazionePayload): string | null {
+  if (row.data_trasmissione) return row.data_trasmissione
+  const fromSales = parseSalesMonth(row.sales_month)
+  if (fromSales) return fromSales
+  if (row.data_inizio) return row.data_inizio
+  return null
+}
+
+/**
+ * Normalizza encoding compatto del numero episodio (rilevato su Pluto TV).
+ * Es: numero_stagione=17, numero_episodio=1701 → episodio_reale=1
+ * Regola: se numero_episodio ∈ [stagione*100+1, stagione*100+99] → sottrai stagione*100
+ * Auto-detection non ambigua: numerazione standard non genera mai questo pattern.
+ */
+export function normalizzaEpisodio(
+  numero_episodio: number | null | undefined,
+  numero_stagione: number | null | undefined
+): number | null | undefined {
+  if (numero_episodio == null || numero_stagione == null) return numero_episodio
+  if (numero_episodio <= 0 || numero_stagione <= 0) return numero_episodio
+  const prefix = numero_stagione * 100
+  if (numero_episodio >= prefix + 1 && numero_episodio <= prefix + 99) {
+    return numero_episodio - prefix
+  }
+  return numero_episodio
+}
+
+/**
+ * Applica tutte le normalizzazioni a una singola riga del payload.
+ * Zero-config, applicata sempre, idempotente.
+ */
+export function normalizzaProgrammazione(row: ProgrammazionePayload): ProgrammazionePayload {
+  const titolo = normalizzaTitolo(row.titolo) as string
+  const titolo_originale = normalizzaTitolo(row.titolo_originale) as string | undefined
+  const titolo_episodio = normalizzaTitolo(row.titolo_episodio) as string | undefined
+  const titolo_episodio_originale = normalizzaTitolo(row.titolo_episodio_originale) as
+    | string
+    | undefined
+  const tipo = normalizzaTipo(row.tipo) as string
+  const numero_episodio = normalizzaEpisodio(row.numero_episodio, row.numero_stagione) as
+    | number
+    | undefined
+  const data_trasmissione = normalizzaData(row) ?? row.data_trasmissione
+
+  return {
+    ...row,
+    titolo,
+    titolo_originale,
+    titolo_episodio,
+    titolo_episodio_originale,
+    tipo,
+    numero_episodio,
+    data_trasmissione,
+  }
+}
+
 export const uploadProgrammazioni = async (programmazioni: ProgrammazionePayload[]) => {
+  const normalized = programmazioni.map(normalizzaProgrammazione)
   const { data, error } = await supabase
     .from('programmazioni')
-    .insert(programmazioni as any)
+    .insert(normalized as any)
     .select()
 
   return { data, error }
@@ -329,88 +430,27 @@ export interface ProcessingProgress {
  */
 export const getProcessingProgress = async (campagnaId: string): Promise<{ data: ProcessingProgress | null; error: any }> => {
   try {
-    // Get campagna info
-    const { data: campagna, error: campagnaError } = await supabase
-      .from('campagne_programmazione' as any)
-      .select('processing_by, processing_started_at')
-      .eq('id', campagnaId)
-      .single()
-    
-    if (campagnaError) throw campagnaError
-
-    // Get total programmazioni
-    const { count: totale, error: totaleError } = await supabase
-      .from('programmazioni')
-      .select('*', { count: 'exact', head: true })
-      .eq('campagna_programmazione_id', campagnaId)
-    
-    if (totaleError) throw totaleError
-
-    // Get processed programmazioni
-    const { count: processate, error: processateError } = await supabase
-      .from('programmazioni')
-      .select('*', { count: 'exact', head: true })
-      .eq('campagna_programmazione_id', campagnaId)
-      .eq('processato', true)
-    
-    if (processateError) throw processateError
-
-    // Check if there's a campagna individuazione
-    const { data: campagnaInd, error: indError } = await (supabase as any)
-      .from('campagne_individuazione')
-      .select('id')
-      .eq('campagne_programmazione_id', campagnaId)
-      .maybeSingle()
-    
-    if (indError) throw indError
-
-    let individuazioni_create = 0
-    let last_activity_at: string | null = null
-    if (campagnaInd) {
-      const { count, error: countError } = await (supabase as any)
-        .from('individuazioni')
-        .select('*', { count: 'exact', head: true })
-        .eq('campagna_individuazioni_id', campagnaInd.id)
-      
-      if (countError) throw countError
-      individuazioni_create = count || 0
-
-      // Get timestamp of last individuazione created
-      if (individuazioni_create > 0) {
-        const { data: lastInd, error: lastIndError } = await (supabase as any)
-          .from('individuazioni')
-          .select('created_at')
-          .eq('campagna_individuazioni_id', campagnaInd.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .single()
-        
-        if (!lastIndError && lastInd) {
-          last_activity_at = lastInd.created_at
-        }
-      }
-    }
-
-    const programmazioni_totali = totale || 0
-    const programmazioni_processate = processate || 0
-    const percentuale = programmazioni_totali > 0 
-      ? Math.round((programmazioni_processate / programmazioni_totali) * 100) 
-      : 0
-
-    const campagnaData = campagna as { processing_by?: string | null; processing_started_at?: string | null } | null
-
+    const { data: raw, error } = await (supabase as any).rpc('get_processing_progress', {
+      p_campagna_id: campagnaId,
+    })
+    if (error) throw error
+    if (!raw) return { data: null, error: null }
+    const programmazioni_totali = Number(raw.programmazioni_totali) || 0
+    const programmazioni_processate = Number(raw.programmazioni_processate) || 0
+    const percentuale = programmazioni_totali > 0
+      ? Math.round((programmazioni_processate / programmazioni_totali) * 100) : 0
     return {
       data: {
-        campagna_individuazione_id: campagnaInd?.id,
+        campagna_individuazione_id: raw.campagna_individuazione_id ?? undefined,
         programmazioni_processate,
         programmazioni_totali,
-        individuazioni_create,
+        individuazioni_create: Number(raw.individuazioni_create) || 0,
         percentuale,
-        processing_by: campagnaData?.processing_by,
-        processing_started_at: campagnaData?.processing_started_at,
-        last_activity_at
+        processing_by: raw.processing_by ?? undefined,
+        processing_started_at: raw.processing_started_at ?? undefined,
+        last_activity_at: raw.last_activity_at ?? null,
       },
-      error: null
+      error: null,
     }
   } catch (error) {
     return { data: null, error }
@@ -464,7 +504,11 @@ export const listProgrammazioniByCampagnaKeyset = async (
     .limit(limit)
 
   if (cursor?.created_at) {
-    query = query.lt('created_at', cursor.created_at)
+    // Compound cursor: (created_at < X) OR (created_at = X AND id < Y)
+    // Handles batches where many rows share the same created_at timestamp
+    query = (query as any).or(
+      `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`
+    )
   }
 
   if (options?.q) {

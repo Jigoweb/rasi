@@ -27,11 +27,13 @@ export async function POST(req: NextRequest) {
     // #endregion
 
     const body = await req.json()
-    const { 
+    const {
       campagne_individuazione_id,
       programmazione_ids,
       soglia_titolo = 0.7,
-      artista_ids = null  // Nuovo: filtro artisti opzionale
+      artista_ids = null,           // Filtro artisti opzionale
+      tolleranza_anno_soft = 3,     // ±N anni senza penalità
+      tolleranza_anno_hard = 5,     // Oltre N anni: scarto duro
     } = body
 
     // #region agent log
@@ -40,6 +42,8 @@ export async function POST(req: NextRequest) {
       programmazione_ids_count: programmazione_ids?.length,
       soglia_titolo,
       artista_ids_count: artista_ids?.length,
+      tolleranza_anno_soft,
+      tolleranza_anno_hard,
       payload_size_bytes: JSON.stringify(body).length
     })
     // #endregion
@@ -102,7 +106,9 @@ export async function POST(req: NextRequest) {
             p_campagne_individuazione_id: campagne_individuazione_id,
             p_programmazione_ids: programmazione_ids,
             p_soglia_titolo: soglia_titolo,
-            p_artista_ids: artista_ids
+            p_artista_ids: artista_ids,
+            p_tolleranza_anno_soft: tolleranza_anno_soft,
+            p_tolleranza_anno_hard: tolleranza_anno_hard,
           })
 
         const timeoutPromise = new Promise((_, reject) => {

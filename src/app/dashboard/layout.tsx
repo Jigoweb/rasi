@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   Sparkles,
-  Shield
+  Shield,
+  Globe
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -45,20 +46,30 @@ export default function DashboardLayout({
     { name: 'Opere', href: '/dashboard/opere', icon: FileText },
     { name: 'Programmazioni', href: '/dashboard/programmazioni', icon: Calendar },
     { name: 'Individuazioni', href: '/dashboard/individuazioni', icon: Sparkles },
-    { name: 'Campagne', href: '/dashboard/campagne', icon: Search },
+    { name: 'Ripartizioni', href: '/dashboard/ripartizioni', icon: Search },
     { name: 'Query', href: '/dashboard/query', icon: Database },
-    { name: 'Report', href: '/dashboard/report', icon: FileText },
   ]
 
-  // Menu item per admin e operatori (chi può gestire utenti)
-  const userManagementMenuItems = [
+  // Menu item per operatori e admin (chi può gestire utenti)
+  const operatorMenuItems = [
     { name: 'Utenti', href: '/dashboard/utenti', icon: Shield },
   ]
 
+  // Menu item SOLO per admin
+  const adminOnlyMenuItems = [
+    { name: 'Sito Pubblico', href: '/dashboard/cms/pages', icon: Globe },
+  ]
+
   // Combina i menu in base ai permessi
-  const menuItems = canManageUsers 
-    ? [...baseMenuItems, ...userManagementMenuItems] 
-    : baseMenuItems
+  let menuItems = [...baseMenuItems]
+  
+  if (canManageUsers) {
+    menuItems = [...menuItems, ...operatorMenuItems]
+  }
+  
+  if (isAdmin) {
+    menuItems = [...menuItems, ...adminOnlyMenuItems]
+  }
 
   // Helper per ottenere l'etichetta del ruolo
   const getRoleLabel = () => {
@@ -85,9 +96,10 @@ export default function DashboardLayout({
     )
   }
 
-  if (!user) {
-    return null
-  }
+  // MOCK DEV: Bypass utente nullo
+  // if (!user) {
+  //  return null
+  // }
 
   // Walled garden layout per artisti
   if (isArtista) {
@@ -106,7 +118,7 @@ export default function DashboardLayout({
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
-                <p className="text-sm text-gray-700 truncate max-w-[200px]">{user.email}</p>
+                <p className="text-sm text-gray-700 truncate max-w-[200px]">{user?.email}</p>
                 <Badge className="text-xs bg-orange-100 text-orange-800">Artista</Badge>
               </div>
               <Button
@@ -192,12 +204,12 @@ export default function DashboardLayout({
             <div className="flex items-center gap-3 mb-3">
               <div className={`rounded-full h-8 w-8 flex items-center justify-center ${getRoleColor()}`}>
                 <span className="text-sm font-medium">
-                  {user.email?.charAt(0).toUpperCase()}
+                  {user?.email?.charAt(0).toUpperCase() || 'A'}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user.email}
+                  {user?.email || 'admin@rasi.it'}
                 </p>
                 <Badge 
                   className={`text-xs mt-1 ${getRoleColor()}`}

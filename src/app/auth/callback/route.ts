@@ -4,9 +4,15 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
+  const invite = requestUrl.searchParams.get('invite') === 'true'
 
   if (code) {
-    const supabaseResponse = NextResponse.redirect(`${requestUrl.origin}/dashboard`)
+    // Determina destinazione dopo lo scambio del codice
+    const destination = invite
+      ? `${requestUrl.origin}/auth/imposta-password`
+      : `${requestUrl.origin}/dashboard`
+
+    const supabaseResponse = NextResponse.redirect(destination)
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,9 +33,9 @@ export async function GET(request: NextRequest) {
 
     await supabase.auth.exchangeCodeForSession(code)
 
-    // Redirect to /dashboard — middleware will handle artista -> /dashboard/profilo
     return supabaseResponse
   }
 
-  return NextResponse.redirect(`${requestUrl.origin}/dashboard`)
+  // Fallback: se non c'è codice, torna al login
+  return NextResponse.redirect(`${requestUrl.origin}/auth`)
 }

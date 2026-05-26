@@ -4,7 +4,11 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Badge } from '@/shared/components/ui/badge'
-import { Users, FileText, Calendar, TrendingUp, Euro, Activity, Search } from 'lucide-react'
+import { Button } from '@/shared/components/ui/button'
+import { Users, FileText, Calendar, TrendingUp, Euro, Activity, Search, Download, Database, Loader2 } from 'lucide-react'
+import { useExportProcess } from '@/shared/contexts/export-process-context'
+import { getFullDatabaseExport, formatFullDatabaseExport } from '@/features/report/services/report-export.service'
+import * as XLSX from 'xlsx'
 
 interface DashboardStats {
   artisti_attivi: number
@@ -56,6 +60,44 @@ function tempoRelativo(isoString: string): string {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const { startExport, state: exportState } = useExportProcess()
+  const isExporting = exportState.status === 'exporting'
+
+  const handleExportFull = async () => {
+    await startExport(
+      'full-database-export',
+      'Banca Dati Completa',
+      'xlsx',
+      async (onProgress, signal) => {
+        const { data, error } = await getFullDatabaseExport((progress) => {
+          onProgress({ fetched: progress.fetched, total: progress.total, percentage: progress.percentage, phase: progress.phase, estimatedTimeRemaining: progress.estimatedTimeRemaining })
+        }, signal)
+
+        if (signal.aborted) throw new Error('Export cancelled')
+        if (error) throw error
+        if (!data || data.length === 0) throw new Error('Nessun dato da esportare')
+
+        onProgress({ fetched: data.length, total: data.length, percentage: 90, phase: 'formatting' })
+        const formattedData = formatFullDatabaseExport(data)
+
+        if (signal.aborted) throw new Error('Export cancelled')
+
+        onProgress({ fetched: data.length, total: data.length, percentage: 95, phase: 'generating' })
+        const worksheet = XLSX.utils.json_to_sheet(formattedData)
+        const workbook = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Banca Dati')
+
+        const maxWidth = 50
+        const colWidths = Object.keys(formattedData[0] || {}).map(key => ({
+          wch: Math.min(maxWidth, Math.max(key.length, ...formattedData.slice(0, 100).map(row => String(row[key as keyof typeof row] || '').length)))
+        }))
+        worksheet['!cols'] = colWidths
+
+        onProgress({ fetched: data.length, total: data.length, percentage: 100, phase: 'done' })
+        XLSX.writeFile(workbook, `banca_dati_completa_${new Date().toISOString().split('T')[0]}.xlsx`, { bookType: 'xlsx' })
+      }
+    )
+  }
   const [totalArtisti, setTotalArtisti] = useState(0)
   const [totalOpere, setTotalOpere] = useState(0)
   const [artistiMetrics, setArtistiMetrics] = useState<Metric[]>([])
@@ -487,6 +529,37 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Export Banca Dati */}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Esportazione Banca Dati
+              </CardTitle>
+              <CardDescription className="text-sm mt-1">
+                Export unificato XLSX: opera + episodio + artista + ruolo. Una riga per partecipazione.
+              </CardDescription>
+            </div>
+            <Badge variant="secondary">XLSX</Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={handleExportFull}
+            disabled={isExporting || loading}
+            className="w-full sm:w-auto"
+          >
+            {isExporting && exportState.campagnaId === 'full-database-export' ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Esportazione in corso...</>
+            ) : (
+              <><Download className="h-4 w-4 mr-2" />Esporta Banca Dati Completa</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Data Health */}
       <Card>

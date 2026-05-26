@@ -77,7 +77,10 @@ export const getFullDatabaseExport = async (
             nome,
             cognome,
             nome_arte,
+            ragione_sociale,
             codice_fiscale,
+            partita_iva,
+            forma_giuridica,
             data_nascita,
             luogo_nascita,
             stato,
@@ -86,7 +89,13 @@ export const getFullDatabaseExport = async (
             territorio,
             tipologia,
             data_inizio_mandato,
-            data_fine_mandato
+            data_fine_mandato,
+            imdb_nconst,
+            contatti,
+            indirizzo,
+            diritti_attivi,
+            codici_esterni,
+            componente_stabile_gruppo_orchestra
           ),
           ruoli_tipologie (
             codice,
@@ -164,21 +173,44 @@ export const formatFullDatabaseExport = (rows: any[]) => {
       'Data Prima Messa in Onda': ep?.data_prima_messa_in_onda || '',
       'ISAN Episodio': ep?.codice_isan || '',
       'IMDB Episodio': ep?.imdb_tconst || '',
-      // Artista
+      // Artista — anagrafica
       'Codice IPN': artista?.codice_ipn || '',
       'Nome': artista?.nome || '',
       'Cognome': artista?.cognome || '',
       'Nome Arte': artista?.nome_arte || '',
+      'Ragione Sociale': artista?.ragione_sociale || '',
       'Codice Fiscale': artista?.codice_fiscale || '',
+      'Partita IVA': artista?.partita_iva ?? '',
+      'Forma Giuridica': artista?.forma_giuridica || '',
+      'RASI': artista?.is_rasi ? 'Sì' : 'No',
+      'Tipologia': artista?.tipologia || '',
+      'Stato Artista': artista?.stato || '',
       'Data Nascita': artista?.data_nascita || '',
       'Luogo Nascita': artista?.luogo_nascita || '',
-      'Stato Artista': artista?.stato || '',
-      'RASI': artista?.is_rasi ? 'Sì' : 'No',
       'Paese': artista?.codice_paese || '',
       'Territorio': artista?.territorio || '',
-      'Tipologia': artista?.tipologia || '',
       'Inizio Mandato': artista?.data_inizio_mandato || '',
       'Fine Mandato': artista?.data_fine_mandato || '',
+      'IMDB NConst': artista?.imdb_nconst || '',
+      // Contatti
+      'Email Artista': (artista?.contatti as any)?.email || '',
+      'Telefono Artista': (artista?.contatti as any)?.telefono || (artista?.contatti as any)?.number || '',
+      // Indirizzo
+      'Via': (artista?.indirizzo as any)?.via || '',
+      'Civico': (artista?.indirizzo as any)?.civico || '',
+      'CAP': (artista?.indirizzo as any)?.cap || '',
+      'Città': (artista?.indirizzo as any)?.citta || '',
+      'Provincia': (artista?.indirizzo as any)?.provincia || '',
+      // Diritti e extra
+      'Diritti Attivi': Array.isArray(artista?.diritti_attivi)
+        ? (artista.diritti_attivi as string[]).join('; ')
+        : '',
+      'Componente Gruppo/Orchestra': artista?.componente_stabile_gruppo_orchestra || '',
+      'Codici Esterni': artista?.codici_esterni && typeof artista.codici_esterni === 'object'
+        ? Object.entries(artista.codici_esterni as Record<string, unknown>)
+            .map(([k, v]) => `${k}:${v}`)
+            .join('; ')
+        : '',
       // Ruolo e partecipazione
       'Codice Ruolo': ruolo?.codice || '',
       'Ruolo': ruolo?.nome || '',

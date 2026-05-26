@@ -1,18 +1,22 @@
 -- =====================================================
 -- FUNZIONI DI MATCHING INDIVIDUAZIONI
--- Allineate al DB reale (2026-03-26)
+-- Allineate al DB reale (2026-05-08)
 --
--- Aggiornamento: discriminanti REGIA e ANNO
--- per ridurre falsi positivi da omonimia titoli
+-- Versione 2: pipeline adattiva
+--   - Tolleranza anno parametrica (default ±3 soft, ±5 hard)
+--   - Discriminante regia null-safe (già corretto, soglia adattiva lo gestisce)
+--   - Fix CONTINUE prematuro per serie senza dati episodio specifici
+--   - Soglia minima adattiva: 35% del peso massimo disponibile, floor 25
 -- =====================================================
 
--- Drop entrambe le overload (se esistono)
+-- Drop tutte le overload (firme nuove e vecchie)
 DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric);
 DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric, uuid[]);
+DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric, uuid[], int, int);
 
 -- =====================================================
--- OVERLOAD 1: Senza filtro artisti (legacy compatibility)
--- Delega alla overload 2 con p_artista_ids = NULL
+-- OVERLOAD 1: Senza filtro artisti né tolleranza (legacy compatibility)
+-- Delega all'overload completo con default
 -- =====================================================
 CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
     p_programmazione_id UUID,
@@ -30,38 +34,71 @@ RETURNS TABLE (
 BEGIN
     RETURN QUERY
     SELECT * FROM match_programmazione_to_partecipazioni(
-        p_programmazione_id, p_soglia_titolo, NULL::UUID[]
+        p_programmazione_id, p_soglia_titolo, NULL::UUID[], 3, 5
     );
 END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- =====================================================
--- OVERLOAD 2: Con filtro artisti + discriminanti regia/anno
+-- OVERLOAD 2: Con filtro artisti, senza tolleranza esplicita
+-- =====================================================
+CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
+    p_programmazione_id UUID,
+    p_soglia_titolo NUMERIC,
+    p_artista_ids UUID[]
+)
+RETURNS TABLE (
+    partecipazione_id UUID,
+    opera_id UUID,
+    episodio_id UUID,
+    artista_id UUID,
+    ruolo_id UUID,
+    punteggio NUMERIC,
+    dettagli_matching JSONB
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT * FROM match_programmazione_to_partecipazioni(
+        p_programmazione_id, p_soglia_titolo, p_artista_ids, 3, 5
+    );
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- =====================================================
+-- OVERLOAD 3: Firma completa con tolleranza anno parametrica
 --
--- SCORING (max 100 punti):
---   Titolo:           50 punti base (similarity * 50)
---   Titolo originale: 10 punti bonus
---   Anno:             15 punti (discriminante con penalità)
---   Regia:            10 punti (discriminante con penalità)
---   Episodio:         15 punti (per serie TV)
+-- SCORING (peso massimo dinamico, 0-100):
+--   Titolo:           50 punti base (similarity * 50) — SEMPRE
+--   Titolo originale: 10 punti bonus — se entrambi presenti
+--   Anno:             15 punti — se entrambi presenti
+--   Regia:            10 punti — se entrambi presenti
+--   Episodio:         15 punti — se serie con episodio matchato
 --
 -- DISCRIMINANTE ANNO (quando entrambi presenti):
---   esatto:    +15 punti
---   ±1 anno:   +10.5 punti
---   ±2 anni:   +4.5 punti
---   >2 anni:   -19.5 punti (PENALITÀ)
+--   esatto:           +15 punti (1.0 * 15)
+--   ≤ soft:           +10.5 punti (0.7 * 15)
+--   soft < d ≤ hard:  +4.5 punti (0.3 * 15)
+--   > hard:           skip opera (scarto duro)
 --
--- DISCRIMINANTE REGIA (quando entrambi presenti):
---   Match (similarity >= 0.7): +10 punti
---   Parziale (>= 0.4):        +5 punti
---   No match:                  -15 punti (PENALITÀ)
+-- DISCRIMINANTE REGIA (null-safe, attivo solo se entrambi presenti):
+--   Match (sim >= 0.7): +10 punti
+--   Parziale (>= 0.4):  +5 punti
+--   No match:           -15 punti (penalità soft)
 --
--- SOGLIA MINIMA FINALE: 35 punti
+-- SERIE SENZA DATI EPISODIO SPECIFICI:
+--   Se prog è marcata serie SOLO per numero_stagione, senza numero_episodio
+--   né titolo_episodio, NON viene scartata: viene matchata senza episode scoring.
+--
+-- SOGLIA ADATTIVA:
+--   35% del peso massimo applicabile, con floor 25.
+--   Esempio: prog senza anno/regia/episodio → max 50 → soglia 25.
 -- =====================================================
 CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
     p_programmazione_id UUID,
     p_soglia_titolo NUMERIC DEFAULT 0.7,
-    p_artista_ids UUID[] DEFAULT NULL
+    p_artista_ids UUID[] DEFAULT NULL,
+    p_tolleranza_anno_soft INT DEFAULT 3,
+    p_tolleranza_anno_hard INT DEFAULT 5
 )
 RETURNS TABLE (
     partecipazione_id UUID,
@@ -75,6 +112,7 @@ RETURNS TABLE (
 DECLARE
     v_prog RECORD;
     v_is_serie BOOLEAN;
+    v_has_episode_data BOOLEAN;
     v_opera RECORD;
     v_episodio RECORD;
     v_partecipazione RECORD;
@@ -90,6 +128,13 @@ DECLARE
     v_best_episodio_score NUMERIC;
     v_regia_best_score NUMERIC;
     v_regia_match_name TEXT;
+    v_diff_anno INT;
+    v_anno_disponibile BOOLEAN;
+    v_regia_disponibile BOOLEAN;
+    v_episodio_applicato BOOLEAN;
+    v_peso_massimo NUMERIC;
+    v_soglia_adattata NUMERIC;
+    v_skip_opera BOOLEAN;
 BEGIN
     -- Set similarity threshold for index usage
     PERFORM set_limit(p_soglia_titolo - 0.1);
@@ -107,6 +152,13 @@ BEGIN
     v_is_serie := (
         v_prog.numero_episodio IS NOT NULL OR
         v_prog.numero_stagione IS NOT NULL OR
+        v_prog.titolo_episodio IS NOT NULL OR
+        v_prog.titolo_episodio_originale IS NOT NULL
+    );
+
+    -- Distingue: serie con dati episodio specifici vs serie marcata solo da stagione
+    v_has_episode_data := (
+        v_prog.numero_episodio IS NOT NULL OR
         v_prog.titolo_episodio IS NOT NULL OR
         v_prog.titolo_episodio_originale IS NOT NULL
     );
@@ -148,6 +200,11 @@ BEGIN
         v_best_episodio_score := 0;
         v_regia_best_score := 0;
         v_regia_match_name := NULL;
+        v_diff_anno := NULL;
+        v_anno_disponibile := FALSE;
+        v_regia_disponibile := FALSE;
+        v_episodio_applicato := FALSE;
+        v_skip_opera := FALSE;
 
         -- Prova con alias_titoli se presenti
         IF v_opera.alias_titoli IS NOT NULL AND array_length(v_opera.alias_titoli, 1) > 0 THEN
@@ -191,36 +248,44 @@ BEGIN
         END IF;
 
         -- =====================================================
-        -- 3. DISCRIMINANTE ANNO
-        -- Quando entrambi presenti:
-        --   esatto:    +1.0 (= +15 punti)
-        --   ±1 anno:   +0.7 (= +10.5 punti)
-        --   ±2 anni:   +0.3 (= +4.5 punti)
-        --   >2 anni:   -1.3 (= -19.5 punti PENALITÀ)
-        -- Quando uno mancante: 0 (neutro)
+        -- 3. DISCRIMINANTE ANNO (parametrico)
+        -- Tolleranza soft (default 3): nessuna penalità
+        -- Tolleranza hard (default 5): penalità ridotta
+        -- Oltre hard: scarta opera
         -- =====================================================
         IF v_prog.anno IS NOT NULL AND v_opera.anno_produzione IS NOT NULL THEN
-            IF v_prog.anno = v_opera.anno_produzione THEN
+            v_anno_disponibile := TRUE;
+            v_diff_anno := ABS(v_prog.anno - v_opera.anno_produzione);
+
+            IF v_diff_anno = 0 THEN
                 v_score_anno := 1.0;
-            ELSIF ABS(v_prog.anno - v_opera.anno_produzione) <= 1 THEN
+            ELSIF v_diff_anno <= p_tolleranza_anno_soft THEN
                 v_score_anno := 0.7;
-            ELSIF ABS(v_prog.anno - v_opera.anno_produzione) <= 2 THEN
+            ELSIF v_diff_anno <= p_tolleranza_anno_hard THEN
                 v_score_anno := 0.3;
             ELSE
-                -- PENALITÀ: anno diverge significativamente
-                v_score_anno := -1.3;
+                -- Oltre tolleranza hard: scarta opera
+                v_skip_opera := TRUE;
             END IF;
-            v_dettagli := jsonb_set(v_dettagli, '{anno}', jsonb_build_object(
-                'score', ROUND(v_score_anno * 15, 2),
-                'programmazione', v_prog.anno,
-                'opera', v_opera.anno_produzione,
-                'differenza', ABS(v_prog.anno - v_opera.anno_produzione),
-                'penalita', v_score_anno < 0
-            ));
+
+            IF NOT v_skip_opera THEN
+                v_dettagli := jsonb_set(v_dettagli, '{anno}', jsonb_build_object(
+                    'score', ROUND(v_score_anno * 15, 2),
+                    'programmazione', v_prog.anno,
+                    'opera', v_opera.anno_produzione,
+                    'differenza', v_diff_anno,
+                    'tolleranza_soft', p_tolleranza_anno_soft,
+                    'tolleranza_hard', p_tolleranza_anno_hard
+                ));
+            END IF;
+        END IF;
+
+        IF v_skip_opera THEN
+            CONTINUE;
         END IF;
 
         -- =====================================================
-        -- 4. DISCRIMINANTE REGIA
+        -- 4. DISCRIMINANTE REGIA (null-safe)
         -- programmazioni.regia = TEXT singolo (es. "HILL WALTER")
         -- opere.regista = VARCHAR[] array (es. ["Walter Hill"])
         -- Confronto fuzzy: prog.regia vs ogni elemento di opera.regista
@@ -231,6 +296,7 @@ BEGIN
         -- =====================================================
         IF v_prog.regia IS NOT NULL AND LENGTH(TRIM(v_prog.regia)) > 0
            AND v_opera.regista IS NOT NULL AND array_length(v_opera.regista, 1) > 0 THEN
+            v_regia_disponibile := TRUE;
             DECLARE
                 v_reg TEXT;
                 v_sim NUMERIC;
@@ -266,7 +332,10 @@ BEGIN
             ));
         END IF;
 
+        -- =====================================================
         -- 5. PER SERIE TV: Match episodio
+        -- Fix: serie senza dati episodio specifici NON scartata
+        -- =====================================================
         IF v_is_serie THEN
             FOR v_episodio IN
                 SELECT
@@ -337,18 +406,28 @@ BEGIN
                 END;
             END LOOP;
 
+            -- FIX: distingue serie senza dati episodio specifici (procedi senza scoring)
+            -- da serie con dati specifici ma nessun match (scarta)
             IF NOT v_episodio_trovato THEN
-                CONTINUE;
+                IF v_has_episode_data THEN
+                    -- Caso A: prog ha dati episodio specifici (numero_episodio o titolo_episodio)
+                    -- ma nessun match → scarta opera
+                    CONTINUE;
+                END IF;
+                -- Caso B: prog "marcata serie" solo per numero_stagione → procedi
+                v_score_episodio := 0;
+                v_episodio_applicato := FALSE;
+            ELSE
+                v_score_episodio := v_best_episodio_score;
+                v_episodio_applicato := TRUE;
+                v_dettagli := jsonb_set(v_dettagli, '{episodio}', jsonb_build_object(
+                    'score', ROUND(v_score_episodio * 100, 2),
+                    'episodio_id', v_best_episodio_id,
+                    'prog_stagione', v_prog.numero_stagione,
+                    'prog_episodio', v_prog.numero_episodio,
+                    'prog_titolo_ep', v_prog.titolo_episodio
+                ));
             END IF;
-
-            v_score_episodio := v_best_episodio_score;
-            v_dettagli := jsonb_set(v_dettagli, '{episodio}', jsonb_build_object(
-                'score', ROUND(v_score_episodio * 100, 2),
-                'episodio_id', v_best_episodio_id,
-                'prog_stagione', v_prog.numero_stagione,
-                'prog_episodio', v_prog.numero_episodio,
-                'prog_titolo_ep', v_prog.titolo_episodio
-            ));
         END IF;
 
         -- =====================================================
@@ -360,30 +439,53 @@ BEGIN
             v_score_totale := v_score_totale + (v_score_titolo_orig * 10);
         END IF;
 
-        -- Anno: può essere positivo (bonus) o negativo (penalità)
+        -- Anno: positivo (bonus). Negativi non più applicati (scarto duro oltre hard)
         v_score_totale := v_score_totale + (v_score_anno * 15);
 
-        -- Regia: può essere positivo (bonus) o negativo (penalità)
+        -- Regia: positivo (bonus) o negativo (penalità no-match)
         v_score_totale := v_score_totale + (v_score_regia * 10);
 
-        IF v_is_serie AND v_score_episodio > 0 THEN
+        IF v_episodio_applicato AND v_score_episodio > 0 THEN
             v_score_totale := v_score_totale + (v_score_episodio * 15);
         END IF;
 
-        -- Floor a 0 (non può essere negativo)
+        -- Floor a 0
         v_score_totale := GREATEST(v_score_totale, 0);
+
+        -- =====================================================
+        -- SOGLIA ADATTIVA: 35% del peso massimo possibile, floor 25
+        -- Conta solo i discriminanti effettivamente disponibili
+        -- =====================================================
+        v_peso_massimo := 50;  -- titolo sempre presente
+        IF v_score_titolo_orig > 0 THEN
+            v_peso_massimo := v_peso_massimo + 10;
+        END IF;
+        IF v_anno_disponibile THEN
+            v_peso_massimo := v_peso_massimo + 15;
+        END IF;
+        IF v_regia_disponibile THEN
+            v_peso_massimo := v_peso_massimo + 10;
+        END IF;
+        IF v_episodio_applicato THEN
+            v_peso_massimo := v_peso_massimo + 15;
+        END IF;
+
+        v_soglia_adattata := GREATEST(v_peso_massimo * 0.35, 25);
 
         v_dettagli := jsonb_set(v_dettagli, '{totale}', jsonb_build_object(
             'score', ROUND(v_score_totale, 2),
+            'peso_massimo', v_peso_massimo,
+            'soglia_applicata', ROUND(v_soglia_adattata, 2),
             'is_serie', v_is_serie,
-            'episodio_trovato', v_episodio_trovato,
-            'has_anno_penalita', v_score_anno < 0,
+            'has_episode_data', v_has_episode_data,
+            'episodio_applicato', v_episodio_applicato,
+            'anno_disponibile', v_anno_disponibile,
+            'regia_disponibile', v_regia_disponibile,
             'has_regia_penalita', v_score_regia < 0
         ));
 
-        -- Soglia minima: score deve essere almeno 35 (= ~70% del solo titolo)
-        -- Esclude match dove titolo matcha ma anno+regia penalizzano pesantemente
-        IF v_score_totale < 35 THEN
+        -- Applica soglia adattiva
+        IF v_score_totale < v_soglia_adattata THEN
             CONTINUE;
         END IF;
 

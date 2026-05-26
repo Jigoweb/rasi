@@ -4,6 +4,22 @@ import ProgrammazioniPage from './page'
 import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni } from '@/features/programmazioni/services/programmazioni.service'
 import { supabase } from '@/shared/lib/supabase'
 
+// Mock Next.js router
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}))
+
+// Mock individuazione-process context — page consumes the hook
+jest.mock('@/shared/contexts/individuazione-process-context', () => ({
+  useIndividuazioneProcess: () => ({
+    state: { status: 'idle', activeCampagnaId: null, progress: 0 },
+    startProcess: jest.fn(),
+    canStartNewProcess: true,
+  }),
+  IndividuazioneProcessProvider: ({ children }: { children: React.ReactNode }) => children,
+}))
+
 // Mock papaparse
 jest.mock('papaparse', () => ({
   parse: jest.fn()

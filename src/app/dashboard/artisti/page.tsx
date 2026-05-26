@@ -209,22 +209,70 @@ export default function ArtistiPage() {
   }
 
   const exportData = () => {
-    const csvContent = [
-      ['Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Codice Fiscale', 'Tipologia', 'Stato', 'Data Nascita', 'Data Inizio Mandato'].join(','),
-      ...artisti.map(artista => [
-        artista.codice_ipn,
-        artista.nome,
-        artista.cognome,
-        artista.nome_arte || '',
-        artista.codice_fiscale || '',
-        (artista.is_rasi ?? true) ? 'RASI' : 'Esterno',
-        artista.stato,
-        artista.data_nascita || '',
-        formatDate(artista.data_inizio_mandato)
-      ].join(','))
-    ].join('\n')
+    // Escaping CSV: wrap in quotes se contiene virgole, newline o virgolette
+    const csvCell = (v: unknown): string => {
+      const s = v === null || v === undefined ? '' : String(v)
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"` : s
+    }
 
-    const blob = new Blob([csvContent], { type: 'text/csv' })
+    const headers = [
+      'Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Ragione Sociale',
+      'Codice Fiscale', 'Partita IVA', 'Forma Giuridica',
+      'RASI', 'Tipologia', 'Stato',
+      'Data Nascita', 'Luogo Nascita',
+      'Codice Paese', 'Territorio',
+      'Data Inizio Mandato', 'Data Fine Mandato',
+      'IMDB NConst',
+      'Email', 'Telefono',
+      'Indirizzo Via', 'Civico', 'CAP', 'Città', 'Provincia',
+      'Diritti Attivi',
+      'Componente Gruppo/Orchestra',
+      'Codici Esterni',
+    ]
+
+    const rows = artisti.map(a => {
+      const contatti = a.contatti as any
+      const indirizzo = a.indirizzo as any
+      const diritti = a.diritti_attivi
+      const codiciEst = a.codici_esterni as any
+
+      return [
+        csvCell(a.codice_ipn),
+        csvCell(a.nome),
+        csvCell(a.cognome),
+        csvCell(a.nome_arte),
+        csvCell(a.ragione_sociale),
+        csvCell(a.codice_fiscale),
+        csvCell(a.partita_iva),
+        csvCell(a.forma_giuridica),
+        csvCell((a.is_rasi ?? true) ? 'Sì' : 'No'),
+        csvCell(a.tipologia),
+        csvCell(a.stato),
+        csvCell(a.data_nascita),
+        csvCell(a.luogo_nascita),
+        csvCell(a.codice_paese),
+        csvCell(a.territorio),
+        csvCell(a.data_inizio_mandato),
+        csvCell(a.data_fine_mandato),
+        csvCell(a.imdb_nconst),
+        csvCell(contatti?.email),
+        csvCell(contatti?.telefono || contatti?.number),
+        csvCell(indirizzo?.via),
+        csvCell(indirizzo?.civico),
+        csvCell(indirizzo?.cap),
+        csvCell(indirizzo?.citta),
+        csvCell(indirizzo?.provincia),
+        csvCell(Array.isArray(diritti) ? diritti.join('; ') : ''),
+        csvCell(a.componente_stabile_gruppo_orchestra),
+        csvCell(codiciEst && typeof codiciEst === 'object'
+          ? Object.entries(codiciEst).map(([k, v]) => `${k}:${v}`).join('; ')
+          : ''),
+      ].join(',')
+    })
+
+    const csvContent = [headers.join(','), ...rows].join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
