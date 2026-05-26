@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { normalizeTitle, buildMatchKey, toTitleCase } from './title-normalize'
+import { normalizeTitle, normalizeTitleStrict, buildMatchKey, buildMatchKeyStrict, toTitleCase } from './title-normalize'
 
 describe('toTitleCase', () => {
   it('converts ALL CAPS to Title Case', () => {
@@ -81,4 +81,90 @@ describe('idempotency', () => {
       expect(toTitleCase(toTitleCase(x))).toBe(toTitleCase(x))
     }
   })
+})
+
+describe('buildMatchKeyStrict', () => {
+  it('preserves trailing Roman numerals', () => {
+    expect(buildMatchKeyStrict('SAW VI', 2009)).toBe('saw vi::2009')
+    expect(buildMatchKeyStrict('Lupin III', null)).toBe('lupin iii')
+  })
+  it('preserves trailing plain digits', () => {
+    expect(buildMatchKeyStrict('IP MAN 2', 2010)).toBe('ip man 2::2010')
+    expect(buildMatchKeyStrict('Makari 2', 2022)).toBe('makari 2::2022')
+  })
+  it('preserves PARTE N trail', () => {
+    expect(buildMatchKeyStrict('Il Padrino - Parte 2', 1974)).toBe('padrino - parte 2::1974')
+  })
+  it('still strips edition/replica/season markers', () => {
+    expect(buildMatchKeyStrict('Beautiful XXXIII (R)', 2022)).toBe('beautiful xxxiii::2022')
+    expect(buildMatchKeyStrict('House Of The Dragon S.02', 2024)).toBe('house of the dragon::2024')
+  })
+})
+
+describe('buildMatchKey (loose) — extended', () => {
+  it('strips trailing plain digit (2+)', () => {
+    expect(buildMatchKey('MAKARI 2', 2022)).toBe('makari::2022')
+    expect(buildMatchKey('Ip Man 2', 2010)).toBe('ip man::2010')
+    expect(buildMatchKey('8 1/2', 1963)).toBe('8 1/2::1963')
+  })
+  it('strips trailing PARTE N', () => {
+    expect(buildMatchKey('Il Padrino - Parte 2', 1974)).toBe('padrino::1974')
+  })
+})
+
+describe('normalizeTitle — audit patterns', () => {
+  it('strips ST.NN like S.NN', () => {
+    expect(normalizeTitle('EDEN - Un pianeta da salvare ST.1')).toBe('Eden - Un Pianeta Da Salvare')
+  })
+  it('strips suffix tags', () => {
+    expect(normalizeTitle('Gomorra - La Serie')).toBe('Gomorra')
+    expect(normalizeTitle('ER (E.R. - MEDICI IN PRIMA LINEA) - PILOTA')).toBe('Er (E.r. - Medici in Prima Linea)')
+    expect(normalizeTitle('Magnifica Italia - Pillole')).toBe('Magnifica Italia')
+    expect(normalizeTitle('Music Line - Speciale')).toBe('Music Line')
+    expect(normalizeTitle('Gomorra - Stagione Finale')).toBe('Gomorra')
+  })
+  it('strips puntata trail "- p.NN"', () => {
+    // Loose normalize strips both the " - p.1" puntata and the trailing " 4",
+    // so the result is just "La Squadra". Strict normalize would preserve "4".
+    expect(normalizeTitle('La Squadra 4 - p.1')).toBe('La Squadra')
+    expect(normalizeTitleStrict('La Squadra 4 - p.1')).toBe('La Squadra 4')
+  })
+  it('strips special parens', () => {
+    expect(normalizeTitle('Enough (Movie)')).toBe('Enough')
+    expect(normalizeTitle('I Corti (Repeat Version)')).toBe('I Corti')
+    expect(normalizeTitle('Rebecca Zahau (Season 1R)')).toBe('Rebecca Zahau')
+    expect(normalizeTitle('Murdoch Mysteries (Christmas Special)')).toBe('Murdoch Mysteries')
+  })
+  it('strips FILM/DOCUMENTARIO prefix', () => {
+    expect(normalizeTitle('FILM LA SACRA FAMIGLIA')).toBe('La Sacra Famiglia')
+    expect(normalizeTitle('DOCUMENTARIO VITA MORTE E MIRACOLI')).toBe('Vita Morte E Miracoli')
+  })
+  it('strips channel-prefix parens', () => {
+    expect(normalizeTitle('(Tv8) Anica Luglio 2024')).toBe('Anica Luglio 2024')
+  })
+  it('moves trailing article-in-parens to front', () => {
+    expect(normalizeTitle('MADAMA (LA)')).toBe('La Madama')
+    expect(normalizeTitle('DIVORZIO (IL)')).toBe('Il Divorzio')
+    expect(normalizeTitle('SACCO BELLO (UN)')).toBe('Un Sacco Bello')
+  })
+  it('normalizes NBSP to space', () => {
+    expect(normalizeTitle('THE REAL INGLOURIOUS BASTARDS\xa0\xa0')).toBe('The Real Inglourious Bastards')
+  })
+})
+
+it('normalizeTitle idempotent on new patterns', () => {
+  for (const x of [
+    'FILM LA SACRA FAMIGLIA PARTE 2',
+    'GOMORRA - LA SERIE',
+    'House Of The Dragon ST.02',
+    'MAKARI 2',
+    'IL PARADISO DELLE SIGNORE DAILY 6',
+    'MADAMA (LA)',
+    'EARTH’S TROPICAL ISLANDS (R)',
+    'La Squadra 4 - p.1                              ',
+    '(Tv8) Anica Luglio 2024',
+    'ER (E.R. - MEDICI IN PRIMA LINEA) - PILOTA',
+  ]) {
+    expect(normalizeTitle(normalizeTitle(x))).toBe(normalizeTitle(x))
+  }
 })
