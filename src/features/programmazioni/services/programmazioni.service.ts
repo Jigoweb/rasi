@@ -278,12 +278,13 @@ export function normalizzaProgrammazione(row: ProgrammazionePayload): Programmaz
 
 export const uploadProgrammazioni = async (programmazioni: ProgrammazionePayload[]) => {
   const normalized = programmazioni.map(normalizzaProgrammazione)
-  const { data, error } = await supabase
+  // No .select() — callers only check `error`. Returning N rows × 13 columns
+  // adds 1-2s serialization on large batches and burns network round-trip budget.
+  const { error } = await supabase
     .from('programmazioni')
     .insert(normalized as any)
-    .select()
 
-  return { data, error }
+  return { data: null, error }
 }
 
 export const updateCampagnaStatus = async (id: string, stato: string) => {
