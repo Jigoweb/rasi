@@ -422,7 +422,10 @@ export default function ProgrammazioniPage() {
         return buildLegacyPayload(rows, ctx)
       }
 
-      const CHUNK_SIZE = 2000
+      // 500 rows/batch: programmazioni has 13 indexes incl. 3 GIN (trgm titolo
+      // 297MB, full-text 96MB). Larger batches exceed authenticated role's 8s
+      // statement_timeout (INSERT 2000 rows ≈ 6-8s on 4M-row table).
+      const CHUNK_SIZE = 500
       for (let i = 0; i < parsedRows.length; i += CHUNK_SIZE) {
         const chunk = parsedRows.slice(i, i + CHUNK_SIZE)
         const programmazioni = buildAll(chunk)
