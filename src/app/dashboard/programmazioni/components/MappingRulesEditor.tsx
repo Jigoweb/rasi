@@ -9,6 +9,7 @@ import {
   resolveFieldValue,
   type FieldRule,
 } from '@/features/programmazioni/services/import-mapping.service'
+import { normalizeTitle, normalizeTitleStrict } from '@/features/programmazioni/utils/title-normalize'
 
 /** Fields this editor manages (the series/episode title group). */
 const RULE_FIELDS = [
@@ -17,6 +18,8 @@ const RULE_FIELDS = [
   'titolo_episodio',
   'titolo_episodio_originale',
 ] as const
+
+const EPISODE_FIELDS = new Set<string>(['titolo_episodio', 'titolo_episodio_originale'])
 
 const NONE = '__none__'
 
@@ -63,12 +66,22 @@ export default function MappingRulesEditor({
   }
 
   const applySeriesPreset = () => {
-    onChange({
-      titolo: { sources: ['NOME_SERIE', 'TITOLO'] },
-      titolo_originale: { sources: ['NOME_SERIE', 'TITOLO_ORIGINALE'] },
-      titolo_episodio: { sources: ['TITOLO'], onlyIfPresent: 'NOME_SERIE' },
-      titolo_episodio_originale: { sources: ['TITOLO_ORIGINALE'], onlyIfPresent: 'NOME_SERIE' },
-    })
+    const has = (c: string) => columns.includes(c)
+    const build = (srcs: string[], guard?: string): FieldRule | null => {
+      const sources = srcs.filter(has)
+      if (sources.length === 0) return null
+      return guard && has(guard) ? { sources, onlyIfPresent: guard } : { sources }
+    }
+    const next: Record<string, FieldRule> = {}
+    const t = build(['NOME_SERIE', 'TITOLO'])
+    if (t) next.titolo = t
+    const to = build(['NOME_SERIE', 'TITOLO_ORIGINALE'])
+    if (to) next.titolo_originale = to
+    const te = build(['TITOLO'], 'NOME_SERIE')
+    if (te) next.titolo_episodio = te
+    const teo = build(['TITOLO_ORIGINALE'], 'NOME_SERIE')
+    if (teo) next.titolo_episodio_originale = teo
+    onChange(next)
   }
 
   return (
@@ -92,7 +105,13 @@ export default function MappingRulesEditor({
           const rule = rules[field]
           const sources = rule?.sources ?? []
           const available = columns.filter(c => !sources.includes(c))
-          const resolved = rule ? resolveFieldValue(previewRow, rule) : undefined
+          const resolvedRaw = rule ? resolveFieldValue(previewRow, rule) : undefined
+          const resolved =
+            typeof resolvedRaw === 'string'
+              ? EPISODE_FIELDS.has(field)
+                ? normalizeTitleStrict(resolvedRaw)
+                : normalizeTitle(resolvedRaw)
+              : resolvedRaw
           return (
             <div key={field} className="bg-white border rounded p-2 space-y-2">
               <div className="flex items-center gap-2">
@@ -113,7 +132,7 @@ export default function MappingRulesEditor({
                     </Badge>
                   ))}
                   {available.length > 0 && (
-                    <Select value="" onValueChange={v => v && addSource(field, v)}>
+                    <Select key={`add-${field}-${sources.length}`} value="" onValueChange={v => v && addSource(field, v)}>
                       <SelectTrigger className="h-7 w-40 text-xs">
                         <span className="flex items-center gap-1 text-gray-500">
                           <Plus className="h-3 w-3" /> aggiungi
@@ -130,7 +149,7 @@ export default function MappingRulesEditor({
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-600">
                 <span className="w-56 shrink-0">popola solo se valorizzato:</span>
-                <Select value={rule?.onlyIfPresent ?? NONE} onValueChange={v => setGuard(field, v)}>
+                <Select value={rule?.onlyIfPresent ?? NONE} onValueChange={v => setGuard(field, v)} disabled={sources.length === 0}>
                   <SelectTrigger className="h-7 w-48 text-xs">
                     <SelectValue />
                   </SelectTrigger>
@@ -142,7 +161,7 @@ export default function MappingRulesEditor({
                   </SelectContent>
                 </Select>
                 {rule && (
-                  <span className="ml-auto truncate max-w-[220px]">
+                  <span className="ml-auto truncate max-w-[220px]" title={resolved === undefined ? '' : String(resolved)}>
                     anteprima: <strong>{resolved === undefined ? '— (vuoto)' : String(resolved)}</strong>
                   </span>
                 )}
