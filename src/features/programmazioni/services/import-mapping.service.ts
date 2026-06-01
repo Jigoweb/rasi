@@ -7,7 +7,7 @@ import {
   TEMPLATE_FIELDS,
   TEMPLATE_FIELDS_SET,
 } from '../utils/coercion'
-import { normalizeTitle } from '../utils/title-normalize'
+import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
 import { applyTransform, type TransformName } from '../utils/transforms'
 import type { ProgrammazionePayload } from './programmazioni.service'
 
@@ -15,12 +15,25 @@ import type { ProgrammazionePayload } from './programmazioni.service'
 // TIPI
 // ============================================
 
+/**
+ * Resolution rule for a single target field. Used to coalesce a value from
+ * several source columns and/or gate population on another column.
+ */
+export interface FieldRule {
+  /** Ordered source columns; the first non-blank value wins. */
+  sources: string[]
+  /** If set, the field is populated only when this source column is non-blank. */
+  onlyIfPresent?: string
+}
+
 export interface ImportMappingConfig {
   version: 1
   colonne_rilevate: string[]
   ultimo_upload: string | null
   /** Mapping: chiave = nome colonna sorgente nel file, valore = nome campo template */
   mapping: Record<string, string>
+  /** Advanced per-target rules (coalesce / conditional). Overrides `mapping` for that target. */
+  rules?: Record<string, FieldRule>
 }
 
 export interface DetectColumnsResult {
@@ -236,7 +249,8 @@ export interface ApplyMappingContext {
 export function applyMapping(
   rows: Record<string, any>[],
   mapping: Record<string, string>,
-  context: ApplyMappingContext
+  context: ApplyMappingContext,
+  rules?: Record<string, FieldRule>
 ): ProgrammazionePayload[] {
   // Mappa inversa: campo template → colonna sorgente (l'ultima vince in caso di duplicati)
   const reverseMap: Record<string, string> = {}
@@ -254,23 +268,35 @@ export function applyMapping(
     }
 
     for (const field of TEMPLATE_FIELDS) {
-      const sourceCol = reverseMap[field]
-      if (!sourceCol) continue
-      // Trova il valore tollerando varianti di capitalizzazione/spaziatura
-      const rawValue =
-        row[sourceCol] ??
-        row[sourceCol.trim()] ??
-        row[normalizeKey(sourceCol)]
+      // A rule for this target takes precedence over the plain 1:1 mapping.
+      const rule = rules?.[field]
+      let rawValue: any
+      if (rule) {
+        rawValue = resolveFieldValue(row, rule)
+      } else {
+        const sourceCol = reverseMap[field]
+        if (!sourceCol) continue
+        rawValue = getRowValue(row, sourceCol)
+      }
       const coerced = coerce(field, rawValue)
       if (coerced !== undefined) {
         payload[field] = coerced
       }
     }
 
-    // Normalize title-like fields after coercion
-    for (const f of ['titolo', 'titolo_originale', 'titolo_episodio', 'titolo_episodio_originale'] as const) {
+    // Normalize title-like fields after coercion.
+    // Main titles use loose normalizer (strips trailing digits/Roman numerals).
+    // Episode titles use strict normalizer (preserves episode numbers like "Episodio 26").
+    for (const f of ['titolo', 'titolo_originale'] as const) {
       if (typeof payload[f] === 'string') {
         const normalized = normalizeTitle(payload[f])
+        if (normalized) payload[f] = normalized
+        else delete payload[f]
+      }
+    }
+    for (const f of ['titolo_episodio', 'titolo_episodio_originale'] as const) {
+      if (typeof payload[f] === 'string') {
+        const normalized = normalizeTitleStrict(payload[f])
         if (normalized) payload[f] = normalized
         else delete payload[f]
       }
@@ -336,6 +362,71 @@ export function applyMappingWithTransforms(
     result.push(payload as ProgrammazionePayload)
   }
   return result
+}
+
+// ============================================
+// FIELD RULES (coalesce / conditional)
+// ============================================
+
+const BLANK_SENTINELS = new Set(['', 'n.d.', 'n.d', 'nd', 'na', 'n/a'])
+
+/** True when a cell carries no usable value (null/empty or an "N.D."-style sentinel). */
+export function isBlankValue(v: unknown): boolean {
+  if (v === null || v === undefined) return true
+  const s = String(v).trim().toLowerCase()
+  return BLANK_SENTINELS.has(s)
+}
+
+/** Reads a column value tolerating capitalization/spacing variants (mirrors applyMapping). */
+export function getRowValue(row: Record<string, any>, col: string): any {
+  // ?? not || so that legitimate 0 / false values count as present
+  return row[col] ?? row[col.trim()] ?? row[normalizeKey(col)]
+}
+
+/**
+ * Resolves a target field value from a row using a FieldRule:
+ *  - if `onlyIfPresent` is set and that column is blank → undefined (skip);
+ *  - otherwise return the first non-blank value among `sources` (in order);
+ *  - undefined when every source is blank.
+ */
+export function resolveFieldValue(row: Record<string, any>, rule: FieldRule): any {
+  if (rule.onlyIfPresent !== undefined && isBlankValue(getRowValue(row, rule.onlyIfPresent))) {
+    return undefined
+  }
+  for (const src of rule.sources) {
+    const v = getRowValue(row, src)
+    if (!isBlankValue(v)) return v
+  }
+  return undefined
+}
+
+/**
+ * Validates a rules map against the detected columns. Returns a list of
+ * human-readable errors (empty = valid). Used by the wizard before save.
+ */
+export function validateImportRules(
+  rules: Record<string, FieldRule>,
+  columns: string[],
+): string[] {
+  const errors: string[] = []
+  const known = new Set(columns.map(c => c.trim()))
+  for (const [field, rule] of Object.entries(rules)) {
+    if (!TEMPLATE_FIELDS_SET.has(field)) {
+      errors.push(`campo sconosciuto '${field}'`)
+      continue
+    }
+    if (!Array.isArray(rule.sources) || rule.sources.length === 0) {
+      errors.push(`'${field}': serve almeno una colonna sorgente`)
+    } else {
+      for (const s of rule.sources) {
+        if (!known.has(s.trim())) errors.push(`'${field}': colonna '${s}' non presente nel file`)
+      }
+    }
+    if (rule.onlyIfPresent && !known.has(rule.onlyIfPresent.trim())) {
+      errors.push(`'${field}': colonna condizione '${rule.onlyIfPresent}' non presente nel file`)
+    }
+  }
+  return errors
 }
 
 /**
