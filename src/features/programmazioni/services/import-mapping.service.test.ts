@@ -98,4 +98,7 @@ describe('getRowValue', () => {
     expect(getRowValue({ NOME_SERIE: 'X' }, ' NOME_SERIE ')).toBe('X')
     expect(getRowValue({ nome_serie: 'X' }, 'NOME_SERIE')).toBe('X')
   })
+  it('returns undefined for a column not present in the row', () => {
+    expect(getRowValue({}, 'NOME_SERIE')).toBeUndefined()
+  })
 })

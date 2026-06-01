@@ -366,6 +366,7 @@ export function isBlankValue(v: unknown): boolean {
 
 /** Reads a column value tolerating capitalization/spacing variants (mirrors applyMapping). */
 export function getRowValue(row: Record<string, any>, col: string): any {
+  // ?? not || so that legitimate 0 / false values count as present
   return row[col] ?? row[col.trim()] ?? row[normalizeKey(col)]
 }
 
