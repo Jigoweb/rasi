@@ -17,9 +17,12 @@ import { FileUp, Check, ArrowLeft, ArrowRight, AlertCircle, Loader2 } from 'luci
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
 import {
   detectColumns,
+  validateImportRules,
   type ImportMappingConfig,
   type DetectColumnsResult,
+  type FieldRule,
 } from '@/features/programmazioni/services/import-mapping.service'
+import MappingRulesEditor from './MappingRulesEditor'
 
 interface MappingWizardProps {
   open: boolean
@@ -44,6 +47,7 @@ export default function MappingWizard({
   const [file, setFile] = useState<File | null>(null)
   const [detected, setDetected] = useState<DetectColumnsResult | null>(null)
   const [mapping, setMapping] = useState<Record<string, string>>({})
+  const [rules, setRules] = useState<Record<string, FieldRule>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -55,6 +59,7 @@ export default function MappingWizard({
     setFile(null)
     setDetected(null)
     setMapping(initialConfig?.mapping ?? {})
+    setRules(initialConfig?.rules ?? {})
     setError(null)
     setSaving(false)
   }, [open, initialConfig])
@@ -84,8 +89,10 @@ export default function MappingWizard({
           if (initialConfig.mapping[c]) filtered[c] = initialConfig.mapping[c]
         }
         setMapping(filtered)
+        setRules(initialConfig.rules ?? {})
       } else {
         setMapping({})
+        setRules({})
       }
       setStep(2)
     } catch (e: any) {
@@ -122,18 +129,25 @@ export default function MappingWizard({
   }
 
   const hasTitoloMapped = usedTemplateFields.has('titolo')
-  const canProceedToStep3 = hasTitoloMapped
+  const titoloFromRule = (rules.titolo?.sources?.length ?? 0) > 0
+  const canProceedToStep3 = hasTitoloMapped || titoloFromRule
 
   const handleSave = async () => {
     if (!detected) return
     setSaving(true)
     setError(null)
     try {
+      const ruleErrors = validateImportRules(rules, detected.columns)
+      if (ruleErrors.length > 0) {
+        setError('Regole avanzate non valide: ' + ruleErrors.join('; '))
+        return
+      }
       const config: ImportMappingConfig = {
         version: 1,
         colonne_rilevate: detected.columns,
         ultimo_upload: new Date().toISOString(),
         mapping,
+        ...(Object.keys(rules).length > 0 ? { rules } : {}),
       }
       await onSave(config)
       onClose()
@@ -196,7 +210,7 @@ export default function MappingWizard({
               <span className="text-gray-600">
                 {detected.columns.length} colonne rilevate, {usedTemplateFields.size} mappate
               </span>
-              {!hasTitoloMapped && (
+              {!hasTitoloMapped && !titoloFromRule && (
                 <Badge variant="destructive" className="text-xs">
                   Mappa "titolo" per continuare
                 </Badge>
@@ -252,6 +266,12 @@ export default function MappingWizard({
                 </tbody>
               </table>
             </div>
+            <MappingRulesEditor
+              columns={detected.columns}
+              rules={rules}
+              onChange={setRules}
+              previewRow={previewRow}
+            />
           </div>
         )}
 
