@@ -1,5 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue } from './import-mapping.service'
-import type { FieldRule } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, type FieldRule } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -117,5 +116,12 @@ describe('resolveFieldValue', () => {
     expect(resolveFieldValue({ NOME_SERIE: 'Centovetrine', TITOLO: 'Episodio 26' }, rule)).toBe('Episodio 26')
     // guard blank (film row) -> field stays empty
     expect(resolveFieldValue({ NOME_SERIE: 'N.D.', TITOLO: 'Barbarian' }, rule)).toBeUndefined()
+  })
+  it('returns undefined when sources is empty', () => {
+    expect(resolveFieldValue({ NOME_SERIE: 'X' }, { sources: [] })).toBeUndefined()
+  })
+  it('returns undefined when the onlyIfPresent column is missing from the row', () => {
+    const rule: FieldRule = { sources: ['TITOLO'], onlyIfPresent: 'NOME_SERIE' }
+    expect(resolveFieldValue({ TITOLO: 'Barbarian' }, rule)).toBeUndefined()
   })
 })

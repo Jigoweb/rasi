@@ -377,7 +377,7 @@ export function getRowValue(row: Record<string, any>, col: string): any {
  *  - undefined when every source is blank.
  */
 export function resolveFieldValue(row: Record<string, any>, rule: FieldRule): any {
-  if (rule.onlyIfPresent && isBlankValue(getRowValue(row, rule.onlyIfPresent))) {
+  if (rule.onlyIfPresent !== undefined && isBlankValue(getRowValue(row, rule.onlyIfPresent))) {
     return undefined
   }
   for (const src of rule.sources) {
