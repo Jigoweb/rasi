@@ -1,4 +1,4 @@
-import { applyMapping, applyMappingWithTransforms } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -69,5 +69,33 @@ describe('applyMappingWithTransforms', () => {
     }
     const out = applyMappingWithTransforms(rows, config, ctx)
     expect(out[0].durata_minuti).toBe(27)
+  })
+})
+
+describe('isBlankValue', () => {
+  it('treats null/undefined/empty as blank', () => {
+    expect(isBlankValue(null)).toBe(true)
+    expect(isBlankValue(undefined)).toBe(true)
+    expect(isBlankValue('')).toBe(true)
+    expect(isBlankValue('   ')).toBe(true)
+  })
+  it('treats N.D. / N/A sentinels as blank (case/space insensitive)', () => {
+    expect(isBlankValue('N.D.')).toBe(true)
+    expect(isBlankValue(' n.d ')).toBe(true)
+    expect(isBlankValue('N/A')).toBe(true)
+    expect(isBlankValue('na')).toBe(true)
+  })
+  it('treats real values as non-blank', () => {
+    expect(isBlankValue('Centovetrine')).toBe(false)
+    expect(isBlankValue(0)).toBe(false)
+    expect(isBlankValue('0')).toBe(false)
+  })
+})
+
+describe('getRowValue', () => {
+  it('reads exact, trimmed, and normalized-key variants', () => {
+    expect(getRowValue({ NOME_SERIE: 'X' }, 'NOME_SERIE')).toBe('X')
+    expect(getRowValue({ NOME_SERIE: 'X' }, ' NOME_SERIE ')).toBe('X')
+    expect(getRowValue({ nome_serie: 'X' }, 'NOME_SERIE')).toBe('X')
   })
 })

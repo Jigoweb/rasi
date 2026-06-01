@@ -15,12 +15,25 @@ import type { ProgrammazionePayload } from './programmazioni.service'
 // TIPI
 // ============================================
 
+/**
+ * Resolution rule for a single target field. Used to coalesce a value from
+ * several source columns and/or gate population on another column.
+ */
+export interface FieldRule {
+  /** Ordered source columns; the first non-blank value wins. */
+  sources: string[]
+  /** If set, the field is populated only when this source column is non-blank. */
+  onlyIfPresent?: string
+}
+
 export interface ImportMappingConfig {
   version: 1
   colonne_rilevate: string[]
   ultimo_upload: string | null
   /** Mapping: chiave = nome colonna sorgente nel file, valore = nome campo template */
   mapping: Record<string, string>
+  /** Advanced per-target rules (coalesce / conditional). Overrides `mapping` for that target. */
+  rules?: Record<string, FieldRule>
 }
 
 export interface DetectColumnsResult {
@@ -336,6 +349,24 @@ export function applyMappingWithTransforms(
     result.push(payload as ProgrammazionePayload)
   }
   return result
+}
+
+// ============================================
+// FIELD RULES (coalesce / conditional)
+// ============================================
+
+const BLANK_SENTINELS = new Set(['', 'n.d.', 'n.d', 'nd', 'na', 'n/a'])
+
+/** True when a cell carries no usable value (null/empty or an "N.D."-style sentinel). */
+export function isBlankValue(v: unknown): boolean {
+  if (v === null || v === undefined) return true
+  const s = String(v).trim().toLowerCase()
+  return BLANK_SENTINELS.has(s)
+}
+
+/** Reads a column value tolerating capitalization/spacing variants (mirrors applyMapping). */
+export function getRowValue(row: Record<string, any>, col: string): any {
+  return row[col] ?? row[col.trim()] ?? row[normalizeKey(col)]
 }
 
 /**
