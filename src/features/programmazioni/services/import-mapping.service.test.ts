@@ -1,4 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, type FieldRule } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, validateImportRules, type FieldRule } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -174,5 +174,28 @@ describe('applyMapping with rules (mixed film + series)', () => {
       { titolo: { sources: ['NOME_SERIE'] } },    // rule must win → "Centovetrine"
     )
     expect(out[0].titolo).toBe('Centovetrine')
+  })
+})
+
+describe('validateImportRules', () => {
+  const columns = ['NOME_SERIE', 'TITOLO', 'TITOLO_ORIGINALE']
+
+  it('passes a valid rule set', () => {
+    const rules = {
+      titolo: { sources: ['NOME_SERIE', 'TITOLO'] },
+      titolo_episodio: { sources: ['TITOLO'], onlyIfPresent: 'NOME_SERIE' },
+    }
+    expect(validateImportRules(rules, columns)).toEqual([])
+  })
+  it('flags empty sources', () => {
+    const errs = validateImportRules({ titolo: { sources: [] } }, columns)
+    expect(errs.some(e => e.includes('titolo'))).toBe(true)
+  })
+  it('flags unknown source / guard columns', () => {
+    const errs = validateImportRules(
+      { titolo: { sources: ['NOPE'], onlyIfPresent: 'ALSO_NOPE' } },
+      columns,
+    )
+    expect(errs.length).toBeGreaterThanOrEqual(2)
   })
 })

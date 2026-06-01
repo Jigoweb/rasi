@@ -401,6 +401,35 @@ export function resolveFieldValue(row: Record<string, any>, rule: FieldRule): an
 }
 
 /**
+ * Validates a rules map against the detected columns. Returns a list of
+ * human-readable errors (empty = valid). Used by the wizard before save.
+ */
+export function validateImportRules(
+  rules: Record<string, FieldRule>,
+  columns: string[],
+): string[] {
+  const errors: string[] = []
+  const known = new Set(columns.map(c => c.trim()))
+  for (const [field, rule] of Object.entries(rules)) {
+    if (!TEMPLATE_FIELDS_SET.has(field)) {
+      errors.push(`campo sconosciuto '${field}'`)
+      continue
+    }
+    if (!Array.isArray(rule.sources) || rule.sources.length === 0) {
+      errors.push(`'${field}': serve almeno una colonna sorgente`)
+    } else {
+      for (const s of rule.sources) {
+        if (!known.has(s.trim())) errors.push(`'${field}': colonna '${s}' non presente nel file`)
+      }
+    }
+    if (rule.onlyIfPresent && !known.has(rule.onlyIfPresent.trim())) {
+      errors.push(`'${field}': colonna condizione '${rule.onlyIfPresent}' non presente nel file`)
+    }
+  }
+  return errors
+}
+
+/**
  * Costruisce un payload identico a quello del flusso legacy (template canonico),
  * usato quando il file ha già le intestazioni del template e non c'è config.
  */
