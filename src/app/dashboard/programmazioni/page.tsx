@@ -417,7 +417,7 @@ export default function ProgrammazioniPage() {
       // - apply_existing: applyMapping con la config emittente
       const buildAll = (rows: any[]): ProgrammazionePayload[] => {
         if (uploadDecision.kind === 'apply_existing') {
-          return applyMapping(rows, uploadDecision.mapping.mapping, ctx)
+          return applyMapping(rows, uploadDecision.mapping.mapping, ctx, uploadDecision.mapping.rules)
         }
         return buildLegacyPayload(rows, ctx)
       }
