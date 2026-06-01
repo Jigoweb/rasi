@@ -7,7 +7,7 @@ import {
   TEMPLATE_FIELDS,
   TEMPLATE_FIELDS_SET,
 } from '../utils/coercion'
-import { normalizeTitle } from '../utils/title-normalize'
+import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
 import { applyTransform, type TransformName } from '../utils/transforms'
 import type { ProgrammazionePayload } from './programmazioni.service'
 
@@ -249,7 +249,8 @@ export interface ApplyMappingContext {
 export function applyMapping(
   rows: Record<string, any>[],
   mapping: Record<string, string>,
-  context: ApplyMappingContext
+  context: ApplyMappingContext,
+  rules?: Record<string, FieldRule>
 ): ProgrammazionePayload[] {
   // Mappa inversa: campo template → colonna sorgente (l'ultima vince in caso di duplicati)
   const reverseMap: Record<string, string> = {}
@@ -267,23 +268,35 @@ export function applyMapping(
     }
 
     for (const field of TEMPLATE_FIELDS) {
-      const sourceCol = reverseMap[field]
-      if (!sourceCol) continue
-      // Trova il valore tollerando varianti di capitalizzazione/spaziatura
-      const rawValue =
-        row[sourceCol] ??
-        row[sourceCol.trim()] ??
-        row[normalizeKey(sourceCol)]
+      // A rule for this target takes precedence over the plain 1:1 mapping.
+      const rule = rules?.[field]
+      let rawValue: any
+      if (rule) {
+        rawValue = resolveFieldValue(row, rule)
+      } else {
+        const sourceCol = reverseMap[field]
+        if (!sourceCol) continue
+        rawValue = getRowValue(row, sourceCol)
+      }
       const coerced = coerce(field, rawValue)
       if (coerced !== undefined) {
         payload[field] = coerced
       }
     }
 
-    // Normalize title-like fields after coercion
-    for (const f of ['titolo', 'titolo_originale', 'titolo_episodio', 'titolo_episodio_originale'] as const) {
+    // Normalize title-like fields after coercion.
+    // Main titles use loose normalizer (strips trailing digits/Roman numerals).
+    // Episode titles use strict normalizer (preserves episode numbers like "Episodio 26").
+    for (const f of ['titolo', 'titolo_originale'] as const) {
       if (typeof payload[f] === 'string') {
         const normalized = normalizeTitle(payload[f])
+        if (normalized) payload[f] = normalized
+        else delete payload[f]
+      }
+    }
+    for (const f of ['titolo_episodio', 'titolo_episodio_originale'] as const) {
+      if (typeof payload[f] === 'string') {
+        const normalized = normalizeTitleStrict(payload[f])
         if (normalized) payload[f] = normalized
         else delete payload[f]
       }

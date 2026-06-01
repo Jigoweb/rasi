@@ -125,3 +125,43 @@ describe('resolveFieldValue', () => {
     expect(resolveFieldValue({ TITOLO: 'Barbarian' }, rule)).toBeUndefined()
   })
 })
+
+describe('applyMapping with rules (mixed film + series)', () => {
+  const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
+  const mapping = { NUMERO_STAGIONE: 'numero_stagione', NUMERO_EPISODIO: 'numero_episodio' }
+  const rules = {
+    titolo: { sources: ['NOME_SERIE', 'TITOLO'] },
+    titolo_originale: { sources: ['NOME_SERIE', 'TITOLO_ORIGINALE'] },
+    titolo_episodio: { sources: ['TITOLO'], onlyIfPresent: 'NOME_SERIE' },
+    titolo_episodio_originale: { sources: ['TITOLO_ORIGINALE'], onlyIfPresent: 'NOME_SERIE' },
+  }
+
+  it('routes a series row: serie madre → titolo, episode → titolo_episodio', () => {
+    const rows = [{
+      NOME_SERIE: 'CENTOVETRINE', TITOLO: 'Episodio 26', TITOLO_ORIGINALE: 'Episodio 26',
+      NUMERO_STAGIONE: '1', NUMERO_EPISODIO: '26',
+    }]
+    const out = applyMapping(rows, mapping, ctx, rules)
+    expect(out[0].titolo).toBe('Centovetrine')
+    expect(out[0].titolo_episodio).toBe('Episodio 26')
+    expect(out[0].numero_stagione).toBe(1)
+    expect(out[0].numero_episodio).toBe(26)
+  })
+
+  it('routes a film row: TITOLO → titolo, no episode title', () => {
+    const rows = [{
+      NOME_SERIE: 'N.D.', TITOLO: 'Barbarian', TITOLO_ORIGINALE: 'Barbarian',
+      NUMERO_STAGIONE: 'N.D.', NUMERO_EPISODIO: 'N.D.',
+    }]
+    const out = applyMapping(rows, mapping, ctx, rules)
+    expect(out[0].titolo).toBe('Barbarian')
+    expect(out[0].titolo_episodio).toBeUndefined()
+    expect(out[0].numero_stagione).toBeUndefined()
+  })
+
+  it('is a no-op when rules is omitted (backward compat)', () => {
+    const rows = [{ TITOLO: 'BEAUTIFUL XXXIII', TIPO: 'serie' }]
+    const out = applyMapping(rows, { TITOLO: 'titolo', TIPO: 'tipo' }, ctx)
+    expect(out[0].titolo).toBe('Beautiful')
+  })
+})
