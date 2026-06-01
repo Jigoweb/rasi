@@ -1,4 +1,5 @@
-import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue } from './import-mapping.service'
+import type { FieldRule } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -100,5 +101,21 @@ describe('getRowValue', () => {
   })
   it('returns undefined for a column not present in the row', () => {
     expect(getRowValue({}, 'NOME_SERIE')).toBeUndefined()
+  })
+})
+
+describe('resolveFieldValue', () => {
+  it('returns the first non-blank source (coalesce priority)', () => {
+    const rule: FieldRule = { sources: ['NOME_SERIE', 'TITOLO'] }
+    expect(resolveFieldValue({ NOME_SERIE: 'Centovetrine', TITOLO: 'Ep 1' }, rule)).toBe('Centovetrine')
+    expect(resolveFieldValue({ NOME_SERIE: 'N.D.', TITOLO: 'Barbarian' }, rule)).toBe('Barbarian')
+    expect(resolveFieldValue({ NOME_SERIE: '', TITOLO: '' }, rule)).toBeUndefined()
+  })
+  it('honors onlyIfPresent guard', () => {
+    const rule: FieldRule = { sources: ['TITOLO'], onlyIfPresent: 'NOME_SERIE' }
+    // guard present -> use TITOLO as episode title
+    expect(resolveFieldValue({ NOME_SERIE: 'Centovetrine', TITOLO: 'Episodio 26' }, rule)).toBe('Episodio 26')
+    // guard blank (film row) -> field stays empty
+    expect(resolveFieldValue({ NOME_SERIE: 'N.D.', TITOLO: 'Barbarian' }, rule)).toBeUndefined()
   })
 })

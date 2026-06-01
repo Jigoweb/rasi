@@ -371,6 +371,23 @@ export function getRowValue(row: Record<string, any>, col: string): any {
 }
 
 /**
+ * Resolves a target field value from a row using a FieldRule:
+ *  - if `onlyIfPresent` is set and that column is blank → undefined (skip);
+ *  - otherwise return the first non-blank value among `sources` (in order);
+ *  - undefined when every source is blank.
+ */
+export function resolveFieldValue(row: Record<string, any>, rule: FieldRule): any {
+  if (rule.onlyIfPresent && isBlankValue(getRowValue(row, rule.onlyIfPresent))) {
+    return undefined
+  }
+  for (const src of rule.sources) {
+    const v = getRowValue(row, src)
+    if (!isBlankValue(v)) return v
+  }
+  return undefined
+}
+
+/**
  * Costruisce un payload identico a quello del flusso legacy (template canonico),
  * usato quando il file ha già le intestazioni del template e non c'è config.
  */
