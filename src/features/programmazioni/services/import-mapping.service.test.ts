@@ -164,4 +164,15 @@ describe('applyMapping with rules (mixed film + series)', () => {
     const out = applyMapping(rows, { TITOLO: 'titolo', TIPO: 'tipo' }, ctx)
     expect(out[0].titolo).toBe('Beautiful')
   })
+
+  it('rule wins over a plain mapping entry for the same field', () => {
+    const rows = [{ NOME_SERIE: 'CENTOVETRINE', TITOLO: 'Ep 1' }]
+    const out = applyMapping(
+      rows,
+      { TITOLO: 'titolo' },                       // plain 1:1 alone would give "Ep 1"
+      ctx,
+      { titolo: { sources: ['NOME_SERIE'] } },    // rule must win → "Centovetrine"
+    )
+    expect(out[0].titolo).toBe('Centovetrine')
+  })
 })
