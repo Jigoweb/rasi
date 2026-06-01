@@ -70,6 +70,19 @@ describe('applyMappingWithTransforms', () => {
     const out = applyMappingWithTransforms(rows, config, ctx)
     expect(out[0].durata_minuti).toBe(27)
   })
+
+  it('preserves episode numbers in titolo_episodio (strict normalizer)', () => {
+    // The loose normalizer would strip the trailing "26" (DIGIT_TRAIL) and
+    // destroy the episode title; episode fields must use normalizeTitleStrict.
+    const rows = [{ NOME_SERIE: 'CENTOVETRINE', TE: 'Episodio 26' }]
+    const config = {
+      fields: { NOME_SERIE: 'titolo', TE: 'titolo_episodio' },
+      transforms: {},
+    }
+    const out = applyMappingWithTransforms(rows, config, ctx)
+    expect(out[0].titolo).toBe('Centovetrine')
+    expect(out[0].titolo_episodio).toBe('Episodio 26')
+  })
 })
 
 describe('isBlankValue', () => {
