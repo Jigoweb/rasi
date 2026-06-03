@@ -121,11 +121,17 @@ export default function DashboardPage() {
         const ultimoGiornoMese = new Date(now.getFullYear(), now.getMonth() + 1, 0)
           .toISOString().split('T')[0]
 
-        // ── Contatori principali ────────────────────────────────────────
-        const [
-          artistiResult, opereResult, episodiResult, filmResult, serieResult,
-          programmazioniResult, campangeResult,
-        ] = await Promise.all([
+        // Condizioni "campo mancante" (null o stringa vuota) per il Data Health.
+        // L'unione via .or() è il set deduplicato di record incompleti (un solo count, zero payload).
+        const ARTISTI_INCOMPLETI_OR =
+          'codice_ipn.is.null,codice_ipn.eq.,nome.is.null,nome.eq.,cognome.is.null,cognome.eq.,stato.is.null,imdb_nconst.is.null,imdb_nconst.eq.,data_nascita.is.null,codice_fiscale.is.null,codice_fiscale.eq.'
+        const OPERE_INCOMPLETE_OR =
+          'titolo.is.null,titolo.eq.,tipo.is.null,anno_produzione.is.null,imdb_tconst.is.null,imdb_tconst.eq.,titolo_originale.is.null,titolo_originale.eq.'
+
+        // ── Tutte le query partono insieme (una sola "wave" parallela) ──
+        // Una Promise inizia a girare quando viene creata, non quando viene attesa:
+        // creando prima tutti i gruppi, le richieste viaggiano in concorrenza.
+        const mainCountsP = Promise.all([
           supabase.from('artisti').select('id', { count: 'exact', head: true }).eq('stato', 'attivo'),
           supabase.from('opere').select('id', { count: 'exact', head: true }),
           supabase.from('episodi').select('id', { count: 'exact', head: true }),
@@ -141,21 +147,83 @@ export default function DashboardPage() {
             .eq('stato', 'in_corso'),
         ])
 
-        // ── Importo distribuito: somma da campagne_ripartizione ─────────
-        const { data: ripartizioniData } = await supabase
+        const ripartizioniP = supabase
           .from('campagne_ripartizione')
           .select('importo_totale_disponibile')
           .eq('stato', 'distribuita')
 
+        const matchingP = Promise.all([
+          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }),
+          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }).neq('stato', 'respinto'),
+        ])
+
+        const recentP = Promise.all([
+          supabase.from('artisti')
+            .select('nome, cognome, created_at')
+            .order('created_at', { ascending: false })
+            .limit(3),
+          supabase.from('opere')
+            .select('titolo, created_at')
+            .order('created_at', { ascending: false })
+            .limit(3),
+          supabase.from('campagne_individuazione')
+            .select('nome, updated_at, stato')
+            .eq('stato', 'completata')
+            .order('updated_at', { ascending: false })
+            .limit(3),
+          (supabase as any).from('campagne_programmazione')
+            .select('nome, created_at')
+            .order('created_at', { ascending: false })
+            .limit(3),
+        ])
+
+        const statsP = Promise.all([
+          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }),
+          supabase.from('partecipazioni').select('id', { count: 'exact', head: true }),
+          supabase.from('campagne_ripartizione').select('id', { count: 'exact', head: true }),
+          supabase.from('programmazioni')
+            .select('created_at')
+            .order('created_at', { ascending: false })
+            .limit(1),
+        ])
+
+        // Data Health: conteggio union (incompleti) in un solo head-count per tabella,
+        // più i count per-campo necessari alle barre di completamento.
+        const incompletiP = Promise.all([
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or(ARTISTI_INCOMPLETI_OR),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or(OPERE_INCOMPLETE_OR),
+        ])
+
+        const artistsMissingP = Promise.all([
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_ipn.is.null,codice_ipn.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('nome.is.null,nome.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('cognome.is.null,cognome.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('stato', null).then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('imdb_nconst.is.null,imdb_nconst.eq.').then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('data_nascita', null).then(r => r.count || 0),
+          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_fiscale.is.null,codice_fiscale.eq.').then(r => r.count || 0),
+        ])
+
+        const opereMissingP = Promise.all([
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo.is.null,titolo.eq.').then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).is('tipo', null).then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).is('anno_produzione', null).then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or('imdb_tconst.is.null,imdb_tconst.eq.').then(r => r.count || 0),
+          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo_originale.is.null,titolo_originale.eq.').then(r => r.count || 0),
+        ])
+
+        // ── Risoluzione (le richieste sono già tutte in volo) ───────────
+        const [
+          artistiResult, opereResult, episodiResult, filmResult, serieResult,
+          programmazioniResult, campangeResult,
+        ] = await mainCountsP
+
+        const { data: ripartizioniData } = await ripartizioniP
         const importoDistribuito = (ripartizioniData || []).reduce(
           (acc: number, r: any) => acc + (parseFloat(r.importo_totale_disponibile) || 0), 0
         )
 
-        // ── Tasso matching: (non-respinte / totale) * 100 ───────────────
-        const [indTotale, indValide] = await Promise.all([
-          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }),
-          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }).neq('stato', 'respinto'),
-        ])
+        const [indTotale, indValide] = await matchingP
         const tassoMatching = indTotale.count
           ? Math.round(((indValide.count || 0) / indTotale.count) * 1000) / 10
           : 0
@@ -178,25 +246,7 @@ export default function DashboardPage() {
         setTotalOpere(to)
 
         // ── Attività Recenti: feed reale dalle 4 tabelle ────────────────
-        const [ultArtisti, ultOpere, ultCampagneInd, ultCampagneProg] = await Promise.all([
-          supabase.from('artisti')
-            .select('nome, cognome, created_at')
-            .order('created_at', { ascending: false })
-            .limit(3),
-          supabase.from('opere')
-            .select('titolo, created_at')
-            .order('created_at', { ascending: false })
-            .limit(3),
-          supabase.from('campagne_individuazione')
-            .select('nome, updated_at, stato')
-            .eq('stato', 'completata')
-            .order('updated_at', { ascending: false })
-            .limit(3),
-          (supabase as any).from('campagne_programmazione')
-            .select('nome, created_at')
-            .order('created_at', { ascending: false })
-            .limit(3),
-        ])
+        const [ultArtisti, ultOpere, ultCampagneInd, ultCampagneProg] = await recentP
 
         const feed: AttivitaItem[] = [
           ...(ultArtisti.data || []).map((a: any) => ({
@@ -230,15 +280,7 @@ export default function DashboardPage() {
         setAttivitaRecenti(feed)
 
         // ── Statistiche sistema: metriche DB reali ──────────────────────
-        const [indCount, partCount, ripCount, ultimaDat] = await Promise.all([
-          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }),
-          supabase.from('partecipazioni').select('id', { count: 'exact', head: true }),
-          supabase.from('campagne_ripartizione').select('id', { count: 'exact', head: true }),
-          supabase.from('programmazioni')
-            .select('created_at')
-            .order('created_at', { ascending: false })
-            .limit(1),
-        ])
+        const [indCount, partCount, ripCount, ultimaDat] = await statsP
 
         setStatsAggiuntive({
           individuazioni: indCount.count || 0,
@@ -248,51 +290,12 @@ export default function DashboardPage() {
         })
 
         // ── Data Health ─────────────────────────────────────────────────
-        const [aCodiceIpn, aNome, aCognome, aStato, aNconst, aNascita, aCf] = await Promise.all([
-          supabase.from('artisti').select('id').or('codice_ipn.is.null,codice_ipn.eq.'),
-          supabase.from('artisti').select('id').or('nome.is.null,nome.eq.'),
-          supabase.from('artisti').select('id').or('cognome.is.null,cognome.eq.'),
-          supabase.from('artisti').select('id').is('stato', null),
-          supabase.from('artisti').select('id').or('imdb_nconst.is.null,imdb_nconst.eq.'),
-          supabase.from('artisti').select('id').is('data_nascita', null),
-          supabase.from('artisti').select('id').or('codice_fiscale.is.null,codice_fiscale.eq.'),
-        ])
-        const artistiSet = new Set<string>()
-        ;[aCodiceIpn, aNome, aCognome, aStato, aNconst, aNascita, aCf].forEach((r) => {
-          ;(r.data || []).forEach((row: any) => artistiSet.add(row.id))
-        })
-        setArtistiIncompleti(artistiSet.size)
+        const [artistiIncompletiRes, opereIncompleteRes] = await incompletiP
+        setArtistiIncompleti(artistiIncompletiRes.count || 0)
+        setOpereIncomplete(opereIncompleteRes.count || 0)
 
-        const [oTitolo, oTipo, oAnno, oTconst, oOrig] = await Promise.all([
-          supabase.from('opere').select('id').or('titolo.is.null,titolo.eq.'),
-          supabase.from('opere').select('id').is('tipo', null),
-          supabase.from('opere').select('id').is('anno_produzione', null),
-          supabase.from('opere').select('id').or('imdb_tconst.is.null,imdb_tconst.eq.'),
-          supabase.from('opere').select('id').or('titolo_originale.is.null,titolo_originale.eq.'),
-        ])
-        const opereSet = new Set<string>()
-        ;[oTitolo, oTipo, oAnno, oTconst, oOrig].forEach((r) => {
-          ;(r.data || []).forEach((row: any) => opereSet.add(row.id))
-        })
-        setOpereIncomplete(opereSet.size)
-
-        const artistsMissing = await Promise.all([
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_ipn.is.null,codice_ipn.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('nome.is.null,nome.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('cognome.is.null,cognome.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('stato', null).then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('imdb_nconst.is.null,imdb_nconst.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('data_nascita', null).then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_fiscale.is.null,codice_fiscale.eq.').then(r => r.count || 0),
-        ])
-
-        const opereMissing = await Promise.all([
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo.is.null,titolo.eq.').then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).is('tipo', null).then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).is('anno_produzione', null).then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or('imdb_tconst.is.null,imdb_tconst.eq.').then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo_originale.is.null,titolo_originale.eq.').then(r => r.count || 0),
-        ])
+        const artistsMissing = await artistsMissingP
+        const opereMissing = await opereMissingP
 
         setArtistiMetrics([
           { label: 'Codice IPN', missing: artistsMissing[0], total: ta },
