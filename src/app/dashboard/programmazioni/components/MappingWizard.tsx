@@ -15,6 +15,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Badge } from '@/shared/components/ui/badge'
 import { FileUp, Check, ArrowLeft, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
+import { transformsForField, TRANSFORM_LABELS, type TransformName } from '@/features/programmazioni/utils/transforms'
 import {
   detectColumns,
   validateImportRules,
@@ -35,6 +36,7 @@ interface MappingWizardProps {
 }
 
 const IGNORE = '__ignore__'
+const NO_TRANSFORM = '__none__'
 
 export default function MappingWizard({
   open,
@@ -48,6 +50,7 @@ export default function MappingWizard({
   const [detected, setDetected] = useState<DetectColumnsResult | null>(null)
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [rules, setRules] = useState<Record<string, FieldRule>>({})
+  const [transforms, setTransforms] = useState<Record<string, TransformName>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -60,6 +63,7 @@ export default function MappingWizard({
     setDetected(null)
     setMapping(initialConfig?.mapping ?? {})
     setRules(initialConfig?.rules ?? {})
+    setTransforms(initialConfig?.transforms ?? {})
     setError(null)
     setSaving(false)
   }, [open, initialConfig])
@@ -90,9 +94,11 @@ export default function MappingWizard({
         }
         setMapping(filtered)
         setRules(initialConfig.rules ?? {})
+        setTransforms(initialConfig?.transforms ?? {})
       } else {
         setMapping({})
         setRules({})
+        setTransforms({})
       }
       setStep(2)
     } catch (e: any) {
@@ -126,6 +132,23 @@ export default function MappingWizard({
       }
       return next
     })
+    if (target === IGNORE || !target) {
+      setTransforms(prev => {
+        if (!prev[sourceCol]) return prev
+        const next = { ...prev }
+        delete next[sourceCol]
+        return next
+      })
+    }
+  }
+
+  const handleTransform = (sourceCol: string, t: string) => {
+    setTransforms(prev => {
+      const next = { ...prev }
+      if (t === NO_TRANSFORM || !t) delete next[sourceCol]
+      else next[sourceCol] = t as TransformName
+      return next
+    })
   }
 
   const hasTitoloMapped = usedTemplateFields.has('titolo')
@@ -148,6 +171,7 @@ export default function MappingWizard({
         ultimo_upload: new Date().toISOString(),
         mapping,
         ...(Object.keys(rules).length > 0 ? { rules } : {}),
+        ...(Object.keys(transforms).length > 0 ? { transforms } : {}),
       }
       await onSave(config)
       onClose()
@@ -222,6 +246,7 @@ export default function MappingWizard({
                   <tr>
                     <th className="text-left px-3 py-2 font-medium">Colonna sorgente</th>
                     <th className="text-left px-3 py-2 font-medium">→ Campo template</th>
+                    <th className="text-left px-3 py-2 font-medium">Trasformazione</th>
                     <th className="text-left px-3 py-2 font-medium text-gray-500">Anteprima</th>
                   </tr>
                 </thead>
@@ -256,6 +281,28 @@ export default function MappingWizard({
                               })}
                             </SelectContent>
                           </Select>
+                        </td>
+                        <td className="px-3 py-2">
+                          {mapping[col] ? (
+                            <Select
+                              value={transforms[col] ?? NO_TRANSFORM}
+                              onValueChange={v => handleTransform(col, v)}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={NO_TRANSFORM}>— nessuna —</SelectItem>
+                                {transformsForField(mapping[col]).map(t => (
+                                  <SelectItem key={t} value={t}>
+                                    {TRANSFORM_LABELS[t]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">
                           {String(previewRow[col] ?? '')}
