@@ -314,6 +314,9 @@ export const getIndividuazioniForExport = async (
       views,
       total_net_ad_revenue,
       total_revenue,
+      punteggio_matching,
+      metodo,
+      stato,
       artisti(nome, cognome, nome_arte),
       ruoli_tipologie(nome)
     `)
@@ -405,7 +408,10 @@ export const formatIndividuazioniForExport = (individuazioni: any[]) => {
     'total_net_ad_revenue': ind.total_net_ad_revenue ?? '',
     'total_revenue': ind.total_revenue ?? '',
     'artista': ind.artisti ? (ind.artisti.nome_arte || `${ind.artisti.nome || ''} ${ind.artisti.cognome || ''}`.trim()) : '',
-    'ruolo': ind.ruoli_tipologie?.nome || ''
+    'ruolo': ind.ruoli_tipologie?.nome || '',
+    'tasso_matching': ind.punteggio_matching != null ? `${Math.round(ind.punteggio_matching * 100)}%` : '',
+    'metodo_matching': ind.metodo || '',
+    'stato': ind.stato || ''
   }))
 }
 
