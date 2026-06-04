@@ -203,3 +203,41 @@ describe('year_range_first', () => {
     expect(applyTransform('year_range_first', undefined)).toBe(null)
   })
 })
+
+describe('date transforms', () => {
+  it('eu_date_to_iso: DD/MM/YYYY → YYYY-MM-DD', () => {
+    expect(applyTransform('eu_date_to_iso', '31/12/2025')).toBe('2025-12-31')
+    expect(applyTransform('eu_date_to_iso', '5/3/2025')).toBe('2025-03-05')
+    expect(applyTransform('eu_date_to_iso', '31-12-2025')).toBe('2025-12-31')
+    expect(applyTransform('eu_date_to_iso', '12/31/2025')).toBe('2025-31-12') // input EU letterale: nessuna validazione semantica qui
+    expect(applyTransform('eu_date_to_iso', 'boh')).toBe(null)
+    expect(applyTransform('eu_date_to_iso', '')).toBe(null)
+  })
+
+  it('iso_date: passthrough/normalizzazione', () => {
+    expect(applyTransform('iso_date', '2025-12-31')).toBe('2025-12-31')
+    expect(applyTransform('iso_date', '2025/12/31')).toBe('2025-12-31')
+    expect(applyTransform('iso_date', '2025-1-3')).toBe(null) // richiede 2 cifre
+    expect(applyTransform('iso_date', 'x')).toBe(null)
+  })
+
+  it('eu_date_short: anno 2 cifre con cutoff 50', () => {
+    expect(applyTransform('eu_date_short', '31/12/25')).toBe('2025-12-31')
+    expect(applyTransform('eu_date_short', '01/06/49')).toBe('2049-06-01')
+    expect(applyTransform('eu_date_short', '01/06/51')).toBe('1951-06-01')
+    expect(applyTransform('eu_date_short', 'no')).toBe(null)
+  })
+
+  it('us_date_short: MM/DD/YY con cutoff 50', () => {
+    expect(applyTransform('us_date_short', '12/31/25')).toBe('2025-12-31')
+    expect(applyTransform('us_date_short', '06/01/51')).toBe('1951-06-01')
+    expect(applyTransform('us_date_short', 'no')).toBe(null)
+  })
+
+  it('excel_serial_to_iso: seriale Excel (base 1899-12-30)', () => {
+    expect(applyTransform('excel_serial_to_iso', 44197)).toBe('2021-01-01')
+    expect(applyTransform('excel_serial_to_iso', '44197')).toBe('2021-01-01')
+    expect(applyTransform('excel_serial_to_iso', 0)).toBe(null)
+    expect(applyTransform('excel_serial_to_iso', 'x')).toBe(null)
+  })
+})

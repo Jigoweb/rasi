@@ -28,6 +28,11 @@ export type TransformName =
   | 'nbsp_to_space'
   | 'null_if_dashes'
   | 'year_range_first'
+  | 'eu_date_to_iso'
+  | 'iso_date'
+  | 'eu_date_short'
+  | 'us_date_short'
+  | 'excel_serial_to_iso'
 
 export type TransformFn = (value: unknown) => unknown
 
@@ -206,6 +211,72 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
       return Number.isFinite(value) ? Math.trunc(value) : null
     }
     return null
+  },
+
+  eu_date_to_iso: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+    if (!match) return null
+    const dd = match[1].padStart(2, '0')
+    const mm = match[2].padStart(2, '0')
+    const yyyy = match[3]
+    return `${yyyy}-${mm}-${dd}`
+  },
+
+  iso_date: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/)
+    if (!match) return null
+    return `${match[1]}-${match[2]}-${match[3]}`
+  },
+
+  eu_date_short: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
+    if (!match) return null
+    const dd = match[1].padStart(2, '0')
+    const mm = match[2].padStart(2, '0')
+    const yy = parseInt(match[3], 10)
+    const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
+    return `${yyyy}-${mm}-${dd}`
+  },
+
+  us_date_short: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
+    if (!match) return null
+    const mm = match[1].padStart(2, '0')
+    const dd = match[2].padStart(2, '0')
+    const yy = parseInt(match[3], 10)
+    const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
+    return `${yyyy}-${mm}-${dd}`
+  },
+
+  excel_serial_to_iso: (value) => {
+    const n = parseNumber(value)
+    if (n === null) return null
+    const days = Math.trunc(n)
+    if (days < 1) return null
+    // Base 1899-12-30 compensa il bug dell'anno bisestile 1900 di Excel.
+    const ms = Date.UTC(1899, 11, 30) + days * 86400000
+    const d = new Date(ms)
+    if (Number.isNaN(d.getTime())) return null
+    const yyyy = d.getUTCFullYear()
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const dd = String(d.getUTCDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
   },
 
   us_date_to_iso: (value) => {
