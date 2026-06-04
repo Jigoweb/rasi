@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform } from './transforms'
+import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform, isDateTargetField } from './transforms'
 
 describe('hhmmss_to_minutes', () => {
   it('converts HH:MM:SS to minutes (rounded)', () => {
@@ -272,6 +272,16 @@ describe('date transforms', () => {
       expect(applyTransform(name, null)).toBeNull()
       expect(applyTransform(name, undefined)).toBeNull()
     }
+  })
+})
+
+describe('isDateTargetField', () => {
+  it('riconosce i campi data', () => {
+    expect(isDateTargetField('data_trasmissione')).toBe(true)
+    expect(isDateTargetField('data_inizio')).toBe(true)
+    expect(isDateTargetField('data_fine')).toBe(true)
+    expect(isDateTargetField('titolo')).toBe(false)
+    expect(isDateTargetField('')).toBe(false)
   })
 })
 

@@ -387,9 +387,17 @@ const GENERIC_TRANSFORMS: TransformName[] = [
   'mojibake_repair', 'nbsp_to_space',
 ]
 
+/** Campi template di tipo data (destinazioni che accettano transform data). */
+export const DATE_TARGET_FIELDS = new Set(['data_trasmissione', 'data_inizio', 'data_fine'])
+
+/** True se il campo template è una data. */
+export function isDateTargetField(field: string): boolean {
+  return DATE_TARGET_FIELDS.has(field)
+}
+
 /** Transform pertinenti a un campo template, per il filtro del selettore UI. */
 export function transformsForField(field: string): TransformName[] {
-  if (field === 'data_trasmissione' || field === 'data_inizio' || field === 'data_fine') {
+  if (isDateTargetField(field)) {
     return [...DATE_TRANSFORMS, ...GENERIC_TRANSFORMS]
   }
   if (field === 'durata_minuti') {
@@ -433,6 +441,7 @@ export function suggestDateTransform(sample: unknown): TransformName | null {
   }
   if (/^\d+$/.test(s)) {
     const n = parseInt(s, 10)
+    // seriali plausibili: ~1927 (10000) .. ~2173 (100000); evita falsi positivi su interi generici
     if (n >= 10000 && n <= 100000) return 'excel_serial_to_iso'
   }
   return null

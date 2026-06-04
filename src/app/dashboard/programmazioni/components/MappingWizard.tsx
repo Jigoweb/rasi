@@ -15,7 +15,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Badge } from '@/shared/components/ui/badge'
 import { FileUp, Check, ArrowLeft, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
-import { transformsForField, TRANSFORM_LABELS, suggestDateTransform, type TransformName } from '@/features/programmazioni/utils/transforms'
+import { transformsForField, TRANSFORM_LABELS, suggestDateTransform, isDateTargetField, type TransformName } from '@/features/programmazioni/utils/transforms'
 import {
   detectColumns,
   validateImportRules,
@@ -140,7 +140,7 @@ export default function MappingWizard({
         return next
       })
     }
-    const isDateField = target === 'data_trasmissione' || target === 'data_inizio' || target === 'data_fine'
+    const isDateField = isDateTargetField(target)
     if (isDateField) {
       setTransforms(prev => {
         if (prev[sourceCol]) return prev // non sovrascrivere scelta esistente
@@ -312,7 +312,7 @@ export default function MappingWizard({
                               </Select>
                               {(() => {
                                 const target = mapping[col]
-                                const isDate = target === 'data_trasmissione' || target === 'data_inizio' || target === 'data_fine'
+                                const isDate = isDateTargetField(target)
                                 if (!isDate) return null
                                 const suggested = suggestDateTransform(previewRow[col])
                                 if (suggested && transforms[col] === suggested) {
