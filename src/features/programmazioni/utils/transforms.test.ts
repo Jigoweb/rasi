@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField } from './transforms'
+import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform } from './transforms'
 
 describe('hhmmss_to_minutes', () => {
   it('converts HH:MM:SS to minutes (rounded)', () => {
@@ -272,6 +272,28 @@ describe('date transforms', () => {
       expect(applyTransform(name, null)).toBeNull()
       expect(applyTransform(name, undefined)).toBeNull()
     }
+  })
+})
+
+describe('suggestDateTransform', () => {
+  it('rileva US quando il 2º campo > 12', () => {
+    expect(suggestDateTransform('12/31/2025')).toBe('us_date_to_iso')
+  })
+  it('rileva EU quando il 1º campo > 12', () => {
+    expect(suggestDateTransform('31/12/2025')).toBe('eu_date_to_iso')
+  })
+  it('rileva ISO', () => {
+    expect(suggestDateTransform('2025-12-31')).toBe('iso_date')
+  })
+  it('rileva seriale Excel', () => {
+    expect(suggestDateTransform('45657')).toBe('excel_serial_to_iso')
+  })
+  it('ambiguo (entrambi <= 12) → null', () => {
+    expect(suggestDateTransform('03/04/2025')).toBe(null)
+  })
+  it('vuoto/non data → null', () => {
+    expect(suggestDateTransform('')).toBe(null)
+    expect(suggestDateTransform('ciao')).toBe(null)
   })
 })
 

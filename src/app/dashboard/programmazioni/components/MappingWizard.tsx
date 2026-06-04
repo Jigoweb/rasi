@@ -15,7 +15,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Badge } from '@/shared/components/ui/badge'
 import { FileUp, Check, ArrowLeft, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
-import { transformsForField, TRANSFORM_LABELS, type TransformName } from '@/features/programmazioni/utils/transforms'
+import { transformsForField, TRANSFORM_LABELS, suggestDateTransform, type TransformName } from '@/features/programmazioni/utils/transforms'
 import {
   detectColumns,
   validateImportRules,
@@ -138,6 +138,15 @@ export default function MappingWizard({
         const next = { ...prev }
         delete next[sourceCol]
         return next
+      })
+    }
+    const isDateField = target === 'data_trasmissione' || target === 'data_inizio' || target === 'data_fine'
+    if (isDateField) {
+      setTransforms(prev => {
+        if (prev[sourceCol]) return prev // non sovrascrivere scelta esistente
+        const suggested = suggestDateTransform(previewRow[sourceCol])
+        if (!suggested) return prev
+        return { ...prev, [sourceCol]: suggested }
       })
     }
   }
@@ -284,22 +293,34 @@ export default function MappingWizard({
                         </td>
                         <td className="px-3 py-2">
                           {mapping[col] ? (
-                            <Select
-                              value={transforms[col] ?? NO_TRANSFORM}
-                              onValueChange={v => handleTransform(col, v)}
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value={NO_TRANSFORM}>— nessuna —</SelectItem>
-                                {transformsForField(mapping[col]).map(t => (
-                                  <SelectItem key={t} value={t}>
-                                    {TRANSFORM_LABELS[t]}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <>
+                              <Select
+                                value={transforms[col] ?? NO_TRANSFORM}
+                                onValueChange={v => handleTransform(col, v)}
+                              >
+                                <SelectTrigger className="h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={NO_TRANSFORM}>— nessuna —</SelectItem>
+                                  {transformsForField(mapping[col]).map(t => (
+                                    <SelectItem key={t} value={t}>
+                                      {TRANSFORM_LABELS[t]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {(() => {
+                                const target = mapping[col]
+                                const isDate = target === 'data_trasmissione' || target === 'data_inizio' || target === 'data_fine'
+                                if (!isDate) return null
+                                const suggested = suggestDateTransform(previewRow[col])
+                                if (suggested && transforms[col] === suggested) {
+                                  return <span className="text-[10px] text-emerald-600 mt-1 block">suggerito dall&apos;anteprima</span>
+                                }
+                                return null
+                              })()}
+                            </>
                           ) : (
                             <span className="text-xs text-gray-400">—</span>
                           )}

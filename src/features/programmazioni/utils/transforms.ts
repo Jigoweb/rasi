@@ -414,6 +414,31 @@ export function isKnownTransform(name: unknown): name is TransformName {
 }
 
 /**
+ * Suggerisce un transform data da un valore campione, SENZA mai indovinare
+ * date intrinsecamente ambigue (entrambi i campi <= 12 → null).
+ */
+export function suggestDateTransform(sample: unknown): TransformName | null {
+  if (sample === null || sample === undefined) return null
+  const s = String(sample).trim()
+  if (s === '') return null
+  if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) return 'iso_date'
+  if (/^\d{8}$/.test(s)) return 'yyyymmdd_int_to_iso'
+  const slash = s.match(/^(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}$/)
+  if (slash) {
+    const a = parseInt(slash[1], 10)
+    const b = parseInt(slash[2], 10)
+    if (b > 12 && a <= 12) return 'us_date_to_iso'
+    if (a > 12 && b <= 12) return 'eu_date_to_iso'
+    return null // ambiguo: non indovinare
+  }
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10)
+    if (n >= 10000 && n <= 100000) return 'excel_serial_to_iso'
+  }
+  return null
+}
+
+/**
  * Apply a named transform to a value.
  * - When `name` is `null`, returns the value unchanged (identity).
  * - When `name` is unknown, throws an Error.
