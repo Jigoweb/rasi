@@ -246,6 +246,7 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     const dd = match[1].padStart(2, '0')
     const mm = match[2].padStart(2, '0')
     const yy = parseInt(match[3], 10)
+    // cutoff: 00–50 → 2000–2050; 51–99 → 1951–1999
     const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
     return `${yyyy}-${mm}-${dd}`
   },
@@ -260,6 +261,7 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     const mm = match[1].padStart(2, '0')
     const dd = match[2].padStart(2, '0')
     const yy = parseInt(match[3], 10)
+    // cutoff: 00–50 → 2000–2050; 51–99 → 1951–1999
     const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
     return `${yyyy}-${mm}-${dd}`
   },
@@ -270,6 +272,9 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     const days = Math.trunc(n)
     if (days < 1) return null
     // Base 1899-12-30 compensa il bug dell'anno bisestile 1900 di Excel.
+    // Seriali 1–59: restituisce la data astronomicamente corretta (un giorno prima
+    // di quanto Excel mostra, perché Excel inventa il 1900-02-29 inesistente).
+    // Seriali ≥ 61: coincide esattamente con la visualizzazione di Excel.
     const ms = Date.UTC(1899, 11, 30) + days * 86400000
     const d = new Date(ms)
     if (Number.isNaN(d.getTime())) return null

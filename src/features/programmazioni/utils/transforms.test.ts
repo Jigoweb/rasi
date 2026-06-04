@@ -105,16 +105,26 @@ describe('yyyymmdd_int_to_iso', () => {
 
 describe('TRANSFORMS registry', () => {
   it('contains all named transforms', () => {
-    const expected = [
-      'hhmmss_to_minutes', 'seconds_to_minutes',
-      'fractional_hours_to_minutes', 'fractional_day_to_minutes',
-      'milliseconds_to_minutes', 'iso8601_duration_to_minutes',
-      'decimal_minutes_to_int', 'rti_apostrophe_minutes',
-      'null_if_NA', 'null_if_ND', 'null_if_NULL_str',
-      'netflix_episode_nbr', 'us_date_to_iso', 'yyyymmdd_int_to_iso',
+    // Every key in TRANSFORMS must be a callable function (catches accidental deletions)
+    for (const [key, fn] of Object.entries(TRANSFORMS)) {
+      expect(typeof fn).toBe('function')
+    }
+
+    // Explicitly assert both pre-existing and new date-transform keys are present
+    const requiredKeys = [
+      // pre-existing
+      'us_date_to_iso',
+      'yyyymmdd_int_to_iso',
+      // new (Task 1)
+      'eu_date_to_iso',
+      'iso_date',
+      'eu_date_short',
+      'us_date_short',
+      'excel_serial_to_iso',
     ]
-    for (const name of expected) {
+    for (const name of requiredKeys) {
       expect(TRANSFORMS).toHaveProperty(name)
+      expect(typeof TRANSFORMS[name as keyof typeof TRANSFORMS]).toBe('function')
     }
   })
 
@@ -239,5 +249,19 @@ describe('date transforms', () => {
     expect(applyTransform('excel_serial_to_iso', '44197')).toBe('2021-01-01')
     expect(applyTransform('excel_serial_to_iso', 0)).toBe(null)
     expect(applyTransform('excel_serial_to_iso', 'x')).toBe(null)
+  })
+
+  it('returns null for null/undefined on all 5 new date transforms', () => {
+    const newTransforms = [
+      'eu_date_to_iso',
+      'iso_date',
+      'eu_date_short',
+      'us_date_short',
+      'excel_serial_to_iso',
+    ] as const
+    for (const name of newTransforms) {
+      expect(applyTransform(name, null)).toBeNull()
+      expect(applyTransform(name, undefined)).toBeNull()
+    }
   })
 })
