@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { applyTransform, TRANSFORMS } from './transforms'
+import { applyTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField } from './transforms'
 
 describe('hhmmss_to_minutes', () => {
   it('converts HH:MM:SS to minutes (rounded)', () => {
@@ -263,5 +263,33 @@ describe('date transforms', () => {
       expect(applyTransform(name, null)).toBeNull()
       expect(applyTransform(name, undefined)).toBeNull()
     }
+  })
+})
+
+describe('transform metadata', () => {
+  it('TRANSFORM_LABELS copre ogni TransformName', () => {
+    for (const name of Object.keys(TRANSFORMS)) {
+      expect(TRANSFORM_LABELS[name as keyof typeof TRANSFORM_LABELS]).toBeTruthy()
+    }
+  })
+
+  it('transformsForField: campi data → transform data', () => {
+    const t = transformsForField('data_trasmissione')
+    expect(t).toContain('us_date_to_iso')
+    expect(t).toContain('eu_date_to_iso')
+    expect(t).toContain('excel_serial_to_iso')
+    expect(t).not.toContain('hhmmss_to_minutes')
+  })
+
+  it('transformsForField: durata → transform durata', () => {
+    const t = transformsForField('durata_minuti')
+    expect(t).toContain('hhmmss_to_minutes')
+    expect(t).not.toContain('us_date_to_iso')
+  })
+
+  it('transformsForField: campo senza transform dedicati → solo generici', () => {
+    const t = transformsForField('titolo')
+    expect(t).toContain('null_if_NULL_str')
+    expect(t).not.toContain('us_date_to_iso')
   })
 })

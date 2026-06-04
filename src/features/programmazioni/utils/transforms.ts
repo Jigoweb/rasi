@@ -344,6 +344,66 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
   },
 }
 
+/** Etichette leggibili per la UI (selettore transform nel wizard). */
+export const TRANSFORM_LABELS: Record<TransformName, string> = {
+  hhmmss_to_minutes: 'Durata HH:MM:SS → minuti',
+  seconds_to_minutes: 'Durata secondi → minuti',
+  fractional_hours_to_minutes: 'Durata ore decimali → minuti',
+  fractional_day_to_minutes: 'Durata frazione di giorno → minuti',
+  milliseconds_to_minutes: 'Durata millisecondi → minuti',
+  iso8601_duration_to_minutes: 'Durata ISO8601 (PT#H#M) → minuti',
+  decimal_minutes_to_int: 'Durata minuti decimali → interi',
+  rti_apostrophe_minutes: "Durata con apostrofo (12') → minuti",
+  null_if_NA: 'Vuoto se "N/A"',
+  null_if_ND: 'Vuoto se "N.D."',
+  null_if_NULL_str: 'Vuoto se "null"',
+  netflix_episode_nbr: 'Numero episodio Netflix (-- → vuoto)',
+  us_date_to_iso: 'Data US MM/DD/YYYY → ISO',
+  yyyymmdd_int_to_iso: 'Data intero YYYYMMDD → ISO',
+  eu_date_to_iso: 'Data EU DD/MM/YYYY → ISO',
+  iso_date: 'Data ISO YYYY-MM-DD (normalizza)',
+  eu_date_short: 'Data EU DD/MM/YY (anno 2 cifre) → ISO',
+  us_date_short: 'Data US MM/DD/YY (anno 2 cifre) → ISO',
+  excel_serial_to_iso: 'Data seriale Excel → ISO',
+  mojibake_repair: 'Ripara mojibake (encoding)',
+  nbsp_to_space: 'Spazio unicode → spazio normale',
+  null_if_dashes: 'Vuoto se trattini',
+  year_range_first: 'Range anni → primo anno',
+}
+
+const DATE_TRANSFORMS: TransformName[] = [
+  'us_date_to_iso', 'eu_date_to_iso', 'iso_date',
+  'us_date_short', 'eu_date_short', 'yyyymmdd_int_to_iso', 'excel_serial_to_iso',
+]
+
+const DURATION_TRANSFORMS: TransformName[] = [
+  'hhmmss_to_minutes', 'seconds_to_minutes', 'fractional_hours_to_minutes',
+  'fractional_day_to_minutes', 'milliseconds_to_minutes', 'iso8601_duration_to_minutes',
+  'decimal_minutes_to_int', 'rti_apostrophe_minutes',
+]
+
+const GENERIC_TRANSFORMS: TransformName[] = [
+  'null_if_NA', 'null_if_ND', 'null_if_NULL_str', 'null_if_dashes',
+  'mojibake_repair', 'nbsp_to_space',
+]
+
+/** Transform pertinenti a un campo template, per il filtro del selettore UI. */
+export function transformsForField(field: string): TransformName[] {
+  if (field === 'data_trasmissione' || field === 'data_inizio' || field === 'data_fine') {
+    return [...DATE_TRANSFORMS, ...GENERIC_TRANSFORMS]
+  }
+  if (field === 'durata_minuti') {
+    return [...DURATION_TRANSFORMS, ...GENERIC_TRANSFORMS]
+  }
+  if (field === 'numero_episodio') {
+    return ['netflix_episode_nbr', ...GENERIC_TRANSFORMS]
+  }
+  if (field === 'anno') {
+    return ['year_range_first', ...GENERIC_TRANSFORMS]
+  }
+  return GENERIC_TRANSFORMS
+}
+
 /**
  * Apply a named transform to a value.
  * - When `name` is `null`, returns the value unchanged (identity).
