@@ -8,7 +8,7 @@ import {
   TEMPLATE_FIELDS_SET,
 } from '../utils/coercion'
 import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
-import { applyTransform, type TransformName } from '../utils/transforms'
+import { applyTransform, isKnownTransform, type TransformName } from '../utils/transforms'
 import type { ProgrammazionePayload } from './programmazioni.service'
 
 // ============================================
@@ -284,7 +284,8 @@ export function applyMapping(
         if (!sourceCol) continue
         rawValue = getRowValue(row, sourceCol)
       }
-      const transformName = sourceCol ? (transforms?.[sourceCol] ?? null) : null
+      const rawName = sourceCol ? transforms?.[sourceCol] : undefined
+      const transformName = isKnownTransform(rawName) ? rawName : null
       const transformed = applyTransform(transformName, rawValue)
       const coerced = coerce(field, transformed)
       if (coerced !== undefined) {

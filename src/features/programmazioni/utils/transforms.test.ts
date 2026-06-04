@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { applyTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField } from './transforms'
+import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField } from './transforms'
 
 describe('hhmmss_to_minutes', () => {
   it('converts HH:MM:SS to minutes (rounded)', () => {
@@ -100,6 +100,15 @@ describe('us_date_to_iso', () => {
 describe('yyyymmdd_int_to_iso', () => {
   it('20231231 → 2023-12-31', () => {
     expect(applyTransform('yyyymmdd_int_to_iso', 20231231)).toBe('2023-12-31')
+  })
+})
+
+describe('isKnownTransform', () => {
+  it('true per nomi noti, false altrimenti', () => {
+    expect(isKnownTransform('us_date_to_iso')).toBe(true)
+    expect(isKnownTransform('bogus')).toBe(false)
+    expect(isKnownTransform(null)).toBe(false)
+    expect(isKnownTransform(undefined)).toBe(false)
   })
 })
 

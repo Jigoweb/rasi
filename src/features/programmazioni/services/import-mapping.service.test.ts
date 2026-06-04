@@ -1,5 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, validateImportRules, type FieldRule } from './import-mapping.service'
-// TransformName imported only for the `as const` cast in tests below
+import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, type FieldRule } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -203,6 +202,27 @@ describe('applyMapping con transforms', () => {
     const transforms = { date_b: 'us_date_to_iso' as const }
     const out = applyMapping(rows, mapping, ctx, rules, transforms)
     expect(out[0].data_trasmissione).toBe('2025-12-31')
+  })
+
+  it('nome transform sconosciuto → trattato come identity (no crash)', () => {
+    const rows = [{ end_date: '31/12/2025', Titolo: 'X' }]
+    const mapping = { end_date: 'data_trasmissione', Titolo: 'titolo' }
+    const transforms = { end_date: 'bogus_transform' } as any
+    const out = applyMapping(rows, mapping, ctx, undefined, transforms)
+    // identity → validateDate EU path → 2025-12-31
+    expect(out[0].data_trasmissione).toBe('2025-12-31')
+  })
+})
+
+describe('resolveFieldValueWithSource', () => {
+  it('riporta la colonna vincente', () => {
+    expect(resolveFieldValueWithSource({ a: '', b: 'X' }, { sources: ['a', 'b'] })).toEqual({ value: 'X', source: 'b' })
+  })
+  it('onlyIfPresent blank → value/source null', () => {
+    expect(resolveFieldValueWithSource({ a: 'X', g: '' }, { sources: ['a'], onlyIfPresent: 'g' })).toEqual({ value: undefined, source: null })
+  })
+  it('tutte le sorgenti blank → null', () => {
+    expect(resolveFieldValueWithSource({ a: '', b: '' }, { sources: ['a', 'b'] })).toEqual({ value: undefined, source: null })
   })
 })
 

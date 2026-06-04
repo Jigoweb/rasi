@@ -405,6 +405,15 @@ export function transformsForField(field: string): TransformName[] {
 }
 
 /**
+ * Type guard: returns true when `name` is a known TransformName present in
+ * the TRANSFORMS registry. Use this at call sites that receive transform
+ * names from untrusted sources (e.g. JSON DB columns) to avoid throwing.
+ */
+export function isKnownTransform(name: unknown): name is TransformName {
+  return typeof name === 'string' && name in TRANSFORMS
+}
+
+/**
  * Apply a named transform to a value.
  * - When `name` is `null`, returns the value unchanged (identity).
  * - When `name` is unknown, throws an Error.
