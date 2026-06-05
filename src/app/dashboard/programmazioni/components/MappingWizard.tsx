@@ -140,6 +140,14 @@ export default function MappingWizard({
         return next
       })
     }
+    if (target && target !== IGNORE && !isDateTargetField(target)) {
+      setTransforms(prev => {
+        if (!prev[sourceCol]) return prev
+        const next = { ...prev }
+        delete next[sourceCol]
+        return next
+      })
+    }
     const isDateField = isDateTargetField(target)
     if (isDateField) {
       setTransforms(prev => {

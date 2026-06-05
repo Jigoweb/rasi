@@ -354,7 +354,8 @@ export function applyMappingWithTransforms(
       const sourceCol = reverseMap[field]
       if (!sourceCol) continue
       const raw = row[sourceCol] ?? row[sourceCol.trim()] ?? row[normalizeKey(sourceCol)]
-      const transformName = config.transforms[sourceCol] || null
+      const rawName = config.transforms[sourceCol] || null
+      const transformName = isKnownTransform(rawName) ? rawName : null
       const transformed = applyTransform(transformName, raw)
       const coerced = coerce(field, transformed)
       if (coerced !== undefined && coerced !== null) payload[field] = coerced

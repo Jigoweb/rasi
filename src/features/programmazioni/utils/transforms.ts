@@ -431,12 +431,13 @@ export function suggestDateTransform(sample: unknown): TransformName | null {
   if (s === '') return null
   if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) return 'iso_date'
   if (/^\d{8}$/.test(s)) return 'yyyymmdd_int_to_iso'
-  const slash = s.match(/^(\d{1,2})[/-](\d{1,2})[/-]\d{2,4}$/)
+  const slash = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
   if (slash) {
     const a = parseInt(slash[1], 10)
     const b = parseInt(slash[2], 10)
-    if (b > 12 && a <= 12) return 'us_date_to_iso'
-    if (a > 12 && b <= 12) return 'eu_date_to_iso'
+    const yearLen = slash[3].length
+    if (b > 12 && a <= 12) return yearLen === 2 ? 'us_date_short' : 'us_date_to_iso'
+    if (a > 12 && b <= 12) return yearLen === 2 ? 'eu_date_short' : 'eu_date_to_iso'
     return null // ambiguo: non indovinare
   }
   if (/^\d+$/.test(s)) {
