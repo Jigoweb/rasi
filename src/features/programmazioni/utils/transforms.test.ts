@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { applyTransform, TRANSFORMS } from './transforms'
+import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform, isDateTargetField } from './transforms'
 
 describe('hhmmss_to_minutes', () => {
   it('converts HH:MM:SS to minutes (rounded)', () => {
@@ -103,18 +103,37 @@ describe('yyyymmdd_int_to_iso', () => {
   })
 })
 
+describe('isKnownTransform', () => {
+  it('true per nomi noti, false altrimenti', () => {
+    expect(isKnownTransform('us_date_to_iso')).toBe(true)
+    expect(isKnownTransform('bogus')).toBe(false)
+    expect(isKnownTransform(null)).toBe(false)
+    expect(isKnownTransform(undefined)).toBe(false)
+  })
+})
+
 describe('TRANSFORMS registry', () => {
   it('contains all named transforms', () => {
-    const expected = [
-      'hhmmss_to_minutes', 'seconds_to_minutes',
-      'fractional_hours_to_minutes', 'fractional_day_to_minutes',
-      'milliseconds_to_minutes', 'iso8601_duration_to_minutes',
-      'decimal_minutes_to_int', 'rti_apostrophe_minutes',
-      'null_if_NA', 'null_if_ND', 'null_if_NULL_str',
-      'netflix_episode_nbr', 'us_date_to_iso', 'yyyymmdd_int_to_iso',
+    // Every key in TRANSFORMS must be a callable function (catches accidental deletions)
+    for (const [key, fn] of Object.entries(TRANSFORMS)) {
+      expect(typeof fn).toBe('function')
+    }
+
+    // Explicitly assert both pre-existing and new date-transform keys are present
+    const requiredKeys = [
+      // pre-existing
+      'us_date_to_iso',
+      'yyyymmdd_int_to_iso',
+      // new (Task 1)
+      'eu_date_to_iso',
+      'iso_date',
+      'eu_date_short',
+      'us_date_short',
+      'excel_serial_to_iso',
     ]
-    for (const name of expected) {
+    for (const name of requiredKeys) {
       expect(TRANSFORMS).toHaveProperty(name)
+      expect(typeof TRANSFORMS[name as keyof typeof TRANSFORMS]).toBe('function')
     }
   })
 
@@ -201,5 +220,126 @@ describe('year_range_first', () => {
     expect(applyTransform('year_range_first', '')).toBe(null)
     expect(applyTransform('year_range_first', null)).toBe(null)
     expect(applyTransform('year_range_first', undefined)).toBe(null)
+  })
+})
+
+describe('date transforms', () => {
+  it('eu_date_to_iso: DD/MM/YYYY → YYYY-MM-DD', () => {
+    expect(applyTransform('eu_date_to_iso', '31/12/2025')).toBe('2025-12-31')
+    expect(applyTransform('eu_date_to_iso', '5/3/2025')).toBe('2025-03-05')
+    expect(applyTransform('eu_date_to_iso', '31-12-2025')).toBe('2025-12-31')
+    expect(applyTransform('eu_date_to_iso', '12/31/2025')).toBe('2025-31-12') // input EU letterale: nessuna validazione semantica qui
+    expect(applyTransform('eu_date_to_iso', 'boh')).toBe(null)
+    expect(applyTransform('eu_date_to_iso', '')).toBe(null)
+  })
+
+  it('iso_date: passthrough/normalizzazione', () => {
+    expect(applyTransform('iso_date', '2025-12-31')).toBe('2025-12-31')
+    expect(applyTransform('iso_date', '2025/12/31')).toBe('2025-12-31')
+    expect(applyTransform('iso_date', '2025-1-3')).toBe(null) // richiede 2 cifre
+    expect(applyTransform('iso_date', 'x')).toBe(null)
+  })
+
+  it('eu_date_short: anno 2 cifre con cutoff 50', () => {
+    expect(applyTransform('eu_date_short', '31/12/25')).toBe('2025-12-31')
+    expect(applyTransform('eu_date_short', '01/06/49')).toBe('2049-06-01')
+    expect(applyTransform('eu_date_short', '01/06/51')).toBe('1951-06-01')
+    expect(applyTransform('eu_date_short', 'no')).toBe(null)
+  })
+
+  it('us_date_short: MM/DD/YY con cutoff 50', () => {
+    expect(applyTransform('us_date_short', '12/31/25')).toBe('2025-12-31')
+    expect(applyTransform('us_date_short', '06/01/51')).toBe('1951-06-01')
+    expect(applyTransform('us_date_short', 'no')).toBe(null)
+  })
+
+  it('excel_serial_to_iso: seriale Excel (base 1899-12-30)', () => {
+    expect(applyTransform('excel_serial_to_iso', 44197)).toBe('2021-01-01')
+    expect(applyTransform('excel_serial_to_iso', '44197')).toBe('2021-01-01')
+    expect(applyTransform('excel_serial_to_iso', 0)).toBe(null)
+    expect(applyTransform('excel_serial_to_iso', 'x')).toBe(null)
+  })
+
+  it('returns null for null/undefined on all 5 new date transforms', () => {
+    const newTransforms = [
+      'eu_date_to_iso',
+      'iso_date',
+      'eu_date_short',
+      'us_date_short',
+      'excel_serial_to_iso',
+    ] as const
+    for (const name of newTransforms) {
+      expect(applyTransform(name, null)).toBeNull()
+      expect(applyTransform(name, undefined)).toBeNull()
+    }
+  })
+})
+
+describe('isDateTargetField', () => {
+  it('riconosce i campi data', () => {
+    expect(isDateTargetField('data_trasmissione')).toBe(true)
+    expect(isDateTargetField('data_inizio')).toBe(true)
+    expect(isDateTargetField('data_fine')).toBe(true)
+    expect(isDateTargetField('titolo')).toBe(false)
+    expect(isDateTargetField('')).toBe(false)
+  })
+})
+
+describe('suggestDateTransform', () => {
+  it('rileva US quando il 2º campo > 12', () => {
+    expect(suggestDateTransform('12/31/2025')).toBe('us_date_to_iso')
+  })
+  it('rileva EU quando il 1º campo > 12', () => {
+    expect(suggestDateTransform('31/12/2025')).toBe('eu_date_to_iso')
+  })
+  it('rileva ISO', () => {
+    expect(suggestDateTransform('2025-12-31')).toBe('iso_date')
+  })
+  it('rileva seriale Excel', () => {
+    expect(suggestDateTransform('45657')).toBe('excel_serial_to_iso')
+  })
+  it('ambiguo (entrambi <= 12) → null', () => {
+    expect(suggestDateTransform('03/04/2025')).toBe(null)
+  })
+  it('vuoto/non data → null', () => {
+    expect(suggestDateTransform('')).toBe(null)
+    expect(suggestDateTransform('ciao')).toBe(null)
+  })
+  it('anno 2 cifre US → us_date_short', () => {
+    expect(suggestDateTransform('12/31/25')).toBe('us_date_short')
+  })
+  it('anno 2 cifre EU → eu_date_short', () => {
+    expect(suggestDateTransform('31/12/25')).toBe('eu_date_short')
+  })
+  it('anno 2 cifre ambiguo → null', () => {
+    expect(suggestDateTransform('03/04/25')).toBe(null)
+  })
+})
+
+describe('transform metadata', () => {
+  it('TRANSFORM_LABELS copre ogni TransformName', () => {
+    for (const name of Object.keys(TRANSFORMS)) {
+      expect(TRANSFORM_LABELS[name as keyof typeof TRANSFORM_LABELS]).toBeTruthy()
+    }
+  })
+
+  it('transformsForField: campi data → transform data', () => {
+    const t = transformsForField('data_trasmissione')
+    expect(t).toContain('us_date_to_iso')
+    expect(t).toContain('eu_date_to_iso')
+    expect(t).toContain('excel_serial_to_iso')
+    expect(t).not.toContain('hhmmss_to_minutes')
+  })
+
+  it('transformsForField: durata → transform durata', () => {
+    const t = transformsForField('durata_minuti')
+    expect(t).toContain('hhmmss_to_minutes')
+    expect(t).not.toContain('us_date_to_iso')
+  })
+
+  it('transformsForField: campo senza transform dedicati → solo generici', () => {
+    const t = transformsForField('titolo')
+    expect(t).toContain('null_if_NULL_str')
+    expect(t).not.toContain('us_date_to_iso')
   })
 })

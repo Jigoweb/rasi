@@ -1,4 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, validateImportRules, type FieldRule } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, type FieldRule } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -174,6 +174,55 @@ describe('applyMapping with rules (mixed film + series)', () => {
       { titolo: { sources: ['NOME_SERIE'] } },    // rule must win → "Centovetrine"
     )
     expect(out[0].titolo).toBe('Centovetrine')
+  })
+})
+
+describe('applyMapping con transforms', () => {
+  const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
+
+  it('applica il transform della colonna sorgente prima di coerce (data US)', () => {
+    const rows = [{ end_date: '12/31/2025', show_name: 'Sr.' }]
+    const mapping = { end_date: 'data_trasmissione', show_name: 'titolo' }
+    const transforms = { end_date: 'us_date_to_iso' as const }
+    const out = applyMapping(rows, mapping, ctx, undefined, transforms)
+    expect(out[0].data_trasmissione).toBe('2025-12-31')
+  })
+
+  it('senza transforms il comportamento resta invariato', () => {
+    const rows = [{ Data: '31/12/2025', Titolo: 'X' }]
+    const mapping = { Data: 'data_trasmissione', Titolo: 'titolo' }
+    const out = applyMapping(rows, mapping, ctx)
+    expect(out[0].data_trasmissione).toBe('2025-12-31')
+  })
+
+  it('rule coalesce: applica il transform della colonna sorgente vincente', () => {
+    const rows = [{ date_a: '', date_b: '12/31/2025', Titolo: 'X' }]
+    const mapping = { Titolo: 'titolo' }
+    const rules = { data_trasmissione: { sources: ['date_a', 'date_b'] } }
+    const transforms = { date_b: 'us_date_to_iso' as const }
+    const out = applyMapping(rows, mapping, ctx, rules, transforms)
+    expect(out[0].data_trasmissione).toBe('2025-12-31')
+  })
+
+  it('nome transform sconosciuto → trattato come identity (no crash)', () => {
+    const rows = [{ end_date: '31/12/2025', Titolo: 'X' }]
+    const mapping = { end_date: 'data_trasmissione', Titolo: 'titolo' }
+    const transforms = { end_date: 'bogus_transform' } as any
+    const out = applyMapping(rows, mapping, ctx, undefined, transforms)
+    // identity → validateDate EU path → 2025-12-31
+    expect(out[0].data_trasmissione).toBe('2025-12-31')
+  })
+})
+
+describe('resolveFieldValueWithSource', () => {
+  it('riporta la colonna vincente', () => {
+    expect(resolveFieldValueWithSource({ a: '', b: 'X' }, { sources: ['a', 'b'] })).toEqual({ value: 'X', source: 'b' })
+  })
+  it('onlyIfPresent blank → value/source null', () => {
+    expect(resolveFieldValueWithSource({ a: 'X', g: '' }, { sources: ['a'], onlyIfPresent: 'g' })).toEqual({ value: undefined, source: null })
+  })
+  it('tutte le sorgenti blank → null', () => {
+    expect(resolveFieldValueWithSource({ a: '', b: '' }, { sources: ['a', 'b'] })).toEqual({ value: undefined, source: null })
   })
 })
 

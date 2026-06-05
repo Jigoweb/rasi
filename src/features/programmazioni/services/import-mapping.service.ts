@@ -8,7 +8,7 @@ import {
   TEMPLATE_FIELDS_SET,
 } from '../utils/coercion'
 import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
-import { applyTransform, type TransformName } from '../utils/transforms'
+import { applyTransform, isKnownTransform, type TransformName } from '../utils/transforms'
 import type { ProgrammazionePayload } from './programmazioni.service'
 
 // ============================================
@@ -34,6 +34,8 @@ export interface ImportMappingConfig {
   mapping: Record<string, string>
   /** Advanced per-target rules (coalesce / conditional). Overrides `mapping` for that target. */
   rules?: Record<string, FieldRule>
+  /** Colonna sorgente → transform applicato prima di coerce. */
+  transforms?: Record<string, TransformName>
 }
 
 export interface DetectColumnsResult {
@@ -250,7 +252,8 @@ export function applyMapping(
   rows: Record<string, any>[],
   mapping: Record<string, string>,
   context: ApplyMappingContext,
-  rules?: Record<string, FieldRule>
+  rules?: Record<string, FieldRule>,
+  transforms?: Record<string, TransformName>,
 ): ProgrammazionePayload[] {
   // Mappa inversa: campo template → colonna sorgente (l'ultima vince in caso di duplicati)
   const reverseMap: Record<string, string> = {}
@@ -271,14 +274,20 @@ export function applyMapping(
       // A rule for this target takes precedence over the plain 1:1 mapping.
       const rule = rules?.[field]
       let rawValue: any
+      let sourceCol: string | null
       if (rule) {
-        rawValue = resolveFieldValue(row, rule)
+        const resolved = resolveFieldValueWithSource(row, rule)
+        rawValue = resolved.value
+        sourceCol = resolved.source
       } else {
-        const sourceCol = reverseMap[field]
+        sourceCol = reverseMap[field] ?? null
         if (!sourceCol) continue
         rawValue = getRowValue(row, sourceCol)
       }
-      const coerced = coerce(field, rawValue)
+      const rawName = sourceCol ? transforms?.[sourceCol] : undefined
+      const transformName = isKnownTransform(rawName) ? rawName : null
+      const transformed = applyTransform(transformName, rawValue)
+      const coerced = coerce(field, transformed)
       if (coerced !== undefined) {
         payload[field] = coerced
       }
@@ -345,7 +354,8 @@ export function applyMappingWithTransforms(
       const sourceCol = reverseMap[field]
       if (!sourceCol) continue
       const raw = row[sourceCol] ?? row[sourceCol.trim()] ?? row[normalizeKey(sourceCol)]
-      const transformName = config.transforms[sourceCol] || null
+      const rawName = config.transforms[sourceCol] || null
+      const transformName = isKnownTransform(rawName) ? rawName : null
       const transformed = applyTransform(transformName, raw)
       const coerced = coerce(field, transformed)
       if (coerced !== undefined && coerced !== null) payload[field] = coerced
@@ -384,20 +394,31 @@ export function getRowValue(row: Record<string, any>, col: string): any {
 }
 
 /**
+ * Come resolveFieldValue, ma riporta anche quale colonna sorgente ha vinto
+ * (serve per applicare il transform corretto sul valore coalesce).
+ */
+export function resolveFieldValueWithSource(
+  row: Record<string, any>,
+  rule: FieldRule,
+): { value: any; source: string | null } {
+  if (rule.onlyIfPresent !== undefined && isBlankValue(getRowValue(row, rule.onlyIfPresent))) {
+    return { value: undefined, source: null }
+  }
+  for (const src of rule.sources) {
+    const v = getRowValue(row, src)
+    if (!isBlankValue(v)) return { value: v, source: src }
+  }
+  return { value: undefined, source: null }
+}
+
+/**
  * Resolves a target field value from a row using a FieldRule:
  *  - if `onlyIfPresent` is set and that column is blank → undefined (skip);
  *  - otherwise return the first non-blank value among `sources` (in order);
  *  - undefined when every source is blank.
  */
 export function resolveFieldValue(row: Record<string, any>, rule: FieldRule): any {
-  if (rule.onlyIfPresent !== undefined && isBlankValue(getRowValue(row, rule.onlyIfPresent))) {
-    return undefined
-  }
-  for (const src of rule.sources) {
-    const v = getRowValue(row, src)
-    if (!isBlankValue(v)) return v
-  }
-  return undefined
+  return resolveFieldValueWithSource(row, rule).value
 }
 
 /**

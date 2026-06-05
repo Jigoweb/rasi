@@ -28,6 +28,11 @@ export type TransformName =
   | 'nbsp_to_space'
   | 'null_if_dashes'
   | 'year_range_first'
+  | 'eu_date_to_iso'
+  | 'iso_date'
+  | 'eu_date_short'
+  | 'us_date_short'
+  | 'excel_serial_to_iso'
 
 export type TransformFn = (value: unknown) => unknown
 
@@ -208,6 +213,77 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     return null
   },
 
+  eu_date_to_iso: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+    if (!match) return null
+    const dd = match[1].padStart(2, '0')
+    const mm = match[2].padStart(2, '0')
+    const yyyy = match[3]
+    return `${yyyy}-${mm}-${dd}`
+  },
+
+  iso_date: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/)
+    if (!match) return null
+    return `${match[1]}-${match[2]}-${match[3]}`
+  },
+
+  eu_date_short: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
+    if (!match) return null
+    const dd = match[1].padStart(2, '0')
+    const mm = match[2].padStart(2, '0')
+    const yy = parseInt(match[3], 10)
+    // cutoff: 00–50 → 2000–2050; 51–99 → 1951–1999
+    const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
+    return `${yyyy}-${mm}-${dd}`
+  },
+
+  us_date_short: (value) => {
+    if (value === null || value === undefined) return null
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    if (trimmed === '') return null
+    const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
+    if (!match) return null
+    const mm = match[1].padStart(2, '0')
+    const dd = match[2].padStart(2, '0')
+    const yy = parseInt(match[3], 10)
+    // cutoff: 00–50 → 2000–2050; 51–99 → 1951–1999
+    const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
+    return `${yyyy}-${mm}-${dd}`
+  },
+
+  excel_serial_to_iso: (value) => {
+    const n = parseNumber(value)
+    if (n === null) return null
+    const days = Math.trunc(n)
+    if (days < 1) return null
+    // Base 1899-12-30 compensa il bug dell'anno bisestile 1900 di Excel.
+    // Seriali 1–59: restituisce la data astronomicamente corretta (un giorno prima
+    // di quanto Excel mostra, perché Excel inventa il 1900-02-29 inesistente).
+    // Seriali ≥ 61: coincide esattamente con la visualizzazione di Excel.
+    const ms = Date.UTC(1899, 11, 30) + days * 86400000
+    const d = new Date(ms)
+    if (Number.isNaN(d.getTime())) return null
+    const yyyy = d.getUTCFullYear()
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const dd = String(d.getUTCDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  },
+
   us_date_to_iso: (value) => {
     if (value === null || value === undefined) return null
     if (typeof value !== 'string') return null
@@ -266,6 +342,110 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     const y = Number(m[1])
     return Number.isFinite(y) ? y : null
   },
+}
+
+/** Etichette leggibili per la UI (selettore transform nel wizard). */
+export const TRANSFORM_LABELS: Record<TransformName, string> = {
+  hhmmss_to_minutes: 'Durata HH:MM:SS → minuti',
+  seconds_to_minutes: 'Durata secondi → minuti',
+  fractional_hours_to_minutes: 'Durata ore decimali → minuti',
+  fractional_day_to_minutes: 'Durata frazione di giorno → minuti',
+  milliseconds_to_minutes: 'Durata millisecondi → minuti',
+  iso8601_duration_to_minutes: 'Durata ISO8601 (PT#H#M) → minuti',
+  decimal_minutes_to_int: 'Durata minuti decimali → interi',
+  rti_apostrophe_minutes: "Durata con apostrofo (12') → minuti",
+  null_if_NA: 'Vuoto se "N/A"',
+  null_if_ND: 'Vuoto se "N.D."',
+  null_if_NULL_str: 'Vuoto se "null"',
+  netflix_episode_nbr: 'Numero episodio Netflix (-- → vuoto)',
+  us_date_to_iso: 'Data US MM/DD/YYYY → ISO',
+  yyyymmdd_int_to_iso: 'Data intero YYYYMMDD → ISO',
+  eu_date_to_iso: 'Data EU DD/MM/YYYY → ISO',
+  iso_date: 'Data ISO YYYY-MM-DD (normalizza)',
+  eu_date_short: 'Data EU DD/MM/YY (anno 2 cifre) → ISO',
+  us_date_short: 'Data US MM/DD/YY (anno 2 cifre) → ISO',
+  excel_serial_to_iso: 'Data seriale Excel → ISO',
+  mojibake_repair: 'Ripara mojibake (encoding)',
+  nbsp_to_space: 'Spazio unicode → spazio normale',
+  null_if_dashes: 'Vuoto se trattini',
+  year_range_first: 'Range anni → primo anno',
+}
+
+const DATE_TRANSFORMS: TransformName[] = [
+  'us_date_to_iso', 'eu_date_to_iso', 'iso_date',
+  'us_date_short', 'eu_date_short', 'yyyymmdd_int_to_iso', 'excel_serial_to_iso',
+]
+
+const DURATION_TRANSFORMS: TransformName[] = [
+  'hhmmss_to_minutes', 'seconds_to_minutes', 'fractional_hours_to_minutes',
+  'fractional_day_to_minutes', 'milliseconds_to_minutes', 'iso8601_duration_to_minutes',
+  'decimal_minutes_to_int', 'rti_apostrophe_minutes',
+]
+
+const GENERIC_TRANSFORMS: TransformName[] = [
+  'null_if_NA', 'null_if_ND', 'null_if_NULL_str', 'null_if_dashes',
+  'mojibake_repair', 'nbsp_to_space',
+]
+
+/** Campi template di tipo data (destinazioni che accettano transform data). */
+export const DATE_TARGET_FIELDS = new Set(['data_trasmissione', 'data_inizio', 'data_fine'])
+
+/** True se il campo template è una data. */
+export function isDateTargetField(field: string): boolean {
+  return DATE_TARGET_FIELDS.has(field)
+}
+
+/** Transform pertinenti a un campo template, per il filtro del selettore UI. */
+export function transformsForField(field: string): TransformName[] {
+  if (isDateTargetField(field)) {
+    return [...DATE_TRANSFORMS, ...GENERIC_TRANSFORMS]
+  }
+  if (field === 'durata_minuti') {
+    return [...DURATION_TRANSFORMS, ...GENERIC_TRANSFORMS]
+  }
+  if (field === 'numero_episodio') {
+    return ['netflix_episode_nbr', ...GENERIC_TRANSFORMS]
+  }
+  if (field === 'anno') {
+    return ['year_range_first', ...GENERIC_TRANSFORMS]
+  }
+  return GENERIC_TRANSFORMS
+}
+
+/**
+ * Type guard: returns true when `name` is a known TransformName present in
+ * the TRANSFORMS registry. Use this at call sites that receive transform
+ * names from untrusted sources (e.g. JSON DB columns) to avoid throwing.
+ */
+export function isKnownTransform(name: unknown): name is TransformName {
+  return typeof name === 'string' && name in TRANSFORMS
+}
+
+/**
+ * Suggerisce un transform data da un valore campione, SENZA mai indovinare
+ * date intrinsecamente ambigue (entrambi i campi <= 12 → null).
+ */
+export function suggestDateTransform(sample: unknown): TransformName | null {
+  if (sample === null || sample === undefined) return null
+  const s = String(sample).trim()
+  if (s === '') return null
+  if (/^\d{4}[-/]\d{2}[-/]\d{2}$/.test(s)) return 'iso_date'
+  if (/^\d{8}$/.test(s)) return 'yyyymmdd_int_to_iso'
+  const slash = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
+  if (slash) {
+    const a = parseInt(slash[1], 10)
+    const b = parseInt(slash[2], 10)
+    const yearLen = slash[3].length
+    if (b > 12 && a <= 12) return yearLen === 2 ? 'us_date_short' : 'us_date_to_iso'
+    if (a > 12 && b <= 12) return yearLen === 2 ? 'eu_date_short' : 'eu_date_to_iso'
+    return null // ambiguo: non indovinare
+  }
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10)
+    // seriali plausibili: ~1927 (10000) .. ~2173 (100000); evita falsi positivi su interi generici
+    if (n >= 10000 && n <= 100000) return 'excel_serial_to_iso'
+  }
+  return null
 }
 
 /**
