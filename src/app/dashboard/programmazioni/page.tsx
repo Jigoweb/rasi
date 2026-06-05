@@ -20,6 +20,7 @@ import {
   type ColumnDiff,
 } from '@/features/programmazioni/services/import-mapping.service'
 import EmittenteMappingSection from './components/EmittenteMappingSection'
+import EmittenteMappingButton from './components/EmittenteMappingButton'
 import MappingWizard from './components/MappingWizard'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { ProcessBlockedDialog } from '@/shared/components/individuazione-progress-indicator'
@@ -1465,6 +1466,7 @@ export default function ProgrammazioniPage() {
                             <Button variant="ghost" size="sm" onClick={() => openEditEmittente(emittente)}>
                               <Edit className="h-4 w-4" />
                             </Button>
+                            <EmittenteMappingButton emittenteId={emittente.id} />
                           </div>
                         </TableCell>
                       </TableRow>
@@ -1498,6 +1500,7 @@ export default function ProgrammazioniPage() {
                           <Button variant="ghost" size="sm" onClick={() => openEditEmittente(emittente)}>
                             <Edit className="h-4 w-4" />
                           </Button>
+                          <EmittenteMappingButton emittenteId={emittente.id} />
                         </div>
                       </div>
                     </Card>
@@ -1567,7 +1570,7 @@ export default function ProgrammazioniPage() {
       </Dialog>
       {/* Emittente Create/Edit Dialog */}
       <Dialog open={showEmittenteForm} onOpenChange={v => { if (!v) setShowEmittenteForm(false) }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={emittenteFormMode === 'edit' ? 'max-w-lg max-h-[90vh] overflow-y-auto' : 'max-w-md'}>
           <DialogHeader>
             <DialogTitle>
               {emittenteFormMode === 'create' ? 'Nuova Emittente' : 'Modifica Emittente'}
@@ -1647,6 +1650,15 @@ export default function ProgrammazioniPage() {
               </label>
             </div>
           </div>
+
+          {emittenteFormMode === 'edit' && selectedEmittente && (
+            <div className="mt-4 pt-4 border-t">
+              <EmittenteMappingSection
+                emittenteId={selectedEmittente.id}
+                onChange={fetchEmittenti}
+              />
+            </div>
+          )}
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowEmittenteForm(false)} disabled={emittenteFormSaving}>
