@@ -426,6 +426,35 @@ export interface ProcessingProgress {
   last_activity_at?: string | null  // Timestamp of last individuazione created
 }
 
+/** Minutes of inactivity after which an in-progress process is considered stale ("bloccato"). */
+export const PROCESSING_STALE_THRESHOLD_MIN = 10
+
+/**
+ * Minutes elapsed since the last processing activity, or null when unknown
+ * (no progress record / no last_activity_at). `now` is injectable for testing.
+ */
+export function minutesSinceProcessingActivity(
+  progress: Pick<ProcessingProgress, 'last_activity_at'> | null | undefined,
+  now: number = Date.now(),
+): number | null {
+  const ts = progress?.last_activity_at
+  if (!ts) return null
+  return Math.floor((now - new Date(ts).getTime()) / 1000 / 60)
+}
+
+/**
+ * True when an `in_corso` process has shown no activity for longer than the
+ * stale threshold — i.e. the UI should surface it as "Bloccato" rather than
+ * "Processamento...". Unknown activity (null) is treated as NOT stale.
+ */
+export function isProcessingStale(
+  progress: Pick<ProcessingProgress, 'last_activity_at'> | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  const m = minutesSinceProcessingActivity(progress, now)
+  return m !== null && m > PROCESSING_STALE_THRESHOLD_MIN
+}
+
 /**
  * Get the processing progress for a campaign that is currently being processed
  */
