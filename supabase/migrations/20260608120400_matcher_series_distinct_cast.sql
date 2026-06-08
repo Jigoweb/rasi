@@ -1,98 +1,23 @@
--- =====================================================
--- FUNZIONI DI MATCHING INDIVIDUAZIONI
--- Allineate al DB reale (2026-05-08)
+-- Estende il match a livello serie: attribuisce il cast DISTINTO della serie (B).
 --
--- Versione 2: pipeline adattiva
---   - Tolleranza anno parametrica (default ±3 soft, ±5 hard)
---   - Discriminante regia null-safe (già corretto, soglia adattiva lo gestisce)
---   - Fix CONTINUE prematuro per serie senza dati episodio specifici
---   - Soglia minima adattiva: 35% del peso massimo disponibile, floor 25
--- =====================================================
+-- Diagnosi: delle serie che fanno match-titolo, solo ~28/127 hanno il cast a livello serie
+-- (partecipazioni.episodio_id IS NULL); le altre ~97/127 hanno il cast SOLO a livello
+-- episodio, e la numerazione episodi non si allinea a Netflix → il fallback della
+-- 20260608120200 (che attribuiva solo le partecipazioni con episodio_id IS NULL) le
+-- lasciava a zero.
+--
+-- Il catalogo opere contiene SOLO gli artisti rappresentati (≈1-2 per opera), non il cast
+-- completo: misurato ~1,4 (artista,ruolo) distinti per opera, ~9.3k voci di revisione
+-- proiettate sui 75k. Niente over-attribution/esplosione.
+--
+-- Questa migration: per i match serie-senza-episodio (v_episodio_mancante) attribuisce il
+-- cast DISTINTO della serie — un (artista, ruolo) una sola volta, con episodio_id NULL,
+-- punteggio ridotto ×0.8, dettagli_matching.episodio_mancante = true (→ in_revisione a valle
+-- via 20260608120300). Per tutti gli altri match il comportamento è invariato.
+--
+-- Sostituisce solo l'overload completo a 6 argomenti. Stato deployato noto = 20260608120200
+-- (già applicata): questa è incrementale (split del solo blocco partecipazioni) e sicura.
 
--- Drop tutte le overload (firme nuove e vecchie)
-DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric);
-DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric, uuid[]);
-DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric, uuid[], int, int);
-
--- =====================================================
--- OVERLOAD 1: Senza filtro artisti né tolleranza (legacy compatibility)
--- Delega all'overload completo con default
--- =====================================================
-CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
-    p_programmazione_id UUID,
-    p_soglia_titolo NUMERIC DEFAULT 0.7
-)
-RETURNS TABLE (
-    partecipazione_id UUID,
-    opera_id UUID,
-    episodio_id UUID,
-    artista_id UUID,
-    ruolo_id UUID,
-    punteggio NUMERIC,
-    dettagli_matching JSONB
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT * FROM match_programmazione_to_partecipazioni(
-        p_programmazione_id, p_soglia_titolo, NULL::UUID[], 3, 5
-    );
-END;
-$$ LANGUAGE plpgsql STABLE;
-
--- =====================================================
--- OVERLOAD 2: Con filtro artisti, senza tolleranza esplicita
--- =====================================================
-CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
-    p_programmazione_id UUID,
-    p_soglia_titolo NUMERIC,
-    p_artista_ids UUID[]
-)
-RETURNS TABLE (
-    partecipazione_id UUID,
-    opera_id UUID,
-    episodio_id UUID,
-    artista_id UUID,
-    ruolo_id UUID,
-    punteggio NUMERIC,
-    dettagli_matching JSONB
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT * FROM match_programmazione_to_partecipazioni(
-        p_programmazione_id, p_soglia_titolo, p_artista_ids, 3, 5
-    );
-END;
-$$ LANGUAGE plpgsql STABLE;
-
--- =====================================================
--- OVERLOAD 3: Firma completa con tolleranza anno parametrica
---
--- SCORING (peso massimo dinamico, 0-100):
---   Titolo:           50 punti base (similarity * 50) — SEMPRE
---   Titolo originale: 10 punti bonus — se entrambi presenti
---   Anno:             15 punti — se entrambi presenti
---   Regia:            10 punti — se entrambi presenti
---   Episodio:         15 punti — se serie con episodio matchato
---
--- DISCRIMINANTE ANNO (quando entrambi presenti):
---   esatto:           +15 punti (1.0 * 15)
---   ≤ soft:           +10.5 punti (0.7 * 15)
---   soft < d ≤ hard:  +4.5 punti (0.3 * 15)
---   > hard:           skip opera (scarto duro)
---
--- DISCRIMINANTE REGIA (null-safe, attivo solo se entrambi presenti):
---   Match (sim >= 0.7): +10 punti
---   Parziale (>= 0.4):  +5 punti
---   No match:           -15 punti (penalità soft)
---
--- SERIE SENZA DATI EPISODIO SPECIFICI:
---   Se prog è marcata serie SOLO per numero_stagione, senza numero_episodio
---   né titolo_episodio, NON viene scartata: viene matchata senza episode scoring.
---
--- SOGLIA ADATTIVA:
---   35% del peso massimo applicabile, con floor 25.
---   Esempio: prog senza anno/regia/episodio → max 50 → soglia 25.
--- =====================================================
 CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
     p_programmazione_id UUID,
     p_soglia_titolo NUMERIC DEFAULT 0.7,
@@ -431,8 +356,8 @@ BEGIN
             END LOOP;
 
             -- RILASSATO: serie con dati episodio ma episodio non in catalogo → NON scarta.
-            -- Aggancia a livello serie (partecipazioni con episodio_id NULL) e marca il
-            -- match come "episodio mancante", così a valle finisce in coda di revisione.
+            -- Aggancia a livello serie e marca il match come "episodio mancante", così a
+            -- valle finisce in coda di revisione.
             IF NOT v_episodio_trovato THEN
                 IF v_has_episode_data THEN
                     -- Caso A: prog ha dati episodio specifici ma nessun match in catalogo

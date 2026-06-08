@@ -152,6 +152,39 @@ describe('normalizeTitle — audit patterns', () => {
   })
 })
 
+describe('normalizeTitle — Netflix structural suffixes', () => {
+  // Real Netflix VOD export forms. The bare ": Season"/": Part" (no number) are the
+  // already-mangled rows produced when loose DIGIT_TRAIL stripped only the number,
+  // leaving an orphan word that wrecked trigram similarity (e.g. "The Ranch: Part"
+  // scored 0.667 vs catalog "THE RANCH", just under the 0.70 live threshold).
+  it('strips ": Season N" onto the base title', () => {
+    expect(normalizeTitle('Spongebob Squarepants: Season 9')).toBe('Spongebob Squarepants')
+    expect(normalizeTitle('Mighty Morphin Power Rangers: Season 1 (Reversioned)'))
+      .toBe('Mighty Morphin Power Rangers')
+  })
+  it('strips ": Part N"', () => {
+    expect(normalizeTitle('The Ranch: Part 8')).toBe('The Ranch')
+  })
+  it('strips dangling ": Season"/": Part" (number already lost)', () => {
+    expect(normalizeTitleStrict('The Ranch: Part')).toBe('The Ranch')
+    expect(normalizeTitleStrict('Spongebob Squarepants: Season')).toBe('Spongebob Squarepants')
+  })
+  it('strips ": Limited Series", ": Volume N", ": Chapter N", ": Collection"', () => {
+    expect(normalizeTitle('Love Is Blind: Limited Series')).toBe('Love Is Blind')
+    expect(normalizeTitle('Stranger Things: Volume 1')).toBe('Stranger Things')
+    expect(normalizeTitle('John Wick: Chapter 2')).toBe('John Wick')
+    expect(normalizeTitle('Black Mirror: Collection')).toBe('Black Mirror')
+  })
+  it('strips only at the structural colon, preserving earlier colons in the title', () => {
+    expect(normalizeTitle('Miraculous: Tales of Ladybug & Cat Noir: Season 2: Part'))
+      .toBe('Miraculous: Tales of Ladybug & Cat Noir')
+  })
+  it('does not eat a non-structural subtitle after the colon', () => {
+    // No structural keyword after the colon → left intact.
+    expect(normalizeTitle('Mission: Impossible')).toBe('Mission: Impossible')
+  })
+})
+
 it('normalizeTitle idempotent on new patterns', () => {
   for (const x of [
     'FILM LA SACRA FAMIGLIA PARTE 2',
@@ -164,6 +197,10 @@ it('normalizeTitle idempotent on new patterns', () => {
     'La Squadra 4 - p.1                              ',
     '(Tv8) Anica Luglio 2024',
     'ER (E.R. - MEDICI IN PRIMA LINEA) - PILOTA',
+    'Spongebob Squarepants: Season 9',
+    'The Ranch: Part 8',
+    'Love Is Blind: Limited Series',
+    'Miraculous: Tales of Ladybug & Cat Noir: Season 2: Part',
   ]) {
     expect(normalizeTitle(normalizeTitle(x))).toBe(normalizeTitle(x))
   }

@@ -360,9 +360,19 @@ export function applyMappingWithTransforms(
       const coerced = coerce(field, transformed)
       if (coerced !== undefined && coerced !== null) payload[field] = coerced
     }
-    for (const f of ['titolo','titolo_originale','titolo_episodio','titolo_episodio_originale'] as const) {
+    // Normalize title-like fields after coercion.
+    // Main titles use loose normalizer (strips trailing digits/Roman numerals).
+    // Episode titles use strict normalizer (preserves episode numbers like "Episodio 26").
+    for (const f of ['titolo', 'titolo_originale'] as const) {
       if (typeof payload[f] === 'string') {
         const n = normalizeTitle(payload[f])
+        if (n) payload[f] = n
+        else delete payload[f]
+      }
+    }
+    for (const f of ['titolo_episodio', 'titolo_episodio_originale'] as const) {
+      if (typeof payload[f] === 'string') {
+        const n = normalizeTitleStrict(payload[f])
         if (n) payload[f] = n
         else delete payload[f]
       }
