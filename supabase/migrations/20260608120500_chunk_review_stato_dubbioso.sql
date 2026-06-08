@@ -1,67 +1,16 @@
--- =====================================================
--- FUNZIONE BATCH: process_programmazioni_chunk
--- Esportata da Supabase (2026-05-08) + modificata
--- per propagare tolleranza anno parametrica
--- =====================================================
+-- Fix enum: il routing in revisione usa 'dubbioso' (valore reale di stato_individuazione).
+--
+-- La 20260608120300 impostava metodo='suggerito'/stato='in_revisione', ma gli enum reali sono:
+--   metodo_matching:      automatico | manuale | validato   (niente 'suggerito')
+--   stato_individuazione: individuato | validato | respinto | dubbioso   (niente 'in_revisione')
+-- → il processamento falliva con "invalid input value for enum metodo_matching: suggerito".
+--
+-- Correzione: per i match serie-senza-episodio (episodio_mancante) lasciamo metodo='automatico'
+-- (il match È stato generato in automatico) e impostiamo stato='dubbioso' (il bucket
+-- "da revisionare/incerto"). Gli altri match restano automatico/individuato.
+--
+-- Sostituisce l'overload completo a 6 argomenti (supersede la 20260608120300).
 
--- Drop overload vecchie + nuova firma se esistente
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[]);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[], int, int);
-
--- =====================================================
--- OVERLOAD 1: Legacy (3 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC DEFAULT 0.7
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        NULL::UUID[],
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 2: Con filtro artisti (4 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC,
-    p_artista_ids UUID[]
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        p_artista_ids,
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 3: Firma completa con tolleranza anno
--- Propaga p_tolleranza_anno_soft/hard al matching
--- =====================================================
 CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
     p_campagne_individuazione_id UUID,
     p_programmazione_ids UUID[],
@@ -207,8 +156,7 @@ BEGIN
 
                     -- Match a livello serie senza episodio puntuale → coda di revisione.
                     -- L'enum stato_individuazione usa 'dubbioso' come bucket "da revisionare";
-                    -- metodo resta 'automatico' (il match È stato generato automaticamente:
-                    -- metodo_matching non ha 'suggerito'). UPDATE con literal → cast enum ok.
+                    -- metodo resta 'automatico' (metodo_matching non ha 'suggerito').
                     IF COALESCE((v_match.dettagli_matching->>'episodio_mancante')::boolean, FALSE) THEN
                         UPDATE individuazioni
                         SET stato = 'dubbioso'
