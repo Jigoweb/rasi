@@ -1,67 +1,25 @@
--- =====================================================
--- FUNZIONE BATCH: process_programmazioni_chunk
--- Esportata da Supabase (2026-05-08) + modificata
--- per propagare tolleranza anno parametrica
--- =====================================================
+-- Routing dei match "a livello serie senza episodio" verso la coda di revisione.
+--
+-- Coppia della migration 20260608120200: il matcher ora marca i match serie-senza-episodio
+-- con dettagli_matching.episodio_mancante = true. Qui process_programmazioni_chunk crea
+-- comunque l'individuazione, ma se episodio_mancante è true la imposta a
+-- metodo='suggerito' / stato='in_revisione' (gli altri restano automatico/individuato).
+--
+-- Implementazione a prova di enum: INSERT con i literal originali + RETURNING id, poi UPDATE
+-- condizionale con literal (un literal 'in_revisione'/'suggerito' fa cast a enum se le
+-- colonne sono enum; un CASE di tipo text NO). Presuppone che 'in_revisione' e 'suggerito'
+-- siano valori ammessi da metodo/stato (lo sono nei tipi TS dell'app) — verificare l'enum/
+-- check-constraint in prod se l'UPDATE dovesse fallire.
+--
+-- Sostituisce solo l'overload completo a 6 argomenti (gli overload 1/2 vi delegano, ed è
+-- quello che la route /process-chunk invoca con tutti i parametri).
+--
+-- ⚠️ Questa funzione vive in db/init/03b_process_chunk.sql (non era nelle supabase/migrations).
+-- Il corpo è allineato a quel sorgente di repo: PRIMA di applicare in prod, diffare contro la
+-- definizione deployata con
+--   SELECT pg_get_functiondef('public.process_programmazioni_chunk(uuid,uuid[],numeric,uuid[],int,int)'::regprocedure);
+-- e validare su staging.
 
--- Drop overload vecchie + nuova firma se esistente
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[]);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[], int, int);
-
--- =====================================================
--- OVERLOAD 1: Legacy (3 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC DEFAULT 0.7
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        NULL::UUID[],
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 2: Con filtro artisti (4 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC,
-    p_artista_ids UUID[]
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        p_artista_ids,
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 3: Firma completa con tolleranza anno
--- Propaga p_tolleranza_anno_soft/hard al matching
--- =====================================================
 CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
     p_campagne_individuazione_id UUID,
     p_programmazione_ids UUID[],
