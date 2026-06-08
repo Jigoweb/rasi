@@ -1,98 +1,29 @@
--- =====================================================
--- FUNZIONI DI MATCHING INDIVIDUAZIONI
--- Allineate al DB reale (2026-05-08)
+-- Live matcher upgrade: match_programmazione_to_partecipazioni (full 6-arg overload).
 --
--- Versione 2: pipeline adattiva
---   - Tolleranza anno parametrica (default ±3 soft, ±5 hard)
---   - Discriminante regia null-safe (già corretto, soglia adattiva lo gestisce)
---   - Fix CONTINUE prematuro per serie senza dati episodio specifici
---   - Soglia minima adattiva: 35% del peso massimo disponibile, floor 25
--- =====================================================
+-- Diagnosi Netflix 2025: su 75.266 programmazioni solo 34 con match. Il collo di
+-- bottiglia è lo stadio "match del titolo": il matcher live fa trigram grezzo su
+-- programmazioni.titolo, che (a) per le serie è "Show: Season N" mutilato in
+-- "Show: Season" dal normalizzatore loose, e (b) confronta solo il titolo IT mentre
+-- Netflix fornisce il titolo in lingua originale.
+--
+-- Questa migration porta dentro la funzione live le due idee del "motore nuovo",
+-- mantenendo l'output partecipazioni (così le individuazioni continuano a crearsi):
+--   1. SERIES_PART_TRAIL a match-time: pulisce "Show: Season/Part/Limited Series/..."
+--      sul titolo della programmazione PRIMA del trigram (funziona sui dati già
+--      caricati, niente UPDATE distruttivo del titolo memorizzato).
+--   2. Match anche su programmazioni.titolo_originale (ponte lingua IT/originale):
+--      il punteggio titolo diventa il GREATEST tra {titolo, titolo_originale} pulito
+--      × {opera.titolo, opera.titolo_originale, alias}.
+--
+-- Tutto il resto (anno, regia, episodio, soglia adattiva, join partecipazioni) è
+-- INVARIATO. Solo gli overload 1/2 delegano a questo, quindi basta sostituire il 6-arg.
+--
+-- ⚠️ Questa funzione vive in db/init/03_matching_functions.sql (non era nelle
+-- supabase/migrations). Il corpo qui sotto è allineato a quel sorgente di repo:
+-- PRIMA di applicarlo in produzione, diffare contro la definizione effettivamente
+-- deployata (pg_get_functiondef) per non sovrascrivere eventuali fix non a repo.
+-- Validare su branch/staging con la campagna Netflix prima del prod.
 
--- Drop tutte le overload (firme nuove e vecchie)
-DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric);
-DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric, uuid[]);
-DROP FUNCTION IF EXISTS match_programmazione_to_partecipazioni(uuid, numeric, uuid[], int, int);
-
--- =====================================================
--- OVERLOAD 1: Senza filtro artisti né tolleranza (legacy compatibility)
--- Delega all'overload completo con default
--- =====================================================
-CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
-    p_programmazione_id UUID,
-    p_soglia_titolo NUMERIC DEFAULT 0.7
-)
-RETURNS TABLE (
-    partecipazione_id UUID,
-    opera_id UUID,
-    episodio_id UUID,
-    artista_id UUID,
-    ruolo_id UUID,
-    punteggio NUMERIC,
-    dettagli_matching JSONB
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT * FROM match_programmazione_to_partecipazioni(
-        p_programmazione_id, p_soglia_titolo, NULL::UUID[], 3, 5
-    );
-END;
-$$ LANGUAGE plpgsql STABLE;
-
--- =====================================================
--- OVERLOAD 2: Con filtro artisti, senza tolleranza esplicita
--- =====================================================
-CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
-    p_programmazione_id UUID,
-    p_soglia_titolo NUMERIC,
-    p_artista_ids UUID[]
-)
-RETURNS TABLE (
-    partecipazione_id UUID,
-    opera_id UUID,
-    episodio_id UUID,
-    artista_id UUID,
-    ruolo_id UUID,
-    punteggio NUMERIC,
-    dettagli_matching JSONB
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT * FROM match_programmazione_to_partecipazioni(
-        p_programmazione_id, p_soglia_titolo, p_artista_ids, 3, 5
-    );
-END;
-$$ LANGUAGE plpgsql STABLE;
-
--- =====================================================
--- OVERLOAD 3: Firma completa con tolleranza anno parametrica
---
--- SCORING (peso massimo dinamico, 0-100):
---   Titolo:           50 punti base (similarity * 50) — SEMPRE
---   Titolo originale: 10 punti bonus — se entrambi presenti
---   Anno:             15 punti — se entrambi presenti
---   Regia:            10 punti — se entrambi presenti
---   Episodio:         15 punti — se serie con episodio matchato
---
--- DISCRIMINANTE ANNO (quando entrambi presenti):
---   esatto:           +15 punti (1.0 * 15)
---   ≤ soft:           +10.5 punti (0.7 * 15)
---   soft < d ≤ hard:  +4.5 punti (0.3 * 15)
---   > hard:           skip opera (scarto duro)
---
--- DISCRIMINANTE REGIA (null-safe, attivo solo se entrambi presenti):
---   Match (sim >= 0.7): +10 punti
---   Parziale (>= 0.4):  +5 punti
---   No match:           -15 punti (penalità soft)
---
--- SERIE SENZA DATI EPISODIO SPECIFICI:
---   Se prog è marcata serie SOLO per numero_stagione, senza numero_episodio
---   né titolo_episodio, NON viene scartata: viene matchata senza episode scoring.
---
--- SOGLIA ADATTIVA:
---   35% del peso massimo applicabile, con floor 25.
---   Esempio: prog senza anno/regia/episodio → max 50 → soglia 25.
--- =====================================================
 CREATE OR REPLACE FUNCTION match_programmazione_to_partecipazioni(
     p_programmazione_id UUID,
     p_soglia_titolo NUMERIC DEFAULT 0.7,
@@ -177,7 +108,9 @@ BEGIN
         v_prog.titolo_episodio_originale IS NOT NULL
     );
 
-    -- OTTIMIZZATO: Cerca solo opere con titolo simile usando l'indice trigram
+    -- OTTIMIZZATO: cerca opere con titolo simile sfruttando l'indice trigram.
+    -- Probe sia col titolo pulito sia col titolo_originale pulito; punteggio = GREATEST
+    -- su tutte le combinazioni {prog titolo, prog titolo_orig} × {opera titolo, titolo_orig}.
     FOR v_opera IN
         SELECT
             o.id,
@@ -197,7 +130,6 @@ BEGIN
         WHERE o.titolo IS NOT NULL
           AND v_titolo_match IS NOT NULL
           AND (
-              -- Usa operatore % che sfrutta l'indice GIN trigram (titolo pulito + titolo_originale)
               LOWER(o.titolo) % LOWER(v_titolo_match)
               OR (o.titolo_originale IS NOT NULL AND LOWER(o.titolo_originale) % LOWER(v_titolo_match))
               OR (v_titolo_orig_match IS NOT NULL AND (
@@ -226,7 +158,7 @@ BEGIN
         v_episodio_applicato := FALSE;
         v_skip_opera := FALSE;
 
-        -- Prova con alias_titoli se presenti
+        -- Prova con alias_titoli se presenti (sul titolo pulito e sul titolo_originale pulito)
         IF v_opera.alias_titoli IS NOT NULL AND array_length(v_opera.alias_titoli, 1) > 0 THEN
             DECLARE
                 v_alias TEXT;
@@ -271,9 +203,6 @@ BEGIN
 
         -- =====================================================
         -- 3. DISCRIMINANTE ANNO (parametrico)
-        -- Tolleranza soft (default 3): nessuna penalità
-        -- Tolleranza hard (default 5): penalità ridotta
-        -- Oltre hard: scarta opera
         -- =====================================================
         IF v_prog.anno IS NOT NULL AND v_opera.anno_produzione IS NOT NULL THEN
             v_anno_disponibile := TRUE;
@@ -286,7 +215,6 @@ BEGIN
             ELSIF v_diff_anno <= p_tolleranza_anno_hard THEN
                 v_score_anno := 0.3;
             ELSE
-                -- Oltre tolleranza hard: scarta opera
                 v_skip_opera := TRUE;
             END IF;
 
@@ -308,13 +236,6 @@ BEGIN
 
         -- =====================================================
         -- 4. DISCRIMINANTE REGIA (null-safe)
-        -- programmazioni.regia = TEXT singolo (es. "HILL WALTER")
-        -- opere.regista = VARCHAR[] array (es. ["Walter Hill"])
-        -- Confronto fuzzy: prog.regia vs ogni elemento di opera.regista
-        -- Match (similarity >= 0.7): +1.0 (= +10 punti)
-        -- Parziale (>= 0.4):        +0.5 (= +5 punti)
-        -- No match:                  -1.5 (= -15 punti PENALITÀ)
-        -- Uno mancante:              0 (neutro)
         -- =====================================================
         IF v_prog.regia IS NOT NULL AND LENGTH(TRIM(v_prog.regia)) > 0
            AND v_opera.regista IS NOT NULL AND array_length(v_opera.regista, 1) > 0 THEN
@@ -340,7 +261,6 @@ BEGIN
             ELSIF v_regia_best_score >= 0.4 THEN
                 v_score_regia := 0.5;
             ELSE
-                -- PENALITÀ: regia presente in entrambi ma non corrisponde
                 v_score_regia := -1.5;
             END IF;
 
@@ -356,7 +276,6 @@ BEGIN
 
         -- =====================================================
         -- 5. PER SERIE TV: Match episodio
-        -- Fix: serie senza dati episodio specifici NON scartata
         -- =====================================================
         IF v_is_serie THEN
             FOR v_episodio IN
@@ -428,15 +347,10 @@ BEGIN
                 END;
             END LOOP;
 
-            -- FIX: distingue serie senza dati episodio specifici (procedi senza scoring)
-            -- da serie con dati specifici ma nessun match (scarta)
             IF NOT v_episodio_trovato THEN
                 IF v_has_episode_data THEN
-                    -- Caso A: prog ha dati episodio specifici (numero_episodio o titolo_episodio)
-                    -- ma nessun match → scarta opera
                     CONTINUE;
                 END IF;
-                -- Caso B: prog "marcata serie" solo per numero_stagione → procedi
                 v_score_episodio := 0;
                 v_episodio_applicato := FALSE;
             ELSE
@@ -461,24 +375,19 @@ BEGIN
             v_score_totale := v_score_totale + (v_score_titolo_orig * 10);
         END IF;
 
-        -- Anno: positivo (bonus). Negativi non più applicati (scarto duro oltre hard)
         v_score_totale := v_score_totale + (v_score_anno * 15);
-
-        -- Regia: positivo (bonus) o negativo (penalità no-match)
         v_score_totale := v_score_totale + (v_score_regia * 10);
 
         IF v_episodio_applicato AND v_score_episodio > 0 THEN
             v_score_totale := v_score_totale + (v_score_episodio * 15);
         END IF;
 
-        -- Floor a 0
         v_score_totale := GREATEST(v_score_totale, 0);
 
         -- =====================================================
         -- SOGLIA ADATTIVA: 35% del peso massimo possibile, floor 25
-        -- Conta solo i discriminanti effettivamente disponibili
         -- =====================================================
-        v_peso_massimo := 50;  -- titolo sempre presente
+        v_peso_massimo := 50;
         IF v_score_titolo_orig > 0 THEN
             v_peso_massimo := v_peso_massimo + 10;
         END IF;
@@ -506,7 +415,6 @@ BEGIN
             'has_regia_penalita', v_score_regia < 0
         ));
 
-        -- Applica soglia adattiva
         IF v_score_totale < v_soglia_adattata THEN
             CONTINUE;
         END IF;
