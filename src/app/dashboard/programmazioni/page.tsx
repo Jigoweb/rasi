@@ -9,7 +9,7 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
-import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload, getProcessingProgress, ProcessingProgress } from '@/features/programmazioni/services/programmazioni.service'
+import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload, getProcessingProgress, ProcessingProgress, isProcessingStale } from '@/features/programmazioni/services/programmazioni.service'
 import {
   decideUploadPath,
   applyMapping,
@@ -1176,12 +1176,9 @@ export default function ProgrammazioniPage() {
                                 ) : campagna.stato === 'in_review' ? (
                                   <Badge variant="default">In review</Badge>
                                 ) : campagna.stato === 'in_corso' ? (() => {
-                                  // Check if process is stale (no activity for >10 minutes)
-                                  const progress = processingProgressMap[campagna.id]
-                                  const isStale = progress?.last_activity_at 
-                                    ? Math.floor((Date.now() - new Date(progress.last_activity_at).getTime()) / 1000 / 60) > 10
-                                    : false
-                                  
+                                  // Stale (no activity > threshold) → surface as "Bloccato"
+                                  const isStale = isProcessingStale(processingProgressMap[campagna.id])
+
                                   return isStale ? (
                                     <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
                                       <AlertCircle className="w-3 h-3 mr-1" /> Bloccato
@@ -1257,12 +1254,21 @@ export default function ProgrammazioniPage() {
                               </Badge>
                             )}
 
-                            {/* Badge processamento in corso */}
+                            {/* Badge processamento in corso — riflette lo stato "bloccato"
+                                (stale >10min) in modo coerente con la colonna Stato, invece
+                                di mostrare sempre "Processamento...". */}
                             {campagna.stato === 'in_corso' && (
-                              <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Processamento...
-                              </Badge>
+                              isProcessingStale(processingProgressMap[campagna.id]) ? (
+                                <Badge variant="outline" className="gap-1.5 py-1.5 px-3 border-yellow-500 text-yellow-600 dark:text-yellow-400">
+                                  <AlertCircle className="h-3.5 w-3.5" />
+                                  Bloccato
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Processamento...
+                                </Badge>
+                              )
                             )}
                           </div>
                         </TableCell>
