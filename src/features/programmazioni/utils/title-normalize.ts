@@ -16,6 +16,14 @@ const REPLICA_PAREN = /\s*\(\s*R(\s+\d+'?)?\s*\)/gi
 const SEASON_TRAIL = /\s+(?:S|ST)\.?\s*\d+\s*$/i
 // Extended to handle "(SEASON 1R)" variant in addition to "(SEASON 4)".
 const SEASON_PAREN = /\s*\(\s*SEASON\s+\d+R?\s*\)/gi
+// Netflix-style structural suffix after a colon: "Show: Season 9", "Show: Part 2",
+// "Show: Limited Series", "Show: Volume 1", "Show: Chapter 3", "Show: Collection",
+// plus the digit-stripped dangling forms ("Show: Season"). VOD exports tag every
+// series row this way; collapsing onto the base title is what lets a season row
+// match the canonical opera. Strict-safe (pure broadcaster metadata, not part of
+// the work title). Anchored on the colon to avoid eating real subtitles.
+const SERIES_PART_TRAIL =
+  /\s*:\s*(SEASON|PART|VOLUME|VOL|CHAPTER|LIMITED\s+SERIES|COLLECTION|STAGIONE|PARTE)\b.*$/i
 const ROMAN_TRAIL = /\s+[IVX]{2,}\s*$/i
 const EPISODE_TRAIL = /\s+EP\.?\s*\d+.*$/i
 const EPISODIO_IT = /\s+EPISODIO\s+\d+.*$/i
@@ -108,6 +116,7 @@ export function normalizeTitleStrict(raw: string | null | undefined): string {
        .replace(REPLICA_PAREN, '')
        .replace(SEASON_PAREN, '')
        .replace(SEASON_TRAIL, '')
+       .replace(SERIES_PART_TRAIL, '')
        .replace(EPISODE_TRAIL, '')
        .replace(EPISODIO_IT, '')
        .replace(PUNTATA_TRAIL, '')
