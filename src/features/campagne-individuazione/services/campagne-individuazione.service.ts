@@ -445,7 +445,11 @@ export const processCampagnaIndividuazioneBatch = async (
         campagne_programmazione_id,
         last_id: lastId,
         limit: chunkSize,
-        only_unprocessed: isResume  // Resume: salta le programmazioni già processate
+        // Sempre true: init azzera `processato` a inizio run fresh e il chunk lo
+        // marca durante il processing, quindi sia il run nuovo che il resume
+        // pescano solo le righe non processate. Evita il piano PK-scan + ORDER BY
+        // id che mandava in timeout le campagne con id alti (es. Netflix 2025).
+        only_unprocessed: true
       })
 
       if (!batchResult.success || !batchResult.data) {

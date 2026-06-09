@@ -31,18 +31,23 @@ export async function POST(req: NextRequest) {
       .from('programmazioni')
       .select('id')
       .eq('campagna_programmazione_id', campagne_programmazione_id)
-      .order('id', { ascending: true })
       .limit(limit)
 
-    // Resume: scarta le programmazioni già processate (processato=true).
-    // No-op al primo run (init azzera processato), skip al resume.
     if (only_unprocessed) {
+      // Prende solo le programmazioni non ancora processate, SENZA ORDER BY/cursor.
+      // CRITICO: con `ORDER BY id LIMIT n` il planner sceglie un Index Scan sulla
+      // PK (id) filtrando per campagna → per campagne con id alti scansiona
+      // milioni di righe prima di trovarne n → statement timeout.
+      // Senza order-by usa l'indice su campagna_programmazione_id (cost ~21).
+      // L'avanzamento è garantito: il chunk marca processato=true e le righe
+      // spariscono dal filtro, quindi non serve il cursore.
       query = query.or('processato.is.null,processato.eq.false')
-    }
-
-    // Se abbiamo un cursor, prendiamo solo gli ID successivi
-    if (last_id) {
-      query = query.gt('id', last_id)
+    } else {
+      // Primo passaggio classico: cursor su id crescente.
+      query = query.order('id', { ascending: true })
+      if (last_id) {
+        query = query.gt('id', last_id)
+      }
     }
 
     const { data: programmazioni, error: progError } = await query
