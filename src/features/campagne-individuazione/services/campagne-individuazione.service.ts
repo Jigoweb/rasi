@@ -43,6 +43,7 @@ export interface GetBatchIdsRequest {
   campagne_programmazione_id: string
   last_id?: string | null  // Cursor: ultimo ID processato (null per il primo batch)
   limit: number
+  only_unprocessed?: boolean  // Resume: salta le programmazioni già processate
 }
 
 export interface GetBatchIdsResponse {
@@ -134,6 +135,42 @@ export const initCampagnaIndividuazione = async (
       return { 
         success: false, 
         error: data.error || 'Errore durante l\'inizializzazione',
+        error_code: data.error_code,
+        locked_by: data.locked_by,
+        locked_since: data.locked_since,
+        message: data.message
+      }
+    }
+
+    return data as InitCampagnaResponse
+  } catch (error: any) {
+    return { success: false, error: error.message || 'Errore di connessione' }
+  }
+}
+
+/**
+ * Riprende una campagna_individuazione interrotta (es. sistema chiuso a metà).
+ * Riusa la campagna_individuazione esistente SENZA eliminare nulla e SENZA
+ * azzerare il flag `processato` — il processing continua dalle righe non ancora
+ * processate. Rinnova il lock server-side per lo stesso utente.
+ */
+export const resumeCampagnaIndividuazione = async (
+  request: { campagne_programmazione_id: string }
+): Promise<InitCampagnaResponse> => {
+  try {
+    const headers = await getAuthHeaders()
+    const response = await fetch('/api/campagne-individuazione/resume', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(request),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.error || 'Errore durante il resume',
         error_code: data.error_code,
         locked_by: data.locked_by,
         locked_since: data.locked_since,
@@ -329,11 +366,13 @@ export const processCampagnaIndividuazioneBatch = async (
     nomeCampagna?: string
     descrizione?: string
     artistaIds?: string[] | null  // Filtro artisti opzionale
+    resume?: boolean              // Riprende un processo interrotto (skip righe già fatte)
   }
 ): Promise<FinalizeCampagnaResponse> => {
   const chunkSize = options?.chunkSize || 500
   const sogliaItolo = options?.sogliaItolo || 0.7
   const artistaIds = options?.artistaIds || null
+  const isResume = options?.resume === true
   const startTime = Date.now()
 
   let progress: BatchProcessingProgress = {
@@ -346,15 +385,19 @@ export const processCampagnaIndividuazioneBatch = async (
   }
 
   try {
-    // 1. Inizializzazione
-    console.log('[Batch] Starting init for campagna:', campagneProgrammazioneId, 'at', new Date().toISOString())
+    // 1. Inizializzazione (o resume di un processo interrotto)
+    console.log(`[Batch] Starting ${isResume ? 'resume' : 'init'} for campagna:`, campagneProgrammazioneId, 'at', new Date().toISOString())
     onProgress({ ...progress, phase: 'init' })
 
-    const initResult = await initCampagnaIndividuazione({
-      campagne_programmazione_id: campagneProgrammazioneId,
-      nome_campagna_individuazione: options?.nomeCampagna,
-      descrizione: options?.descrizione
-    })
+    const initResult = isResume
+      ? await resumeCampagnaIndividuazione({
+          campagne_programmazione_id: campagneProgrammazioneId
+        })
+      : await initCampagnaIndividuazione({
+          campagne_programmazione_id: campagneProgrammazioneId,
+          nome_campagna_individuazione: options?.nomeCampagna,
+          descrizione: options?.descrizione
+        })
 
     console.log('[Batch] Init result:', JSON.stringify(initResult, null, 2))
 
@@ -401,7 +444,8 @@ export const processCampagnaIndividuazioneBatch = async (
       const batchResult = await getBatchIds({
         campagne_programmazione_id,
         last_id: lastId,
-        limit: chunkSize
+        limit: chunkSize,
+        only_unprocessed: isResume  // Resume: salta le programmazioni già processate
       })
 
       if (!batchResult.success || !batchResult.data) {

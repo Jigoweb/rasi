@@ -36,7 +36,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Textarea } from '@/shared/components/ui/textarea'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon, Users, Check, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon, Users, Check, ChevronDown, ChevronUp, AlertCircle, RotateCw } from 'lucide-react'
 
 type Emittente = Database['public']['Tables']['emittenti']['Row']
 
@@ -237,6 +237,28 @@ export default function ProgrammazioniPage() {
     }
 
     setCampagnaForIndividuazioni(null)
+  }
+
+  // Riprende un processo di individuazione interrotto (stato in_corso + stale).
+  // Riusa la campagna_individuazione esistente e salta le programmazioni già
+  // processate (resume), senza ricominciare da capo.
+  const handleResumeIndividuazioni = async (campagna: CampagnaProgrammazione) => {
+    if (!canStartNewProcess) {
+      setShowProcessBlockedDialog(true)
+      return
+    }
+    setCampagne(prev => prev.map(c =>
+      c.id === campagna.id ? { ...c, stato: 'in_corso' } : c
+    ))
+    const result = await startProcess(campagna, { resume: true })
+    if (result.success) {
+      setCampagne(prev => prev.map(c =>
+        c.id === campagna.id ? { ...c, stato: 'individuata' } : c
+      ))
+    } else {
+      // Resume fallito (es. lock di altro utente): riallinea allo stato reale
+      fetchCampagne()
+    }
   }
 
   // Delete Campagna Handlers
@@ -1243,6 +1265,23 @@ export default function ProgrammazioniPage() {
                               >
                                 <Sparkles className="h-3.5 w-3.5" />
                                 Crea Individuazioni
+                              </Button>
+                            )}
+
+                            {/* CTA Riprendi — processo interrotto (in_corso + stale >10min) */}
+                            {campagna.stato === 'in_corso' && isProcessingStale(processingProgressMap[campagna.id]) && !isGlobalProcessingThisCampagna && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!canStartNewProcess}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleResumeIndividuazioni(campagna)
+                                }}
+                                className="gap-1.5 cursor-pointer disabled:cursor-not-allowed border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
+                              >
+                                <RotateCw className="h-3.5 w-3.5" />
+                                Riprendi
                               </Button>
                             )}
 

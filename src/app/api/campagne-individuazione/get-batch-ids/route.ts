@@ -10,10 +10,11 @@ import { supabaseServer } from '@/shared/lib/supabase-server'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { 
+    const {
       campagne_programmazione_id,
       last_id = null,  // Cursor: ultimo ID processato
-      limit = 500
+      limit = 500,
+      only_unprocessed = false  // Resume: salta le programmazioni già processate
     } = body
 
     if (!campagne_programmazione_id) {
@@ -32,6 +33,12 @@ export async function POST(req: NextRequest) {
       .eq('campagna_programmazione_id', campagne_programmazione_id)
       .order('id', { ascending: true })
       .limit(limit)
+
+    // Resume: scarta le programmazioni già processate (processato=true).
+    // No-op al primo run (init azzera processato), skip al resume.
+    if (only_unprocessed) {
+      query = query.or('processato.is.null,processato.eq.false')
+    }
 
     // Se abbiamo un cursor, prendiamo solo gli ID successivi
     if (last_id) {
