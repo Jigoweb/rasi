@@ -33,6 +33,7 @@ export interface IndividuazioneProcessState {
 export interface StartProcessOptions {
   artistaIds?: string[] | null  // Filtro artisti opzionale
   descrizione?: string | null   // Descrizione pre-compilata dalla campagna programmazione
+  resume?: boolean              // Riprende un processo interrotto (skip righe già processate)
 }
 
 export interface IndividuazioneProcessContextValue {
@@ -105,6 +106,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
           chunkSize: 25,
           artistaIds: options?.artistaIds,  // Passa il filtro artisti
           descrizione: options?.descrizione || campagna.descrizione || undefined,  // Usa descrizione passata o quella della campagna
+          resume: options?.resume,  // Riprende un processo interrotto
         }
       )
 
