@@ -6,7 +6,13 @@ import {
   BatchProcessingProgress,
   FinalizeCampagnaResponse
 } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
-import { CampagnaProgrammazione } from '@/features/programmazioni/services/programmazioni.service'
+import {
+  CampagnaProgrammazione,
+  getCampagneProgrammazione,
+  getProcessingProgress,
+  isProcessingStale,
+  minutesSinceProcessingActivity,
+} from '@/features/programmazioni/services/programmazioni.service'
 
 // ============================================
 // TYPES
@@ -36,6 +42,18 @@ export interface StartProcessOptions {
   resume?: boolean              // Riprende un processo interrotto (skip righe già processate)
 }
 
+/**
+ * Job di individuazione rimasto "in_corso" e stale (es. sistema chiuso a metà),
+ * idratato dal server al mount così riemerge proattivamente su ogni pagina.
+ */
+export interface InterruptedCampagna {
+  id: string                       // campagne_programmazione_id
+  nome: string
+  programmazioni_totali: number
+  individuazioni_create: number
+  minutesSinceActivity: number | null
+}
+
 export interface IndividuazioneProcessContextValue {
   state: IndividuazioneProcessState
   startProcess: (campagna: CampagnaProgrammazione, options?: StartProcessOptions) => Promise<FinalizeCampagnaResponse>
@@ -43,6 +61,14 @@ export interface IndividuazioneProcessContextValue {
   maximize: () => void
   reset: () => void
   canStartNewProcess: boolean
+  /** Job interrotti (in_corso + stale) idratati dal server, mostrati globalmente. */
+  interrupted: InterruptedCampagna[]
+  /** Ricarica la lista dei job interrotti dal server. */
+  refreshInterrupted: () => Promise<void>
+  /** Riprende un job interrotto dato il suo campagne_programmazione_id. */
+  resumeById: (campagneProgrammazioneId: string, nome?: string) => Promise<FinalizeCampagnaResponse>
+  /** Nasconde una card "interrotto" senza riprenderla (solo lato UI). */
+  dismissInterrupted: (campagneProgrammazioneId: string) => void
 }
 
 // ============================================
@@ -65,6 +91,40 @@ const initialState: IndividuazioneProcessState = {
 
 export function IndividuazioneProcessProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<IndividuazioneProcessState>(initialState)
+  const [interrupted, setInterrupted] = useState<InterruptedCampagna[]>([])
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+
+  // Idratazione da server: trova i job rimasti "in_corso" e stale (es. sistema
+  // chiuso a metà) così riemergono globalmente su ogni pagina, anche dopo
+  // riavvio. È la verità persistente (DB), non lo stato di sessione.
+  const refreshInterrupted = useCallback(async () => {
+    try {
+      const { data: campagne, error } = await getCampagneProgrammazione()
+      if (error || !campagne) return
+      const inCorso = campagne.filter(c => c.stato === 'in_corso')
+      const results = await Promise.all(
+        inCorso.map(async (c) => {
+          const { data: progress } = await getProcessingProgress(c.id)
+          // Stale = nessuna attività da >10min → processo orfano/interrotto.
+          if (!isProcessingStale(progress)) return null
+          return {
+            id: c.id,
+            nome: c.nome,
+            programmazioni_totali: progress?.programmazioni_totali ?? 0,
+            individuazioni_create: progress?.individuazioni_create ?? 0,
+            minutesSinceActivity: minutesSinceProcessingActivity(progress),
+          } as InterruptedCampagna
+        })
+      )
+      setInterrupted(results.filter((r): r is InterruptedCampagna => r !== null))
+    } catch {
+      // best-effort: l'idratazione non deve mai rompere l'app
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshInterrupted()
+  }, [refreshInterrupted])
 
   // Warning before unload during processing
   useEffect(() => {
@@ -92,6 +152,8 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
       result: null,
       isMinimized: false,
     })
+    // Il job non è più "interrotto": è ripartito.
+    setInterrupted(prev => prev.filter(c => c.id !== campagna.id))
 
     try {
       const result = await processCampagnaIndividuazioneBatch(
@@ -183,7 +245,33 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     setState(initialState)
   }, [])
 
+  // Riprende un job interrotto dato solo il suo campagne_programmazione_id.
+  // Il resume route ha bisogno solo dell'id; nome è per il display.
+  const resumeById = useCallback(async (
+    campagneProgrammazioneId: string,
+    nome?: string,
+  ): Promise<FinalizeCampagnaResponse> => {
+    const campagna = {
+      id: campagneProgrammazioneId,
+      nome: nome ?? 'Campagna',
+      stato: 'in_corso',
+    } as CampagnaProgrammazione
+    const result = await startProcess(campagna, { resume: true })
+    if (!result.success) {
+      // resume fallito (es. lock di altro utente): risincronizza con il server
+      refreshInterrupted()
+    }
+    return result
+  }, [startProcess, refreshInterrupted])
+
+  const dismissInterrupted = useCallback((campagneProgrammazioneId: string) => {
+    setDismissedIds(prev => new Set(prev).add(campagneProgrammazioneId))
+    setInterrupted(prev => prev.filter(c => c.id !== campagneProgrammazioneId))
+  }, [])
+
   const canStartNewProcess = state.status === 'idle' || state.status === 'completed' || state.status === 'error'
+
+  const visibleInterrupted = interrupted.filter(c => !dismissedIds.has(c.id))
 
   const value: IndividuazioneProcessContextValue = {
     state,
@@ -192,6 +280,10 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     maximize,
     reset,
     canStartNewProcess,
+    interrupted: visibleInterrupted,
+    refreshInterrupted,
+    resumeById,
+    dismissInterrupted,
   }
 
   return (

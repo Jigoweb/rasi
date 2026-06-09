@@ -8,6 +8,8 @@ import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { isProcessingStale } from '@/features/programmazioni/services/programmazioni.service'
+import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { 
   Search, 
   Sparkles, 
@@ -19,6 +21,7 @@ import {
   CheckCircle,
   Clock,
   Loader2,
+  RotateCw,
   Info,
   BarChart3,
   Trash2,
@@ -35,6 +38,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/
 
 export default function IndividuazioniPage() {
   const router = useRouter()
+  const { resumeById, canStartNewProcess } = useIndividuazioneProcess()
+  const [resumingId, setResumingId] = useState<string | null>(null)
   const [campagne, setCampagne] = useState<CampagnaIndividuazione[]>([])
   const [filteredCampagne, setFilteredCampagne] = useState<CampagnaIndividuazione[]>([])
   const [loading, setLoading] = useState(true)
@@ -120,6 +125,23 @@ export default function IndividuazioniPage() {
       setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: false }))
     }
   }, [loadingProgressMap])
+
+  // Riprende un processo interrotto direttamente dalla pagina Individuazioni
+  // (locality of action: agisci dove vedi lo stato "Interrotto").
+  const handleResume = async (campagna: CampagnaIndividuazione) => {
+    if (!canStartNewProcess) return
+    setResumingId(campagna.id)
+    try {
+      await resumeById(
+        campagna.campagne_programmazione_id,
+        campagna.campagne_programmazione?.nome ?? campagna.nome
+      )
+      // Riallinea la lista col nuovo stato dopo il processo
+      loadCampagne()
+    } finally {
+      setResumingId(null)
+    }
+  }
 
   // Delete Handlers
   const handleOpenDeleteDialog = async (campagna: CampagnaIndividuazione) => {
@@ -254,7 +276,7 @@ export default function IndividuazioniPage() {
         
         return isStale ? (
           <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
-            <AlertCircle className="w-3 h-3 mr-1" /> Bloccato
+            <AlertCircle className="w-3 h-3 mr-1" /> Interrotto
           </Badge>
         ) : (
           <Badge className="bg-blue-100 text-blue-800 border-blue-200">In corso</Badge>
@@ -555,7 +577,7 @@ export default function IndividuazioniPage() {
                                       {isStale ? (
                                         <>
                                           <AlertCircle className="h-3 w-3 text-yellow-500" />
-                                          Processo bloccato
+                                          Processo interrotto
                                         </>
                                       ) : (
                                         <>
@@ -628,7 +650,7 @@ export default function IndividuazioniPage() {
                                             {isStale && (
                                               <div className="pt-1.5 text-[11px] text-yellow-300 flex items-center gap-1.5">
                                                 <span>⚠️</span>
-                                                <span>Il processo sembra bloccato ({minutesSinceActivity} minuti senza attività)</span>
+                                                <span>Processo interrotto ({minutesSinceActivity} minuti senza attività) — riprendibile</span>
                                               </div>
                                             )}
                                           </>
@@ -676,6 +698,23 @@ export default function IndividuazioniPage() {
                     </TableCell>
                     <TableCell className="py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
+                        {/* Riprendi — processo interrotto (in_corso + stale) */}
+                        {campagna.stato === 'in_corso' && isProcessingStale(processingProgressMap[campagna.id]) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!canStartNewProcess || resumingId === campagna.id}
+                            onClick={() => handleResume(campagna)}
+                            className="gap-1.5 border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
+                          >
+                            {resumingId === campagna.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RotateCw className="h-4 w-4" />
+                            )}
+                            Riprendi
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"

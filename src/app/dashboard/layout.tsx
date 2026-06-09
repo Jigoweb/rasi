@@ -3,7 +3,7 @@
 import { useAuth, AVAILABLE_ROLES } from '@/shared/contexts/auth-context'
 import { IndividuazioneProcessProvider } from '@/shared/contexts/individuazione-process-context'
 import { ExportProcessProvider } from '@/shared/contexts/export-process-context'
-import { FloatingProgressIndicator, IndividuazioneProgressDialog } from '@/shared/components/individuazione-progress-indicator'
+import { FloatingProgressIndicator, IndividuazioneProgressDialog, FloatingInterruptedIndicator } from '@/shared/components/individuazione-progress-indicator'
 import { FloatingExportIndicator, ExportProgressDialog } from '@/shared/components/export-progress-indicator'
 import { Button } from '@/shared/components/ui/button'
 import { Separator } from '@/shared/components/ui/separator'
@@ -271,6 +271,7 @@ export default function DashboardLayout({
 
       {/* Global Individuazione Process Components */}
       <FloatingProgressIndicator />
+      <FloatingInterruptedIndicator />
       <IndividuazioneProgressDialog />
       
       {/* Global Export Process Components */}

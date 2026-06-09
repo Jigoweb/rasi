@@ -1,17 +1,20 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
-import { 
-  Loader2, 
-  Sparkles, 
-  CheckCircle, 
-  XCircle, 
-  Eye, 
+import {
+  Loader2,
+  Sparkles,
+  CheckCircle,
+  XCircle,
+  Eye,
   Minimize2,
-  X
+  X,
+  AlertCircle,
+  RotateCw
 } from 'lucide-react'
 
 // ============================================
@@ -95,6 +98,91 @@ export function FloatingProgressIndicator() {
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+// ============================================
+// FLOATING INTERRUPTED INDICATOR (job orfani da riprendere)
+// ============================================
+
+/**
+ * Mostra globalmente (su ogni pagina) i job di individuazione rimasti
+ * "in_corso" e stale — es. sistema chiuso a metà. Idratati dal server al mount,
+ * così il processo interrotto riemerge proattivamente ed è riprendibile da
+ * qualsiasi pagina, senza doverlo andare a cercare su Programmazioni.
+ */
+export function FloatingInterruptedIndicator() {
+  const router = useRouter()
+  const { interrupted, resumeById, dismissInterrupted, canStartNewProcess, state } =
+    useIndividuazioneProcess()
+  const [resumingId, setResumingId] = useState<string | null>(null)
+
+  // Non mostrare durante un processo attivo (evita clutter col progress) o se
+  // non ci sono job interrotti.
+  if (state.status === 'processing' || interrupted.length === 0) {
+    return null
+  }
+
+  const handleResume = async (id: string, nome: string) => {
+    if (!canStartNewProcess) return
+    setResumingId(id)
+    try {
+      await resumeById(id, nome)
+    } finally {
+      setResumingId(null)
+    }
+  }
+
+  return (
+    <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm pointer-events-auto animate-in slide-in-from-bottom-4 fade-in duration-300">
+      {interrupted.map((c) => {
+        const isResuming = resumingId === c.id
+        return (
+          <div
+            key={c.id}
+            className="flex items-start gap-3 bg-background border border-yellow-400/60 rounded-lg shadow-lg px-4 py-3"
+          >
+            <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">Processo interrotto</p>
+              <p className="text-xs text-muted-foreground truncate">{c.nome}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                {c.individuazioni_create.toLocaleString()} individuazioni create
+                {c.minutesSinceActivity != null && ` · fermo da ${c.minutesSinceActivity} min`}
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  size="sm"
+                  className="h-7 gap-1.5"
+                  disabled={!canStartNewProcess || isResuming}
+                  onClick={() => handleResume(c.id, c.nome)}
+                >
+                  {isResuming ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCw className="h-3.5 w-3.5" />
+                  )}
+                  Riprendi
+                </Button>
+                <button
+                  onClick={() => router.push('/dashboard/programmazioni')}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Vai
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => dismissInterrupted(c.id)}
+              className="p-1 hover:bg-muted rounded text-muted-foreground shrink-0"
+              aria-label="Nascondi"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }
