@@ -1117,7 +1117,7 @@ export default function ProgrammazioniPage() {
                                                   {isStale && (
                                                     <div className="pt-1.5 text-[11px] text-yellow-300 flex items-center gap-1.5">
                                                       <span>⚠️</span>
-                                                      <span>Il processo sembra bloccato ({minutesSinceActivity} minuti senza attività)</span>
+                                                      <span>Processo interrotto ({minutesSinceActivity} minuti senza attività) — riprendibile</span>
                                                     </div>
                                                   )}
                                                 </>
@@ -1198,12 +1198,12 @@ export default function ProgrammazioniPage() {
                                 ) : campagna.stato === 'in_review' ? (
                                   <Badge variant="default">In review</Badge>
                                 ) : campagna.stato === 'in_corso' ? (() => {
-                                  // Stale (no activity > threshold) → surface as "Bloccato"
+                                  // Stale (no activity > threshold) → surface as "Interrotto"
                                   const isStale = isProcessingStale(processingProgressMap[campagna.id])
 
                                   return isStale ? (
                                     <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
-                                      <AlertCircle className="w-3 h-3 mr-1" /> Bloccato
+                                      <AlertCircle className="w-3 h-3 mr-1" /> Interrotto
                                     </Badge>
                                   ) : (
                                     <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Processando</Badge>
@@ -1300,7 +1300,7 @@ export default function ProgrammazioniPage() {
                               isProcessingStale(processingProgressMap[campagna.id]) ? (
                                 <Badge variant="outline" className="gap-1.5 py-1.5 px-3 border-yellow-500 text-yellow-600 dark:text-yellow-400">
                                   <AlertCircle className="h-3.5 w-3.5" />
-                                  Bloccato
+                                  Interrotto
                                 </Badge>
                               ) : (
                                 <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
