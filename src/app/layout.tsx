@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+
+export const dynamic = 'force-dynamic'
 import { Inter, Poppins, Lora } from "next/font/google";
 import { AuthProvider } from "@/shared/contexts/auth-context";
 import "./globals.css";
