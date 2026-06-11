@@ -357,18 +357,27 @@ export const getBatchIds = async (
 /**
  * Processa una campagna_individuazione in batch con callback per il progresso
  */
+type BatchProcessingOptions = {
+  chunkSize?: number
+  sogliaItolo?: number
+  nomeCampagna?: string
+  descrizione?: string
+  artistaIds?: string[] | null  // Filtro artisti opzionale
+  resume?: boolean              // Riprende un processo interrotto (skip righe già fatte)
+}
+
 export const processCampagnaIndividuazioneBatch = async (
   campagneProgrammazioneId: string,
   onProgress: (progress: BatchProcessingProgress) => void,
-  options?: {
-    chunkSize?: number
-    sogliaItolo?: number
-    nomeCampagna?: string
-    descrizione?: string
-    artistaIds?: string[] | null  // Filtro artisti opzionale
-    resume?: boolean              // Riprende un processo interrotto (skip righe già fatte)
-  }
+  options?: BatchProcessingOptions
 ): Promise<FinalizeCampagnaResponse> => {
+  // Se è configurato il worker Node.js (Railway), delega a lui l'intera
+  // orchestrazione: il browser fa solo start + polling e può chiudersi senza
+  // fermare il processo. Altrimenti resta il path serverless legacy qui sotto.
+  if (getWorkerUrl()) {
+    return processCampagnaIndividuazioneViaWorker(campagneProgrammazioneId, onProgress, options)
+  }
+
   const chunkSize = options?.chunkSize || 500
   const sogliaItolo = options?.sogliaItolo || 0.7
   const artistaIds = options?.artistaIds || null
@@ -537,6 +546,138 @@ export const processCampagnaIndividuazioneBatch = async (
       success: false,
       error: error.message
     }
+  }
+}
+
+// ============================================
+// WORKER (Railway) — orchestrazione server-side
+// ============================================
+
+/**
+ * URL del worker Node.js su Railway (senza slash finale), oppure null se non
+ * configurato. Quando assente, il processing resta orchestrato dal browser.
+ */
+const getWorkerUrl = (): string | null => {
+  const url = process.env.NEXT_PUBLIC_WORKER_URL
+  return url ? url.replace(/\/+$/, '') : null
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+const WORKER_POLL_INTERVAL_MS = 2500
+
+/**
+ * Variante di processCampagnaIndividuazioneBatch che delega al worker Railway.
+ * Avvia il job (start), poi fa polling dello stato mappandolo su onProgress.
+ * Il processo gira interamente server-side: chiudere il browser non lo ferma.
+ */
+const processCampagnaIndividuazioneViaWorker = async (
+  campagneProgrammazioneId: string,
+  onProgress: (progress: BatchProcessingProgress) => void,
+  options?: BatchProcessingOptions
+): Promise<FinalizeCampagnaResponse> => {
+  const workerUrl = getWorkerUrl()!
+  const startTime = Date.now()
+
+  const baseProgress: BatchProcessingProgress = {
+    phase: 'init',
+    programmazioni_totali: 0,
+    programmazioni_processate: 0,
+    individuazioni_create: 0,
+    current_chunk: 0,
+    total_chunks: 0,
+  }
+  onProgress(baseProgress)
+
+  try {
+    // 1. Avvia (o riprende) il job
+    const headers = await getAuthHeaders()
+    const startRes = await fetch(`${workerUrl}/api/individuazione/start`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        campagne_programmazione_id: campagneProgrammazioneId,
+        soglia_titolo: options?.sogliaItolo,
+        artista_ids: options?.artistaIds ?? null,
+        nome_campagna: options?.nomeCampagna,
+        descrizione: options?.descrizione,
+        resume: options?.resume === true,
+      }),
+    })
+
+    const startData = await startRes.json()
+    // 202 = nuovo job; 409 con job_id = job già attivo → ci agganciamo a quello.
+    const jobId: string | undefined = startData?.job_id
+    if (!jobId) {
+      throw new Error(startData?.error || 'Errore avvio job sul worker')
+    }
+
+    // 2. Polling dello stato
+    let networkErrors = 0
+    while (true) {
+      await sleep(WORKER_POLL_INTERVAL_MS)
+
+      let job: any
+      try {
+        const pollHeaders = await getAuthHeaders()
+        const res = await fetch(`${workerUrl}/api/jobs/${jobId}`, { headers: pollHeaders })
+        if (!res.ok) {
+          // 5xx transitori: riprova qualche volta prima di arrendersi
+          if (++networkErrors > 10) throw new Error(`Worker non raggiungibile (${res.status})`)
+          continue
+        }
+        const payload = await res.json()
+        job = payload?.data
+        networkErrors = 0
+      } catch (e) {
+        if (++networkErrors > 10) throw e
+        continue
+      }
+
+      if (!job) continue
+
+      onProgress({
+        phase: (job.fase as BatchProcessingProgress['phase']) || 'processing',
+        programmazioni_totali: job.programmazioni_totali ?? 0,
+        programmazioni_processate: job.programmazioni_processate ?? 0,
+        individuazioni_create: job.individuazioni_create ?? 0,
+        current_chunk: job.current_chunk ?? 0,
+        total_chunks: job.total_chunks ?? 0,
+        error: job.error ?? undefined,
+      })
+
+      if (job.stato === 'completed') {
+        onProgress({
+          phase: 'completed',
+          programmazioni_totali: job.programmazioni_totali ?? 0,
+          programmazioni_processate: job.programmazioni_processate ?? 0,
+          individuazioni_create: job.individuazioni_create ?? 0,
+          current_chunk: job.current_chunk ?? 0,
+          total_chunks: job.total_chunks ?? 0,
+        })
+        return {
+          success: true,
+          data: {
+            statistiche: {
+              programmazioni_totali: job.programmazioni_totali ?? 0,
+              programmazioni_processate: job.programmazioni_processate ?? 0,
+              individuazioni_create: job.individuazioni_create ?? 0,
+              artisti_distinti: 0,
+              opere_distinte: 0,
+              campagne_individuazione_id: job.campagne_individuazione_id,
+              tempo_processamento_ms: Date.now() - startTime,
+            } as any,
+          },
+        }
+      }
+
+      if (job.stato === 'error' || job.stato === 'cancelled') {
+        return { success: false, error: job.error || 'Job terminato con errore' }
+      }
+    }
+  } catch (error: any) {
+    onProgress({ ...baseProgress, phase: 'error', error: error.message })
+    return { success: false, error: error.message || 'Errore di connessione al worker' }
   }
 }
 
