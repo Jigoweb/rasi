@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
+import type { WebSocketLikeConstructor } from '@supabase/realtime-js'
+import WebSocket from 'ws'
 import { config } from './config.js'
+
+const wsTransport = WebSocket as unknown as WebSocketLikeConstructor
 
 /**
  * Client service-role: bypassa RLS, usato per tutte le operazioni server-side
@@ -17,6 +21,7 @@ export const supabaseService = createClient(
     auth: { autoRefreshToken: false, persistSession: false },
     db: { schema: 'public' },
     global: { headers: { 'x-client-info': 'rasi-worker' } },
+    realtime: { transport: wsTransport },
   }
 )
 
@@ -26,6 +31,7 @@ export const supabaseService = createClient(
  */
 const supabaseAnon = createClient(config.supabaseUrl, config.supabaseAnonKey, {
   auth: { autoRefreshToken: false, persistSession: false },
+  realtime: { transport: wsTransport },
 })
 
 /**
