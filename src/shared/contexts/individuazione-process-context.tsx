@@ -1,14 +1,18 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
-import { 
-  processCampagnaIndividuazioneBatch, 
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react'
+import {
+  processCampagnaIndividuazioneBatch,
   BatchProcessingProgress,
-  FinalizeCampagnaResponse
+  FinalizeCampagnaResponse,
+  findActiveWorkerJob,
+  pollWorkerJob,
+  getWorkerUrl,
 } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import {
   CampagnaProgrammazione,
   getCampagneProgrammazione,
+  getCampagnaProgrammazioneById,
   getProcessingProgress,
   isProcessingStale,
   minutesSinceProcessingActivity,
@@ -93,6 +97,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
   const [state, setState] = useState<IndividuazioneProcessState>(initialState)
   const [interrupted, setInterrupted] = useState<InterruptedCampagna[]>([])
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  const reattachAbortRef = useRef<AbortController | null>(null)
 
   // Idratazione da server: trova i job rimasti "in_corso" e stale (es. sistema
   // chiuso a metà) così riemergono globalmente su ogni pagina, anche dopo
@@ -122,9 +127,67 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     }
   }, [])
 
-  useEffect(() => {
-    refreshInterrupted()
+  // Al mount, se il worker è configurato, cerca un job attivo su campaign_jobs
+  // e si riaggancia al polling senza che l'utente debba riavviare il processo.
+  const reattachToActiveJob = useCallback(async () => {
+    if (!getWorkerUrl()) return
+    try {
+      const active = await findActiveWorkerJob()
+      if (!active) return
+
+      const { data: campagna } = await getCampagnaProgrammazioneById(active.campagneProgrammazioneId)
+
+      setState({
+        status: 'processing',
+        campagna: campagna ?? ({ id: active.campagneProgrammazioneId, nome: 'Campagna' } as CampagnaProgrammazione),
+        progress: null,
+        result: null,
+        isMinimized: true,
+      })
+      setInterrupted(prev => prev.filter(c => c.id !== active.campagneProgrammazioneId))
+
+      const controller = new AbortController()
+      reattachAbortRef.current = controller
+
+      const result = await pollWorkerJob(
+        active.jobId,
+        (progress) => { setState(prev => ({ ...prev, progress })) },
+        Date.now(),
+        controller.signal
+      )
+
+      if (controller.signal.aborted) return
+
+      reattachAbortRef.current = null
+
+      if (result.success && result.data) {
+        setState(prev => ({
+          ...prev,
+          status: 'completed',
+          result: {
+            success: true,
+            stats: result.data!.statistiche,
+            campagneIndividuazioneId: (result.data!.statistiche as any).campagne_individuazione_id,
+          },
+        }))
+      } else {
+        setState(prev => ({
+          ...prev,
+          status: 'error',
+          result: { success: false, error: result.error || 'Errore job' },
+        }))
+      }
+
+      refreshInterrupted()
+    } catch {
+      // best-effort: non rompere l'app
+    }
   }, [refreshInterrupted])
+
+  useEffect(() => {
+    reattachToActiveJob()
+    refreshInterrupted()
+  }, [reattachToActiveJob, refreshInterrupted])
 
   // Warning before unload during processing
   useEffect(() => {
@@ -141,10 +204,13 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
   }, [state.status])
 
   const startProcess = useCallback(async (
-    campagna: CampagnaProgrammazione, 
+    campagna: CampagnaProgrammazione,
     options?: StartProcessOptions
   ): Promise<FinalizeCampagnaResponse> => {
-    // Set initial state
+    // Annulla l'eventuale re-attach in corso per evitare loop di polling doppi
+    reattachAbortRef.current?.abort()
+    reattachAbortRef.current = null
+
     setState({
       status: 'processing',
       campagna,

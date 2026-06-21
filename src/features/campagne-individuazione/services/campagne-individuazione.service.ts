@@ -557,7 +557,7 @@ export const processCampagnaIndividuazioneBatch = async (
  * URL del worker Node.js su Railway (senza slash finale), oppure null se non
  * configurato. Quando assente, il processing resta orchestrato dal browser.
  */
-const getWorkerUrl = (): string | null => {
+export const getWorkerUrl = (): string | null => {
   const url = process.env.NEXT_PUBLIC_WORKER_URL
   return url ? url.replace(/\/+$/, '') : null
 }
@@ -565,6 +565,105 @@ const getWorkerUrl = (): string | null => {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 const WORKER_POLL_INTERVAL_MS = 2500
+
+/** Cerca il job attivo (queued/running) più recente su campaign_jobs. */
+export const findActiveWorkerJob = async (): Promise<{
+  jobId: string
+  campagneProgrammazioneId: string
+} | null> => {
+  const { data, error } = await (supabase as any)
+    .from('campaign_jobs')
+    .select('id, campagne_programmazione_id')
+    .in('stato', ['queued', 'running'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return {
+    jobId: data.id as string,
+    campagneProgrammazioneId: data.campagne_programmazione_id as string,
+  }
+}
+
+/**
+ * Polling di un job già avviato (su Railway). Usato sia dal flusso normale
+ * (dopo start) sia per il re-attach al reload di pagina.
+ * `signal` permette di annullare il loop quando startProcess prende il controllo.
+ */
+export const pollWorkerJob = async (
+  jobId: string,
+  onProgress: (progress: BatchProcessingProgress) => void,
+  startTime = Date.now(),
+  signal?: AbortSignal
+): Promise<FinalizeCampagnaResponse> => {
+  const workerUrl = getWorkerUrl()
+  if (!workerUrl) return { success: false, error: 'Worker non configurato' }
+
+  let networkErrors = 0
+  while (true) {
+    if (signal?.aborted) return { success: false, error: 'Polling annullato' }
+    await sleep(WORKER_POLL_INTERVAL_MS)
+    if (signal?.aborted) return { success: false, error: 'Polling annullato' }
+
+    let job: any
+    try {
+      const pollHeaders = await getAuthHeaders()
+      const res = await fetch(`${workerUrl}/api/jobs/${jobId}`, { headers: pollHeaders })
+      if (!res.ok) {
+        if (++networkErrors > 10) throw new Error(`Worker non raggiungibile (${res.status})`)
+        continue
+      }
+      const payload = await res.json()
+      job = payload?.data
+      networkErrors = 0
+    } catch (e) {
+      if (++networkErrors > 10) throw e as any
+      continue
+    }
+
+    if (!job) continue
+
+    onProgress({
+      phase: (job.fase as BatchProcessingProgress['phase']) || 'processing',
+      programmazioni_totali: job.programmazioni_totali ?? 0,
+      programmazioni_processate: job.programmazioni_processate ?? 0,
+      individuazioni_create: job.individuazioni_create ?? 0,
+      current_chunk: job.current_chunk ?? 0,
+      total_chunks: job.total_chunks ?? 0,
+      error: job.error ?? undefined,
+    })
+
+    if (job.stato === 'completed') {
+      onProgress({
+        phase: 'completed',
+        programmazioni_totali: job.programmazioni_totali ?? 0,
+        programmazioni_processate: job.programmazioni_processate ?? 0,
+        individuazioni_create: job.individuazioni_create ?? 0,
+        current_chunk: job.current_chunk ?? 0,
+        total_chunks: job.total_chunks ?? 0,
+      })
+      return {
+        success: true,
+        data: {
+          statistiche: {
+            programmazioni_totali: job.programmazioni_totali ?? 0,
+            programmazioni_processate: job.programmazioni_processate ?? 0,
+            individuazioni_create: job.individuazioni_create ?? 0,
+            artisti_distinti: 0,
+            opere_distinte: 0,
+            campagne_individuazione_id: job.campagne_individuazione_id,
+            tempo_processamento_ms: Date.now() - startTime,
+          } as any,
+        },
+      }
+    }
+
+    if (job.stato === 'error' || job.stato === 'cancelled') {
+      return { success: false, error: job.error || 'Job terminato con errore' }
+    }
+  }
+}
 
 /**
  * Variante di processCampagnaIndividuazioneBatch che delega al worker Railway.
@@ -612,69 +711,8 @@ const processCampagnaIndividuazioneViaWorker = async (
       throw new Error(startData?.error || 'Errore avvio job sul worker')
     }
 
-    // 2. Polling dello stato
-    let networkErrors = 0
-    while (true) {
-      await sleep(WORKER_POLL_INTERVAL_MS)
-
-      let job: any
-      try {
-        const pollHeaders = await getAuthHeaders()
-        const res = await fetch(`${workerUrl}/api/jobs/${jobId}`, { headers: pollHeaders })
-        if (!res.ok) {
-          // 5xx transitori: riprova qualche volta prima di arrendersi
-          if (++networkErrors > 10) throw new Error(`Worker non raggiungibile (${res.status})`)
-          continue
-        }
-        const payload = await res.json()
-        job = payload?.data
-        networkErrors = 0
-      } catch (e) {
-        if (++networkErrors > 10) throw e
-        continue
-      }
-
-      if (!job) continue
-
-      onProgress({
-        phase: (job.fase as BatchProcessingProgress['phase']) || 'processing',
-        programmazioni_totali: job.programmazioni_totali ?? 0,
-        programmazioni_processate: job.programmazioni_processate ?? 0,
-        individuazioni_create: job.individuazioni_create ?? 0,
-        current_chunk: job.current_chunk ?? 0,
-        total_chunks: job.total_chunks ?? 0,
-        error: job.error ?? undefined,
-      })
-
-      if (job.stato === 'completed') {
-        onProgress({
-          phase: 'completed',
-          programmazioni_totali: job.programmazioni_totali ?? 0,
-          programmazioni_processate: job.programmazioni_processate ?? 0,
-          individuazioni_create: job.individuazioni_create ?? 0,
-          current_chunk: job.current_chunk ?? 0,
-          total_chunks: job.total_chunks ?? 0,
-        })
-        return {
-          success: true,
-          data: {
-            statistiche: {
-              programmazioni_totali: job.programmazioni_totali ?? 0,
-              programmazioni_processate: job.programmazioni_processate ?? 0,
-              individuazioni_create: job.individuazioni_create ?? 0,
-              artisti_distinti: 0,
-              opere_distinte: 0,
-              campagne_individuazione_id: job.campagne_individuazione_id,
-              tempo_processamento_ms: Date.now() - startTime,
-            } as any,
-          },
-        }
-      }
-
-      if (job.stato === 'error' || job.stato === 'cancelled') {
-        return { success: false, error: job.error || 'Job terminato con errore' }
-      }
-    }
+    // 2. Polling (delegato a pollWorkerJob per permettere il re-attach al reload)
+    return pollWorkerJob(jobId, onProgress, startTime)
   } catch (error: any) {
     onProgress({ ...baseProgress, phase: 'error', error: error.message })
     return { success: false, error: error.message || 'Errore di connessione al worker' }
