@@ -1,4 +1,13 @@
 import { supabase } from '@/shared/lib/supabase'
+import {
+  getDataHealthPolicyFromConfig,
+  getFieldsForHealthCounts,
+  getMissingFieldFilter,
+  resolveDataHealthPolicy,
+  type DataHealthFieldMetric,
+  type DataHealthPolicySummary,
+  type ResolvedDataHealthField,
+} from './data-health-policy.service'
 
 export interface CampagnaProgrammazionePayload {
   emittente_id: string
@@ -572,66 +581,65 @@ export interface ProgrammazioniHealth {
   errors_count: number
   date_min?: string
   date_max?: string
+  date_range_error?: string
+  policy: DataHealthPolicySummary
+  field_metrics: DataHealthFieldMetric[]
 }
 
 export const getProgrammazioniHealth = async (campagnaId: string) => {
   try {
-    // Execute all count queries in parallel for better performance
+    const campagnaRes = await supabase
+      .from('campagne_programmazione' as any)
+      .select('emittenti(nome,tipo,configurazione)')
+      .eq('id', campagnaId)
+      .single()
+
+    const emittente = (campagnaRes.data as any)?.emittenti
+    const policy = getDataHealthPolicyFromConfig(
+      emittente?.configurazione,
+      emittente?.tipo,
+      emittente?.nome
+    )
+    const resolvedPolicy = resolveDataHealthPolicy(policy)
+    const fieldsToCount = getFieldsForHealthCounts(policy)
+
+    // Execute core counts in parallel for better performance. Date range is
+    // intentionally outside this block: it can time out on large sparse datasets
+    // and should not make every health metric disappear.
     const [
       totalRes,
       processedRes,
       unprocessedRes,
-      missingTitleRes,
-      missingDurationRes,
       errorsRes,
-      rangeRes
     ] = await Promise.all([
       supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
         .eq('campagna_programmazione_id', campagnaId),
       supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId)
         .eq('processato', true),
       supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
+        .from('programmazioni' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagnaId)
         .eq('processato', false),
       supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-        .is('titolo', null),
-      supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-        .is('durata_minuti', null),
-      supabase
-    .from('programmazioni' as any)
-    .select('*', { count: 'exact', head: true })
-    .eq('campagna_programmazione_id', campagnaId)
-        .not('errori_processamento', 'is', null),
-      supabase
         .from('programmazioni' as any)
-        .select('data_trasmissione')
+        .select('*', { count: 'exact', head: true })
         .eq('campagna_programmazione_id', campagnaId)
-        .order('data_trasmissione', { ascending: true })
-        .limit(1)
+        .not('errori_processamento', 'is', null),
     ])
 
     // Check for errors
     const errors = [
+      campagnaRes.error,
       totalRes.error,
       processedRes.error,
       unprocessedRes.error,
-      missingTitleRes.error,
-      missingDurationRes.error,
       errorsRes.error,
-      rangeRes.error
     ].filter(Boolean)
 
     if (errors.length > 0) {
@@ -639,38 +647,62 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
       return { data: null, error: errors[0] }
     }
 
-    // Get date range from first and last records
-    let date_min: string | undefined = undefined
-    let date_max: string | undefined = undefined
-
-    if (rangeRes.data && rangeRes.data.length > 0) {
-      const firstRecord = rangeRes.data[0] as any
-      date_min = firstRecord.data_trasmissione
-      
-      // Get max date
-      const maxRes = await supabase
-    .from('programmazioni' as any)
-        .select('data_trasmissione')
-    .eq('campagna_programmazione_id', campagnaId)
-        .order('data_trasmissione', { ascending: false })
-    .limit(1)
-
-      if (maxRes.data && maxRes.data.length > 0) {
-        const lastRecord = maxRes.data[0] as any
-        date_max = lastRecord.data_trasmissione
-      }
+    const total = totalRes.count || 0
+    const fieldMetrics = await Promise.all(
+      fieldsToCount.map(field => countMissingHealthField(campagnaId, field, total))
+    )
+    const fieldMetricErrors = fieldMetrics.filter(metric => metric.error).map(metric => metric.error)
+    if (fieldMetricErrors.length > 0) {
+      console.error('[getProgrammazioniHealth] Field metric errors:', fieldMetricErrors)
+      return { data: null, error: fieldMetricErrors[0] }
     }
 
-  const health: ProgrammazioniHealth = {
-    total: totalRes.count || 0,
-    processed: processedRes.count || 0,
-    unprocessed: unprocessedRes.count || 0,
-    missing_title: missingTitleRes.count || 0,
-    missing_duration: missingDurationRes.count || 0,
-    errors_count: errorsRes.count || 0,
+    let date_min: string | undefined = undefined
+    let date_max: string | undefined = undefined
+    let date_range_error: string | undefined = undefined
+
+    const [minDateRes, maxDateRes] = await Promise.all([
+      supabase
+        .from('programmazioni' as any)
+        .select('data_trasmissione')
+        .eq('campagna_programmazione_id', campagnaId)
+        .not('data_trasmissione', 'is', null)
+        .order('data_trasmissione', { ascending: true })
+        .limit(1),
+      supabase
+        .from('programmazioni' as any)
+        .select('data_trasmissione')
+        .eq('campagna_programmazione_id', campagnaId)
+        .not('data_trasmissione', 'is', null)
+        .order('data_trasmissione', { ascending: false })
+        .limit(1),
+    ])
+
+    if (minDateRes.error || maxDateRes.error) {
+      const rangeError = minDateRes.error || maxDateRes.error
+      date_range_error = rangeError?.message ?? 'Periodo non disponibile'
+      console.warn('[getProgrammazioniHealth] Date range unavailable:', rangeError)
+    } else {
+      date_min = ((minDateRes.data?.[0] as any)?.data_trasmissione as string | undefined) ?? undefined
+      date_max = ((maxDateRes.data?.[0] as any)?.data_trasmissione as string | undefined) ?? undefined
+    }
+
+    const metricData = fieldMetrics.map(metric => metric.data)
+    const metricByKey = new Map(metricData.map(metric => [metric.key, metric]))
+
+    const health: ProgrammazioniHealth = {
+      total,
+      processed: processedRes.count || 0,
+      unprocessed: unprocessedRes.count || 0,
+      missing_title: metricByKey.get('titolo')?.missing ?? 0,
+      missing_duration: metricByKey.get('durata_minuti')?.missing ?? 0,
+      errors_count: errorsRes.count || 0,
       date_min,
       date_max,
-  }
+      date_range_error,
+      policy: resolvedPolicy,
+      field_metrics: metricData,
+    }
 
     return { data: health, error: null }
   } catch (error: any) {
@@ -679,5 +711,35 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
       data: null, 
       error: error instanceof Error ? error : new Error(String(error))
     }
+  }
+}
+
+async function countMissingHealthField(
+  campagnaId: string,
+  field: ResolvedDataHealthField,
+  total: number
+): Promise<{ data: DataHealthFieldMetric; error: any }> {
+  let query = supabase
+    .from('programmazioni' as any)
+    .select('*', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaId)
+
+  if (field.valueType === 'text') {
+    query = query.or(getMissingFieldFilter(field))
+  } else {
+    query = query.is(field.key, null)
+  }
+
+  const { count, error } = await query
+  const missing = count || 0
+  return {
+    data: {
+      key: field.key,
+      label: field.label,
+      status: field.status,
+      missing,
+      percent: total > 0 ? Math.round((missing / total) * 100) : 0,
+    },
+    error,
   }
 }

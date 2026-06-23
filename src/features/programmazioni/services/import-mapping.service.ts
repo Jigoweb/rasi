@@ -38,6 +38,23 @@ export interface ImportMappingConfig {
   transforms?: Record<string, TransformName>
 }
 
+export type ImportMappingStatus = 'not_configured' | 'incomplete' | 'configured'
+
+export interface ImportMappingSummary {
+  status: ImportMappingStatus
+  mappedCount: number
+  mappedFields: string[]
+  sourceColumnCount: number
+  lastConfiguredAt: string | null
+  hasRequiredTitle: boolean
+}
+
+export interface ReconcileImportMappingColumnsResult {
+  mapping: Record<string, string>
+  transforms: Record<string, TransformName>
+  removedColumns: string[]
+}
+
 export interface DetectColumnsResult {
   columns: string[]
   preview: Record<string, any>[]
@@ -59,6 +76,65 @@ export type UploadDecision =
       diff: ColumnDiff
       mappedRemoved: string[]
     }
+
+export function summarizeImportMapping(
+  config: ImportMappingConfig | null | undefined
+): ImportMappingSummary {
+  if (!config) {
+    return {
+      status: 'not_configured',
+      mappedCount: 0,
+      mappedFields: [],
+      sourceColumnCount: 0,
+      lastConfiguredAt: null,
+      hasRequiredTitle: false,
+    }
+  }
+
+  const mappedFields = new Set<string>()
+  for (const target of Object.values(config.mapping ?? {})) {
+    if (target && TEMPLATE_FIELDS_SET.has(target)) mappedFields.add(target)
+  }
+  for (const [target, rule] of Object.entries(config.rules ?? {})) {
+    if (TEMPLATE_FIELDS_SET.has(target) && (rule.sources?.length ?? 0) > 0) {
+      mappedFields.add(target)
+    }
+  }
+
+  const fields = [...mappedFields].sort((a, b) => a.localeCompare(b))
+  const hasRequiredTitle = fields.includes('titolo')
+
+  return {
+    status: hasRequiredTitle ? 'configured' : 'incomplete',
+    mappedCount: fields.length,
+    mappedFields: fields,
+    sourceColumnCount: config.colonne_rilevate?.length ?? 0,
+    lastConfiguredAt: config.ultimo_upload ?? null,
+    hasRequiredTitle,
+  }
+}
+
+export function reconcileImportMappingColumns(
+  previousColumns: string[],
+  nextColumns: string[],
+  mapping: Record<string, string>,
+  transforms: Record<string, TransformName> = {},
+): ReconcileImportMappingColumnsResult {
+  const nextColumnSet = new Set(nextColumns)
+  const nextMapping: Record<string, string> = {}
+  const nextTransforms: Record<string, TransformName> = {}
+
+  for (const column of nextColumns) {
+    if (mapping[column]) nextMapping[column] = mapping[column]
+    if (transforms[column]) nextTransforms[column] = transforms[column]
+  }
+
+  return {
+    mapping: nextMapping,
+    transforms: nextTransforms,
+    removedColumns: previousColumns.filter(column => !nextColumnSet.has(column)),
+  }
+}
 
 // ============================================
 // REGISTRY: campi richiesti del template "legacy"

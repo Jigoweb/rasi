@@ -21,6 +21,7 @@ export default function CampagnaDettaglioPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [health, setHealth] = useState<ProgrammazioniHealth | null>(null)
+  const [healthError, setHealthError] = useState<string | null>(null)
   const [loadingHealth, setLoadingHealth] = useState(false)
   const [q, setQ] = useState('')
   const [debouncedQ, setDebouncedQ] = useState('')
@@ -106,6 +107,7 @@ export default function CampagnaDettaglioPage() {
 
   const fetchHealth = useCallback(async () => {
     setLoadingHealth(true)
+    setHealthError(null)
     try {
       const { data, error } = await getProgrammazioniHealth(campagnaId)
       if (error) {
@@ -115,6 +117,7 @@ export default function CampagnaDettaglioPage() {
           ? JSON.stringify(error)
           : String(error)
         console.error('Errore caricamento health:', errorMessage, error)
+        setHealthError(errorMessage)
         setHealth(null)
         return
       }
@@ -126,6 +129,7 @@ export default function CampagnaDettaglioPage() {
         ? JSON.stringify(error)
         : String(error)
       console.error('Errore caricamento health:', errorMessage, error)
+      setHealthError(errorMessage)
       setHealth(null)
     } finally {
     setLoadingHealth(false)
@@ -169,6 +173,13 @@ export default function CampagnaDettaglioPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT')
+  }
+
+  const getHealthStatusLabel = (status: string) => {
+    if (status === 'required') return 'Richiesto'
+    if (status === 'recommended') return 'Consigliato'
+    if (status === 'optional') return 'Opzionale'
+    return 'Non applicabile'
   }
 
   if (loading && rows.length === 0) {
@@ -243,9 +254,22 @@ export default function CampagnaDettaglioPage() {
       <Card>
         <CardContent>
           <div className="flex items-center justify-between mb-2">
-            <div className="font-medium">Data Health</div>
+            <div>
+              <div className="font-medium">Data Health</div>
+              {health?.policy && (
+                <div className="text-xs text-gray-500">
+                  Profilo: {health.policy.presetLabel}
+                </div>
+              )}
+            </div>
             {loadingHealth && <Loader2 className="h-4 w-4 animate-spin" />}
           </div>
+          {healthError && (
+            <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 mt-0.5" />
+              <span>Data Health non disponibile: {healthError}</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div>
               <div className="text-xs text-gray-500">Totale</div>
@@ -266,22 +290,37 @@ export default function CampagnaDettaglioPage() {
               </div>
             </div>
             <div>
-              <div className="text-xs text-gray-500">Titolo mancante</div>
-              <div className="text-lg font-semibold">{health?.missing_title ?? 0}</div>
-              <Badge variant="outline" className="mt-1">{Math.round(((health?.missing_title ?? 0) / Math.max(1, health?.total ?? 0)) * 100)}%</Badge>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Durata mancante</div>
-              <div className="text-lg font-semibold">{health?.missing_duration ?? 0}</div>
-              <Badge variant="outline" className="mt-1">{Math.round(((health?.missing_duration ?? 0) / Math.max(1, health?.total ?? 0)) * 100)}%</Badge>
-            </div>
-            <div>
               <div className="text-xs text-gray-500">Errori</div>
               <div className="text-lg font-semibold">{health?.errors_count ?? 0}</div>
             </div>
           </div>
+          {health?.field_metrics && health.field_metrics.length > 0 && (
+            <div className="mt-5">
+              <div className="text-sm font-medium mb-2">Campi attesi</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {health.field_metrics.map(metric => (
+                  <div key={metric.key} className="rounded border bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-medium">{metric.label}</div>
+                        <div className="text-xs text-gray-500">{getHealthStatusLabel(metric.status)}</div>
+                      </div>
+                      <Badge variant={metric.status === 'required' ? 'destructive' : 'outline'}>
+                        {metric.percent}%
+                      </Badge>
+                    </div>
+                    <div className="mt-2 text-lg font-semibold">{metric.missing}</div>
+                    <div className="text-xs text-gray-500">record mancanti</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="mt-3 text-xs text-gray-600">
             Periodo: {health?.date_min ? new Date(health.date_min).toLocaleDateString('it-IT') : '-'} → {health?.date_max ? new Date(health.date_max).toLocaleDateString('it-IT') : '-'}
+            {health?.date_range_error && (
+              <span className="ml-2 text-amber-700">({health.date_range_error})</span>
+            )}
           </div>
         </CardContent>
       </Card>
