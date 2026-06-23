@@ -59,5 +59,5 @@ export const config = {
     .map((o) => o.trim())
     .filter(Boolean),
 
-  chunkSize: Number(process.env.CHUNK_SIZE) || 500,
+  chunkSize: Number(process.env.CHUNK_SIZE) || 50,
 }

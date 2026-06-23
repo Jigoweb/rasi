@@ -95,6 +95,26 @@ interface ChunkResult {
   match_trovati?: number
 }
 
+function isStatementTimeout(message: string | undefined): boolean {
+  return Boolean(message?.toLowerCase().includes('statement timeout'))
+}
+
+function sumChunkResults(results: ChunkResult[]): ChunkResult {
+  return results.reduce<ChunkResult>(
+    (acc, result) => ({
+      success: acc.success && result.success,
+      programmazioni_processate:
+        (acc.programmazioni_processate ?? 0) + (result.programmazioni_processate ?? 0),
+      programmazioni_con_match:
+        (acc.programmazioni_con_match ?? 0) + (result.programmazioni_con_match ?? 0),
+      individuazioni_create:
+        (acc.individuazioni_create ?? 0) + (result.individuazioni_create ?? 0),
+      match_trovati: (acc.match_trovati ?? 0) + (result.match_trovati ?? 0),
+    }),
+    { success: true, programmazioni_processate: 0, programmazioni_con_match: 0, individuazioni_create: 0, match_trovati: 0 }
+  )
+}
+
 /**
  * Processa un chunk con timeout + retry esponenziale (come la route serverless,
  * ma senza il vincolo dei 60s di Vercel: qui il timeout è solo una salvaguardia).
@@ -140,6 +160,14 @@ async function processChunk(
           error.code === 'ECONNRESET' ||
           error.code === 'ETIMEDOUT'
         if (!retryable || attempt === maxRetries) {
+          if (isStatementTimeout(error.message) && programmazioneIds.length > 1) {
+            return processChunkInHalves(
+              campagneIndividuazioneId,
+              programmazioneIds,
+              sogliaItolo,
+              artistaIds
+            )
+          }
           return { success: false, error: error.message }
         }
         continue
@@ -153,12 +181,46 @@ async function processChunk(
     } catch (err: any) {
       lastError = err
       if (attempt === maxRetries) {
+        if (isStatementTimeout(err.message) && programmazioneIds.length > 1) {
+          return processChunkInHalves(
+            campagneIndividuazioneId,
+            programmazioneIds,
+            sogliaItolo,
+            artistaIds
+          )
+        }
         return { success: false, error: err.message || 'Errore chunk' }
       }
     }
   }
 
   return { success: false, error: lastError?.message || 'Chunk fallito dopo i retry' }
+}
+
+async function processChunkInHalves(
+  campagneIndividuazioneId: string,
+  programmazioneIds: string[],
+  sogliaItolo: number,
+  artistaIds: string[] | null
+): Promise<ChunkResult> {
+  const midpoint = Math.ceil(programmazioneIds.length / 2)
+  const left = await processChunk(
+    campagneIndividuazioneId,
+    programmazioneIds.slice(0, midpoint),
+    sogliaItolo,
+    artistaIds
+  )
+  if (!left.success) return left
+
+  const right = await processChunk(
+    campagneIndividuazioneId,
+    programmazioneIds.slice(midpoint),
+    sogliaItolo,
+    artistaIds
+  )
+  if (!right.success) return right
+
+  return sumChunkResults([left, right])
 }
 
 /**
