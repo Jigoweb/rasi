@@ -186,6 +186,7 @@ describe('upload job store', () => {
         total_chunks: 2,
         chunk_size: 500,
         error: null,
+        quality_report: null,
         created_by: 'user-1',
         created_at: '2026-06-23T11:00:00.000Z',
         updated_at: '2026-06-23T11:30:00.000Z',

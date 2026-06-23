@@ -277,6 +277,7 @@ export function useProgrammazioniUpload({
           current_chunk: 0,
           total_chunks: 0,
           error: null,
+          quality_report: null,
         }, parsedRowCount)
 
         return

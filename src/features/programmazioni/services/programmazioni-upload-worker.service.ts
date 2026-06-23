@@ -22,6 +22,7 @@ export interface UploadJobSnapshot {
   current_chunk: number
   total_chunks: number
   error: string | null
+  quality_report: Record<string, unknown> | null
 }
 
 export async function getLatestUploadJobsForCampagne(
@@ -32,7 +33,7 @@ export async function getLatestUploadJobsForCampagne(
   const { data, error } = await supabase
     .from('upload_jobs' as any)
     .select(
-      'id,campagna_programmazione_id,stato,fase,righe_totali,righe_processate,righe_inserite,righe_duplicate_saltate,current_chunk,total_chunks,error,created_at'
+      'id,campagna_programmazione_id,stato,fase,righe_totali,righe_processate,righe_inserite,righe_duplicate_saltate,current_chunk,total_chunks,error,quality_report,created_at'
     )
     .in('campagna_programmazione_id', campagneProgrammazioneIds)
     .order('created_at', { ascending: false })

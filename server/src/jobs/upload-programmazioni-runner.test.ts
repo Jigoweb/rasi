@@ -191,4 +191,57 @@ describe('upload programmazioni runner', () => {
       duplicateSkippedExact: null,
     })
   })
+
+  it('patches a quality report after mapping uploaded rows', async () => {
+    const patchCalls: QueryCall[] = []
+    const csv = 'titolo,emittente,anno,durata_minuti\nX-Men: The Last Stand,Disney,3000,1\nHacks,Amazon,2022,34\n'
+
+    ;(supabaseModule.supabaseService as any).rpc = async () => ({
+      data: { success: true },
+      error: null,
+    })
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      if (table === 'upload_jobs') return createPatchQuery(patchCalls)
+      if (table === 'programmazioni') return createUpsertQuery([])
+      throw new Error(`Unexpected table ${table}`)
+    }
+    ;(supabaseModule.supabaseService as any).storage = {
+      from: () => ({
+        download: async () => ({
+          data: {
+            arrayBuffer: async () => {
+              const encoded = new TextEncoder().encode(csv)
+              return encoded.buffer.slice(
+                encoded.byteOffset,
+                encoded.byteOffset + encoded.byteLength
+              )
+            },
+          },
+          error: null,
+        }),
+        remove: async () => ({ error: null }),
+      }),
+    }
+
+    await runner.runUploadProgrammazioniJob({
+      jobId: 'job-quality',
+      campagneProgrammazioneId: 'campagna-1',
+      userId: 'user-1',
+      emittenteId: 'emittente-1',
+      storagePath: 'user-1/campagna-1/file.csv',
+      fileName: 'file.csv',
+      mappingSnapshot: { kind: 'legacy_template' },
+      chunkSize: 500,
+    })
+
+    const qualityPatch = patchCalls.find((call) =>
+      call.method === 'update' &&
+      Boolean((call.args[0] as { quality_report?: unknown }).quality_report)
+    )
+    assert.ok(qualityPatch)
+    assert.deepEqual((qualityPatch.args[0] as any).quality_report.warningCounts, {
+      year_out_of_range: 1,
+      duration_placeholder: 1,
+    })
+  })
 })

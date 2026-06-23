@@ -43,6 +43,7 @@ const uploadJob = (overrides: Partial<UploadJobSnapshot> = {}): UploadJobSnapsho
   current_chunk: 1,
   total_chunks: 4,
   error: null,
+  quality_report: null,
   ...overrides,
 })
 

@@ -22,6 +22,7 @@ export interface UploadJob {
   total_chunks: number
   chunk_size: number
   error: string | null
+  quality_report: Record<string, unknown> | null
   created_by: string | null
   created_at: string
   updated_at: string

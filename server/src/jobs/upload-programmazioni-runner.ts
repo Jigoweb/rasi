@@ -5,6 +5,7 @@ import {
   type ProgrammazioneImportPayload,
   type UploadMappingSnapshot,
 } from './programmazioni-import-core.js'
+import { summarizeImportQuality } from './import-quality.js'
 import { patchUploadJob } from './upload-job-store.js'
 
 const BUCKET = 'programmazioni-uploads'
@@ -107,6 +108,7 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
 
     let righeInserite = 0
     let righeDuplicateSaltate = 0
+    const qualityPayloads: ProgrammazioneImportPayload[] = []
 
     for (let offset = 0; offset < rows.length; offset += chunkSize) {
       const chunk = rows.slice(offset, offset + chunkSize)
@@ -119,6 +121,7 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
         },
         offset + 1
       )
+      qualityPayloads.push(...payloads)
 
       if (payloads.length > 0) {
         try {
@@ -139,12 +142,14 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
     }
 
     await releaseLock(campagneProgrammazioneId, userId, 'in_review')
+    const qualityReport = summarizeImportQuality(qualityPayloads)
     await patchUploadJob(jobId, {
       stato: 'completed',
       fase: 'completed',
       righe_processate: rows.length,
       righe_inserite: righeInserite,
       righe_duplicate_saltate: righeDuplicateSaltate,
+      quality_report: qualityReport,
     })
     await removeUploadedFile(storagePath)
   } catch (error: any) {
