@@ -9,7 +9,22 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
-import { createCampagnaProgrammazione, getCampagneProgrammazione, uploadProgrammazioni, updateCampagnaStatus, deleteCampagnaProgrammazione, getDeleteCampagnaProgrammazioneInfo, DeleteCampagnaProgrammazioneInfo, CampagnaProgrammazione, ProgrammazionePayload, getProcessingProgress, ProcessingProgress, isProcessingStale } from '@/features/programmazioni/services/programmazioni.service'
+import {
+  createCampagnaProgrammazione,
+  deleteCampagnaProgrammazione,
+  type CampagnaProgrammazione,
+  type DeleteCampagnaProgrammazioneInfo,
+  getCampagneProgrammazione,
+  getDeleteCampagnaProgrammazioneInfo,
+  getLatestProcessingJobsForCampagne,
+  getProcessingProgress,
+  isProcessingStale,
+  type ProcessingActivityJob,
+  type ProcessingProgress,
+  type ProgrammazionePayload,
+  updateCampagnaStatus,
+  uploadProgrammazioni,
+} from '@/features/programmazioni/services/programmazioni.service'
 import {
   decideUploadPath,
   applyMapping,
@@ -29,6 +44,10 @@ import {
   type UploadJobSnapshot,
   uploadProgrammazioniFileToStorage,
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
+import {
+  getProgrammazioneRowState,
+  type ProgrammazioneRowBadge,
+} from '@/features/programmazioni/services/programmazioni-state.service'
 import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
 import EmittenteMappingSection from './components/EmittenteMappingSection'
@@ -136,6 +155,7 @@ export default function ProgrammazioniPage() {
     mappedRemoved: string[]
   } | null>(null)
   const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, ProcessingProgress | null>>({})
+  const [processingJobMap, setProcessingJobMap] = useState<Record<string, ProcessingActivityJob | null>>({})
   const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
   const progressFetchedRef = useRef<Set<string>>(new Set())
   const uploadPollingJobsRef = useRef<Set<string>>(new Set())
@@ -527,6 +547,25 @@ export default function ProgrammazioniPage() {
     }
   }
 
+  const reconcileProcessingJobs = async (campagneList: CampagnaProgrammazione[]) => {
+    if (getIndividuazioneRuntimeMode() !== 'worker') return
+
+    const { data: jobs, error } = await getLatestProcessingJobsForCampagne(campagneList.map(c => c.id))
+    if (error) {
+      console.warn('[programmazioni] Processing job recovery unavailable:', error)
+      return
+    }
+
+    const nextMap: Record<string, ProcessingActivityJob | null> = {}
+    for (const job of jobs) {
+      if (job.campagne_programmazione_id) {
+        nextMap[job.campagne_programmazione_id] = job
+      }
+    }
+
+    setProcessingJobMap(nextMap)
+  }
+
   const handleUploadDatabase = async () => {
     if (!selectedCampagna || parsedRows.length === 0 || !uploadDecision) return
     setIsUploading(true)
@@ -778,12 +817,17 @@ export default function ProgrammazioniPage() {
   // not on every map state update (which would cause an infinite loop).
   useEffect(() => {
     campagne
-      .filter(c => c.stato === 'in_corso' && !progressFetchedRef.current.has(c.id))
+      .filter(c => (
+        c.stato === 'in_corso' ||
+        processingJobMap[c.id]?.stato === 'queued' ||
+        processingJobMap[c.id]?.stato === 'running' ||
+        processingJobMap[c.id]?.stato === 'error'
+      ) && !progressFetchedRef.current.has(c.id))
       .forEach(c => {
         progressFetchedRef.current.add(c.id)
         fetchProcessingProgress(c.id)
       })
-  }, [campagne])
+  }, [campagne, processingJobMap, fetchProcessingProgress])
 
   useEffect(() => {
     filterCampagne()
@@ -822,6 +866,7 @@ export default function ProgrammazioniPage() {
       }
       const campagneList = data || []
       setCampagne(campagneList)
+      await reconcileProcessingJobs(campagneList)
       await reconcileUploadJobs(campagneList)
     } catch (error) {
       const errorMessage = error instanceof Error 
@@ -956,6 +1001,34 @@ export default function ProgrammazioniPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT')
+  }
+
+  const renderProgrammazioneBadge = (badge: ProgrammazioneRowBadge) => {
+    switch (badge) {
+      case 'uploading':
+        return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading</Badge>
+      case 'deleting':
+        return <Badge variant="outline"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Eliminazione</Badge>
+      case 'upload_error':
+      case 'error':
+        return <Badge variant="destructive">Errore</Badge>
+      case 'in_review':
+        return <Badge variant="default">In review</Badge>
+      case 'individuazione_stale':
+        return (
+          <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
+            <AlertCircle className="w-3 h-3 mr-1" /> Individuazione interrotta
+          </Badge>
+        )
+      case 'individuazione_running':
+        return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Individuazione in corso</Badge>
+      case 'individuata':
+        return <Badge variant="default" className="bg-green-600">Individuata</Badge>
+      case 'bozza':
+        return <Badge variant="outline">Bozza</Badge>
+      default:
+        return <Badge variant="secondary">{badge}</Badge>
+    }
   }
 
   const exportData = () => {
@@ -1180,9 +1253,22 @@ export default function ProgrammazioniPage() {
                     filteredCampagne.map((campagna) => {
                       const hasData = (campagna.programmazioni_count || 0) > 0
                       const isGlobalProcessingThisCampagna = isCampagnaProcessing(campagna.id)
-                      const canCreateIndividuazioni = hasData && campagna.stato === 'in_review' && !isGlobalProcessingThisCampagna
-                      const isProcessing = campagna.stato === 'in_corso' || campagna.stato === 'uploading' || campagna.stato === 'deleting' || isGlobalProcessingThisCampagna
-                      const isCompleted = campagna.stato === 'individuata'
+                      const rowState = getProgrammazioneRowState({
+                        datasetStatus: campagna.stato,
+                        uploadJob: uploadProgress[campagna.id]
+                          ? {
+                            stato: 'running',
+                            righe_processate: uploadProgress[campagna.id].done,
+                            righe_totali: uploadProgress[campagna.id].total,
+                          }
+                          : null,
+                        progress: processingProgressMap[campagna.id],
+                        campaignJob: processingJobMap[campagna.id],
+                        hasLocalRuntimeProcess: isGlobalProcessingThisCampagna,
+                        hasData,
+                      })
+                      const canCreateIndividuazioni = rowState.canCreateIndividuazione
+                      const isCompleted = rowState.badge === 'individuata'
                       
                       return (
                       <TableRow
@@ -1233,7 +1319,7 @@ export default function ProgrammazioniPage() {
                                       {campagna.stato === 'in_review' && 'I dati sono stati caricati correttamente. Puoi procedere con la creazione delle individuazioni oppure caricare ulteriori file per aggiungere altri record.'}
                                       {campagna.stato === 'individuata' && 'Il processo di individuazione è stato completato con successo. Le individuazioni sono state create e sono pronte per la revisione.'}
                                       {campagna.stato === 'error' && 'Si è verificato un errore durante l\'elaborazione. Verifica i dati e riprova il caricamento.'}
-                                      {campagna.stato === 'in_corso' && 'Il sistema sta processando le programmazioni e creando le individuazioni.'}
+                                      {campagna.stato === 'in_corso' && 'Esiste una campagna individuazione in corso o interrotta per questi dati. Gestiscila dalla pagina Individuazioni.'}
                                       {campagna.stato === 'uploading' && 'Caricamento dati in corso. Attendere il completamento...'}
                                     </p>
                                     
@@ -1381,32 +1467,7 @@ export default function ProgrammazioniPage() {
                               </div>
                             ) : (
                               <>
-                                {campagna.stato === 'uploading' ? (
-                                  <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading</Badge>
-                                ) : campagna.stato === 'deleting' ? (
-                                  <Badge variant="outline"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Eliminazione</Badge>
-                                ) : campagna.stato === 'error' ? (
-                                  <Badge variant="destructive">Errore</Badge>
-                                ) : campagna.stato === 'in_review' ? (
-                                  <Badge variant="default">In review</Badge>
-                                ) : campagna.stato === 'in_corso' ? (() => {
-                                  // Stale (no activity > threshold) → surface as "Interrotto"
-                                  const isStale = isProcessingStale(processingProgressMap[campagna.id])
-
-                                  return isStale ? (
-                                    <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
-                                      <AlertCircle className="w-3 h-3 mr-1" /> Interrotto
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Processando</Badge>
-                                  )
-                                })() : campagna.stato === 'individuata' ? (
-                                  <Badge variant="default" className="bg-green-600">Individuata</Badge>
-                                ) : campagna.stato === 'bozza' ? (
-                                  <Badge variant="outline">Bozza</Badge>
-                                ) : (
-                                  <Badge variant="secondary">{campagna.stato}</Badge>
-                                )}
+                                {renderProgrammazioneBadge(rowState.badge)}
                               </>
                             )}
                           </div>
@@ -1425,7 +1486,7 @@ export default function ProgrammazioniPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                disabled={isProcessing || !!uploadProgress[campagna.id]}
+                                disabled={!rowState.canUpload}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   setSelectedCampagna(campagna)
@@ -1445,7 +1506,7 @@ export default function ProgrammazioniPage() {
                             )}
                             
                             {/* CTA Crea Individuazioni - sempre visibile ma disabilitato se non ci sono dati */}
-                            {!isCompleted && !isProcessing && (
+                            {!isCompleted && rowState.badge !== 'uploading' && rowState.badge !== 'deleting' && (
                               <Button
                                 size="sm"
                                 disabled={!canCreateIndividuazioni}
@@ -1460,8 +1521,8 @@ export default function ProgrammazioniPage() {
                               </Button>
                             )}
 
-                            {/* CTA Riprendi — processo interrotto (in_corso + stale >10min) */}
-                            {campagna.stato === 'in_corso' && isProcessingStale(processingProgressMap[campagna.id]) && !isGlobalProcessingThisCampagna && (
+                            {/* CTA Riprendi — processo individuazione interrotto */}
+                            {rowState.canResumeIndividuazione && !isGlobalProcessingThisCampagna && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1485,19 +1546,17 @@ export default function ProgrammazioniPage() {
                               </Badge>
                             )}
 
-                            {/* Badge processamento in corso — riflette lo stato "bloccato"
-                                (stale >10min) in modo coerente con la colonna Stato, invece
-                                di mostrare sempre "Processamento...". */}
-                            {campagna.stato === 'in_corso' && (
-                              isProcessingStale(processingProgressMap[campagna.id]) ? (
+                            {/* Badge operativo individuazione, distinto dallo stato dataset. */}
+                            {(rowState.badge === 'individuazione_running' || rowState.badge === 'individuazione_stale') && (
+                              rowState.badge === 'individuazione_stale' ? (
                                 <Badge variant="outline" className="gap-1.5 py-1.5 px-3 border-yellow-500 text-yellow-600 dark:text-yellow-400">
                                   <AlertCircle className="h-3.5 w-3.5" />
-                                  Interrotto
+                                  Individuazione interrotta
                                 </Badge>
                               ) : (
                                 <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  Processamento...
+                                  Individuazione in corso
                                 </Badge>
                               )
                             )}
@@ -1545,7 +1604,25 @@ export default function ProgrammazioniPage() {
                 {filteredCampagne.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">Nessuna campagna trovata</div>
                 ) : (
-                  filteredCampagne.map((campagna) => (
+                  filteredCampagne.map((campagna) => {
+                    const hasData = (campagna.programmazioni_count || 0) > 0
+                    const rowState = getProgrammazioneRowState({
+                      datasetStatus: campagna.stato,
+                      uploadJob: uploadProgress[campagna.id]
+                        ? {
+                          stato: 'running',
+                          righe_processate: uploadProgress[campagna.id].done,
+                          righe_totali: uploadProgress[campagna.id].total,
+                        }
+                        : null,
+                      progress: processingProgressMap[campagna.id],
+                      campaignJob: processingJobMap[campagna.id],
+                      hasLocalRuntimeProcess: isCampagnaProcessing(campagna.id),
+                      hasData,
+                    })
+                    const isCompleted = rowState.badge === 'individuata'
+
+                    return (
                     <Card
                       key={campagna.id}
                       className="p-4 cursor-pointer"
@@ -1590,6 +1667,54 @@ export default function ProgrammazioniPage() {
                             <Calendar className="h-4 w-4 text-gray-400" />
                             <span>{formatDate(campagna.created_at)}</span>
                           </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            {renderProgrammazioneBadge(rowState.badge)}
+                            {!isCompleted && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!rowState.canUpload}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setSelectedCampagna(campagna)
+                                  setNewProgrammazioneStep(2)
+                                  setIsResumingUpload(true)
+                                  setIsNewModalOpen(true)
+                                }}
+                              >
+                                <FileUp className="h-3.5 w-3.5 mr-1" />
+                                Carica
+                              </Button>
+                            )}
+                            {!isCompleted && rowState.badge !== 'uploading' && rowState.badge !== 'deleting' && (
+                              <Button
+                                size="sm"
+                                disabled={!rowState.canCreateIndividuazione}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStartIndividuazioni(campagna)
+                                }}
+                              >
+                                <Sparkles className="h-3.5 w-3.5 mr-1" />
+                                Individuazioni
+                              </Button>
+                            )}
+                            {rowState.canResumeIndividuazione && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!canStartProcess(campagna.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleResumeIndividuazioni(campagna)
+                                }}
+                                className="border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
+                              >
+                                <RotateCw className="h-3.5 w-3.5 mr-1" />
+                                Riprendi
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -1606,7 +1731,8 @@ export default function ProgrammazioniPage() {
                         </DropdownMenu>
                       </div>
                     </Card>
-                  ))
+                    )
+                  })
                 )}
               </div>
             </CardContent>

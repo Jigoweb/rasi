@@ -452,10 +452,12 @@ export type ProcessingJobState = 'queued' | 'running' | 'error' | 'completed' | 
 
 type ProcessingActivityProgress = Pick<ProcessingProgress, 'last_activity_at'>
 
-type ProcessingActivityJob = {
+export type ProcessingActivityJob = {
   id?: string | null
   stato?: ProcessingJobState | null
   updated_at?: string | null
+  error?: string | null
+  campagne_programmazione_id?: string | null
 }
 
 const PROCESSING_ACTIVITY_JOB_STATES: ProcessingJobState[] = ['queued', 'running', 'error']
@@ -556,6 +558,43 @@ async function getLatestProcessingActivityJob(
   } catch (error) {
     console.warn('[getProcessingProgress] campaign_jobs activity lookup failed:', error)
     return null
+  }
+}
+
+export async function getLatestProcessingJobsForCampagne(
+  campagneIds: string[],
+  now: number = Date.now(),
+): Promise<{ data: ProcessingActivityJob[]; error: any }> {
+  if (campagneIds.length === 0) return { data: [], error: null }
+
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) return { data: [], error: null }
+
+    const { data, error } = await (supabase as any)
+      .from('campaign_jobs')
+      .select('id, campagne_programmazione_id, stato, error, updated_at')
+      .in('campagne_programmazione_id', campagneIds)
+      .eq('created_by', userId)
+      .in('stato', PROCESSING_ACTIVITY_JOB_STATES)
+      .order('updated_at', { ascending: false })
+
+    if (error) return { data: [], error }
+
+    const latestByCampagna = new Map<string, ProcessingActivityJob>()
+    for (const job of ((data ?? []) as ProcessingActivityJob[])) {
+      const campagnaId = job.campagne_programmazione_id
+      if (campagnaId && !latestByCampagna.has(campagnaId) && isProcessingActivityJobEligible(job, now)) {
+        latestByCampagna.set(campagnaId, job)
+      }
+    }
+
+    return { data: Array.from(latestByCampagna.values()), error: null }
+  } catch (error) {
+    return { data: [], error }
   }
 }
 

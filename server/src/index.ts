@@ -1,7 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import { config } from './config.js'
-import { markStaleActiveJobsAsError } from './jobs/recovery.js'
+import { markStaleActiveJobsAsError, markStaleActiveUploadJobsAsError } from './jobs/recovery.js'
 import { individuazioneRouter } from './routes/individuazione.js'
 import { jobsRouter } from './routes/jobs.js'
 import { uploadJobsRouter, uploadProgrammazioniRouter } from './routes/upload-programmazioni.js'
@@ -30,9 +30,12 @@ app.use('/api/upload-jobs', uploadJobsRouter)
 app.listen(config.port, () => {
   console.log(`[rasi-worker] in ascolto sulla porta ${config.port}`)
 
-  void markStaleActiveJobsAsError()
-    .then((count) => {
-      console.log(`[rasi-worker] recovery job stale completata: ${count} job marcati in errore`)
+  void Promise.all([
+    markStaleActiveJobsAsError(),
+    markStaleActiveUploadJobsAsError(),
+  ])
+    .then(([campaignJobs, uploadJobs]) => {
+      console.log(`[rasi-worker] recovery job stale completata: ${campaignJobs} individuazioni, ${uploadJobs} upload marcati in errore`)
     })
     .catch((error) => {
       console.error('[rasi-worker] recovery job stale fallita', error)

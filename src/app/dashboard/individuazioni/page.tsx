@@ -263,24 +263,34 @@ export default function IndividuazioniPage() {
     return Array.from(emittentiMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
   }, [campagne])
 
+  const canShowResume = (campagna: CampagnaIndividuazione) => {
+    const progress = processingProgressMap[campagna.id]
+    return campagna.stato === 'in_corso' && (
+      progress?.job_stato === 'error' ||
+      isProcessingStale(progress) ||
+      (!progress?.last_activity_at && progress?.job_stato !== 'running')
+    )
+  }
+
   const getStatoBadge = (stato: string, campagnaId?: string) => {
     switch (stato) {
       case 'completata':
         return <Badge className="bg-green-100 text-green-800 border-green-200">Completata</Badge>
       case 'in_corso': {
-        // Check if process is stale (no activity for >10 minutes)
         const progress = campagnaId ? processingProgressMap[campagnaId] : null
-        const isStale = progress?.last_activity_at 
-          ? Math.floor((Date.now() - new Date(progress.last_activity_at).getTime()) / 1000 / 60) > 10
-          : false
-        
-        return isStale ? (
+        if (progress?.job_stato === 'error' || isProcessingStale(progress)) {
+          return (
           <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
             <AlertCircle className="w-3 h-3 mr-1" /> Interrotto
           </Badge>
-        ) : (
-          <Badge className="bg-blue-100 text-blue-800 border-blue-200">In corso</Badge>
-        )
+          )
+        }
+
+        if (!progress?.last_activity_at && progress?.job_stato !== 'running') {
+          return <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">Da verificare</Badge>
+        }
+
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">In corso</Badge>
       }
       case 'bozza':
         return <Badge variant="secondary">Bozza</Badge>
@@ -567,17 +577,21 @@ export default function IndividuazioniPage() {
                               {/* Processing progress for in_corso state */}
                               {campagna.stato === 'in_corso' && (() => {
                                 const progress = processingProgressMap[campagna.id]
-                                const isStale = progress?.last_activity_at 
-                                  ? Math.floor((Date.now() - new Date(progress.last_activity_at).getTime()) / 1000 / 60) > 10
-                                  : false
+                                const isInterrupted = progress?.job_stato === 'error' || isProcessingStale(progress)
+                                const needsReview = !progress?.last_activity_at && progress?.job_stato !== 'running'
                                 
                                 return (
                                   <div className="pt-2 border-t border-primary-foreground/20">
                                     <p className="font-medium text-sm mb-2 flex items-center gap-1.5">
-                                      {isStale ? (
+                                      {isInterrupted ? (
                                         <>
                                           <AlertCircle className="h-3 w-3 text-yellow-500" />
                                           Processo interrotto
+                                        </>
+                                      ) : needsReview ? (
+                                        <>
+                                          <AlertCircle className="h-3 w-3 text-yellow-500" />
+                                          Stato da verificare
                                         </>
                                       ) : (
                                         <>
@@ -634,6 +648,12 @@ export default function IndividuazioniPage() {
                                         <div className="flex justify-between opacity-70 pt-1.5 border-t border-primary-foreground/10 text-[11px]">
                                           <span>Avviato il:</span>
                                           <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
+                                        </div>
+                                      )}
+                                      {processingProgressMap[campagna.id]!.job_stato === 'error' && (
+                                        <div className="pt-1.5 text-[11px] text-yellow-300 flex items-center gap-1.5">
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>Job in errore — puoi riprendere il processo.</span>
                                         </div>
                                       )}
                                       {processingProgressMap[campagna.id]!.last_activity_at && (() => {
@@ -699,7 +719,7 @@ export default function IndividuazioniPage() {
                     <TableCell className="py-4" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         {/* Riprendi — processo interrotto (in_corso + stale) */}
-                        {campagna.stato === 'in_corso' && isProcessingStale(processingProgressMap[campagna.id]) && (
+                        {canShowResume(campagna) && (
                           <Button
                             variant="outline"
                             size="sm"

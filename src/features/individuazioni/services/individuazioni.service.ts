@@ -1,4 +1,9 @@
 import { supabase } from '@/shared/lib/supabase'
+import {
+  resolveProcessingActivity,
+  type ProcessingActivitySource,
+  type ProcessingJobState,
+} from '@/features/programmazioni/services/programmazioni.service'
 
 export interface CampagnaIndividuazione {
   id: string
@@ -437,6 +442,39 @@ export interface IndividuazioneProcessingProgress {
   processing_by?: string | null
   processing_started_at?: string | null
   last_activity_at?: string | null  // Timestamp of last individuazione created
+  activity_source?: ProcessingActivitySource
+  job_id?: string | null
+  job_stato?: ProcessingJobState | null
+  job_updated_at?: string | null
+}
+
+type CampaignJobActivity = {
+  id?: string | null
+  stato?: ProcessingJobState | null
+  updated_at?: string | null
+}
+
+async function getLatestCampaignJobForProgrammazione(
+  campagneProgrammazioneId: string,
+  userId?: string | null
+): Promise<CampaignJobActivity | null> {
+  let query = (supabase as any)
+    .from('campaign_jobs')
+    .select('id, stato, updated_at')
+    .eq('campagne_programmazione_id', campagneProgrammazioneId)
+    .in('stato', ['queued', 'running', 'error'])
+    .order('updated_at', { ascending: false })
+    .limit(1)
+
+  if (userId) query = query.eq('created_by', userId)
+
+  const { data, error } = await query.maybeSingle()
+  if (error) {
+    console.warn('[getIndividuazioneProcessingProgress] campaign_jobs lookup failed:', error)
+    return null
+  }
+
+  return (data as CampaignJobActivity) ?? null
 }
 
 /**
@@ -444,6 +482,10 @@ export interface IndividuazioneProcessingProgress {
  */
 export const getIndividuazioneProcessingProgress = async (campagnaIndId: string): Promise<{ data: IndividuazioneProcessingProgress | null; error: any }> => {
   try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
     // Get campagna individuazione with statistiche and related campagna programmazione
     const { data: campagnaInd, error: indError } = await (supabase as any)
       .from('campagne_individuazione')
@@ -479,6 +521,11 @@ export const getIndividuazioneProcessingProgress = async (campagnaIndId: string)
 
     const statistiche = campagnaInd?.statistiche || {}
     const campagnaProg = campagnaInd?.campagne_programmazione || {}
+    const job = await getLatestCampaignJobForProgrammazione(
+      campagnaInd?.campagne_programmazione_id,
+      session?.user?.id,
+    )
+    const activity = resolveProcessingActivity({ last_activity_at }, job)
     
     const programmazioni_totali = statistiche.programmazioni_totali || 0
     const programmazioni_processate = statistiche.programmazioni_processate || 0
@@ -494,7 +541,11 @@ export const getIndividuazioneProcessingProgress = async (campagnaIndId: string)
         percentuale,
         processing_by: campagnaProg.processing_by,
         processing_started_at: campagnaProg.processing_started_at,
-        last_activity_at
+        last_activity_at: activity.last_activity_at,
+        activity_source: activity.activity_source,
+        job_id: job?.id ?? null,
+        job_stato: job?.stato ?? null,
+        job_updated_at: job?.updated_at ?? null,
       },
       error: null
     }
@@ -559,7 +610,6 @@ export const deleteCampagnaIndividuazione = async (
   onProgress?: (progress: { phase: 'deleting_individuazioni' | 'updating_programmazione' | 'deleting_campagna'; deleted?: number; total?: number }) => void
 ): Promise<{ data: any; error: any }> => {
   try {
-    // Get info first
     const { data: info, error: infoError } = await getDeleteCampagnaIndividuazioneInfo(campagnaId)
     if (infoError) {
       console.error('[deleteCampagnaIndividuazione] Error getting info:', infoError)
@@ -567,55 +617,27 @@ export const deleteCampagnaIndividuazione = async (
     }
     if (!info) throw new Error('Campagna non trovata')
 
-    console.log('[deleteCampagnaIndividuazione] Starting delete for campagna:', campagnaId, 'with', info.individuazioni_count, 'individuazioni')
-
-    // 1. Delete all individuazioni directly with eq filter (more efficient than batching with IN)
     onProgress?.({ phase: 'deleting_individuazioni', deleted: 0, total: info.individuazioni_count })
-    
-    // Delete directly - Supabase handles large deletes
-    const { error: deleteIndError } = await (supabase as any)
-      .from('individuazioni')
-      .delete()
-      .eq('campagna_individuazioni_id', campagnaId)
 
-    if (deleteIndError) {
-      console.error('[deleteCampagnaIndividuazione] Error deleting individuazioni:', deleteIndError)
-      throw new Error(`Errore eliminazione individuazioni: ${deleteIndError.message || JSON.stringify(deleteIndError)}`)
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) throw new Error('Utente non autenticato')
+
+    const { data, error } = await (supabase as any).rpc('delete_campagna_individuazione_safe', {
+      p_campagna_individuazione_id: campagnaId,
+      p_user_id: userId,
+    })
+
+    if (error) throw error
+    if (!data?.success) {
+      throw new Error(data?.error || 'Errore eliminazione campagna individuazione')
     }
 
-    console.log('[deleteCampagnaIndividuazione] Individuazioni deleted successfully')
     onProgress?.({ phase: 'deleting_individuazioni', deleted: info.individuazioni_count, total: info.individuazioni_count })
-
-    // 2. Update campagna_programmazione to remove 'individuata' status
     onProgress?.({ phase: 'updating_programmazione' })
-    
-    const { error: updateProgError } = await (supabase as any)
-      .from('campagne_programmazione')
-      .update({ stato: 'in_review', is_individuated: false })
-      .eq('id', info.campagne_programmazione_id)
-
-    if (updateProgError) {
-      console.error('[deleteCampagnaIndividuazione] Error updating campagna_programmazione:', updateProgError)
-      throw new Error(`Errore aggiornamento campagna programmazione: ${updateProgError.message || JSON.stringify(updateProgError)}`)
-    }
-
-    console.log('[deleteCampagnaIndividuazione] Campagna programmazione updated')
-
-    // 3. Delete campagna_individuazione
     onProgress?.({ phase: 'deleting_campagna' })
-    
-    const { data, error } = await (supabase as any)
-      .from('campagne_individuazione')
-      .delete()
-      .eq('id', campagnaId)
-      .select()
-
-    if (error) {
-      console.error('[deleteCampagnaIndividuazione] Error deleting campagna_individuazione:', error)
-      throw new Error(`Errore eliminazione campagna: ${error.message || JSON.stringify(error)}`)
-    }
-
-    console.log('[deleteCampagnaIndividuazione] Campagna individuazione deleted successfully')
 
     return { data, error: null }
   } catch (error: any) {

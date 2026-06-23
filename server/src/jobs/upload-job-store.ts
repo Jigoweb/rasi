@@ -2,6 +2,8 @@ import { supabaseService } from '../supabase.js'
 import type { UploadMappingSnapshot } from './programmazioni-import-core.js'
 
 const TABLE = 'upload_jobs'
+const STALE_UPLOAD_ERROR =
+  'Upload interrotto dal riavvio del worker. Riprova il caricamento.'
 
 export interface UploadJob {
   id: string
@@ -88,4 +90,51 @@ export async function patchUploadJob(
     .eq('id', id)
 
   if (error) throw new Error(`patchUploadJob: ${error.message}`)
+}
+
+export async function findStaleActiveUploadJobs(cutoffIso: string): Promise<UploadJob[]> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .select('*')
+    .in('stato', ['queued', 'running'])
+    .lt('updated_at', cutoffIso)
+
+  if (error) throw new Error(`findStaleActiveUploadJobs: ${error.message}`)
+  return (data as UploadJob[]) ?? []
+}
+
+export async function markStaleActiveUploadJobAsError(
+  job: UploadJob,
+  cutoffIso: string,
+  now = new Date()
+): Promise<boolean> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .update({
+      stato: 'error',
+      fase: 'error',
+      error: STALE_UPLOAD_ERROR,
+      updated_at: now.toISOString(),
+    })
+    .eq('id', job.id)
+    .in('stato', ['queued', 'running'])
+    .lt('updated_at', cutoffIso)
+    .select('id')
+
+  if (error) throw new Error(`markStaleActiveUploadJobAsError: ${error.message}`)
+  const marked = ((data as Array<Pick<UploadJob, 'id'>> | null) ?? []).length > 0
+  if (!marked) return false
+
+  await supabaseService
+    .from('campagne_programmazione')
+    .update({
+      stato: 'in_review',
+      processing_by: null,
+      processing_started_at: null,
+      updated_at: now.toISOString(),
+    })
+    .eq('id', job.campagna_programmazione_id)
+    .eq('stato', 'uploading')
+
+  return true
 }
