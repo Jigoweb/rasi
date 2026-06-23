@@ -10,6 +10,8 @@ Questi sono gli entry point correnti, ma sono ancora sotto audit: usarli come or
 - `CONTRIBUTING.md`: convenzioni per dev umani.
 - `docs/DEVELOPMENT.md`: setup locale, env, database, worker e verifiche.
 - `docs/ARCHITECTURE.md`: confini architetturali e mappa dei moduli.
+- `docs/FEATURE_MAP.md`: entry point, test e rischi per feature.
+- `docs/TESTING.md`: comandi di verifica e strategia test.
 - `AGENTS.md`: regole operative per agenti AI.
 
 ## Canonici Pianificati

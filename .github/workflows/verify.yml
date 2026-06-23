@@ -48,3 +48,6 @@ jobs:
 
       - name: Worker typecheck
         run: npm --prefix server run typecheck
+
+      - name: Worker test
+        run: npm --prefix server test

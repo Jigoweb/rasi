@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import Papa from 'papaparse'
-import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import {
@@ -18,7 +16,6 @@ import {
   getDeleteCampagnaProgrammazioneInfo,
   getLatestProcessingJobsForCampagne,
   getProcessingProgress,
-  isProcessingStale,
   type ProcessingActivityJob,
   type ProcessingProgress,
   type ProgrammazionePayload,
@@ -29,6 +26,8 @@ import {
   decideUploadPath,
   applyMapping,
   buildLegacyPayload,
+  detectColumns,
+  readAllRows,
   saveMapping,
   summarizeImportMapping,
   type ImportMappingConfig,
@@ -46,12 +45,17 @@ import {
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
 import {
   getProgrammazioneRowState,
-  type ProgrammazioneRowBadge,
 } from '@/features/programmazioni/services/programmazioni-state.service'
+import {
+  filterCampagneProgrammazione,
+  getUniqueAnni,
+  getUniqueEmittenti,
+} from '@/features/programmazioni/services/programmazioni-filters.service'
 import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
 import EmittenteMappingSection from './components/EmittenteMappingSection'
 import MappingWizard from './components/MappingWizard'
+import ProgrammazioneStatusBadge from './components/ProgrammazioneStatusBadge'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { ProcessBlockedDialog } from '@/shared/components/individuazione-progress-indicator'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -69,6 +73,25 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon, Users, Check, ChevronDown, ChevronUp, AlertCircle, RotateCw } from 'lucide-react'
 
 type Emittente = Database['public']['Tables']['emittenti']['Row']
+type ImportRow = Record<string, unknown>
+type ArtistOption = { id: string; nome: string; cognome: string; nome_arte: string | null }
+type CampagnaWithRuntimeError = CampagnaProgrammazione & { last_error?: string }
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object') {
+    const details = (error as { details?: unknown }).details
+    if (typeof details === 'string') return details
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string') return message
+    return JSON.stringify(error)
+  }
+  return String(error)
+}
+
+function getCampagnaLastError(campagna: CampagnaProgrammazione): string | undefined {
+  return (campagna as CampagnaWithRuntimeError).last_error
+}
 
 const formSchema = z.object({
   emittente_id: z.string().min(1, "Seleziona un'emittente"),
@@ -107,7 +130,6 @@ export default function ProgrammazioniPage() {
   const [emittenteFilter, setEmittenteFilter] = useState<string>('all')
   const [annoFilter, setAnnoFilter] = useState<string>('all')
   const [selectedCampagna, setSelectedCampagna] = useState<CampagnaProgrammazione | null>(null)
-  const [showDetails, setShowDetails] = useState(false)
 
   // Emittenti State
   const [emittenti, setEmittenti] = useState<Emittente[]>([])
@@ -135,14 +157,15 @@ export default function ProgrammazioniPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [parsedRows, setParsedRows] = useState<any[]>([])
+  const [parsedRows, setParsedRows] = useState<ImportRow[]>([])
+  const [parsedRowCount, setParsedRowCount] = useState(0)
   const [parsedColumns, setParsedColumns] = useState<string[]>([])
   const [uploadDecision, setUploadDecision] = useState<UploadDecision | null>(null)
   const [headerError, setHeaderError] = useState<string | null>(null)
   const [isUploadReady, setIsUploadReady] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
-  const [deleteProgress, setDeleteProgress] = useState<Record<string, { done: number; total: number }>>({})
+  const [deleteProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   // Mapping wizard state (inline durante upload)
@@ -168,7 +191,7 @@ export default function ProgrammazioniPage() {
   
   // Artist filter for individuazioni
   const [showArtistFilter, setShowArtistFilter] = useState(false)
-  const [allArtists, setAllArtists] = useState<Array<{ id: string; nome: string; cognome: string; nome_arte: string | null }>>([])
+  const [allArtists, setAllArtists] = useState<ArtistOption[]>([])
   const [loadingArtists, setLoadingArtists] = useState(false)
   const [selectedArtistIds, setSelectedArtistIds] = useState<Set<string>>(new Set())
   const [artistSearchQuery, setArtistSearchQuery] = useState('')
@@ -194,9 +217,10 @@ export default function ProgrammazioniPage() {
         .limit(5000)
       
       if (error) throw error
-      setAllArtists(data || [])
+      const artists = (data || []) as ArtistOption[]
+      setAllArtists(artists)
       // By default, select all artists
-      setSelectedArtistIds(new Set((data || []).map((a: any) => a.id)))
+      setSelectedArtistIds(new Set(artists.map(artist => artist.id)))
     } catch (error) {
       console.error('Errore caricamento artisti:', error)
     } finally {
@@ -356,43 +380,23 @@ export default function ProgrammazioniPage() {
     setSelectedFile(file)
 
     try {
-      let rows: any[] = []
+      const workerMode = getIndividuazioneRuntimeMode() === 'worker'
+      const { columns, preview } = await detectColumns(file)
+      const rows = workerMode ? [] : await readAllRows(file)
+      const rowCount = workerMode ? preview.length : rows.length
 
-      if (file.name.endsWith('.csv')) {
-        await new Promise<void>((resolve, reject) => {
-          Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-              if (results.errors.length > 0) {
-                console.error('CSV Parsing Errors:', results.errors)
-              }
-              rows = results.data
-              resolve()
-            },
-            error: (error) => reject(error)
-          })
-        })
-      } else if (file.name.match(/\.xlsx?$/)) {
-        const data = await file.arrayBuffer()
-        const workbook = XLSX.read(data)
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-        rows = XLSX.utils.sheet_to_json(worksheet, { raw: false }) // raw: false ensures dates are formatted as strings
-      } else {
-        throw new Error('Formato file non supportato. Usa CSV o Excel.')
-      }
-
-      if (rows.length === 0) {
+      if (rowCount === 0) {
         setHeaderError('Il file non contiene righe.')
         setParsedRows([])
+        setParsedRowCount(0)
         setParsedColumns([])
         setUploadDecision(null)
         setIsUploadReady(false)
         return
       }
 
-      const columns = Object.keys(rows[0]).map(c => String(c).trim())
       setParsedRows(rows)
+      setParsedRowCount(rowCount)
       setParsedColumns(columns)
 
       // Decisione upload in base al mapping_import dell'emittente
@@ -567,16 +571,19 @@ export default function ProgrammazioniPage() {
   }
 
   const handleUploadDatabase = async () => {
-    if (!selectedCampagna || parsedRows.length === 0 || !uploadDecision) return
+    const workerMode = getIndividuazioneRuntimeMode() === 'worker'
+    if (!selectedCampagna || !uploadDecision) return
+    if (workerMode && !selectedFile) return
+    if (!workerMode && parsedRows.length === 0) return
     setIsUploading(true)
     try {
       const campagna = selectedCampagna
       const file = selectedFile
       setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'uploading' } : c))
-      setUploadProgress(prev => ({ ...prev, [campagna.id]: { done: 0, total: parsedRows.length } }))
+      setUploadProgress(prev => ({ ...prev, [campagna.id]: { done: 0, total: workerMode ? parsedRowCount : parsedRows.length } }))
       await updateCampagnaStatus(campagna.id, 'uploading')
 
-      if (getIndividuazioneRuntimeMode() === 'worker' && file) {
+      if (workerMode && file) {
         const { storagePath, error: storageError } = await uploadProgrammazioniFileToStorage(file, campagna.id)
         if (storageError) throw storageError
 
@@ -601,14 +608,14 @@ export default function ProgrammazioniPage() {
           campagna_programmazione_id: campagna.id,
           stato: 'queued',
           fase: 'queued',
-          righe_totali: parsedRows.length,
+          righe_totali: 0,
           righe_processate: 0,
           righe_inserite: 0,
           righe_duplicate_saltate: 0,
           current_chunk: 0,
           total_chunks: 0,
           error: null,
-        })
+        }, parsedRowCount)
 
         return
       }
@@ -621,7 +628,7 @@ export default function ProgrammazioniPage() {
       // Build payload secondo la decisione:
       // - legacy_template: parser legacy (template canonico)
       // - apply_existing: applyMapping con la config emittente
-      const buildAll = (rows: any[]): ProgrammazionePayload[] => {
+      const buildAll = (rows: ImportRow[]): ProgrammazionePayload[] => {
         if (uploadDecision.kind === 'apply_existing') {
           return applyMapping(rows, uploadDecision.mapping.mapping, ctx, uploadDecision.mapping.rules, uploadDecision.mapping.transforms)
         }
@@ -678,8 +685,8 @@ export default function ProgrammazioniPage() {
         return next
       })
       await fetchCampagne()
-    } catch (error: any) {
-      const errorMessage = error?.message || error?.details || (typeof error === 'object' ? JSON.stringify(error) : String(error))
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error)
       console.error('Error uploading database:', errorMessage, error)
       setUploadError(errorMessage)
       await updateCampagnaStatus(selectedCampagna.id, 'error')
@@ -729,6 +736,7 @@ export default function ProgrammazioniPage() {
     form.reset()
     setSelectedFile(null)
     setParsedRows([])
+    setParsedRowCount(0)
     setParsedColumns([])
     setUploadDecision(null)
     setIsUploadReady(false)
@@ -740,50 +748,19 @@ export default function ProgrammazioniPage() {
   }
 
   const filterCampagne = useCallback(() => {
-    let filtered = campagne
-
-    // Filter by search query
-    if (debouncedSearchQuery) {
-      filtered = filtered.filter(campagna =>
-        campagna.nome.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-        (campagna.emittenti?.nome && campagna.emittenti.nome.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
-      )
-    }
-
-    // Filter by status
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(campagna => campagna.stato === statusFilter)
-    }
-
-    // Filter by emittente
-    if (emittenteFilter !== 'all') {
-      filtered = filtered.filter(campagna => campagna.emittente_id === emittenteFilter)
-    }
-
-    // Filter by anno
-    if (annoFilter !== 'all') {
-      filtered = filtered.filter(campagna => campagna.anno?.toString() === annoFilter)
-    }
-
-    setFilteredCampagne(filtered)
+    setFilteredCampagne(filterCampagneProgrammazione(campagne, {
+      searchQuery: debouncedSearchQuery,
+      statusFilter,
+      emittenteFilter,
+      annoFilter,
+    }))
   }, [campagne, debouncedSearchQuery, statusFilter, emittenteFilter, annoFilter])
 
   // Get unique anni from campagne for filter dropdown
-  const uniqueAnni = useMemo(() => {
-    const anni = campagne.map(c => c.anno).filter((v, i, a) => v != null && a.indexOf(v) === i)
-    return anni.sort((a, b) => (b || 0) - (a || 0)) // Sort descending (most recent first)
-  }, [campagne])
+  const uniqueAnni = useMemo(() => getUniqueAnni(campagne), [campagne])
 
   // Get unique emittenti from campagne for filter dropdown
-  const uniqueEmittenti = useMemo(() => {
-    const emittentiMap = new Map<string, { id: string; nome: string }>()
-    campagne.forEach(c => {
-      if (c.emittente_id && c.emittenti?.nome) {
-        emittentiMap.set(c.emittente_id, { id: c.emittente_id, nome: c.emittenti.nome })
-      }
-    })
-    return Array.from(emittentiMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
-  }, [campagne])
+  const uniqueEmittenti = useMemo(() => getUniqueEmittenti(campagne), [campagne])
 
   const filterEmittenti = useCallback(() => {
     let filtered = emittenti
@@ -933,11 +910,11 @@ export default function ProgrammazioniPage() {
     setEmittenteFormError(null)
     try {
       if (emittenteFormMode === 'create') {
-        const { error } = await supabase.from('emittenti' as any).insert(emittenteFormData)
+        const { error } = await supabase.from('emittenti').insert(emittenteFormData)
         if (error) throw error
       } else {
         const { error } = await supabase
-          .from('emittenti' as any)
+          .from('emittenti')
           .update(emittenteFormData)
           .eq('id', selectedEmittente!.id)
         if (error) throw error
@@ -945,8 +922,8 @@ export default function ProgrammazioniPage() {
       setShowEmittenteForm(false)
       if (emittenteFormMode === 'edit') setShowEmittenteDetails(false)
       await fetchEmittenti()
-    } catch (e: any) {
-      setEmittenteFormError(e?.message ?? 'Errore salvataggio')
+    } catch (error: unknown) {
+      setEmittenteFormError(getErrorMessage(error) || 'Errore salvataggio')
     } finally {
       setEmittenteFormSaving(false)
     }
@@ -1001,34 +978,6 @@ export default function ProgrammazioniPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT')
-  }
-
-  const renderProgrammazioneBadge = (badge: ProgrammazioneRowBadge) => {
-    switch (badge) {
-      case 'uploading':
-        return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading</Badge>
-      case 'deleting':
-        return <Badge variant="outline"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Eliminazione</Badge>
-      case 'upload_error':
-      case 'error':
-        return <Badge variant="destructive">Errore</Badge>
-      case 'in_review':
-        return <Badge variant="default">In review</Badge>
-      case 'individuazione_stale':
-        return (
-          <Badge variant="outline" className="border-yellow-500 text-yellow-600 dark:text-yellow-400">
-            <AlertCircle className="w-3 h-3 mr-1" /> Individuazione interrotta
-          </Badge>
-        )
-      case 'individuazione_running':
-        return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Individuazione in corso</Badge>
-      case 'individuata':
-        return <Badge variant="default" className="bg-green-600">Individuata</Badge>
-      case 'bozza':
-        return <Badge variant="outline">Bozza</Badge>
-      default:
-        return <Badge variant="secondary">{badge}</Badge>
-    }
   }
 
   const exportData = () => {
@@ -1415,10 +1364,10 @@ export default function ProgrammazioniPage() {
                                       </div>
                                     )}
                                     
-                                    {campagna.stato === 'error' && (campagna as any).last_error && (
+                                    {campagna.stato === 'error' && getCampagnaLastError(campagna) && (
                                       <div className="pt-2 border-t border-red-500/30">
                                         <p className="font-medium text-sm text-red-300 mb-1">Dettaglio errore:</p>
-                                        <p className="text-xs text-red-200/90 wrap-break-word">{(campagna as any).last_error}</p>
+                                        <p className="text-xs text-red-200/90 wrap-break-word">{getCampagnaLastError(campagna)}</p>
                                       </div>
                                     )}
                                   </div>
@@ -1467,7 +1416,7 @@ export default function ProgrammazioniPage() {
                               </div>
                             ) : (
                               <>
-                                {renderProgrammazioneBadge(rowState.badge)}
+                                <ProgrammazioneStatusBadge badge={rowState.badge} />
                               </>
                             )}
                           </div>
@@ -1648,10 +1597,10 @@ export default function ProgrammazioniPage() {
                                       <p className="text-xs">{campagna.descrizione}</p>
                                     </div>
                                   )}
-                                  {campagna.stato === 'error' && (campagna as any).last_error && (
+                                  {campagna.stato === 'error' && getCampagnaLastError(campagna) && (
                                     <div className="pt-1 border-t">
                                       <p className="text-xs font-medium text-red-500">Errore:</p>
-                                      <p className="text-xs text-red-400">{(campagna as any).last_error}</p>
+                                      <p className="text-xs text-red-400">{getCampagnaLastError(campagna)}</p>
                                     </div>
                                   )}
                                 </div>
@@ -1668,7 +1617,7 @@ export default function ProgrammazioniPage() {
                             <span>{formatDate(campagna.created_at)}</span>
                           </div>
                           <div className="mt-3 flex flex-wrap items-center gap-2">
-                            {renderProgrammazioneBadge(rowState.badge)}
+                            <ProgrammazioneStatusBadge badge={rowState.badge} />
                             {!isCompleted && (
                               <Button
                                 variant="outline"
@@ -2659,7 +2608,7 @@ export default function ProgrammazioniPage() {
               Annulla upload
             </Button>
             <Button variant="outline" onClick={handleProceedDespiteFormatChange}>
-              Procedi così com'è
+              Procedi così com&apos;è
             </Button>
             <Button onClick={handleUpdateMappingFromWarning}>
               Aggiorna mapping

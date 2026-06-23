@@ -53,7 +53,7 @@ npm run dev
 
 In worker-primary mode, keep the Next.js app and worker running together. In legacy fallback mode, the frontend uses the serverless routes because `NEXT_PUBLIC_WORKER_URL` is absent.
 
-The worker handles long-running operations such as individuazione jobs outside serverless timeouts.
+The worker handles long-running operations such as individuazione and upload jobs outside serverless timeouts.
 By default it listens on `http://localhost:8080/health`; keep `NEXT_PUBLIC_WORKER_URL` aligned with the worker `PORT`.
 
 ## Database
@@ -80,6 +80,8 @@ npm --prefix server run typecheck
 ```
 
 Root Jest ignores `server/` because worker tests use Node's `node:test` runner through `npm --prefix server test`.
+
+For feature-specific commands and entry points, see `docs/FEATURE_MAP.md` and `docs/TESTING.md`.
 
 ## Troubleshooting
 

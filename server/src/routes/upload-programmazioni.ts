@@ -7,6 +7,7 @@ import {
   createUploadJob,
   findActiveUploadJob,
   getUploadJobForUser,
+  userOwnsCampagnaEmittente,
 } from '../jobs/upload-job-store.js'
 import type { UploadMappingSnapshot } from '../jobs/programmazioni-import-core.js'
 
@@ -15,6 +16,51 @@ export const uploadJobsRouter = Router()
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const TEMPLATE_FIELDS = new Set([
+  'titolo',
+  'tipo',
+  'data_trasmissione',
+  'ora_inizio',
+  'ora_fine',
+  'durata_minuti',
+  'titolo_originale',
+  'numero_episodio',
+  'titolo_episodio',
+  'titolo_episodio_originale',
+  'numero_stagione',
+  'anno',
+  'production',
+  'regia',
+  'data_inizio',
+  'data_fine',
+  'retail_price',
+  'sales_month',
+  'track_price_local_currency',
+  'views',
+  'total_net_ad_revenue',
+  'total_revenue',
+  'canale',
+  'emittente',
+])
+
+export function normalizeUploadChunkSize(value: unknown): number {
+  return Math.max(100, Math.min(Number(value) || 500, 1000))
+}
+
+export function isValidUploadStoragePath(
+  storagePath: unknown,
+  userId: string,
+  campagnaProgrammazioneId: string
+): storagePath is string {
+  if (typeof storagePath !== 'string') return false
+  const parts = storagePath.split('/')
+  if (parts.length < 3) return false
+  const [pathUserId, pathCampagnaId, ...fileParts] = parts
+  if (pathUserId !== userId || pathCampagnaId !== campagnaProgrammazioneId) return false
+  if (fileParts.length === 0) return false
+  return fileParts.every(part => part.length > 0 && part !== '.' && part !== '..')
+}
 
 async function acquireLock(campagnaId: string, userId: string) {
   const { data, error } = await supabaseService.rpc('acquire_campagna_processing_lock', {
@@ -46,7 +92,7 @@ uploadProgrammazioniRouter.post('/start', requireAuth, async (req, res) => {
   if (!emittente_id || !UUID_RE.test(emittente_id)) {
     return res.status(400).json({ success: false, error: 'emittente_id non valido' })
   }
-  if (!storage_path || typeof storage_path !== 'string' || !storage_path.startsWith(`${req.userId}/`)) {
+  if (!isValidUploadStoragePath(storage_path, req.userId!, campagne_programmazione_id)) {
     return res.status(400).json({ success: false, error: 'storage_path non valido' })
   }
   if (!file_name || typeof file_name !== 'string') {
@@ -65,6 +111,18 @@ uploadProgrammazioniRouter.post('/start', requireAuth, async (req, res) => {
       return res.status(404).json({
         success: false,
         error: 'Campagna non trovata o non autorizzata',
+      })
+    }
+
+    const hasEmittenteAccess = await userOwnsCampagnaEmittente(
+      campagne_programmazione_id,
+      emittente_id,
+      req.userId!
+    )
+    if (!hasEmittenteAccess) {
+      return res.status(404).json({
+        success: false,
+        error: 'Emittente non trovata per questa campagna',
       })
     }
 
@@ -107,7 +165,7 @@ uploadProgrammazioniRouter.post('/start', requireAuth, async (req, res) => {
       file_name,
       file_type: typeof file_type === 'string' ? file_type : 'application/octet-stream',
       mapping_snapshot,
-      chunk_size: Math.max(100, Math.min(Number(chunk_size) || 500, 1000)),
+      chunk_size: normalizeUploadChunkSize(chunk_size),
       created_by: req.userId ?? null,
     })
 
@@ -140,13 +198,66 @@ uploadJobsRouter.get('/:id', requireAuth, async (req, res) => {
   }
 })
 
-function isValidMappingSnapshot(value: unknown): value is UploadMappingSnapshot {
+export function isValidMappingSnapshot(value: unknown): value is UploadMappingSnapshot {
   if (!value || typeof value !== 'object') return false
   const kind = (value as { kind?: unknown }).kind
   if (kind === 'legacy_template') return true
   if (kind === 'apply_existing') {
     const mapping = (value as { mapping?: unknown }).mapping
-    return Boolean(mapping && typeof mapping === 'object')
+    return isValidImportMappingConfig(mapping)
   }
   return false
+}
+
+function isValidImportMappingConfig(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const config = value as {
+    version?: unknown
+    colonne_rilevate?: unknown
+    mapping?: unknown
+    rules?: unknown
+    transforms?: unknown
+  }
+  if (config.version !== 1) return false
+  if (!Array.isArray(config.colonne_rilevate)) return false
+  if (!config.colonne_rilevate.every(column => typeof column === 'string' && column.length > 0)) {
+    return false
+  }
+  if (!config.mapping || typeof config.mapping !== 'object' || Array.isArray(config.mapping)) {
+    return false
+  }
+
+  const sourceColumns = new Set(config.colonne_rilevate)
+  for (const [source, target] of Object.entries(config.mapping as Record<string, unknown>)) {
+    if (!sourceColumns.has(source)) return false
+    if (typeof target !== 'string' || !TEMPLATE_FIELDS.has(target)) return false
+  }
+
+  if (config.rules !== undefined) {
+    if (!config.rules || typeof config.rules !== 'object' || Array.isArray(config.rules)) return false
+    for (const [target, ruleValue] of Object.entries(config.rules as Record<string, unknown>)) {
+      if (!TEMPLATE_FIELDS.has(target)) return false
+      if (!ruleValue || typeof ruleValue !== 'object' || Array.isArray(ruleValue)) return false
+      const rule = ruleValue as { sources?: unknown; onlyIfPresent?: unknown }
+      if (!Array.isArray(rule.sources) || rule.sources.length === 0) return false
+      if (!rule.sources.every(source => typeof source === 'string' && sourceColumns.has(source))) {
+        return false
+      }
+      if (
+        rule.onlyIfPresent !== undefined &&
+        (typeof rule.onlyIfPresent !== 'string' || !sourceColumns.has(rule.onlyIfPresent))
+      ) {
+        return false
+      }
+    }
+  }
+
+  if (config.transforms !== undefined) {
+    if (!config.transforms || typeof config.transforms !== 'object' || Array.isArray(config.transforms)) return false
+    for (const source of Object.keys(config.transforms as Record<string, unknown>)) {
+      if (!sourceColumns.has(source)) return false
+    }
+  }
+
+  return true
 }

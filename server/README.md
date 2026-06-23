@@ -7,8 +7,8 @@ evitarne i limiti di timeout.
 Il lavoro pesante resta dentro Postgres (le RPC `process_programmazioni_chunk`,
 `init_campagna_individuazione`, `finalize_campagna_individuazione`, ...). Questo
 worker fa solo da **orchestratore**: avvia un job, cicla i chunk fino al
-completamento e scrive l'avanzamento sulla tabella `campaign_jobs`. Il frontend
-chiama "start" e poi fa polling dell'avanzamento.
+completamento e scrive l'avanzamento sulle tabelle `campaign_jobs` e
+`upload_jobs`. Il frontend chiama "start" e poi fa polling dell'avanzamento.
 
 ## Architettura
 
@@ -56,5 +56,16 @@ Vedi `.env.example`. Su Railway vanno impostate nel servizio:
 | GET    | `/health`                     | Healthcheck                                  |
 | POST   | `/api/individuazione/start`   | Avvia/riprende l'individuazione → `job_id`   |
 | GET    | `/api/jobs/:id`               | Avanzamento del job (per polling)            |
+| POST   | `/api/upload-programmazioni/start` | Avvia upload programmazioni da Storage |
+| GET    | `/api/upload-jobs/:id`        | Avanzamento upload programmazioni            |
 
 Tutte le route (tranne `/health`) richiedono header `Authorization: Bearer <supabase access token>`.
+
+## Test
+
+```bash
+npm --prefix server run typecheck
+npm --prefix server test
+```
+
+I test worker usano `node:test` via `tsx`; non sono eseguiti dal Jest root.

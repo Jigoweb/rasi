@@ -38,6 +38,16 @@ async function releaseLock(
   }
 }
 
+async function removeUploadedFile(storagePath: string): Promise<void> {
+  const { error } = await supabaseService.storage
+    .from(BUCKET)
+    .remove([storagePath])
+
+  if (error) {
+    console.warn(`[upload-programmazioni] cleanup storage fallito per ${storagePath}: ${error.message}`)
+  }
+}
+
 export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promise<void> {
   const {
     jobId,
@@ -116,6 +126,7 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
       righe_inserite: righeInserite,
       righe_duplicate_saltate: righeDuplicateSaltate,
     })
+    await removeUploadedFile(storagePath)
   } catch (error: any) {
     try {
       await releaseLock(campagneProgrammazioneId, userId, 'in_review')
@@ -128,5 +139,6 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
       fase: 'error',
       error: error.message || 'Errore inatteso upload programmazioni',
     })
+    await removeUploadedFile(storagePath)
   }
 }

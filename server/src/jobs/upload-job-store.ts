@@ -80,6 +80,23 @@ export async function findActiveUploadJob(
   return (data as UploadJob) ?? null
 }
 
+export async function userOwnsCampagnaEmittente(
+  campagneProgrammazioneId: string,
+  emittenteId: string,
+  userId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseService
+    .from('campagne_programmazione')
+    .select('id')
+    .eq('id', campagneProgrammazioneId)
+    .eq('emittente_id', emittenteId)
+    .eq('created_by', userId)
+    .maybeSingle()
+
+  if (error) throw new Error(`userOwnsCampagnaEmittente: ${error.message}`)
+  return Boolean(data?.id)
+}
+
 export async function patchUploadJob(
   id: string,
   patch: Partial<Omit<UploadJob, 'id' | 'created_at'>>
