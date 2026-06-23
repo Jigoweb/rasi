@@ -130,7 +130,7 @@ export default function ProgrammazioniPage() {
   const progressFetchedRef = useRef<Set<string>>(new Set())
 
   // Individuazioni - use global context
-  const { state: individuazioneState, startProcess, canStartNewProcess } = useIndividuazioneProcess()
+  const { startProcess, canStartProcess, isCampagnaProcessing } = useIndividuazioneProcess()
   const [showProcessBlockedDialog, setShowProcessBlockedDialog] = useState(false)
   const [showIndividuazioniConfirmDialog, setShowIndividuazioniConfirmDialog] = useState(false)
   const [campagnaForIndividuazioni, setCampagnaForIndividuazioni] = useState<CampagnaProgrammazione | null>(null)
@@ -192,8 +192,8 @@ export default function ProgrammazioniPage() {
 
   // Handle starting individuazioni process - show confirmation first
   const handleStartIndividuazioni = (campagna: CampagnaProgrammazione) => {
-    if (!canStartNewProcess) {
-      // Show blocked dialog if process already running
+    if (!canStartProcess(campagna.id)) {
+      // Show blocked dialog if this campaign is already running.
       setShowProcessBlockedDialog(true)
       return
     }
@@ -244,7 +244,7 @@ export default function ProgrammazioniPage() {
   // Riusa la campagna_individuazione esistente e salta le programmazioni già
   // processate (resume), senza ricominciare da capo.
   const handleResumeIndividuazioni = async (campagna: CampagnaProgrammazione) => {
-    if (!canStartNewProcess) {
+    if (!canStartProcess(campagna.id)) {
       setShowProcessBlockedDialog(true)
       return
     }
@@ -1030,7 +1030,7 @@ export default function ProgrammazioniPage() {
                   ) : (
                     filteredCampagne.map((campagna) => {
                       const hasData = (campagna.programmazioni_count || 0) > 0
-                      const isGlobalProcessingThisCampagna = individuazioneState.status === 'processing' && individuazioneState.campagna?.id === campagna.id
+                      const isGlobalProcessingThisCampagna = isCampagnaProcessing(campagna.id)
                       const canCreateIndividuazioni = hasData && campagna.stato === 'in_review' && !isGlobalProcessingThisCampagna
                       const isProcessing = campagna.stato === 'in_corso' || campagna.stato === 'uploading' || campagna.stato === 'deleting' || isGlobalProcessingThisCampagna
                       const isCompleted = campagna.stato === 'individuata'
@@ -1183,7 +1183,7 @@ export default function ProgrammazioniPage() {
                                     {campagna.stato === 'error' && (campagna as any).last_error && (
                                       <div className="pt-2 border-t border-red-500/30">
                                         <p className="font-medium text-sm text-red-300 mb-1">Dettaglio errore:</p>
-                                        <p className="text-xs text-red-200/90 break-words">{(campagna as any).last_error}</p>
+                                        <p className="text-xs text-red-200/90 wrap-break-word">{(campagna as any).last_error}</p>
                                       </div>
                                     )}
                                   </div>
@@ -1316,7 +1316,7 @@ export default function ProgrammazioniPage() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                disabled={!canStartNewProcess}
+                                disabled={!canStartProcess(campagna.id)}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   handleResumeIndividuazioni(campagna)
@@ -1985,7 +1985,7 @@ export default function ProgrammazioniPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-destructive">Errore durante l&apos;upload</p>
-                    <p className="text-sm text-muted-foreground mt-1 break-words">{uploadError}</p>
+                    <p className="text-sm text-muted-foreground mt-1 wrap-break-word">{uploadError}</p>
                   </div>
                 </div>
                 <div className="flex justify-end mt-3">

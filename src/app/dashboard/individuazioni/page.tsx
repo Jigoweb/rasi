@@ -38,7 +38,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/
 
 export default function IndividuazioniPage() {
   const router = useRouter()
-  const { resumeById, canStartNewProcess } = useIndividuazioneProcess()
+  const { resumeById, canStartProcess } = useIndividuazioneProcess()
   const [resumingId, setResumingId] = useState<string | null>(null)
   const [campagne, setCampagne] = useState<CampagnaIndividuazione[]>([])
   const [filteredCampagne, setFilteredCampagne] = useState<CampagnaIndividuazione[]>([])
@@ -129,7 +129,7 @@ export default function IndividuazioniPage() {
   // Riprende un processo interrotto direttamente dalla pagina Individuazioni
   // (locality of action: agisci dove vedi lo stato "Interrotto").
   const handleResume = async (campagna: CampagnaIndividuazione) => {
-    if (!canStartNewProcess) return
+    if (!canStartProcess(campagna.campagne_programmazione_id)) return
     setResumingId(campagna.id)
     try {
       await resumeById(
@@ -703,7 +703,7 @@ export default function IndividuazioniPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={!canStartNewProcess || resumingId === campagna.id}
+                            disabled={!canStartProcess(campagna.campagne_programmazione_id) || resumingId === campagna.id}
                             onClick={() => handleResume(campagna)}
                             className="gap-1.5 border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
                           >

@@ -1,18 +1,14 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react'
 import {
   processCampagnaIndividuazioneBatch,
   BatchProcessingProgress,
   FinalizeCampagnaResponse,
-  findActiveWorkerJob,
-  pollWorkerJob,
-  getWorkerUrl,
 } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import {
   CampagnaProgrammazione,
   getCampagneProgrammazione,
-  getCampagnaProgrammazioneById,
   getProcessingProgress,
   isProcessingStale,
   minutesSinceProcessingActivity,
@@ -60,11 +56,15 @@ export interface InterruptedCampagna {
 
 export interface IndividuazioneProcessContextValue {
   state: IndividuazioneProcessState
+  processByCampagnaId: Record<string, IndividuazioneProcessState>
+  activeProcesses: IndividuazioneProcessState[]
   startProcess: (campagna: CampagnaProgrammazione, options?: StartProcessOptions) => Promise<FinalizeCampagnaResponse>
-  minimize: () => void
-  maximize: () => void
-  reset: () => void
+  minimize: (campagneProgrammazioneId?: string) => void
+  maximize: (campagneProgrammazioneId?: string) => void
+  reset: (campagneProgrammazioneId?: string) => void
   canStartNewProcess: boolean
+  canStartProcess: (campagneProgrammazioneId: string) => boolean
+  isCampagnaProcessing: (campagneProgrammazioneId: string) => boolean
   /** Job interrotti (in_corso + stale) idratati dal server, mostrati globalmente. */
   interrupted: InterruptedCampagna[]
   /** Ricarica la lista dei job interrotti dal server. */
@@ -94,10 +94,29 @@ const initialState: IndividuazioneProcessState = {
 }
 
 export function IndividuazioneProcessProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<IndividuazioneProcessState>(initialState)
+  const [processByCampagnaId, setProcessByCampagnaId] = useState<Record<string, IndividuazioneProcessState>>({})
+  const [focusedCampagnaId, setFocusedCampagnaId] = useState<string | null>(null)
   const [interrupted, setInterrupted] = useState<InterruptedCampagna[]>([])
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
-  const reattachAbortRef = useRef<AbortController | null>(null)
+
+  const activeProcesses = useMemo(
+    () => Object.values(processByCampagnaId).filter(process => process.status === 'processing'),
+    [processByCampagnaId]
+  )
+
+  const state = focusedCampagnaId
+    ? processByCampagnaId[focusedCampagnaId] ?? initialState
+    : initialState
+
+  const updateProcessState = useCallback((
+    campagneProgrammazioneId: string,
+    updater: (prev: IndividuazioneProcessState) => IndividuazioneProcessState
+  ) => {
+    setProcessByCampagnaId(prev => ({
+      ...prev,
+      [campagneProgrammazioneId]: updater(prev[campagneProgrammazioneId] ?? initialState),
+    }))
+  }, [])
 
   // Idratazione da server: trova i job rimasti "in_corso" e stale (es. sistema
   // chiuso a metà) così riemergono globalmente su ogni pagina, anche dopo
@@ -127,75 +146,14 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     }
   }, [])
 
-  // Se conosciamo già la campagna corrente, cerca un job attivo scoped su
-  // quella campagna. Senza id non facciamo più lookup globali.
-  const reattachToActiveJob = useCallback(async () => {
-    if (!getWorkerUrl()) return
-    const campagneProgrammazioneId = state.campagna?.id
-    if (!campagneProgrammazioneId || state.status !== 'idle') return
-
-    try {
-      const active = await findActiveWorkerJob(campagneProgrammazioneId)
-      if (!active) return
-
-      const { data: campagna } = await getCampagnaProgrammazioneById(active.campagneProgrammazioneId)
-
-      setState({
-        status: 'processing',
-        campagna: campagna ?? ({ id: active.campagneProgrammazioneId, nome: 'Campagna' } as CampagnaProgrammazione),
-        progress: null,
-        result: null,
-        isMinimized: true,
-      })
-      setInterrupted(prev => prev.filter(c => c.id !== active.campagneProgrammazioneId))
-
-      const controller = new AbortController()
-      reattachAbortRef.current = controller
-
-      const result = await pollWorkerJob(
-        active.jobId,
-        (progress) => { setState(prev => ({ ...prev, progress })) },
-        Date.now(),
-        controller.signal
-      )
-
-      if (controller.signal.aborted) return
-
-      reattachAbortRef.current = null
-
-      if (result.success && result.data) {
-        setState(prev => ({
-          ...prev,
-          status: 'completed',
-          result: {
-            success: true,
-            stats: result.data!.statistiche,
-            campagneIndividuazioneId: (result.data!.statistiche as any).campagne_individuazione_id,
-          },
-        }))
-      } else {
-        setState(prev => ({
-          ...prev,
-          status: 'error',
-          result: { success: false, error: result.error || 'Errore job' },
-        }))
-      }
-
-      refreshInterrupted()
-    } catch {
-      // best-effort: non rompere l'app
-    }
-  }, [refreshInterrupted, state.campagna?.id, state.status])
-
   useEffect(() => {
-    reattachToActiveJob()
     refreshInterrupted()
-  }, [reattachToActiveJob, refreshInterrupted])
+  }, [refreshInterrupted])
 
   // Warning before unload during processing
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (state.status === 'processing') {
+      if (activeProcesses.length > 0) {
         e.preventDefault()
         e.returnValue = 'Processo di individuazione in corso. Sei sicuro di voler uscire?'
         return e.returnValue
@@ -204,23 +162,31 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [state.status])
+  }, [activeProcesses.length])
 
   const startProcess = useCallback(async (
     campagna: CampagnaProgrammazione,
     options?: StartProcessOptions
   ): Promise<FinalizeCampagnaResponse> => {
-    // Annulla l'eventuale re-attach in corso per evitare loop di polling doppi
-    reattachAbortRef.current?.abort()
-    reattachAbortRef.current = null
+    const existingProcess = processByCampagnaId[campagna.id]
+    if (existingProcess?.status === 'processing') {
+      return {
+        success: false,
+        error: 'Esiste già un job attivo per questa campagna',
+      }
+    }
 
-    setState({
-      status: 'processing',
-      campagna,
-      progress: null,
-      result: null,
-      isMinimized: false,
-    })
+    setFocusedCampagnaId(campagna.id)
+    setProcessByCampagnaId(prev => ({
+      ...prev,
+      [campagna.id]: {
+        status: 'processing',
+        campagna,
+        progress: null,
+        result: null,
+        isMinimized: false,
+      },
+    }))
     // Il job non è più "interrotto": è ripartito.
     setInterrupted(prev => prev.filter(c => c.id !== campagna.id))
 
@@ -228,7 +194,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
       const result = await processCampagnaIndividuazioneBatch(
         campagna.id,
         (progress) => {
-          setState(prev => ({
+          updateProcessState(campagna.id, prev => ({
             ...prev,
             progress,
           }))
@@ -242,7 +208,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
       )
 
       if (result.success && result.data) {
-        setState(prev => ({
+        updateProcessState(campagna.id, prev => ({
           ...prev,
           status: 'completed',
           result: {
@@ -254,7 +220,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
       } else {
         // Check for lock error from init
         const anyResult = result as any
-        setState(prev => ({
+        updateProcessState(campagna.id, prev => ({
           ...prev,
           status: 'error',
           result: {
@@ -286,7 +252,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         errorMessage = 'Errore di connessione al database (schema cache). Il sistema sta tentando di riconnettersi automaticamente.'
       }
 
-      setState(prev => ({
+      updateProcessState(campagna.id, prev => ({
         ...prev,
         status: 'error',
         result: {
@@ -300,19 +266,42 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         error: errorMessage
       }
     }
-  }, [])
+  }, [processByCampagnaId, updateProcessState])
 
-  const minimize = useCallback(() => {
-    setState(prev => ({ ...prev, isMinimized: true }))
-  }, [])
+  const minimize = useCallback((campagneProgrammazioneId?: string) => {
+    const targetId = campagneProgrammazioneId ?? focusedCampagnaId
+    if (!targetId) return
+    updateProcessState(targetId, prev => ({ ...prev, isMinimized: true }))
+  }, [focusedCampagnaId, updateProcessState])
 
-  const maximize = useCallback(() => {
-    setState(prev => ({ ...prev, isMinimized: false }))
-  }, [])
+  const maximize = useCallback((campagneProgrammazioneId?: string) => {
+    const targetId = campagneProgrammazioneId ?? focusedCampagnaId
+    if (!targetId) return
+    setFocusedCampagnaId(targetId)
+    updateProcessState(targetId, prev => ({ ...prev, isMinimized: false }))
+  }, [focusedCampagnaId, updateProcessState])
 
-  const reset = useCallback(() => {
-    setState(initialState)
-  }, [])
+  const reset = useCallback((campagneProgrammazioneId?: string) => {
+    const targetId = campagneProgrammazioneId ?? focusedCampagnaId
+    if (!targetId) return
+
+    setProcessByCampagnaId(prev => {
+      const next = { ...prev }
+      delete next[targetId]
+      return next
+    })
+    if (focusedCampagnaId === targetId) {
+      setFocusedCampagnaId(null)
+    }
+  }, [focusedCampagnaId])
+
+  const isCampagnaProcessing = useCallback((campagneProgrammazioneId: string) => (
+    processByCampagnaId[campagneProgrammazioneId]?.status === 'processing'
+  ), [processByCampagnaId])
+
+  const canStartProcess = useCallback((campagneProgrammazioneId: string) => (
+    !isCampagnaProcessing(campagneProgrammazioneId)
+  ), [isCampagnaProcessing])
 
   // Riprende un job interrotto dato solo il suo campagne_programmazione_id.
   // Il resume route ha bisogno solo dell'id; nome è per il display.
@@ -338,17 +327,21 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     setInterrupted(prev => prev.filter(c => c.id !== campagneProgrammazioneId))
   }, [])
 
-  const canStartNewProcess = state.status === 'idle' || state.status === 'completed' || state.status === 'error'
+  const canStartNewProcess = true
 
   const visibleInterrupted = interrupted.filter(c => !dismissedIds.has(c.id))
 
   const value: IndividuazioneProcessContextValue = {
     state,
+    processByCampagnaId,
+    activeProcesses,
     startProcess,
     minimize,
     maximize,
     reset,
     canStartNewProcess,
+    canStartProcess,
+    isCampagnaProcessing,
     interrupted: visibleInterrupted,
     refreshInterrupted,
     resumeById,

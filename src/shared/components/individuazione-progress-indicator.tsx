@@ -22,82 +22,86 @@ import {
 // ============================================
 
 export function FloatingProgressIndicator() {
-  const { state, maximize, reset } = useIndividuazioneProcess()
+  const { processByCampagnaId, maximize, reset } = useIndividuazioneProcess()
+  const visibleProcesses = Object.values(processByCampagnaId).filter(
+    process => process.status !== 'idle' && process.isMinimized
+  )
 
-  // Don't show if idle or not minimized
-  if (state.status === 'idle' || !state.isMinimized) {
+  if (visibleProcesses.length === 0) {
     return null
   }
 
-  const progress = state.progress
-  const percentage = progress && progress.programmazioni_totali > 0
-    ? Math.round((progress.programmazioni_processate / progress.programmazioni_totali) * 100)
-    : 0
-
   return (
     <div 
-      className="fixed bottom-4 right-4 z-40 animate-in slide-in-from-bottom-4 fade-in duration-300 pointer-events-auto"
+      className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 animate-in slide-in-from-bottom-4 fade-in duration-300 pointer-events-auto"
     >
-      <div
-        onClick={maximize}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && maximize()}
-        className="flex items-center gap-3 bg-background border rounded-lg shadow-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer group pointer-events-auto"
-      >
-        {/* Icon */}
-        <div className="relative">
-          {state.status === 'processing' && (
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-          )}
-          {state.status === 'completed' && (
-            <CheckCircle className="h-5 w-5 text-green-600" />
-          )}
-          {state.status === 'error' && (
-            <XCircle className="h-5 w-5 text-destructive" />
-          )}
-        </div>
+      {visibleProcesses.map((process) => {
+        const campagnaId = process.campagna?.id
+        const progress = process.progress
+        const percentage = progress && progress.programmazioni_totali > 0
+          ? Math.round((progress.programmazioni_processate / progress.programmazioni_totali) * 100)
+          : 0
 
-        {/* Content */}
-        <div className="text-left">
-          <p className="text-sm font-medium">
-            {state.status === 'processing' && 'Individuazione in corso...'}
-            {state.status === 'completed' && 'Individuazione completata'}
-            {state.status === 'error' && 'Errore individuazione'}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {state.campagna?.nome}
-          </p>
-        </div>
-
-        {/* Progress bar (only during processing) */}
-        {state.status === 'processing' && (
-          <div className="flex items-center gap-2">
-            <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-primary transition-all duration-300"
-                style={{ width: `${percentage}%` }}
-              />
-            </div>
-            <span className="text-xs font-medium text-muted-foreground w-8">
-              {percentage}%
-            </span>
-          </div>
-        )}
-
-        {/* Close button for completed/error */}
-        {(state.status === 'completed' || state.status === 'error') && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              reset()
-            }}
-            className="ml-2 p-1 hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"
+        return (
+          <div
+            key={campagnaId ?? process.campagna?.nome}
+            onClick={() => campagnaId && maximize(campagnaId)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && campagnaId && maximize(campagnaId)}
+            className="flex items-center gap-3 bg-background border rounded-lg shadow-lg px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer group pointer-events-auto"
           >
-            <X className="h-4 w-4 text-muted-foreground" />
-          </button>
-        )}
-      </div>
+            <div className="relative">
+              {process.status === 'processing' && (
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              )}
+              {process.status === 'completed' && (
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              )}
+              {process.status === 'error' && (
+                <XCircle className="h-5 w-5 text-destructive" />
+              )}
+            </div>
+
+            <div className="text-left min-w-0">
+              <p className="text-sm font-medium">
+                {process.status === 'processing' && 'Individuazione in corso...'}
+                {process.status === 'completed' && 'Individuazione completata'}
+                {process.status === 'error' && 'Errore individuazione'}
+              </p>
+              <p className="text-xs text-muted-foreground truncate max-w-56">
+                {process.campagna?.nome}
+              </p>
+            </div>
+
+            {process.status === 'processing' && (
+              <div className="flex items-center gap-2">
+                <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-muted-foreground w-8">
+                  {percentage}%
+                </span>
+              </div>
+            )}
+
+            {(process.status === 'completed' || process.status === 'error') && campagnaId && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  reset(campagnaId)
+                }}
+                className="ml-2 p-1 hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X className="h-4 w-4 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -114,18 +118,16 @@ export function FloatingProgressIndicator() {
  */
 export function FloatingInterruptedIndicator() {
   const router = useRouter()
-  const { interrupted, resumeById, dismissInterrupted, canStartNewProcess, state } =
+  const { interrupted, resumeById, dismissInterrupted, canStartProcess, activeProcesses } =
     useIndividuazioneProcess()
   const [resumingId, setResumingId] = useState<string | null>(null)
 
-  // Non mostrare durante un processo attivo (evita clutter col progress) o se
-  // non ci sono job interrotti.
-  if (state.status === 'processing' || interrupted.length === 0) {
+  if (interrupted.length === 0) {
     return null
   }
 
   const handleResume = async (id: string, nome: string) => {
-    if (!canStartNewProcess) return
+    if (!canStartProcess(id)) return
     setResumingId(id)
     try {
       await resumeById(id, nome)
@@ -135,7 +137,7 @@ export function FloatingInterruptedIndicator() {
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm pointer-events-auto animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div className={`fixed ${activeProcesses.length > 0 ? 'bottom-24' : 'bottom-4'} right-4 z-40 flex flex-col gap-2 max-w-sm pointer-events-auto animate-in slide-in-from-bottom-4 fade-in duration-300`}>
       {interrupted.map((c) => {
         const isResuming = resumingId === c.id
         return (
@@ -155,7 +157,7 @@ export function FloatingInterruptedIndicator() {
                 <Button
                   size="sm"
                   className="h-7 gap-1.5"
-                  disabled={!canStartNewProcess || isResuming}
+                  disabled={!canStartProcess(c.id) || isResuming}
                   onClick={() => handleResume(c.id, c.nome)}
                 >
                   {isResuming ? (
@@ -408,7 +410,7 @@ export function IndividuazioneProgressDialog() {
                 <p className="text-sm text-red-800 font-medium">
                   Si è verificato un errore durante il processamento.
                 </p>
-                <p className="text-xs text-red-600 font-mono break-words">
+                <p className="text-xs text-red-600 font-mono wrap-break-word">
                   {state.result?.error}
                 </p>
                 {/* Suggerimenti per errori comuni */}
@@ -448,7 +450,7 @@ export function IndividuazioneProgressDialog() {
         <DialogFooter className="gap-2">
           {/* Processing - can minimize */}
           {state.status === 'processing' && (
-            <Button variant="outline" onClick={minimize}>
+            <Button variant="outline" onClick={() => minimize()}>
               <Minimize2 className="mr-2 h-4 w-4" />
               Continua in background
             </Button>
@@ -457,7 +459,7 @@ export function IndividuazioneProgressDialog() {
           {/* Completed */}
           {state.status === 'completed' && (
             <>
-              <Button variant="outline" onClick={reset}>
+              <Button variant="outline" onClick={() => reset()}>
                 Chiudi
               </Button>
               <Button onClick={() => {
@@ -472,7 +474,7 @@ export function IndividuazioneProgressDialog() {
 
           {/* Error */}
           {state.status === 'error' && (
-            <Button variant="outline" onClick={reset}>
+            <Button variant="outline" onClick={() => reset()}>
               Chiudi
             </Button>
           )}

@@ -14,8 +14,12 @@ jest.mock('next/navigation', () => ({
 jest.mock('@/shared/contexts/individuazione-process-context', () => ({
   useIndividuazioneProcess: () => ({
     state: { status: 'idle', activeCampagnaId: null, progress: 0 },
+    processByCampagnaId: {},
+    activeProcesses: [],
     startProcess: jest.fn(),
     canStartNewProcess: true,
+    canStartProcess: jest.fn(() => true),
+    isCampagnaProcessing: jest.fn(() => false),
   }),
   IndividuazioneProcessProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
