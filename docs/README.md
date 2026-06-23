@@ -21,6 +21,13 @@ Nessuno al momento.
 - `docs/codebase-audit/2026-06-23-baseline.md`: baseline operativa.
 - `docs/codebase-audit/branch-inventory.md`: stato branch e worktree.
 - `docs/codebase-audit/cleanup-candidates.md`: candidati cleanup con rischio.
+- `docs/codebase-audit/root-security-cleanup.md`: cleanup root applicato e follow-up sicurezza sugli script.
+
+## Archivio
+
+- `docs/archive/`: documenti storici non operativi.
+- `docs/archive/deploy/`: note deploy storiche e fix one-off.
+- `docs/archive/trae/`: documenti storici esportati da Trae.
 
 ## Piani E Spec
 

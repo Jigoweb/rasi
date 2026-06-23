@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import mysql.connector
 import requests
 import json
@@ -13,8 +14,8 @@ mysql_config = {
 }
 
 # Supabase PostgreSQL connection details
-supabase_url = "https://jdflzupcfwdcajxfobfj.supabase.co/rest/v1"
-supabase_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkZmx6dXBjZndkY2FqeGZvYmZqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDg2MTUxOCwiZXhwIjoyMDY2NDM3NTE4fQ.Tu03Gs9pvYAnr7qqTsFHqG38O7vGGGn0xTqwIvv2UFo"
+supabase_url = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1"
+supabase_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 headers = {
     "apikey": supabase_key,

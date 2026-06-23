@@ -75,8 +75,12 @@ Thumbs.db
 # Git worktrees
 .worktrees/
 
-# TypeScript build cache
+# Generated caches
+__pycache__/
 tsconfig.tsbuildinfo
 
 # Local scratch / cleanup scripts
 trash_rm_scripts/
+
+# Local brainstorming/session artifacts
+.superpowers/

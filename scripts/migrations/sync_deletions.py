@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 Script per sincronizzare le eliminazioni da MySQL a PostgreSQL (Supabase).
 Elimina le partecipazioni in PostgreSQL il cui id_opera_staging non esiste più in MySQL.
@@ -19,8 +20,8 @@ mysql_config = {
 }
 
 # Supabase configuration
-SUPABASE_URL = "https://jdflzupcfwdcajxfobfj.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkZmx6dXBjZndkY2FqeGZvYmZqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDg2MTUxOCwiZXhwIjoyMDY2NDM3NTE4fQ.Tu03Gs9pvYAnr7qqTsFHqG38O7vGGGn0xTqwIvv2UFo"
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 supabase_headers = {
     "apikey": SUPABASE_KEY,
