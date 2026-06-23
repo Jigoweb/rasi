@@ -78,6 +78,7 @@ export const createCampagnaProgrammazione = async (payload: CampagnaProgrammazio
 export interface ProgrammazionePayload {
   campagna_programmazione_id: string
   emittente_id: string
+  import_row_uid?: string
   titolo: string
   tipo: string
   data_trasmissione?: string
@@ -291,7 +292,10 @@ export const uploadProgrammazioni = async (programmazioni: ProgrammazionePayload
   // adds 1-2s serialization on large batches and burns network round-trip budget.
   const { error } = await supabase
     .from('programmazioni')
-    .insert(normalized as any)
+    .upsert(normalized as any, {
+      onConflict: 'import_row_uid',
+      ignoreDuplicates: true,
+    })
 
   return { data: null, error }
 }

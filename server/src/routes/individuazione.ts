@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireAuth } from '../auth.js'
 import { createJob, findActiveJob, userOwnsCampagnaProgrammazione } from '../jobs/store.js'
 import { runIndividuazioneJob } from '../jobs/individuazione-runner.js'
+import { findActiveUploadJob } from '../jobs/upload-job-store.js'
 
 export const individuazioneRouter = Router()
 
@@ -36,6 +37,15 @@ individuazioneRouter.post('/start', requireAuth, async (req, res) => {
       return res.status(404).json({
         success: false,
         error: 'Campagna non trovata o non autorizzata',
+      })
+    }
+
+    const activeUpload = await findActiveUploadJob(campagne_programmazione_id)
+    if (activeUpload) {
+      return res.status(409).json({
+        success: false,
+        error: 'Esiste già un upload attivo per questa campagna',
+        error_code: 'UPLOAD_ALREADY_RUNNING',
       })
     }
 

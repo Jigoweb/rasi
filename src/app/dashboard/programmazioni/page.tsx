@@ -20,6 +20,14 @@ import {
   type UploadDecision,
   type ColumnDiff,
 } from '@/features/programmazioni/services/import-mapping.service'
+import {
+  computeImportRowUid,
+  getUploadMappingSnapshot,
+  pollUploadProgrammazioniJob,
+  startUploadProgrammazioniJob,
+  uploadProgrammazioniFileToStorage,
+} from '@/features/programmazioni/services/programmazioni-upload-worker.service'
+import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
 import EmittenteMappingSection from './components/EmittenteMappingSection'
 import MappingWizard from './components/MappingWizard'
@@ -428,13 +436,68 @@ export default function ProgrammazioniPage() {
     if (!selectedCampagna || parsedRows.length === 0 || !uploadDecision) return
     setIsUploading(true)
     try {
-      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'uploading' } : c))
-      setUploadProgress(prev => ({ ...prev, [selectedCampagna.id]: { done: 0, total: parsedRows.length } }))
-      await updateCampagnaStatus(selectedCampagna.id, 'uploading')
+      const campagna = selectedCampagna
+      const file = selectedFile
+      setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'uploading' } : c))
+      setUploadProgress(prev => ({ ...prev, [campagna.id]: { done: 0, total: parsedRows.length } }))
+      await updateCampagnaStatus(campagna.id, 'uploading')
+
+      if (getIndividuazioneRuntimeMode() === 'worker' && file) {
+        const { storagePath, error: storageError } = await uploadProgrammazioniFileToStorage(file, campagna.id)
+        if (storageError) throw storageError
+
+        const startResult = await startUploadProgrammazioniJob({
+          campagneProgrammazioneId: campagna.id,
+          emittenteId: campagna.emittente_id,
+          storagePath,
+          fileName: file.name,
+          fileType: file.type || 'application/octet-stream',
+          mappingSnapshot: getUploadMappingSnapshot(uploadDecision),
+          chunkSize: 500,
+        })
+        if (!startResult.success || !startResult.jobId) {
+          throw new Error(startResult.error || 'Errore avvio upload su Railway')
+        }
+
+        handleCloseModal()
+        setIsUploading(false)
+
+        void pollUploadProgrammazioniJob(startResult.jobId, (job) => {
+          setUploadProgress(prev => ({
+            ...prev,
+            [campagna.id]: {
+              done: job.righe_processate,
+              total: job.righe_totali || parsedRows.length,
+            },
+          }))
+        }).then(async (result) => {
+          if (result.success) {
+            setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'in_review' } : c))
+            setUploadProgress(prev => {
+              const next = { ...prev }
+              delete next[campagna.id]
+              return next
+            })
+            await fetchCampagne()
+            return
+          }
+
+          const errorMessage = result.error || 'Errore upload programmazioni'
+          setUploadError(errorMessage)
+          setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'error', last_error: errorMessage } : c))
+          setUploadProgress(prev => {
+            const next = { ...prev }
+            delete next[campagna.id]
+            return next
+          })
+        })
+
+        return
+      }
 
       const ctx = {
-        campagnaProgrammazioneId: selectedCampagna.id,
-        emittenteId: selectedCampagna.emittente_id,
+        campagnaProgrammazioneId: campagna.id,
+        emittenteId: campagna.emittente_id,
       }
 
       // Build payload secondo la decisione:
@@ -453,7 +516,12 @@ export default function ProgrammazioniPage() {
       const CHUNK_SIZE = 500
       for (let i = 0; i < parsedRows.length; i += CHUNK_SIZE) {
         const chunk = parsedRows.slice(i, i + CHUNK_SIZE)
-        const programmazioni = buildAll(chunk)
+        const programmazioni = await Promise.all(
+          buildAll(chunk).map(async (programmazione, index) => ({
+            ...programmazione,
+            import_row_uid: await computeImportRowUid(campagna.id, i + index + 1, chunk[index]),
+          }))
+        )
         const { error } = await uploadProgrammazioni(programmazioni)
         if (error) {
           const startRow = i + 2
@@ -464,9 +532,9 @@ export default function ProgrammazioniPage() {
           throw enhancedError
         }
         setUploadProgress(prev => {
-          const curr = prev[selectedCampagna.id]
+          const curr = prev[campagna.id]
           const done = (curr?.done || 0) + chunk.length
-          return { ...prev, [selectedCampagna.id]: { done, total: parsedRows.length } }
+          return { ...prev, [campagna.id]: { done, total: parsedRows.length } }
         })
       }
 

@@ -4,6 +4,7 @@ import { config } from './config.js'
 import { markStaleActiveJobsAsError } from './jobs/recovery.js'
 import { individuazioneRouter } from './routes/individuazione.js'
 import { jobsRouter } from './routes/jobs.js'
+import { uploadJobsRouter, uploadProgrammazioniRouter } from './routes/upload-programmazioni.js'
 
 const app = express()
 
@@ -23,6 +24,8 @@ app.get('/health', (_req, res) => res.json({ ok: true }))
 
 app.use('/api/individuazione', individuazioneRouter)
 app.use('/api/jobs', jobsRouter)
+app.use('/api/upload-programmazioni', uploadProgrammazioniRouter)
+app.use('/api/upload-jobs', uploadJobsRouter)
 
 app.listen(config.port, () => {
   console.log(`[rasi-worker] in ascolto sulla porta ${config.port}`)
