@@ -140,7 +140,11 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
   }, [])
 
   useEffect(() => {
-    refreshInterrupted()
+    const timer = window.setTimeout(() => {
+      void refreshInterrupted()
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
   }, [refreshInterrupted])
 
   // Warning before unload during processing

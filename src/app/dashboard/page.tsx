@@ -8,35 +8,17 @@ import { Button } from '@/shared/components/ui/button'
 import { Users, FileText, Calendar, TrendingUp, Euro, Activity, Search, Download, Database, Loader2 } from 'lucide-react'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import { getFullDatabaseExport, formatFullDatabaseExport } from '@/features/report/services/report-export.service'
-import * as XLSX from 'xlsx'
-
-interface DashboardStats {
-  artisti_attivi: number
-  opere_totali: number
-  episodi_totali: number
-  opere_film: number
-  opere_serie_tv: number
-  programmazioni_mese: number
-  campagne_attive: number
-  importo_distribuito: number
-  tasso_matching: number
-}
-
-interface AttivitaItem {
-  tipo: 'artista' | 'opera' | 'campagna_individuazione' | 'campagna_programmazione'
-  label: string
-  dettaglio: string
-  timestamp: string
-}
-
-interface StatsAggiuntive {
-  individuazioni: number
-  partecipazioni: number
-  campagneRipartizione: number
-  ultimoDato: string | null
-}
-
-type Metric = { label: string; missing: number; total: number }
+import {
+  createSupabaseDashboardDataDeps,
+  loadDashboardRpcData,
+  loadDashboardHealthData,
+  loadDashboardPrimaryData,
+  loadDashboardSecondaryData,
+  type AttivitaItem,
+  type DashboardStats,
+  type Metric,
+  type StatsAggiuntive,
+} from '@/features/dashboard/services/dashboard-data.service'
 
 function percentComplete(m: Metric): number {
   if (!m.total) return 0
@@ -83,6 +65,7 @@ export default function DashboardPage() {
         if (signal.aborted) throw new Error('Export cancelled')
 
         onProgress({ fetched: data.length, total: data.length, percentage: 95, phase: 'generating' })
+        const XLSX = await import('xlsx')
         const worksheet = XLSX.utils.json_to_sheet(formattedData)
         const workbook = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(workbook, worksheet, 'Banca Dati')
@@ -104,6 +87,7 @@ export default function DashboardPage() {
   const [opereMetrics, setOpereMetrics] = useState<Metric[]>([])
   const [artistiIncompleti, setArtistiIncompleti] = useState(0)
   const [opereIncomplete, setOpereIncomplete] = useState(0)
+  const [healthLoading, setHealthLoading] = useState(true)
   const [attivitaRecenti, setAttivitaRecenti] = useState<AttivitaItem[]>([])
   const [statsAggiuntive, setStatsAggiuntive] = useState<StatsAggiuntive>({
     individuazioni: 0,
@@ -113,215 +97,79 @@ export default function DashboardPage() {
   })
 
   useEffect(() => {
+    let cancelled = false
+
     const fetchStats = async () => {
+      const deps = createSupabaseDashboardDataDeps(supabase as any)
+      const now = new Date()
+      const range = {
+        firstDay: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0],
+        lastDay: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0],
+      }
+
       try {
-        const now = new Date()
-        const primoGiornoMese = new Date(now.getFullYear(), now.getMonth(), 1)
-          .toISOString().split('T')[0]
-        const ultimoGiornoMese = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-          .toISOString().split('T')[0]
+        try {
+          const snapshot = await loadDashboardRpcData(supabase as any, range)
+          if (cancelled) return
 
-        // Condizioni "campo mancante" (null o stringa vuota) per il Data Health.
-        // L'unione via .or() è il set deduplicato di record incompleti (un solo count, zero payload).
-        const ARTISTI_INCOMPLETI_OR =
-          'codice_ipn.is.null,codice_ipn.eq.,nome.is.null,nome.eq.,cognome.is.null,cognome.eq.,stato.is.null,imdb_nconst.is.null,imdb_nconst.eq.,data_nascita.is.null,codice_fiscale.is.null,codice_fiscale.eq.'
-        const OPERE_INCOMPLETE_OR =
-          'titolo.is.null,titolo.eq.,tipo.is.null,anno_produzione.is.null,imdb_tconst.is.null,imdb_tconst.eq.,titolo_originale.is.null,titolo_originale.eq.'
+          setStats(snapshot.primary.stats)
+          setTotalArtisti(snapshot.primary.totalArtisti)
+          setTotalOpere(snapshot.primary.totalOpere)
+          setAttivitaRecenti(snapshot.secondary.attivitaRecenti)
+          setStatsAggiuntive(snapshot.secondary.statsAggiuntive)
+          setArtistiIncompleti(snapshot.health.artistiIncompleti)
+          setOpereIncomplete(snapshot.health.opereIncomplete)
+          setArtistiMetrics(snapshot.health.artistiMetrics)
+          setOpereMetrics(snapshot.health.opereMetrics)
+          setLoading(false)
+          setHealthLoading(false)
+          return
+        } catch (rpcError) {
+          console.warn('Dashboard metrics RPC unavailable, falling back to client loaders:', rpcError)
+        }
 
-        // ── Tutte le query partono insieme (una sola "wave" parallela) ──
-        // Una Promise inizia a girare quando viene creata, non quando viene attesa:
-        // creando prima tutti i gruppi, le richieste viaggiano in concorrenza.
-        const mainCountsP = Promise.all([
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).eq('stato', 'attivo'),
-          supabase.from('opere').select('id', { count: 'exact', head: true }),
-          supabase.from('episodi').select('id', { count: 'exact', head: true }),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'film'),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'serie_tv'),
-          supabase.from('programmazioni')
-            .select('id', { count: 'exact', head: true })
-            .gte('data_trasmissione', primoGiornoMese)
-            .lte('data_trasmissione', ultimoGiornoMese),
-          (supabase as any)
-            .from('campagne_individuazione')
-            .select('id', { count: 'exact', head: true })
-            .eq('stato', 'in_corso'),
-        ])
+        const primary = await loadDashboardPrimaryData(deps, range)
+        if (cancelled) return
 
-        const ripartizioniP = supabase
-          .from('campagne_ripartizione')
-          .select('importo_totale_disponibile')
-          .eq('stato', 'distribuita')
+        setStats(primary.stats)
+        setTotalArtisti(primary.totalArtisti)
+        setTotalOpere(primary.totalOpere)
+        setLoading(false)
 
-        const matchingP = Promise.all([
-          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }),
-          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }).neq('stato', 'respinto'),
-        ])
+        void loadDashboardSecondaryData(deps, primary)
+          .then(secondary => {
+            if (cancelled) return
+            setAttivitaRecenti(secondary.attivitaRecenti)
+            setStatsAggiuntive(secondary.statsAggiuntive)
+          })
+          .catch(error => console.error('Error fetching secondary dashboard stats:', error))
 
-        const recentP = Promise.all([
-          supabase.from('artisti')
-            .select('nome, cognome, created_at')
-            .order('created_at', { ascending: false })
-            .limit(3),
-          supabase.from('opere')
-            .select('titolo, created_at')
-            .order('created_at', { ascending: false })
-            .limit(3),
-          supabase.from('campagne_individuazione')
-            .select('nome, updated_at, stato')
-            .eq('stato', 'completata')
-            .order('updated_at', { ascending: false })
-            .limit(3),
-          (supabase as any).from('campagne_programmazione')
-            .select('nome, created_at')
-            .order('created_at', { ascending: false })
-            .limit(3),
-        ])
-
-        const statsP = Promise.all([
-          (supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }),
-          supabase.from('partecipazioni').select('id', { count: 'exact', head: true }),
-          supabase.from('campagne_ripartizione').select('id', { count: 'exact', head: true }),
-          supabase.from('programmazioni')
-            .select('created_at')
-            .order('created_at', { ascending: false })
-            .limit(1),
-        ])
-
-        // Data Health: conteggio union (incompleti) in un solo head-count per tabella,
-        // più i count per-campo necessari alle barre di completamento.
-        const incompletiP = Promise.all([
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or(ARTISTI_INCOMPLETI_OR),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or(OPERE_INCOMPLETE_OR),
-        ])
-
-        const artistsMissingP = Promise.all([
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_ipn.is.null,codice_ipn.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('nome.is.null,nome.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('cognome.is.null,cognome.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('stato', null).then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('imdb_nconst.is.null,imdb_nconst.eq.').then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).is('data_nascita', null).then(r => r.count || 0),
-          supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_fiscale.is.null,codice_fiscale.eq.').then(r => r.count || 0),
-        ])
-
-        const opereMissingP = Promise.all([
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo.is.null,titolo.eq.').then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).is('tipo', null).then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).is('anno_produzione', null).then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or('imdb_tconst.is.null,imdb_tconst.eq.').then(r => r.count || 0),
-          supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo_originale.is.null,titolo_originale.eq.').then(r => r.count || 0),
-        ])
-
-        // ── Risoluzione (le richieste sono già tutte in volo) ───────────
-        const [
-          artistiResult, opereResult, episodiResult, filmResult, serieResult,
-          programmazioniResult, campangeResult,
-        ] = await mainCountsP
-
-        const { data: ripartizioniData } = await ripartizioniP
-        const importoDistribuito = (ripartizioniData || []).reduce(
-          (acc: number, r: any) => acc + (parseFloat(r.importo_totale_disponibile) || 0), 0
-        )
-
-        const [indTotale, indValide] = await matchingP
-        const tassoMatching = indTotale.count
-          ? Math.round(((indValide.count || 0) / indTotale.count) * 1000) / 10
-          : 0
-
-        setStats({
-          artisti_attivi: artistiResult.count || 0,
-          opere_totali: opereResult.count || 0,
-          episodi_totali: episodiResult.count || 0,
-          opere_film: filmResult.count || 0,
-          opere_serie_tv: serieResult.count || 0,
-          programmazioni_mese: programmazioniResult.count || 0,
-          campagne_attive: campangeResult.count || 0,
-          importo_distribuito: importoDistribuito,
-          tasso_matching: tassoMatching,
-        })
-
-        const ta = artistiResult.count || 0
-        const to = opereResult.count || 0
-        setTotalArtisti(ta)
-        setTotalOpere(to)
-
-        // ── Attività Recenti: feed reale dalle 4 tabelle ────────────────
-        const [ultArtisti, ultOpere, ultCampagneInd, ultCampagneProg] = await recentP
-
-        const feed: AttivitaItem[] = [
-          ...(ultArtisti.data || []).map((a: any) => ({
-            tipo: 'artista' as const,
-            label: 'Nuovo artista registrato',
-            dettaglio: `${a.nome} ${a.cognome}`,
-            timestamp: a.created_at,
-          })),
-          ...(ultOpere.data || []).map((o: any) => ({
-            tipo: 'opera' as const,
-            label: 'Nuova opera catalogata',
-            dettaglio: o.titolo,
-            timestamp: o.created_at,
-          })),
-          ...(ultCampagneInd.data || []).map((c: any) => ({
-            tipo: 'campagna_individuazione' as const,
-            label: 'Campagna completata',
-            dettaglio: c.nome,
-            timestamp: c.updated_at,
-          })),
-          ...(ultCampagneProg.data || []).map((c: any) => ({
-            tipo: 'campagna_programmazione' as const,
-            label: 'Nuova campagna programmazione',
-            dettaglio: c.nome,
-            timestamp: c.created_at,
-          })),
-        ]
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          .slice(0, 5)
-
-        setAttivitaRecenti(feed)
-
-        // ── Statistiche sistema: metriche DB reali ──────────────────────
-        const [indCount, partCount, ripCount, ultimaDat] = await statsP
-
-        setStatsAggiuntive({
-          individuazioni: indCount.count || 0,
-          partecipazioni: partCount.count || 0,
-          campagneRipartizione: ripCount.count || 0,
-          ultimoDato: ultimaDat.data?.[0]?.created_at || null,
-        })
-
-        // ── Data Health ─────────────────────────────────────────────────
-        const [artistiIncompletiRes, opereIncompleteRes] = await incompletiP
-        setArtistiIncompleti(artistiIncompletiRes.count || 0)
-        setOpereIncomplete(opereIncompleteRes.count || 0)
-
-        const artistsMissing = await artistsMissingP
-        const opereMissing = await opereMissingP
-
-        setArtistiMetrics([
-          { label: 'Codice IPN', missing: artistsMissing[0], total: ta },
-          { label: 'Nome', missing: artistsMissing[1], total: ta },
-          { label: 'Cognome', missing: artistsMissing[2], total: ta },
-          { label: 'Stato', missing: artistsMissing[3], total: ta },
-          { label: 'IMDB nconst', missing: artistsMissing[4], total: ta },
-          { label: 'Data nascita', missing: artistsMissing[5], total: ta },
-          { label: 'Codice fiscale', missing: artistsMissing[6], total: ta },
-        ])
-
-        setOpereMetrics([
-          { label: 'Titolo', missing: opereMissing[0], total: to },
-          { label: 'Tipo', missing: opereMissing[1], total: to },
-          { label: 'Anno produzione', missing: opereMissing[2], total: to },
-          { label: 'IMDB tconst', missing: opereMissing[3], total: to },
-          { label: 'Titolo originale', missing: opereMissing[4], total: to },
-        ])
+        void loadDashboardHealthData(deps, primary)
+          .then(health => {
+            if (cancelled) return
+            setArtistiIncompleti(health.artistiIncompleti)
+            setOpereIncomplete(health.opereIncomplete)
+            setArtistiMetrics(health.artistiMetrics)
+            setOpereMetrics(health.opereMetrics)
+          })
+          .catch(error => console.error('Error fetching dashboard health:', error))
+          .finally(() => {
+            if (!cancelled) setHealthLoading(false)
+          })
       } catch (error) {
         console.error('Error fetching stats:', error)
-      } finally {
-        setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          setHealthLoading(false)
+        }
       }
     }
 
-    fetchStats()
+    void fetchStats()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const attivitaConfig: Record<AttivitaItem['tipo'], {
@@ -461,7 +309,7 @@ export default function DashboardPage() {
                   const { Icon, bg, iconBg, iconColor } = attivitaConfig[item.tipo]
                   return (
                     <div key={i} className={`flex items-center gap-3 p-3 ${bg} rounded-lg`}>
-                      <div className={`${iconBg} p-2 rounded-full flex-shrink-0`}>
+                      <div className={`${iconBg} p-2 rounded-full shrink-0`}>
                         <Icon className={`h-4 w-4 ${iconColor}`} />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -567,7 +415,15 @@ export default function DashboardPage() {
       {/* Data Health */}
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg">Data Health</CardTitle>
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-lg">Data Health</CardTitle>
+            {healthLoading && (
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Caricamento
+              </Badge>
+            )}
+          </div>
           <CardDescription className="text-sm">Completamento complessivo e campi mancanti</CardDescription>
         </CardHeader>
         <CardContent className="p-4 lg:p-6 space-y-6">
