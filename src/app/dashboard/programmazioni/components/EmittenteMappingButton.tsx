@@ -12,6 +12,7 @@ import MappingWizard from './MappingWizard'
 
 interface EmittenteMappingButtonProps {
   emittenteId: string
+  label?: string
   /** Callback opzionale quando la config cambia (per refresh esterno) */
   onChange?: () => void
 }
@@ -23,6 +24,7 @@ interface EmittenteMappingButtonProps {
  */
 export default function EmittenteMappingButton({
   emittenteId,
+  label = 'Mapping',
   onChange,
 }: EmittenteMappingButtonProps) {
   const [open, setOpen] = useState(false)
@@ -47,18 +49,19 @@ export default function EmittenteMappingButton({
   return (
     <>
       <Button
-        variant="ghost"
+        variant="outline"
         size="sm"
         onClick={handleOpen}
         disabled={loading}
-        title="Mapping import"
-        aria-label="Mapping import"
+        title={`${label} mapping import`}
+        aria-label={`${label} mapping import`}
       >
         {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
         ) : (
-          <Settings className="h-4 w-4" />
+          <Settings className="h-4 w-4 mr-1.5" />
         )}
+        {label}
       </Button>
 
       <MappingWizard

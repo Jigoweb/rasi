@@ -1,4 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, type FieldRule } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, summarizeImportMapping, reconcileImportMappingColumns, type FieldRule, type ImportMappingConfig } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -259,5 +259,101 @@ describe('validateImportRules', () => {
       columns,
     )
     expect(errs.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('summarizeImportMapping', () => {
+  const baseConfig: ImportMappingConfig = {
+    version: 1,
+    colonne_rilevate: ['TITOLO', 'DATA', 'DURATA'],
+    ultimo_upload: '2026-06-23T10:00:00.000Z',
+    mapping: { TITOLO: 'titolo', DATA: 'data_trasmissione' },
+  }
+
+  it('classifica come non configurato quando manca la config', () => {
+    expect(summarizeImportMapping(null)).toEqual({
+      status: 'not_configured',
+      mappedCount: 0,
+      mappedFields: [],
+      sourceColumnCount: 0,
+      lastConfiguredAt: null,
+      hasRequiredTitle: false,
+    })
+  })
+
+  it('classifica come configurato quando titolo è mappato direttamente', () => {
+    expect(summarizeImportMapping(baseConfig)).toMatchObject({
+      status: 'configured',
+      mappedCount: 2,
+      mappedFields: ['data_trasmissione', 'titolo'],
+      sourceColumnCount: 3,
+      lastConfiguredAt: '2026-06-23T10:00:00.000Z',
+      hasRequiredTitle: true,
+    })
+  })
+
+  it('classifica come configurato quando titolo arriva da una regola avanzata', () => {
+    expect(summarizeImportMapping({
+      ...baseConfig,
+      mapping: { DATA: 'data_trasmissione' },
+      rules: { titolo: { sources: ['NOME_SERIE', 'TITOLO'] } },
+    })).toMatchObject({
+      status: 'configured',
+      mappedCount: 2,
+      mappedFields: ['data_trasmissione', 'titolo'],
+      hasRequiredTitle: true,
+    })
+  })
+
+  it('classifica come da completare quando manca il titolo richiesto', () => {
+    expect(summarizeImportMapping({
+      ...baseConfig,
+      mapping: { DATA: 'data_trasmissione' },
+      rules: { titolo: { sources: [] } },
+    })).toMatchObject({
+      status: 'incomplete',
+      mappedCount: 1,
+      mappedFields: ['data_trasmissione'],
+      hasRequiredTitle: false,
+    })
+  })
+})
+
+describe('reconcileImportMappingColumns', () => {
+  it('preserva mapping e transform delle colonne ancora presenti', () => {
+    expect(reconcileImportMappingColumns(
+      ['TITOLO', 'DATA', 'DURATA'],
+      ['TITOLO', 'DURATA', 'NUOVA'],
+      {
+        TITOLO: 'titolo',
+        DATA: 'data_trasmissione',
+        DURATA: 'durata_minuti',
+      },
+      {
+        DATA: 'us_date_to_iso',
+        DURATA: 'hhmmss_to_minutes',
+      },
+    )).toEqual({
+      mapping: {
+        TITOLO: 'titolo',
+        DURATA: 'durata_minuti',
+      },
+      transforms: {
+        DURATA: 'hhmmss_to_minutes',
+      },
+      removedColumns: ['DATA'],
+    })
+  })
+
+  it('lascia non mappate le nuove colonne', () => {
+    expect(reconcileImportMappingColumns(
+      ['TITOLO'],
+      ['TITOLO', 'GENERE'],
+      { TITOLO: 'titolo' },
+    )).toEqual({
+      mapping: { TITOLO: 'titolo' },
+      transforms: {},
+      removedColumns: [],
+    })
   })
 })

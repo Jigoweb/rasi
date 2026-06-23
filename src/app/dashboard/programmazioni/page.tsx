@@ -15,12 +15,13 @@ import {
   applyMapping,
   buildLegacyPayload,
   saveMapping,
+  summarizeImportMapping,
   type ImportMappingConfig,
   type UploadDecision,
   type ColumnDiff,
 } from '@/features/programmazioni/services/import-mapping.service'
+import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
 import EmittenteMappingSection from './components/EmittenteMappingSection'
-import EmittenteMappingButton from './components/EmittenteMappingButton'
 import MappingWizard from './components/MappingWizard'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { ProcessBlockedDialog } from '@/shared/components/individuazione-progress-indicator'
@@ -403,6 +404,7 @@ export default function ProgrammazioniPage() {
     if (error) throw new Error(error.message ?? 'Errore salvataggio mapping')
     setUploadDecision({ kind: 'apply_existing', mapping: config })
     setIsUploadReady(true)
+    await fetchEmittenti()
     setMappingWizardOpen(false)
   }
 
@@ -760,6 +762,47 @@ export default function ProgrammazioniPage() {
     if (attiva === true) return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" /> Attiva</Badge>
     if (attiva === false) return <Badge variant="outline" className="bg-gray-50 text-gray-700"><XCircle className="w-3 h-3 mr-1" /> Inattiva</Badge>
     return <Badge variant="outline" className="bg-gray-50 text-gray-700">Non specificato</Badge>
+  }
+
+  const getImportMappingSummary = (emittente: Emittente) =>
+    summarizeImportMapping(emittente.mapping_import as ImportMappingConfig | null)
+
+  const getImportMappingBadge = (emittente: Emittente) => {
+    const summary = getImportMappingSummary(emittente)
+    if (summary.status === 'configured') {
+      return (
+        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+          <CheckCircle className="w-3 h-3 mr-1" /> Configurato
+        </Badge>
+      )
+    }
+    if (summary.status === 'incomplete') {
+      return (
+        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+          <AlertCircle className="w-3 h-3 mr-1" /> Da completare
+        </Badge>
+      )
+    }
+    return (
+      <Badge variant="outline" className="bg-gray-50 text-gray-700">
+        <XCircle className="w-3 h-3 mr-1" /> Non configurato
+      </Badge>
+    )
+  }
+
+  const getImportMappingMeta = (emittente: Emittente) => {
+    const summary = getImportMappingSummary(emittente)
+    if (summary.status === 'not_configured') return 'Nessun mapping salvato'
+
+    const updated = summary.lastConfiguredAt
+      ? new Date(summary.lastConfiguredAt).toLocaleDateString('it-IT')
+      : 'data non disponibile'
+    return `${summary.mappedCount} / ${TEMPLATE_FIELDS.length} campi · ${updated}`
+  }
+
+  const openManageEmittente = (emittente: Emittente) => {
+    setSelectedEmittente(emittente)
+    setShowEmittenteDetails(true)
   }
 
   const formatDate = (dateString: string) => {
@@ -1472,13 +1515,14 @@ export default function ProgrammazioniPage() {
                     <TableHead>Tipo</TableHead>
                     <TableHead>Paese</TableHead>
                     <TableHead>Attiva</TableHead>
-                    <TableHead className="w-16">Azioni</TableHead>
+                    <TableHead>Import</TableHead>
+                    <TableHead className="w-24">Azioni</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {loadingEmittenti ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">
+                      <TableCell colSpan={7} className="text-center py-8">
                         <div className="flex justify-center items-center">
                           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
                         </div>
@@ -1486,7 +1530,7 @@ export default function ProgrammazioniPage() {
                     </TableRow>
                   ) : filteredEmittenti.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                         Nessuna emittente trovata
                       </TableCell>
                     </TableRow>
@@ -1501,18 +1545,17 @@ export default function ProgrammazioniPage() {
                         <TableCell>{emittente.paese || '-'}</TableCell>
                         <TableCell>{getAttivaBadge(emittente.attiva)}</TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => {
-                              setSelectedEmittente(emittente)
-                              setShowEmittenteDetails(true)
-                            }}>
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => openEditEmittente(emittente)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <EmittenteMappingButton emittenteId={emittente.id} />
+                          <div className="space-y-1">
+                            {getImportMappingBadge(emittente)}
+                            <div className="text-xs text-muted-foreground">
+                              {getImportMappingMeta(emittente)}
+                            </div>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="outline" size="sm" onClick={() => openManageEmittente(emittente)}>
+                            <Eye className="h-4 w-4 mr-1.5" /> Gestisci
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
@@ -1534,18 +1577,17 @@ export default function ProgrammazioniPage() {
                             Codice: <span className="font-mono">{emittente.codice}</span>
                           </div>
                           <div className="text-xs text-gray-600">{emittente.paese || '—'}</div>
+                          <div className="mt-3 space-y-1">
+                            {getImportMappingBadge(emittente)}
+                            <div className="text-xs text-muted-foreground">
+                              {getImportMappingMeta(emittente)}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => {
-                            setSelectedEmittente(emittente)
-                            setShowEmittenteDetails(true)
-                          }}>
-                            <Eye className="h-4 w-4" />
+                        <div className="shrink-0">
+                          <Button variant="outline" size="sm" onClick={() => openManageEmittente(emittente)}>
+                            <Eye className="h-4 w-4 mr-1.5" /> Gestisci
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => openEditEmittente(emittente)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <EmittenteMappingButton emittenteId={emittente.id} />
                         </div>
                       </div>
                     </Card>
@@ -1563,9 +1605,9 @@ export default function ProgrammazioniPage() {
       <Dialog open={showEmittenteDetails} onOpenChange={setShowEmittenteDetails}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Dettagli Emittente</DialogTitle>
+            <DialogTitle>Gestisci Emittente</DialogTitle>
             <DialogDescription>
-              Informazioni per &quot;{selectedEmittente?.nome}&quot;
+              Anagrafica e configurazione import per &quot;{selectedEmittente?.nome}&quot;.
             </DialogDescription>
           </DialogHeader>
 
@@ -1598,7 +1640,7 @@ export default function ProgrammazioniPage() {
                 </div>
               </div>
 
-              <EmittenteMappingSection emittenteId={selectedEmittente.id} />
+              <EmittenteMappingSection emittenteId={selectedEmittente.id} onChange={fetchEmittenti} />
 
                <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setShowEmittenteDetails(false)}>
@@ -1606,7 +1648,7 @@ export default function ProgrammazioniPage() {
                 </Button>
                 <Button onClick={() => openEditEmittente(selectedEmittente)}>
                   <Edit className="h-4 w-4 mr-2" />
-                  Modifica
+                  Modifica anagrafica
                 </Button>
               </div>
             </div>

@@ -8,6 +8,7 @@ import {
   getMappingByEmittente,
   saveMapping,
   deleteMapping,
+  summarizeImportMapping,
   type ImportMappingConfig,
 } from '@/features/programmazioni/services/import-mapping.service'
 import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
@@ -83,7 +84,21 @@ export default function EmittenteMappingSection({
     )
   }
 
-  const mappedCount = config ? Object.keys(config.mapping).length : 0
+  const summary = summarizeImportMapping(config)
+  const statusBadge =
+    summary.status === 'configured' ? (
+      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+        Configurato
+      </Badge>
+    ) : summary.status === 'incomplete' ? (
+      <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+        Da completare
+      </Badge>
+    ) : (
+      <Badge variant="outline" className="bg-gray-50 text-gray-700">
+        Non configurato
+      </Badge>
+    )
 
   return (
     <>
@@ -92,10 +107,10 @@ export default function EmittenteMappingSection({
           <div>
             <h4 className="font-medium text-sm">Configurazione import</h4>
             <p className="text-xs text-gray-500 mt-0.5">
-              Mappa le colonne del file originale dell'emittente sui campi del template RASI.
-              Una volta configurato, puoi caricare i file senza normalizzazione manuale.
+              Vedi e modifica i campi già mappati. Carica un nuovo file campione solo se il tracciato dell&apos;emittente è cambiato.
             </p>
           </div>
+          {statusBadge}
         </div>
 
         {!config ? (
@@ -124,7 +139,7 @@ export default function EmittenteMappingSection({
               <div>
                 <span className="text-gray-500">Mappati:</span>{' '}
                 <Badge variant="secondary">
-                  {mappedCount} / {TEMPLATE_FIELDS.length} campi
+                  {summary.mappedCount} / {TEMPLATE_FIELDS.length} campi
                 </Badge>
               </div>
             </div>
@@ -137,7 +152,7 @@ export default function EmittenteMappingSection({
 
             <div className="flex gap-2 pt-1">
               <Button size="sm" variant="outline" onClick={() => setWizardOpen(true)}>
-                <Settings className="h-4 w-4 mr-1.5" /> Modifica mapping
+                <Settings className="h-4 w-4 mr-1.5" /> Modifica campi mappati
               </Button>
               <Button
                 size="sm"
