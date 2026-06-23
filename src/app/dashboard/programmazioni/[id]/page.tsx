@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { getCampagnaProgrammazioneById, listProgrammazioniByCampagnaKeyset, getProgrammazioniHealth, CampagnaProgrammazione, ProgrammazioneRow, ProgrammazioniCursor, ProgrammazioniHealth } from '@/features/programmazioni/services/programmazioni.service'
 import {
   getProgrammazioniTableColumns,
@@ -13,11 +14,11 @@ import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 
 export default function CampagnaDettaglioPage() {
   const params = useParams()
-  const router = useRouter()
   const campagnaId = Array.isArray(params?.id) ? params?.id[0] : (params?.id as string)
 
   const [campagna, setCampagna] = useState<CampagnaProgrammazione | null>(null)
@@ -287,14 +288,23 @@ export default function CampagnaDettaglioPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardBreadcrumbs
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Programmazioni', href: '/dashboard/programmazioni' },
+          { label: campagna?.nome || 'Dettaglio campagna' },
+        ]}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dettaglio Campagna</h1>
           <p className="text-gray-600">Programmazioni associate</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.back()}>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/programmazioni">
             <ArrowLeft className="h-4 w-4 mr-2" /> Indietro
+            </Link>
           </Button>
         </div>
       </div>

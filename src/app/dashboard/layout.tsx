@@ -13,7 +13,6 @@ import {
   FileText, 
   Calendar, 
   Search, 
-  Settings, 
   LogOut,
   Music,
   BarChart3,
@@ -69,6 +68,11 @@ export default function DashboardLayout({
   
   if (isAdmin) {
     menuItems = [...menuItems, ...adminOnlyMenuItems]
+  }
+
+  const isMenuItemActive = (href: string) => {
+    if (href === '/dashboard') return pathname === href
+    return pathname === href || pathname.startsWith(`${href}/`)
   }
 
   // Helper per ottenere l'etichetta del ruolo
@@ -171,6 +175,7 @@ export default function DashboardLayout({
               variant="ghost"
               size="sm"
               className="lg:hidden"
+              aria-label="Chiudi menu"
               onClick={() => setSidebarOpen(false)}
             >
               <X className="h-5 w-5" />
@@ -180,11 +185,12 @@ export default function DashboardLayout({
           {/* Navigation */}
           <nav className="flex-1 p-4 space-y-1">
             {menuItems.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = isMenuItemActive(item.href)
               return (
                 <Link
                   key={item.name}
                   href={item.href}
+                  aria-current={isActive ? 'page' : undefined}
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive
@@ -224,14 +230,6 @@ export default function DashboardLayout({
             <div className="space-y-1">
               <Button
                 variant="ghost"
-                className="w-full justify-start text-sm"
-                size="sm"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Impostazioni
-              </Button>
-              <Button
-                variant="ghost"
                 className="w-full justify-start text-sm text-red-600 hover:text-red-700 hover:bg-red-50"
                 size="sm"
                 onClick={signOut}
@@ -251,6 +249,7 @@ export default function DashboardLayout({
           <Button
             variant="ghost"
             size="sm"
+            aria-label="Apri menu"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-5 w-5" />

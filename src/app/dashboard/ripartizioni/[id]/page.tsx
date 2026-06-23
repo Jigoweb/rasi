@@ -1,16 +1,17 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import { supabase } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
+import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { ArrowLeft, Calendar, Euro } from 'lucide-react'
 
 export default function RipartizioneDettaglioPage() {
   const params = useParams()
-  const router = useRouter()
   const id = Array.isArray(params?.id) ? params?.id[0] : (params?.id as string)
   const [campagna, setCampagna] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
@@ -51,13 +52,22 @@ export default function RipartizioneDettaglioPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardBreadcrumbs
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Ripartizioni', href: '/dashboard/ripartizioni' },
+          { label: campagna?.nome || 'Dettaglio ripartizione' },
+        ]}
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Dettaglio Ripartizione</h1>
           <p className="text-gray-600">{campagna?.nome || ''}</p>
         </div>
-        <Button variant="outline" onClick={() => router.push('/dashboard/ripartizioni')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />Indietro
+        <Button variant="outline" asChild>
+          <Link href="/dashboard/ripartizioni">
+            <ArrowLeft className="h-4 w-4 mr-2" />Indietro
+          </Link>
         </Button>
       </div>
 

@@ -58,13 +58,13 @@ describe('ProgrammazioniTable', () => {
     expect(screen.getAllByText('2026').length).toBeGreaterThan(0)
   })
 
-  it('keeps upload clicks from triggering row navigation', () => {
-    const onUpload = jest.fn()
-    renderTable({ onUpload })
+  it('keeps primary workflow clicks from triggering row navigation', () => {
+    const onStartIndividuazioni = jest.fn()
+    renderTable({ onStartIndividuazioni })
 
-    fireEvent.click(screen.getByText('Carica Dati'))
+    fireEvent.click(screen.getByText('Crea Individuazioni'))
 
-    expect(onUpload).toHaveBeenCalledWith(campagna)
+    expect(onStartIndividuazioni).toHaveBeenCalledWith(campagna)
     expect(pushMock).not.toHaveBeenCalled()
   })
 

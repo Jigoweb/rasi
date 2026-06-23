@@ -5,13 +5,15 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { Search, MoreHorizontal, Eye, Download, Filter, Play, Pause, CheckCircle, Clock, AlertCircle, Euro } from 'lucide-react'
+import { EmptyState, PageErrorState, PageLoadingState } from '@/shared/components/page-states'
+import { SearchInput } from '@/shared/components/search-input'
+import { clickableRowClassName, handleClickableRowKeyDown } from '@/shared/lib/clickable-row'
+import { MoreHorizontal, Eye, Download, Filter, Play, Pause, CheckCircle, Clock, AlertCircle, Euro, Calendar } from 'lucide-react'
 
 type CampagnaRipartizione = Database['public']['Tables']['campagne_ripartizione']['Row']
 
@@ -20,8 +22,10 @@ export default function RipartizioniPage() {
   const [campagne, setCampagne] = useState<CampagnaRipartizione[]>([])
   const [filtered, setFiltered] = useState<CampagnaRipartizione[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const hasActiveFilters = searchQuery.trim().length > 0 || statusFilter !== 'all'
 
   const applyFilters = useCallback(() => {
     let result = campagne
@@ -41,6 +45,8 @@ export default function RipartizioniPage() {
   useEffect(() => { applyFilters() }, [applyFilters])
 
   const fetchCampagne = async () => {
+    setError(null)
+    setLoading(true)
     try {
       const { data, error } = await supabase
         .from('campagne_ripartizione')
@@ -50,9 +56,16 @@ export default function RipartizioniPage() {
       setCampagne(data || [])
     } catch (error) {
       console.error('Error fetching campagne ripartizione:', error)
+      setError(error instanceof Error ? error.message : 'Errore sconosciuto')
+      setCampagne([])
     } finally {
       setLoading(false)
     }
+  }
+
+  const resetFilters = () => {
+    setSearchQuery('')
+    setStatusFilter('all')
   }
 
   const getStatusBadge = (stato: string | null) => {
@@ -111,11 +124,19 @@ export default function RipartizioniPage() {
     return (
       <div className="space-y-6">
         <div><h1 className="text-3xl font-bold tracking-tight">Ripartizioni</h1></div>
-        <Card><CardContent className="p-6">
-          <div className="animate-pulse space-y-4">
-            {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-gray-200 rounded" />)}
-          </div>
-        </CardContent></Card>
+        <PageLoadingState title="Caricamento ripartizioni" description="Stiamo recuperando le campagne di ripartizione." />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div><h1 className="text-3xl font-bold tracking-tight">Ripartizioni</h1></div>
+        <PageErrorState
+          description="Non siamo riusciti a caricare le campagne di ripartizione. Riprova."
+          onRetry={fetchCampagne}
+        />
       </div>
     )
   }
@@ -138,13 +159,11 @@ export default function RipartizioniPage() {
       <Card>
         <CardContent className="pt-4">
           <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Cerca per nome..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-10"
+            <div className="flex-1">
+              <SearchInput
+                placeholder="Cerca per nome o descrizione..."
+                initialValue={searchQuery}
+                onSearch={setSearchQuery}
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -162,12 +181,13 @@ export default function RipartizioniPage() {
                 <SelectItem value="annullata">Annullata</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => { setSearchQuery(''); setStatusFilter('all') }}>
+            <Button variant="outline" onClick={resetFilters} disabled={!hasActiveFilters}>
               Reset
             </Button>
           </div>
           <div className="mt-3 text-sm text-gray-500">
             {filtered.length} di {campagne.length} campagne
+            {hasActiveFilters ? ' filtrate' : ''}
           </div>
         </CardContent>
       </Card>
@@ -175,6 +195,7 @@ export default function RipartizioniPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
+          <div className="hidden lg:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -191,15 +212,19 @@ export default function RipartizioniPage() {
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                    Nessuna campagna trovata
+                    {hasActiveFilters ? 'Nessuna campagna corrisponde ai filtri attuali.' : 'Non ci sono campagne disponibili.'}
                   </TableCell>
                 </TableRow>
               ) : (
                 filtered.map(c => (
                   <TableRow
                     key={c.id}
-                    className="hover:bg-gray-50 cursor-pointer"
+                    className={clickableRowClassName}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Apri dettaglio ripartizione ${c.nome}`}
                     onClick={() => router.push(`/dashboard/ripartizioni/${c.id}`)}
+                    onKeyDown={(event) => handleClickableRowKeyDown(event, () => router.push(`/dashboard/ripartizioni/${c.id}`))}
                   >
                     <TableCell className="font-medium">{c.nome}</TableCell>
                     <TableCell>{getStatusBadge(c.stato)}</TableCell>
@@ -210,7 +235,12 @@ export default function RipartizioniPage() {
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" onClick={e => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Azioni per ${c.nome}`}
+                            onClick={e => e.stopPropagation()}
+                          >
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -227,6 +257,65 @@ export default function RipartizioniPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          <div className="lg:hidden space-y-4 p-4">
+            {filtered.length === 0 ? (
+              <EmptyState
+                title={hasActiveFilters ? 'Nessuna campagna corrisponde ai filtri attuali' : 'Non ci sono campagne disponibili'}
+                description={hasActiveFilters ? 'Cancella i filtri per tornare alla lista completa.' : 'Quando verranno create campagne di ripartizione, le troverai qui.'}
+                actionLabel={hasActiveFilters ? 'Cancella filtri' : undefined}
+                onAction={hasActiveFilters ? resetFilters : undefined}
+              />
+            ) : (
+              filtered.map(c => (
+                <Card
+                  key={c.id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Apri dettaglio ripartizione ${c.nome}`}
+                  className={`p-4 ${clickableRowClassName}`}
+                  onClick={() => router.push(`/dashboard/ripartizioni/${c.id}`)}
+                  onKeyDown={(event) => handleClickableRowKeyDown(event, () => router.push(`/dashboard/ripartizioni/${c.id}`))}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-2">
+                      <div>
+                        <h2 className="font-medium text-foreground">{c.nome}</h2>
+                        <p className="text-sm text-muted-foreground line-clamp-2">{c.descrizione || 'Nessuna descrizione'}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {getStatusBadge(c.stato)}
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {formatDate(c.periodo_riferimento_inizio)} - {formatDate(c.periodo_riferimento_fine)}
+                        </span>
+                      </div>
+                      <div className="text-sm font-mono font-medium">{formatImporto(c.importo_totale_disponibile)}</div>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Azioni per ${c.nome}`}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={e => { e.stopPropagation(); router.push(`/dashboard/ripartizioni/${c.id}`) }}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Dettaglio
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </Card>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

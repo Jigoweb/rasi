@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, updateArtista } from '@/features/artisti/services/artisti.service';
 import { getRuoliTipologie, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service';
 import { Database } from '@/shared/lib/supabase'
@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User, MoreHorizontal, Edit, Trash2, Loader2, Tv, Clapperboard, PenTool, ExternalLink, Theater, CheckSquare, Square, X, Pencil, Plus, Search } from 'lucide-react'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import Link from 'next/link'
+import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { ArtistaFormMultistep } from '@/app/dashboard/artisti/components/artista-form-multistep'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
@@ -62,7 +63,6 @@ interface Partecipazione {
 
 export default function ArtistaProfiloPage() {
   const params = useParams()
-  const router = useRouter()
   const artistaId = params.id as string
 
   const [artista, setArtista] = useState<Artista | null>(null)
@@ -384,9 +384,11 @@ export default function ArtistaProfiloPage() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="text-lg text-red-600 mb-4">{error}</div>
-            <Button onClick={() => router.back()} variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna Indietro
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/artisti">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Torna agli artisti
+              </Link>
             </Button>
           </div>
         </div>
@@ -406,6 +408,13 @@ export default function ArtistaProfiloPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-4 lg:space-y-6">
+      <DashboardBreadcrumbs
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Artisti', href: '/dashboard/artisti' },
+          { label: `${artista.nome} ${artista.cognome}` },
+        ]}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -420,9 +429,11 @@ export default function ArtistaProfiloPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button onClick={() => router.back()} variant="outline" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna Indietro
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/artisti">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Torna agli artisti
+            </Link>
           </Button>
           <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
             <Pencil className="mr-2 h-4 w-4" />

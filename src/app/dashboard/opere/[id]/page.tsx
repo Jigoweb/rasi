@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -26,12 +26,12 @@ import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Label } from '@/shared/components/ui/label'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
 export default function OperaDetailPage() {
   const params = useParams()
-  const router = useRouter()
   const operaId = params.id as string
 
   const [opera, setOpera] = useState<Opera | null>(null)
@@ -878,9 +878,11 @@ export default function OperaDetailPage() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="text-lg text-red-600 mb-4">{error}</div>
-            <Button onClick={() => router.back()} variant="outline">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna Indietro
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/opere">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Torna alle opere
+              </Link>
             </Button>
           </div>
         </div>
@@ -936,11 +938,20 @@ export default function OperaDetailPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <DashboardBreadcrumbs
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Opere', href: '/dashboard/opere' },
+          { label: 'Dettaglio opera' },
+        ]}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Button onClick={() => router.back()} variant="outline" size="sm" className="w-fit">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Torna Indietro
+          <Button variant="outline" size="sm" className="w-fit" asChild>
+            <Link href="/dashboard/opere">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Torna alle opere
+            </Link>
           </Button>
           <div>
             <h1 className="text-xl lg:text-3xl font-bold">{opera.titolo}</h1>

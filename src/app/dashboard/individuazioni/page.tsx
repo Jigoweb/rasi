@@ -4,14 +4,15 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCampagneIndividuazione, CampagnaIndividuazione, getDeleteCampagnaIndividuazioneInfo, deleteCampagnaIndividuazione, DeleteCampagnaIndividuazioneInfo, getIndividuazioneProcessingProgress, IndividuazioneProcessingProgress } from '@/features/individuazioni/services/individuazioni.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
-import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { isProcessingStale } from '@/features/programmazioni/services/programmazioni.service'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
+import { EmptyState, PageErrorState, PageLoadingState } from '@/shared/components/page-states'
+import { SearchInput } from '@/shared/components/search-input'
+import { clickableRowClassName, handleClickableRowKeyDown } from '@/shared/lib/clickable-row'
 import { 
-  Search, 
   Sparkles, 
   Eye, 
   Download, 
@@ -43,6 +44,7 @@ export default function IndividuazioniPage() {
   const [campagne, setCampagne] = useState<CampagnaIndividuazione[]>([])
   const [filteredCampagne, setFilteredCampagne] = useState<CampagnaIndividuazione[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -60,6 +62,7 @@ export default function IndividuazioniPage() {
   const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
   const [isDeletingCampagna, setIsDeletingCampagna] = useState(false)
   const [deleteProgress, setDeleteProgress] = useState<{ phase: string; deleted?: number; total?: number } | null>(null)
+  const hasActiveFilters = searchTerm.trim().length > 0 || statusFilter !== 'all' || emittenteFilter !== 'all' || annoFilter !== 'all'
 
   useEffect(() => {
     loadCampagne()
@@ -78,6 +81,7 @@ export default function IndividuazioniPage() {
   }, [campagne])
 
   const loadCampagne = async () => {
+    setError(null)
     setLoading(true)
     try {
     const { data, error } = await getCampagneIndividuazione()
@@ -88,7 +92,7 @@ export default function IndividuazioniPage() {
           ? JSON.stringify(error)
           : String(error)
         console.error('Errore caricamento campagne:', errorMessage, error)
-        // Still set empty array to prevent UI from breaking
+        setError(errorMessage)
         setCampagne([])
         return
       }
@@ -104,10 +108,18 @@ export default function IndividuazioniPage() {
         ? JSON.stringify(error)
         : String(error)
       console.error('Errore caricamento campagne:', errorMessage, error)
+      setError(errorMessage)
       setCampagne([])
     } finally {
     setLoading(false)
     }
+  }
+
+  const resetFilters = () => {
+    setSearchTerm('')
+    setStatusFilter('all')
+    setEmittenteFilter('all')
+    setAnnoFilter('all')
   }
 
   // Fetch processing progress for a specific campaign
@@ -314,6 +326,42 @@ export default function IndividuazioniPage() {
     })
   }
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Sparkles className="h-6 w-6" />
+            Individuazioni
+          </h1>
+          <p className="text-muted-foreground">Gestione delle campagne di individuazione artisti</p>
+        </div>
+        <PageLoadingState
+          title="Caricamento individuazioni"
+          description="Stiamo recuperando le campagne di individuazione e il loro stato operativo."
+        />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Sparkles className="h-6 w-6" />
+            Individuazioni
+          </h1>
+          <p className="text-muted-foreground">Gestione delle campagne di individuazione artisti</p>
+        </div>
+        <PageErrorState
+          description="Non siamo riusciti a caricare le campagne di individuazione. Riprova."
+          onRetry={loadCampagne}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -396,13 +444,11 @@ export default function IndividuazioniPage() {
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4">
             {/* Prima riga: Ricerca */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
+            <div>
+              <SearchInput
                 placeholder="Cerca per nome o emittente..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                initialValue={searchTerm}
+                onSearch={setSearchTerm}
               />
             </div>
             
@@ -454,12 +500,8 @@ export default function IndividuazioniPage() {
               {/* Reset */}
               <Button 
                 variant="outline" 
-                onClick={() => { 
-                  setSearchTerm('')
-                  setStatusFilter('all')
-                  setEmittenteFilter('all')
-                  setAnnoFilter('all')
-                }}
+                onClick={resetFilters}
+                disabled={!hasActiveFilters}
                 className="sm:ml-auto"
               >
                 Reset filtri
@@ -493,6 +535,7 @@ export default function IndividuazioniPage() {
 
           <div className="mt-4 text-sm text-muted-foreground">
             Mostrando {filteredCampagne.length} di {campagne.length} campagne
+            {hasActiveFilters ? ' filtrate' : ''}
           </div>
         </CardContent>
       </Card>
@@ -500,6 +543,7 @@ export default function IndividuazioniPage() {
       {/* Table */}
       <Card>
         <CardContent className="p-0">
+          <div className="hidden lg:block">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -515,24 +559,29 @@ export default function IndividuazioniPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center">
-                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                  </TableCell>
-                </TableRow>
-              ) : filteredCampagne.length === 0 ? (
+              {filteredCampagne.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
-                    {searchTerm ? 'Nessuna campagna trovata' : 'Nessuna campagna individuazione'}
+                    {hasActiveFilters ? 'Nessuna campagna corrisponde ai filtri attuali.' : 'Non ci sono campagne di individuazione disponibili.'}
+                    {hasActiveFilters && (
+                      <div className="mt-3">
+                        <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+                          Cancella filtri
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredCampagne.map((campagna) => (
                   <TableRow 
                     key={campagna.id}
-                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    className={clickableRowClassName}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Apri dettaglio individuazione ${campagna.nome}`}
                     onClick={() => router.push(`/dashboard/individuazioni/${campagna.id}`)}
+                    onKeyDown={(event) => handleClickableRowKeyDown(event, () => router.push(`/dashboard/individuazioni/${campagna.id}`))}
                   >
                     <TableCell className="py-4 px-6">
                       <div className="flex items-center gap-2">
@@ -549,6 +598,7 @@ export default function IndividuazioniPage() {
                           <TooltipTrigger asChild>
                             <button 
                               className="text-muted-foreground hover:text-foreground transition-colors"
+                              aria-label={`Informazioni su ${campagna.nome}`}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Info className="h-4 w-4" />
@@ -738,13 +788,14 @@ export default function IndividuazioniPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          aria-label={`Apri dettaglio ${campagna.nome}`}
                           onClick={() => router.push(`/dashboard/individuazioni/${campagna.id}`)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={`Azioni per ${campagna.nome}`}>
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -769,6 +820,100 @@ export default function IndividuazioniPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+
+          <div className="lg:hidden space-y-4 p-4">
+            {filteredCampagne.length === 0 ? (
+              <EmptyState
+                title={hasActiveFilters ? 'Nessuna campagna corrisponde ai filtri attuali' : 'Non ci sono campagne di individuazione disponibili'}
+                description={hasActiveFilters ? 'Cancella i filtri per tornare alla lista completa.' : 'Quando verranno create campagne di individuazione, le troverai qui.'}
+                actionLabel={hasActiveFilters ? 'Cancella filtri' : undefined}
+                onAction={hasActiveFilters ? resetFilters : undefined}
+              />
+            ) : (
+              filteredCampagne.map((campagna) => {
+                const progress = processingProgressMap[campagna.id]
+                const canResume = canShowResume(campagna)
+
+                return (
+                  <Card
+                    key={campagna.id}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Apri dettaglio individuazione ${campagna.nome}`}
+                    className={`p-4 ${clickableRowClassName}`}
+                    onClick={() => router.push(`/dashboard/individuazioni/${campagna.id}`)}
+                    onKeyDown={(event) => handleClickableRowKeyDown(event, () => router.push(`/dashboard/individuazioni/${campagna.id}`))}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-muted-foreground" />
+                            <h2 className="font-medium text-foreground">{campagna.nome}</h2>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {campagna.emittenti?.nome || 'Emittente non indicata'} • {campagna.anno || '-'}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {getStatoBadge(campagna.stato, campagna.id)}
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {formatDate(campagna.created_at)}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Individuazioni</p>
+                            <p className="font-medium">{formatNumber(campagna.statistiche?.individuazioni_create)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Artisti</p>
+                            <p className="font-medium">{formatNumber(campagna.statistiche?.artisti_distinti)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Opere</p>
+                            <p className="font-medium">{formatNumber(campagna.statistiche?.opere_distinte)}</p>
+                          </div>
+                        </div>
+                        {progress?.job_stato === 'error' && (
+                          <p className="text-sm text-yellow-700">Processo interrotto, puoi riprenderlo.</p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-2" onClick={(event) => event.stopPropagation()}>
+                        {canResume && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!canStartProcess(campagna.campagne_programmazione_id) || resumingId === campagna.id}
+                            onClick={() => handleResume(campagna)}
+                            className="border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
+                          >
+                            {resumingId === campagna.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RotateCw className="h-4 w-4" />
+                            )}
+                            Riprendi
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Apri dettaglio ${campagna.nome}`}
+                          onClick={() => router.push(`/dashboard/individuazioni/${campagna.id}`)}
+                        >
+                          <Eye className="h-4 w-4" />
+                          Dettaglio
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })
+            )}
+          </div>
 
         </CardContent>
       </Card>

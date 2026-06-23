@@ -1,6 +1,5 @@
 'use client'
 
-import type { KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
@@ -44,6 +43,7 @@ import {
   TableRow,
 } from '@/shared/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
+import { clickableRowClassName, handleClickableRowKeyDown } from '@/shared/lib/clickable-row'
 import ProgrammazioneStatusBadge from './ProgrammazioneStatusBadge'
 
 type ProgressCount = {
@@ -90,12 +90,6 @@ export default function ProgrammazioniTable({
     router.push(`/dashboard/programmazioni/${campagnaId}`)
   }
 
-  function handleRowKeyDown(event: KeyboardEvent, campagnaId: string): void {
-    if (event.key === 'Enter') {
-      navigateToCampagna(campagnaId)
-    }
-  }
-
   return (
     <Card>
       <CardContent className="p-0">
@@ -130,14 +124,17 @@ export default function ProgrammazioniTable({
                   })
                   const isGlobalProcessingThisCampagna = isCampagnaProcessing(campagna.id)
                   const isCompleted = rowState.badge === 'individuata'
+                  const workflowStep = getWorkflowStep(rowState)
 
                   return (
                     <TableRow
                       key={campagna.id}
-                      className="hover:bg-muted/50 cursor-pointer"
+                      className={clickableRowClassName}
+                      role="link"
                       tabIndex={0}
+                      aria-label={`Apri dettaglio programmazione ${campagna.nome}`}
                       onClick={() => navigateToCampagna(campagna.id)}
-                      onKeyDown={(event) => handleRowKeyDown(event, campagna.id)}
+                      onKeyDown={(event) => handleClickableRowKeyDown(event, () => navigateToCampagna(campagna.id))}
                     >
                       <TableCell className="py-4">
                         <div className="flex items-center gap-2">
@@ -167,6 +164,7 @@ export default function ProgrammazioniTable({
                           uploadProgress={uploadProgress}
                           deleteProgress={deleteProgress}
                         />
+                        <p className="mt-1 text-xs text-muted-foreground">{workflowStep.label}</p>
                       </TableCell>
                       <TableCell className="py-4">
                         <div className="flex items-center gap-2 text-muted-foreground">
@@ -175,85 +173,25 @@ export default function ProgrammazioniTable({
                         </div>
                       </TableCell>
                       <TableCell className="py-4" onClick={(event) => event.stopPropagation()}>
-                        <div className="flex items-center gap-3">
-                          {!isCompleted && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={!rowState.canUpload}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                onUpload(campagna)
-                              }}
-                              className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
-                            >
-                              {campagna.stato === 'uploading' || uploadProgress[campagna.id] ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <FileUp className="h-3.5 w-3.5" />
-                              )}
-                              Carica Dati
-                            </Button>
-                          )}
-
-                          {!isCompleted && rowState.badge !== 'uploading' && rowState.badge !== 'deleting' && (
-                            <Button
-                              size="sm"
-                              disabled={!rowState.canCreateIndividuazione}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                onStartIndividuazioni(campagna)
-                              }}
-                              className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
-                            >
-                              <Sparkles className="h-3.5 w-3.5" />
-                              Crea Individuazioni
-                            </Button>
-                          )}
-
-                          {rowState.canResumeIndividuazione && !isGlobalProcessingThisCampagna && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={!canStartProcess(campagna.id)}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                onResumeIndividuazioni(campagna)
-                              }}
-                              className="gap-1.5 cursor-pointer disabled:cursor-not-allowed border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
-                            >
-                              <RotateCw className="h-3.5 w-3.5" />
-                              Riprendi
-                            </Button>
-                          )}
-
-                          {isCompleted && (
-                            <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 gap-1.5 py-1.5 px-3">
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Completata
-                            </Badge>
-                          )}
-
-                          {(rowState.badge === 'individuazione_running' || rowState.badge === 'individuazione_stale') && (
-                            rowState.badge === 'individuazione_stale' ? (
-                              <Badge variant="outline" className="gap-1.5 py-1.5 px-3 border-yellow-500 text-yellow-600 dark:text-yellow-400">
-                                <AlertCircle className="h-3.5 w-3.5" />
-                                Individuazione interrotta
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Individuazione in corso
-                              </Badge>
-                            )
-                          )}
-                        </div>
+                        <PrimaryWorkflowAction
+                          campagna={campagna}
+                          rowState={rowState}
+                          isCompleted={isCompleted}
+                          isGlobalProcessingThisCampagna={isGlobalProcessingThisCampagna}
+                          uploadProgress={uploadProgress}
+                          canStartProcess={canStartProcess}
+                          onUpload={onUpload}
+                          onStartIndividuazioni={onStartIndividuazioni}
+                          onResumeIndividuazioni={onResumeIndividuazioni}
+                        />
                       </TableCell>
                       <TableCell className="py-4">
                         <SecondaryActions
                           campagna={campagna}
                           onNavigate={navigateToCampagna}
                           onDelete={onDelete}
+                          onUpload={onUpload}
+                          rowState={rowState}
                           showEdit
                         />
                       </TableCell>
@@ -278,14 +216,17 @@ export default function ProgrammazioniTable({
                 isCampagnaProcessing,
               })
               const isCompleted = rowState.badge === 'individuata'
+              const workflowStep = getWorkflowStep(rowState)
 
               return (
                 <Card
                   key={campagna.id}
-                  className="p-4 cursor-pointer"
+                  className={`p-4 ${clickableRowClassName}`}
+                  role="link"
                   tabIndex={0}
+                  aria-label={`Apri dettaglio programmazione ${campagna.nome}`}
                   onClick={() => navigateToCampagna(campagna.id)}
-                  onKeyDown={(event) => handleRowKeyDown(event, campagna.id)}
+                  onKeyDown={(event) => handleClickableRowKeyDown(event, () => navigateToCampagna(campagna.id))}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -309,54 +250,29 @@ export default function ProgrammazioniTable({
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <ProgrammazioneStatusBadge badge={rowState.badge} />
-                        {!isCompleted && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={!rowState.canUpload}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onUpload(campagna)
-                            }}
-                          >
-                            <FileUp className="h-3.5 w-3.5 mr-1" />
-                            Carica
-                          </Button>
-                        )}
-                        {!isCompleted && rowState.badge !== 'uploading' && rowState.badge !== 'deleting' && (
-                          <Button
-                            size="sm"
-                            disabled={!rowState.canCreateIndividuazione}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onStartIndividuazioni(campagna)
-                            }}
-                          >
-                            <Sparkles className="h-3.5 w-3.5 mr-1" />
-                            Individuazioni
-                          </Button>
-                        )}
-                        {rowState.canResumeIndividuazione && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={!canStartProcess(campagna.id)}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              onResumeIndividuazioni(campagna)
-                            }}
-                            className="border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
-                          >
-                            <RotateCw className="h-3.5 w-3.5 mr-1" />
-                            Riprendi
-                          </Button>
-                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{workflowStep.label}</p>
+                      <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+                        <PrimaryWorkflowAction
+                          campagna={campagna}
+                          rowState={rowState}
+                          isCompleted={isCompleted}
+                          isGlobalProcessingThisCampagna={isCampagnaProcessing(campagna.id)}
+                          uploadProgress={uploadProgress}
+                          canStartProcess={canStartProcess}
+                          onUpload={onUpload}
+                          onStartIndividuazioni={onStartIndividuazioni}
+                          onResumeIndividuazioni={onResumeIndividuazioni}
+                          compact
+                        />
                       </div>
                     </div>
                     <SecondaryActions
                       campagna={campagna}
                       onNavigate={navigateToCampagna}
                       onDelete={onDelete}
+                      onUpload={onUpload}
+                      rowState={rowState}
                     />
                   </div>
                 </Card>
@@ -400,6 +316,138 @@ function getRowState({
     hasLocalRuntimeProcess: isCampagnaProcessing(campagna.id),
     hasData,
   })
+}
+
+type ProgrammazioneRowState = ReturnType<typeof getRowState>
+
+function getWorkflowStep(rowState: ProgrammazioneRowState): { label: string } {
+  if (rowState.badge === 'uploading') return { label: 'Step attuale: caricamento dati' }
+  if (rowState.badge === 'deleting') return { label: 'Step attuale: eliminazione in corso' }
+  if (rowState.badge === 'individuazione_running') return { label: 'Step attuale: monitoraggio individuazioni' }
+  if (rowState.badge === 'individuazione_stale') return { label: 'Step attuale: riprendi individuazioni' }
+  if (rowState.badge === 'individuata') return { label: 'Step completato: individuazioni create' }
+  if (rowState.canCreateIndividuazione) return { label: 'Prossimo step: crea individuazioni' }
+  if (rowState.canUpload) return { label: 'Prossimo step: carica dati' }
+  return { label: 'Step attuale: verifica dati' }
+}
+
+interface PrimaryWorkflowActionProps {
+  campagna: CampagnaProgrammazione
+  rowState: ProgrammazioneRowState
+  isCompleted: boolean
+  isGlobalProcessingThisCampagna: boolean
+  uploadProgress: Record<string, ProgressCount>
+  canStartProcess: (campagnaId: string) => boolean
+  onUpload: (campagna: CampagnaProgrammazione) => void
+  onStartIndividuazioni: (campagna: CampagnaProgrammazione) => void
+  onResumeIndividuazioni: (campagna: CampagnaProgrammazione) => void
+  compact?: boolean
+}
+
+function PrimaryWorkflowAction({
+  campagna,
+  rowState,
+  isCompleted,
+  isGlobalProcessingThisCampagna,
+  uploadProgress,
+  canStartProcess,
+  onUpload,
+  onStartIndividuazioni,
+  onResumeIndividuazioni,
+  compact = false,
+}: PrimaryWorkflowActionProps) {
+  if (isCompleted) {
+    return (
+      <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 gap-1.5 py-1.5 px-3">
+        <CheckCircle className="h-3.5 w-3.5" />
+        Completata
+      </Badge>
+    )
+  }
+
+  if (rowState.canResumeIndividuazione && !isGlobalProcessingThisCampagna) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!canStartProcess(campagna.id)}
+        onClick={(event) => {
+          event.stopPropagation()
+          onResumeIndividuazioni(campagna)
+        }}
+        className="gap-1.5 cursor-pointer disabled:cursor-not-allowed border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
+      >
+        <RotateCw className="h-3.5 w-3.5" />
+        Riprendi
+      </Button>
+    )
+  }
+
+  if (rowState.badge === 'individuazione_stale') {
+    return (
+      <Badge variant="outline" className="gap-1.5 py-1.5 px-3 border-yellow-500 text-yellow-600 dark:text-yellow-400">
+        <AlertCircle className="h-3.5 w-3.5" />
+        Individuazione interrotta
+      </Badge>
+    )
+  }
+
+  if (rowState.badge === 'individuazione_running') {
+    return (
+      <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Individuazione in corso
+      </Badge>
+    )
+  }
+
+  if (rowState.badge === 'uploading' || uploadProgress[campagna.id]) {
+    return (
+      <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Caricamento dati
+      </Badge>
+    )
+  }
+
+  if (rowState.canCreateIndividuazione) {
+    return (
+      <Button
+        size="sm"
+        onClick={(event) => {
+          event.stopPropagation()
+          onStartIndividuazioni(campagna)
+        }}
+        className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+      >
+        <Sparkles className="h-3.5 w-3.5" />
+        {compact ? 'Individuazioni' : 'Crea Individuazioni'}
+      </Button>
+    )
+  }
+
+  if (rowState.canUpload) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={(event) => {
+          event.stopPropagation()
+          onUpload(campagna)
+        }}
+        className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+      >
+        <FileUp className="h-3.5 w-3.5" />
+        {compact ? 'Carica' : 'Carica Dati'}
+      </Button>
+    )
+  }
+
+  return (
+    <Badge variant="outline" className="gap-1.5 py-1.5 px-3">
+      Verifica dati
+    </Badge>
+  )
 }
 
 interface StatusCellProps {
@@ -472,7 +520,14 @@ function CampagnaInfoTooltip({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={`Informazioni su ${campagna.nome}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Info className="h-4 w-4 cursor-help" />
+          </button>
         </TooltipTrigger>
         <TooltipContent side="right" className="max-w-xs">
           <div className="space-y-2">
@@ -506,7 +561,9 @@ function CampagnaInfoTooltip({
     >
       <TooltipTrigger asChild>
         <button
+          type="button"
           className="text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={`Informazioni su ${campagna.nome}`}
           onClick={(event) => event.stopPropagation()}
         >
           <Info className="h-4 w-4" />
@@ -676,6 +733,8 @@ interface SecondaryActionsProps {
   campagna: CampagnaProgrammazione
   onNavigate: (campagnaId: string) => void
   onDelete: (campagna: CampagnaProgrammazione) => void
+  onUpload?: (campagna: CampagnaProgrammazione) => void
+  rowState?: ProgrammazioneRowState
   showEdit?: boolean
 }
 
@@ -683,13 +742,15 @@ function SecondaryActions({
   campagna,
   onNavigate,
   onDelete,
+  onUpload,
+  rowState,
   showEdit = false,
 }: SecondaryActionsProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          aria-label="Azioni"
+          aria-label={`Azioni per ${campagna.nome}`}
           variant="ghost"
           size="sm"
           className={showEdit ? 'h-8 w-8 p-0' : undefined}
@@ -703,6 +764,12 @@ function SecondaryActions({
           <Eye className="h-4 w-4 mr-2" />
           Dettaglio
         </DropdownMenuItem>
+        {onUpload && rowState?.canUpload && (
+          <DropdownMenuItem onClick={(event) => { event.stopPropagation(); onUpload(campagna) }}>
+            <FileUp className="h-4 w-4 mr-2" />
+            Carica dati
+          </DropdownMenuItem>
+        )}
         {showEdit && (
           <DropdownMenuItem>
             <Edit className="h-4 w-4 mr-2" />

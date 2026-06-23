@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { 
   getCampagnaIndividuazione, 
@@ -22,6 +23,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { 
   Search, 
   Sparkles, 
@@ -42,7 +44,6 @@ import {
 } from 'lucide-react'
 
 export default function IndividuazioneDetailPage() {
-  const router = useRouter()
   const params = useParams()
   const campagnaId = params.id as string
 
@@ -374,9 +375,11 @@ export default function IndividuazioneDetailPage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Campagna non trovata</p>
-        <Button variant="outline" className="mt-4" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Torna indietro
+        <Button variant="outline" className="mt-4" asChild>
+          <Link href="/dashboard/individuazioni">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Torna alle campagne
+          </Link>
         </Button>
       </div>
     )
@@ -384,6 +387,13 @@ export default function IndividuazioneDetailPage() {
 
   return (
     <div className="space-y-6">
+      <DashboardBreadcrumbs
+        items={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: 'Individuazioni', href: '/dashboard/individuazioni' },
+          { label: campagna.nome || 'Dettaglio individuazione' },
+        ]}
+      />
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
@@ -391,10 +401,12 @@ export default function IndividuazioneDetailPage() {
             variant="ghost" 
             size="sm" 
             className="mb-2 -ml-2"
-            onClick={() => router.push('/dashboard/individuazioni')}
+            asChild
           >
+            <Link href="/dashboard/individuazioni">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Torna alle campagne
+            </Link>
           </Button>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Sparkles className="h-6 w-6" />
