@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, ReactNode } from 'react'
 import {
   processCampagnaIndividuazioneBatch,
   BatchProcessingProgress,
@@ -10,9 +10,10 @@ import {
   CampagnaProgrammazione,
   getCampagneProgrammazione,
   getProcessingProgress,
-  isProcessingStale,
-  minutesSinceProcessingActivity,
+  getLatestProcessingJobsForCampagne,
 } from '@/features/programmazioni/services/programmazioni.service'
+import { getLatestUploadJobsForCampagne } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
+import { createCoalescedOperationalSnapshotLoader } from '@/features/programmazioni/services/programmazioni-operational-snapshot.service'
 
 // ============================================
 // TYPES
@@ -98,6 +99,13 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
   const [focusedCampagnaId, setFocusedCampagnaId] = useState<string | null>(null)
   const [interrupted, setInterrupted] = useState<InterruptedCampagna[]>([])
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
+  const operationalSnapshotLoaderRef = useRef(createCoalescedOperationalSnapshotLoader({
+    workerMode: true,
+    getCampagneProgrammazione,
+    getLatestProcessingJobsForCampagne,
+    getLatestUploadJobsForCampagne,
+    getProcessingProgress,
+  }))
 
   const activeProcesses = useMemo(
     () => Object.values(processByCampagnaId).filter(process => process.status === 'processing'),
@@ -123,24 +131,9 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
   // riavvio. È la verità persistente (DB), non lo stato di sessione.
   const refreshInterrupted = useCallback(async () => {
     try {
-      const { data: campagne, error } = await getCampagneProgrammazione()
-      if (error || !campagne) return
-      const inCorso = campagne.filter(c => c.stato === 'in_corso')
-      const results = await Promise.all(
-        inCorso.map(async (c) => {
-          const { data: progress } = await getProcessingProgress(c.id)
-          // Stale = nessuna attività da >10min → processo orfano/interrotto.
-          if (!isProcessingStale(progress)) return null
-          return {
-            id: c.id,
-            nome: c.nome,
-            programmazioni_totali: progress?.programmazioni_totali ?? 0,
-            individuazioni_create: progress?.individuazioni_create ?? 0,
-            minutesSinceActivity: minutesSinceProcessingActivity(progress),
-          } as InterruptedCampagna
-        })
-      )
-      setInterrupted(results.filter((r): r is InterruptedCampagna => r !== null))
+      const snapshot = await operationalSnapshotLoaderRef.current.load()
+      if (snapshot.error) return
+      setInterrupted(snapshot.interrupted)
     } catch {
       // best-effort: l'idratazione non deve mai rompere l'app
     }
@@ -233,6 +226,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         }))
       }
 
+      void refreshInterrupted()
       return result
     } catch (error: any) {
       // Estrai il messaggio di errore in modo più robusto
@@ -261,12 +255,13 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         }
       }))
 
+      void refreshInterrupted()
       return {
         success: false,
         error: errorMessage
       }
     }
-  }, [processByCampagnaId, updateProcessState])
+  }, [processByCampagnaId, refreshInterrupted, updateProcessState])
 
   const minimize = useCallback((campagneProgrammazioneId?: string) => {
     const targetId = campagneProgrammazioneId ?? focusedCampagnaId

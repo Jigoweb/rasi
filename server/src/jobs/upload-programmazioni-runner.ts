@@ -51,8 +51,10 @@ async function removeUploadedFile(storagePath: string): Promise<void> {
 
 export async function upsertProgrammazioniChunk(
   payloads: ProgrammazioneImportPayload[]
-): Promise<{ processed: number }> {
-  if (payloads.length === 0) return { processed: 0 }
+): Promise<{ attempted: number; insertedExact: number | null; duplicateSkippedExact: number | null }> {
+  if (payloads.length === 0) {
+    return { attempted: 0, insertedExact: 0, duplicateSkippedExact: 0 }
+  }
 
   const { error } = await supabaseService
     .from('programmazioni')
@@ -62,7 +64,13 @@ export async function upsertProgrammazioniChunk(
     })
 
   if (error) throw error
-  return { processed: payloads.length }
+  // Without selecting returned rows, Supabase confirms the upsert request but not
+  // exact inserted-vs-duplicate counts. Keep exact counters nullable internally.
+  return {
+    attempted: payloads.length,
+    insertedExact: null,
+    duplicateSkippedExact: null,
+  }
 }
 
 export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promise<void> {
@@ -114,8 +122,9 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
 
       if (payloads.length > 0) {
         try {
-          const { processed } = await upsertProgrammazioniChunk(payloads)
-          righeInserite += processed
+          const { attempted, insertedExact, duplicateSkippedExact } = await upsertProgrammazioniChunk(payloads)
+          righeInserite += insertedExact ?? attempted
+          righeDuplicateSaltate += duplicateSkippedExact ?? 0
         } catch (error: any) {
           throw new Error(`insert chunk ${offset / chunkSize + 1}: ${error.message}`)
         }

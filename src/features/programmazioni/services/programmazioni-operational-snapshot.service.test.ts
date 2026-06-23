@@ -124,6 +124,68 @@ describe('loadProgrammazioniOperationalSnapshot', () => {
     })
     expect(snapshot.processingProgressMap['campagna-running']).toBeUndefined()
   })
+
+  it('derives interrupted campaigns from the same operational snapshot', async () => {
+    const now = Date.parse('2026-06-23T12:00:00.000Z')
+    const campagne = [
+      campaign({ id: 'campagna-unknown', nome: 'Unknown', stato: 'in_corso', programmazioni_count: 30 }),
+      campaign({ id: 'campagna-running', nome: 'Running', stato: 'in_corso', programmazioni_count: 40 }),
+      campaign({ id: 'campagna-error', nome: 'Error', stato: 'in_corso', programmazioni_count: 50 }),
+    ]
+    const getProcessingProgress = jest.fn().mockResolvedValue({
+      data: progress({
+        programmazioni_totali: 30,
+        individuazioni_create: 3,
+        last_activity_at: null,
+      }),
+      error: null,
+    })
+
+    const snapshot = await loadProgrammazioniOperationalSnapshot({
+      workerMode: true,
+      now,
+      getCampagneProgrammazione: jest.fn().mockResolvedValue({ data: campagne, error: null }),
+      getLatestProcessingJobsForCampagne: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'job-running',
+            campagne_programmazione_id: 'campagna-running',
+            stato: 'running',
+            updated_at: '2026-06-23T11:59:00.000Z',
+            error: null,
+          },
+          {
+            id: 'job-error',
+            campagne_programmazione_id: 'campagna-error',
+            stato: 'error',
+            updated_at: '2026-06-23T11:40:00.000Z',
+            error: 'statement timeout',
+          },
+        ],
+        error: null,
+      }),
+      getLatestUploadJobsForCampagne: jest.fn().mockResolvedValue({ data: [], error: null }),
+      getProcessingProgress,
+    })
+
+    expect(snapshot.interrupted).toEqual([
+      {
+        id: 'campagna-unknown',
+        nome: 'Unknown',
+        programmazioni_totali: 30,
+        individuazioni_create: 3,
+        minutesSinceActivity: null,
+      },
+      {
+        id: 'campagna-error',
+        nome: 'Error',
+        programmazioni_totali: 50,
+        individuazioni_create: 0,
+        minutesSinceActivity: null,
+      },
+    ])
+    expect(snapshot.processingJobMap['campagna-running']?.stato).toBe('running')
+  })
 })
 
 describe('createCoalescedOperationalSnapshotLoader', () => {

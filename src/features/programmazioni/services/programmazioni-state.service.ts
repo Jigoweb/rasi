@@ -40,23 +40,66 @@ export interface ProgrammazioneRowState {
   blockingReason?: string
 }
 
-export function getProgrammazioneRowState(input: ProgrammazioneOperationalState): ProgrammazioneRowState {
-  const datasetStatus = input.datasetStatus
-  const uploadJobStatus = input.uploadJob?.stato
+export type ProcessingOperationalState =
+  | 'idle'
+  | 'running'
+  | 'stale'
+  | 'recoverable_unknown'
+  | 'error_recent'
+  | 'error_old'
+
+export function classifyProcessingOperationalState(
+  input: Pick<
+    ProgrammazioneOperationalState,
+    'datasetStatus' | 'campaignJob' | 'progress' | 'hasLocalRuntimeProcess' | 'now'
+  >
+): ProcessingOperationalState {
   const campaignJobStatus = input.campaignJob?.stato ?? input.progress?.job_stato
-  const hasActiveUpload = uploadJobStatus === 'queued' || uploadJobStatus === 'running'
-  const hasUploadError = uploadJobStatus === 'error'
   const hasActiveCampaignJob =
     campaignJobStatus === 'queued' ||
     campaignJobStatus === 'running' ||
     input.hasLocalRuntimeProcess
-  const hasCampaignJobError = campaignJobStatus === 'error'
+  const hasIndividuazioneInCorso = input.datasetStatus === 'in_corso'
+
+  if (hasActiveCampaignJob) {
+    return 'running'
+  }
+
+  if (campaignJobStatus === 'error') {
+    return isRecent(input.campaignJob?.updated_at, input.now) ? 'error_recent' : 'error_old'
+  }
+
+  if (isProcessingStale(input.progress, input.now)) {
+    return 'stale'
+  }
+
+  if (hasIndividuazioneInCorso && !input.progress?.last_activity_at) {
+    return 'recoverable_unknown'
+  }
+
+  return 'idle'
+}
+
+export function getProgrammazioneRowState(input: ProgrammazioneOperationalState): ProgrammazioneRowState {
+  const datasetStatus = input.datasetStatus
+  const uploadJobStatus = input.uploadJob?.stato
+  const hasActiveUpload = uploadJobStatus === 'queued' || uploadJobStatus === 'running'
+  const hasUploadError = uploadJobStatus === 'error'
   const hasIndividuazioneInCorso =
     input.individuazioneStatus === 'in_corso' || datasetStatus === 'in_corso'
+  const processingState = classifyProcessingOperationalState({
+    datasetStatus,
+    campaignJob: input.campaignJob,
+    progress: input.progress,
+    hasLocalRuntimeProcess: input.hasLocalRuntimeProcess,
+    now: input.now,
+  })
+  const hasActiveCampaignJob = processingState === 'running'
+  const hasCampaignJobError = processingState === 'error_recent' || processingState === 'error_old'
   const stale =
-    hasCampaignJobError ||
-    isProcessingStale(input.progress, input.now) ||
-    (hasIndividuazioneInCorso && !input.progress?.last_activity_at && !hasActiveCampaignJob)
+    processingState === 'stale' ||
+    processingState === 'recoverable_unknown' ||
+    hasCampaignJobError
 
   if (datasetStatus === 'deleting') {
     return blocked('deleting', 'Eliminazione programmazione in corso')
@@ -136,4 +179,11 @@ function blocked(badge: ProgrammazioneRowBadge, blockingReason: string): Program
     canResumeIndividuazione: false,
     blockingReason,
   }
+}
+
+function isRecent(updatedAt: string | null | undefined, now = Date.now()): boolean {
+  if (!updatedAt) return false
+  const updatedTime = new Date(updatedAt).getTime()
+  if (Number.isNaN(updatedTime)) return false
+  return now - updatedTime <= 10 * 60 * 1000
 }
