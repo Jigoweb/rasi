@@ -51,11 +51,18 @@ async function releaseLock(
   userId: string,
   newStato: string
 ): Promise<void> {
-  await supabaseService.rpc('release_campagna_processing_lock', {
+  const { data, error } = await supabaseService.rpc('release_campagna_processing_lock', {
     p_campagna_id: campagnaId,
     p_user_id: userId,
     p_new_stato: newStato,
   })
+
+  if (error) throw new Error(`release lock: ${error.message}`)
+
+  const result = data as LockResult | null
+  if (!result?.success) {
+    throw new Error(`release lock: ${result?.error || 'rilascio lock non riuscito'}`)
+  }
 }
 
 /**

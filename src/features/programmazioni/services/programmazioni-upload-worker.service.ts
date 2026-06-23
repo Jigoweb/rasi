@@ -24,6 +24,31 @@ export interface UploadJobSnapshot {
   error: string | null
 }
 
+export async function getLatestUploadJobsForCampagne(
+  campagneProgrammazioneIds: string[]
+): Promise<{ data: UploadJobSnapshot[]; error: Error | null }> {
+  if (campagneProgrammazioneIds.length === 0) return { data: [], error: null }
+
+  const { data, error } = await supabase
+    .from('upload_jobs' as any)
+    .select(
+      'id,campagna_programmazione_id,stato,fase,righe_totali,righe_processate,righe_inserite,righe_duplicate_saltate,current_chunk,total_chunks,error,created_at'
+    )
+    .in('campagna_programmazione_id', campagneProgrammazioneIds)
+    .order('created_at', { ascending: false })
+
+  if (error) return { data: [], error: new Error(error.message) }
+
+  const latestByCampagna = new Map<string, UploadJobSnapshot>()
+  for (const job of ((data ?? []) as unknown as UploadJobSnapshot[])) {
+    if (!latestByCampagna.has(job.campagna_programmazione_id)) {
+      latestByCampagna.set(job.campagna_programmazione_id, job)
+    }
+  }
+
+  return { data: Array.from(latestByCampagna.values()), error: null }
+}
+
 export function getUploadMappingSnapshot(decision: UploadDecision): UploadMappingSnapshot {
   if (decision.kind === 'apply_existing') {
     return { kind: 'apply_existing', mapping: decision.mapping }

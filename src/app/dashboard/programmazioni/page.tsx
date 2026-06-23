@@ -22,9 +22,11 @@ import {
 } from '@/features/programmazioni/services/import-mapping.service'
 import {
   computeImportRowUid,
+  getLatestUploadJobsForCampagne,
   getUploadMappingSnapshot,
   pollUploadProgrammazioniJob,
   startUploadProgrammazioniJob,
+  type UploadJobSnapshot,
   uploadProgrammazioniFileToStorage,
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
 import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
@@ -136,6 +138,7 @@ export default function ProgrammazioniPage() {
   const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, ProcessingProgress | null>>({})
   const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
   const progressFetchedRef = useRef<Set<string>>(new Set())
+  const uploadPollingJobsRef = useRef<Set<string>>(new Set())
 
   // Individuazioni - use global context
   const { startProcess, canStartProcess, isCampagnaProcessing } = useIndividuazioneProcess()
@@ -432,6 +435,98 @@ export default function ProgrammazioniPage() {
     setMappingWizardOpen(true)
   }
 
+  const clearUploadProgress = (campagnaId: string) => {
+    setUploadProgress(prev => {
+      const next = { ...prev }
+      delete next[campagnaId]
+      return next
+    })
+  }
+
+  const applyUploadJobSnapshot = (job: UploadJobSnapshot, fallbackTotal = 0) => {
+    if (job.stato === 'completed') {
+      setCampagne(prev => prev.map(c => (
+        c.id === job.campagna_programmazione_id ? { ...c, stato: 'in_review' } : c
+      )))
+      clearUploadProgress(job.campagna_programmazione_id)
+      return
+    }
+
+    if (job.stato === 'error' || job.stato === 'cancelled') {
+      const errorMessage = job.error || 'Upload programmazioni terminato con errore'
+      setCampagne(prev => prev.map(c => (
+        c.id === job.campagna_programmazione_id
+          ? { ...c, stato: 'error', last_error: errorMessage }
+          : c
+      )))
+      clearUploadProgress(job.campagna_programmazione_id)
+      return
+    }
+
+    const total = Math.max(
+      job.righe_totali || 0,
+      job.righe_processate || 0,
+      fallbackTotal,
+      1
+    )
+    setUploadProgress(prev => ({
+      ...prev,
+      [job.campagna_programmazione_id]: {
+        done: job.righe_processate,
+        total,
+      },
+    }))
+  }
+
+  const attachUploadJobPolling = (job: UploadJobSnapshot, fallbackTotal = 0) => {
+    if (uploadPollingJobsRef.current.has(job.id)) return
+    uploadPollingJobsRef.current.add(job.id)
+
+    applyUploadJobSnapshot(job, fallbackTotal)
+
+    void pollUploadProgrammazioniJob(job.id, (nextJob) => {
+      applyUploadJobSnapshot(nextJob, fallbackTotal)
+    }).then(async (result) => {
+      uploadPollingJobsRef.current.delete(job.id)
+      if (result.success && result.job) {
+        applyUploadJobSnapshot(result.job, fallbackTotal)
+        await fetchCampagne()
+        return
+      }
+
+      if (result.job) {
+        applyUploadJobSnapshot(result.job, fallbackTotal)
+      } else {
+        setUploadError(result.error || 'Errore polling upload programmazioni')
+        clearUploadProgress(job.campagna_programmazione_id)
+      }
+    })
+  }
+
+  const reconcileUploadJobs = async (campagneList: CampagnaProgrammazione[]) => {
+    if (getIndividuazioneRuntimeMode() !== 'worker') return
+
+    const uploadingCampagne = campagneList.filter(c => c.stato === 'uploading')
+    if (uploadingCampagne.length === 0) return
+
+    const { data: jobs, error } = await getLatestUploadJobsForCampagne(uploadingCampagne.map(c => c.id))
+    if (error) {
+      console.warn('[programmazioni] Upload job recovery unavailable:', error)
+      return
+    }
+
+    for (const job of jobs) {
+      const campagna = uploadingCampagne.find(c => c.id === job.campagna_programmazione_id)
+      const fallbackTotal = campagna?.programmazioni_count ?? 0
+
+      if (job.stato === 'queued' || job.stato === 'running') {
+        attachUploadJobPolling(job, fallbackTotal)
+      } else {
+        applyUploadJobSnapshot(job, fallbackTotal)
+      }
+    }
+  }
+
   const handleUploadDatabase = async () => {
     if (!selectedCampagna || parsedRows.length === 0 || !uploadDecision) return
     setIsUploading(true)
@@ -462,34 +557,18 @@ export default function ProgrammazioniPage() {
         handleCloseModal()
         setIsUploading(false)
 
-        void pollUploadProgrammazioniJob(startResult.jobId, (job) => {
-          setUploadProgress(prev => ({
-            ...prev,
-            [campagna.id]: {
-              done: job.righe_processate,
-              total: job.righe_totali || parsedRows.length,
-            },
-          }))
-        }).then(async (result) => {
-          if (result.success) {
-            setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'in_review' } : c))
-            setUploadProgress(prev => {
-              const next = { ...prev }
-              delete next[campagna.id]
-              return next
-            })
-            await fetchCampagne()
-            return
-          }
-
-          const errorMessage = result.error || 'Errore upload programmazioni'
-          setUploadError(errorMessage)
-          setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'error', last_error: errorMessage } : c))
-          setUploadProgress(prev => {
-            const next = { ...prev }
-            delete next[campagna.id]
-            return next
-          })
+        attachUploadJobPolling({
+          id: startResult.jobId,
+          campagna_programmazione_id: campagna.id,
+          stato: 'queued',
+          fase: 'queued',
+          righe_totali: parsedRows.length,
+          righe_processate: 0,
+          righe_inserite: 0,
+          righe_duplicate_saltate: 0,
+          current_chunk: 0,
+          total_chunks: 0,
+          error: null,
         })
 
         return
@@ -741,7 +820,9 @@ export default function ProgrammazioniPage() {
         setCampagne([])
         return
       }
-      setCampagne(data || [])
+      const campagneList = data || []
+      setCampagne(campagneList)
+      await reconcileUploadJobs(campagneList)
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
