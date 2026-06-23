@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest"
+    "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "verify:server": "npm --prefix server run typecheck",
+    "verify": "npm run lint && npm run typecheck && npm test && npm run build && npm run verify:server"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
