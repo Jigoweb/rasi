@@ -111,7 +111,7 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
     })
   } catch (error: any) {
     try {
-      await releaseLock(campagneProgrammazioneId, userId, 'error')
+      await releaseLock(campagneProgrammazioneId, userId, 'in_review')
     } catch {
       /* best effort */
     }

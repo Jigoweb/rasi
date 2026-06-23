@@ -62,14 +62,18 @@ const TEMPLATE_FIELDS = [
 ] as const
 
 const TEMPLATE_FIELDS_SET = new Set<string>(TEMPLATE_FIELDS)
-const NUMBER_FIELDS = new Set([
+const INTEGER_FIELDS = new Set([
   'durata_minuti',
   'numero_episodio',
   'numero_stagione',
   'anno',
+  'sales_month',
+  'views',
+])
+
+const NUMERIC_FIELDS = new Set([
   'retail_price',
   'track_price_local_currency',
-  'views',
   'total_net_ad_revenue',
   'total_revenue',
 ])
@@ -230,7 +234,11 @@ function isBlankValue(value: unknown): boolean {
 
 function coerce(field: string, value: unknown): unknown {
   if (value === null || value === undefined || value === '') return undefined
-  if (NUMBER_FIELDS.has(field)) {
+  if (INTEGER_FIELDS.has(field)) {
+    const numberValue = Number(String(value).replace(',', '.'))
+    return Number.isFinite(numberValue) ? Math.round(numberValue) : undefined
+  }
+  if (NUMERIC_FIELDS.has(field)) {
     const numberValue = Number(String(value).replace(',', '.'))
     return Number.isFinite(numberValue) ? numberValue : undefined
   }
