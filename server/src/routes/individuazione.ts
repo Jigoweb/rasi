@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth.js'
-import { createJob, findActiveJob } from '../jobs/store.js'
+import { createJob, findActiveJob, userOwnsCampagnaProgrammazione } from '../jobs/store.js'
 import { runIndividuazioneJob } from '../jobs/individuazione-runner.js'
 
 export const individuazioneRouter = Router()
@@ -28,14 +28,33 @@ individuazioneRouter.post('/start', requireAuth, async (req, res) => {
   }
 
   try {
+    const hasCampaignAccess = await userOwnsCampagnaProgrammazione(
+      campagne_programmazione_id,
+      req.userId!
+    )
+    if (!hasCampaignAccess) {
+      return res.status(404).json({
+        success: false,
+        error: 'Campagna non trovata o non autorizzata',
+      })
+    }
+
     // Evita doppi avvii concorrenti sulla stessa campagna.
     const active = await findActiveJob(campagne_programmazione_id)
     if (active) {
+      if (active.created_by === req.userId) {
+        return res.status(409).json({
+          success: false,
+          error: 'Esiste già un job attivo per questa campagna',
+          error_code: 'JOB_ALREADY_RUNNING',
+          job_id: active.id,
+        })
+      }
+
       return res.status(409).json({
         success: false,
         error: 'Esiste già un job attivo per questa campagna',
         error_code: 'JOB_ALREADY_RUNNING',
-        job_id: active.id,
       })
     }
 

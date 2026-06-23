@@ -30,6 +30,8 @@ export type NewJob = {
 }
 
 const TABLE = 'campaign_jobs'
+const STALE_JOB_ERROR =
+  'Job interrotto dal riavvio del worker. Usa Riprendi per continuare.'
 
 export async function createJob(input: NewJob): Promise<CampaignJob> {
   const { data, error } = await supabaseService
@@ -57,6 +59,33 @@ export async function getJob(id: string): Promise<CampaignJob | null> {
 
   if (error) throw new Error(`getJob: ${error.message}`)
   return (data as CampaignJob) ?? null
+}
+
+export async function getJobForUser(id: string, userId: string): Promise<CampaignJob | null> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .select('*')
+    .eq('id', id)
+    .eq('created_by', userId)
+    .maybeSingle()
+
+  if (error) throw new Error(`getJobForUser: ${error.message}`)
+  return (data as CampaignJob) ?? null
+}
+
+export async function userOwnsCampagnaProgrammazione(
+  campagneProgrammazioneId: string,
+  userId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseService
+    .from('campagne_programmazione')
+    .select('id')
+    .eq('id', campagneProgrammazioneId)
+    .eq('created_by', userId)
+    .maybeSingle()
+
+  if (error) throw new Error(`userOwnsCampagnaProgrammazione: ${error.message}`)
+  return Boolean(data?.id)
 }
 
 /**
@@ -92,4 +121,37 @@ export async function findActiveJob(
 
   if (error) throw new Error(`findActiveJob: ${error.message}`)
   return (data as CampaignJob) ?? null
+}
+
+export async function findStaleActiveJobs(cutoffIso: string): Promise<CampaignJob[]> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .select('*')
+    .in('stato', ['queued', 'running'])
+    .lt('updated_at', cutoffIso)
+
+  if (error) throw new Error(`findStaleActiveJobs: ${error.message}`)
+  return (data as CampaignJob[]) ?? []
+}
+
+export async function markStaleActiveJobAsError(
+  jobId: string,
+  cutoffIso: string,
+  now = new Date()
+): Promise<boolean> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .update({
+      stato: 'error',
+      fase: 'error',
+      error: STALE_JOB_ERROR,
+      updated_at: now.toISOString(),
+    })
+    .eq('id', jobId)
+    .in('stato', ['queued', 'running'])
+    .lt('updated_at', cutoffIso)
+    .select('id')
+
+  if (error) throw new Error(`markStaleActiveJobAsError: ${error.message}`)
+  return ((data as Array<Pick<CampaignJob, 'id'>> | null) ?? []).length > 0
 }

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth.js'
-import { getJob } from '../jobs/store.js'
+import { getJobForUser } from '../jobs/store.js'
 
 export const jobsRouter = Router()
 
@@ -10,7 +10,7 @@ export const jobsRouter = Router()
  */
 jobsRouter.get('/:id', requireAuth, async (req, res) => {
   try {
-    const job = await getJob(req.params.id)
+    const job = await getJobForUser(req.params.id, req.userId!)
     if (!job) {
       return res.status(404).json({ success: false, error: 'Job non trovato' })
     }

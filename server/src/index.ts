@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import { config } from './config.js'
+import { markStaleActiveJobsAsError } from './jobs/recovery.js'
 import { individuazioneRouter } from './routes/individuazione.js'
 import { jobsRouter } from './routes/jobs.js'
 
@@ -25,4 +26,12 @@ app.use('/api/jobs', jobsRouter)
 
 app.listen(config.port, () => {
   console.log(`[rasi-worker] in ascolto sulla porta ${config.port}`)
+
+  void markStaleActiveJobsAsError()
+    .then((count) => {
+      console.log(`[rasi-worker] recovery job stale completata: ${count} job marcati in errore`)
+    })
+    .catch((error) => {
+      console.error('[rasi-worker] recovery job stale fallita', error)
+    })
 })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/shared/lib/supabase-server'
+import { requireCampagnaProgrammazioneOwner, requireCampagneIndividuazioneAuth } from '../auth'
 
 /**
  * POST /api/campagne-individuazione/process
@@ -25,6 +26,9 @@ import { supabaseServer } from '@/shared/lib/supabase-server'
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireCampagneIndividuazioneAuth(req)
+    if (!auth.authenticated) return auth.response
+
     const body = await req.json()
     const { 
       campagne_programmazione_id,
@@ -43,22 +47,11 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Verifica che la campagna_programmazione esista
-    const { data: campagna, error: campagnaError } = await (supabaseServer as any)
-      .from('campagne_programmazione')
-      .select('id, nome')
-      .eq('id', campagne_programmazione_id)
-      .single()
-
-    if (campagnaError || !campagna) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Campagna programmazione non trovata' 
-        },
-        { status: 404 }
-      )
-    }
+    const campaignAuthorization = await requireCampagnaProgrammazioneOwner(
+      campagne_programmazione_id,
+      auth.userId
+    )
+    if (!campaignAuthorization.authorized) return campaignAuthorization.response
 
     // Chiama la funzione SQL per processare la campagna
     const { data: result, error: processError } = await (supabaseServer as any)

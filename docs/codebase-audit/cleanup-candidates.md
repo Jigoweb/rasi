@@ -28,6 +28,14 @@ Aggiornamento 2026-06-23: un primo batch di root cleanup e stato applicato. Vede
 | `.superpowers/` | artefatti locali di brainstorming/sessione | basso | removed and ignored | nessuna azione |
 | `vercel.json` | configurazione Vercel vuota (`{}`) | basso | removed | ripristinare solo se serve configurazione esplicita |
 
+## Percorsi Runtime Transitori
+
+| Percorso | Evidenza | Rischio | Proposta | Gate |
+|---|---|---|---|---|
+| `src/app/api/campagne-individuazione/*` | fallback serverless legacy per il workflow individuazione | alto | transitional; non rimuovere e non archiviare ancora | worker contract tests passano; recovery worker live; job reads scoped; RLS owner policy applicata; legacy auth enforced; criteri fallback documentati; rollback path esistente; almeno una run staging/production verificata |
+
+Le route serverless legacy restano disponibili solo come fallback quando `NEXT_PUBLIC_WORKER_URL` non e configurato. Questo documento non approva cancellazione o archiviazione delle route: la rimozione richiede il completamento del gate e una decisione separata.
+
 ## Dipendenze Da Verificare
 
 | Package | Evidenza iniziale | Proposta | Gate |

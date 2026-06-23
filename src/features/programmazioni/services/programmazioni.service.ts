@@ -433,10 +433,68 @@ export interface ProcessingProgress {
   processing_by?: string | null
   processing_started_at?: string | null
   last_activity_at?: string | null  // Timestamp of last individuazione created
+  activity_source?: ProcessingActivitySource
+  job_id?: string | null
+  job_stato?: ProcessingJobState | null
+  job_updated_at?: string | null
 }
 
 /** Minutes of inactivity after which an in-progress process is considered stale ("bloccato"). */
 export const PROCESSING_STALE_THRESHOLD_MIN = 10
+
+export type ProcessingActivitySource = 'campaign_jobs' | 'individuazioni' | 'unknown'
+
+export type ProcessingJobState = 'queued' | 'running' | 'error' | 'completed' | 'cancelled'
+
+type ProcessingActivityProgress = Pick<ProcessingProgress, 'last_activity_at'>
+
+type ProcessingActivityJob = {
+  id?: string | null
+  stato?: ProcessingJobState | null
+  updated_at?: string | null
+}
+
+const PROCESSING_ACTIVITY_JOB_STATES: ProcessingJobState[] = ['queued', 'running', 'error']
+
+export function isProcessingActivityJobEligible(
+  job: ProcessingActivityJob | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (!job?.stato) return false
+  if (job.stato === 'queued' || job.stato === 'running') return true
+  if (job.stato !== 'error' || !job.updated_at) return false
+
+  const minutesSinceJobUpdate = minutesSinceProcessingActivity(
+    { last_activity_at: job.updated_at },
+    now,
+  )
+  return minutesSinceJobUpdate !== null && minutesSinceJobUpdate <= PROCESSING_STALE_THRESHOLD_MIN
+}
+
+export function resolveProcessingActivity(
+  progress: ProcessingActivityProgress | null | undefined,
+  job: ProcessingActivityJob | null | undefined,
+  now: number = Date.now(),
+): { last_activity_at: string | null; activity_source: ProcessingActivitySource } {
+  if (isProcessingActivityJobEligible(job, now)) {
+    return {
+      last_activity_at: job?.updated_at ?? null,
+      activity_source: 'campaign_jobs',
+    }
+  }
+
+  if (progress?.last_activity_at) {
+    return {
+      last_activity_at: progress.last_activity_at,
+      activity_source: 'individuazioni',
+    }
+  }
+
+  return {
+    last_activity_at: null,
+    activity_source: 'unknown',
+  }
+}
 
 /**
  * Minutes elapsed since the last processing activity, or null when unknown
@@ -464,6 +522,39 @@ export function isProcessingStale(
   return m !== null && m > PROCESSING_STALE_THRESHOLD_MIN
 }
 
+async function getLatestProcessingActivityJob(
+  campagnaId: string,
+  now: number = Date.now(),
+): Promise<ProcessingActivityJob | null> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) return null
+
+    const { data, error } = await (supabase as any)
+      .from('campaign_jobs')
+      .select('id, stato, updated_at')
+      .eq('campagne_programmazione_id', campagnaId)
+      .eq('created_by', userId)
+      .in('stato', PROCESSING_ACTIVITY_JOB_STATES)
+      .order('updated_at', { ascending: false })
+      .limit(10)
+
+    if (error) {
+      console.warn('[getProcessingProgress] campaign_jobs activity query failed:', error)
+      return null
+    }
+
+    return ((data as ProcessingActivityJob[] | null) ?? [])
+      .find(job => isProcessingActivityJobEligible(job, now)) ?? null
+  } catch (error) {
+    console.warn('[getProcessingProgress] campaign_jobs activity lookup failed:', error)
+    return null
+  }
+}
+
 /**
  * Get the processing progress for a campaign that is currently being processed
  */
@@ -478,6 +569,12 @@ export const getProcessingProgress = async (campagnaId: string): Promise<{ data:
     const programmazioni_processate = Number(raw.programmazioni_processate) || 0
     const percentuale = programmazioni_totali > 0
       ? Math.round((programmazioni_processate / programmazioni_totali) * 100) : 0
+    const job = await getLatestProcessingActivityJob(campagnaId)
+    const activity = resolveProcessingActivity(
+      { last_activity_at: raw.last_activity_at ?? null },
+      job,
+    )
+
     return {
       data: {
         campagna_individuazione_id: raw.campagna_individuazione_id ?? undefined,
@@ -487,7 +584,11 @@ export const getProcessingProgress = async (campagnaId: string): Promise<{ data:
         percentuale,
         processing_by: raw.processing_by ?? undefined,
         processing_started_at: raw.processing_started_at ?? undefined,
-        last_activity_at: raw.last_activity_at ?? null,
+        last_activity_at: activity.last_activity_at,
+        activity_source: activity.activity_source,
+        job_id: job?.id ?? null,
+        job_stato: job?.stato ?? null,
+        job_updated_at: job?.updated_at ?? null,
       },
       error: null,
     }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/shared/lib/supabase-server'
-import { createClient } from '@supabase/supabase-js'
+import { requireCampagnaIndividuazioneAccess, requireCampagneIndividuazioneAuth } from '../auth'
 
 /**
  * POST /api/campagne-individuazione/finalize
@@ -10,6 +10,10 @@ import { createClient } from '@supabase/supabase-js'
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireCampagneIndividuazioneAuth(req)
+    if (!auth.authenticated) return auth.response
+    const userId = auth.userId
+
     const body = await req.json()
     const { 
       campagne_individuazione_id,
@@ -23,18 +27,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Get user ID from authorization header for lock release
-    const authHeader = req.headers.get('authorization')
-    let userId: string | null = null
-    
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7)
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      const tempClient = createClient(supabaseUrl, supabaseAnonKey)
-      const { data: { user } } = await tempClient.auth.getUser(token)
-      userId = user?.id || null
-    }
+    const campaignAuthorization = await requireCampagnaIndividuazioneAccess(
+      campagne_individuazione_id,
+      userId,
+      campagne_programmazione_id
+    )
+    if (!campaignAuthorization.authorized) return campaignAuthorization.response
 
     // Finalizza la campagna
     const { data: result, error: finalizeError } = await (supabaseServer as any)
@@ -47,15 +45,13 @@ export async function POST(req: NextRequest) {
       )
 
     // Release the lock (regardless of success/failure - process is done)
-    if (userId) {
-      const newStato = (finalizeError || !result?.success) ? 'in_review' : 'individuata'
-      await (supabaseServer as any).rpc('release_campagna_processing_lock', {
-        p_campagna_id: campagne_programmazione_id,
-        p_user_id: userId,
-        p_new_stato: newStato
-      })
-      console.log('Lock released for campagna:', campagne_programmazione_id)
-    }
+    const newStato = (finalizeError || !result?.success) ? 'in_review' : 'individuata'
+    await (supabaseServer as any).rpc('release_campagna_processing_lock', {
+      p_campagna_id: campagne_programmazione_id,
+      p_user_id: userId,
+      p_new_stato: newStato
+    })
+    console.log('Lock released for campagna:', campagne_programmazione_id)
 
     if (finalizeError) {
       console.error('Errore finalizzazione:', finalizeError)

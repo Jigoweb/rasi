@@ -127,12 +127,15 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     }
   }, [])
 
-  // Al mount, se il worker è configurato, cerca un job attivo su campaign_jobs
-  // e si riaggancia al polling senza che l'utente debba riavviare il processo.
+  // Se conosciamo già la campagna corrente, cerca un job attivo scoped su
+  // quella campagna. Senza id non facciamo più lookup globali.
   const reattachToActiveJob = useCallback(async () => {
     if (!getWorkerUrl()) return
+    const campagneProgrammazioneId = state.campagna?.id
+    if (!campagneProgrammazioneId || state.status !== 'idle') return
+
     try {
-      const active = await findActiveWorkerJob()
+      const active = await findActiveWorkerJob(campagneProgrammazioneId)
       if (!active) return
 
       const { data: campagna } = await getCampagnaProgrammazioneById(active.campagneProgrammazioneId)
@@ -182,7 +185,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     } catch {
       // best-effort: non rompere l'app
     }
-  }, [refreshInterrupted])
+  }, [refreshInterrupted, state.campagna?.id, state.status])
 
   useEffect(() => {
     reattachToActiveJob()

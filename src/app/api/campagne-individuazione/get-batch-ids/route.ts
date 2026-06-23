@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/shared/lib/supabase-server'
+import { requireCampagnaProgrammazioneOwner, requireCampagneIndividuazioneAuth } from '../auth'
 
 /**
  * POST /api/campagne-individuazione/get-batch-ids
@@ -9,6 +10,9 @@ import { supabaseServer } from '@/shared/lib/supabase-server'
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireCampagneIndividuazioneAuth(req)
+    if (!auth.authenticated) return auth.response
+
     const body = await req.json()
     const {
       campagne_programmazione_id,
@@ -23,6 +27,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    const campaignAuthorization = await requireCampagnaProgrammazioneOwner(
+      campagne_programmazione_id,
+      auth.userId
+    )
+    if (!campaignAuthorization.authorized) return campaignAuthorization.response
 
     // Cursor-based pagination: molto più veloce di OFFSET per grandi dataset
     // Invece di "OFFSET 19000" che deve saltare 19000 righe,

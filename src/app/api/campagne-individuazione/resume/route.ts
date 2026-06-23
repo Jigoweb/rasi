@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/shared/lib/supabase-server'
-import { createClient } from '@supabase/supabase-js'
+import { requireCampagnaProgrammazioneOwner, requireCampagneIndividuazioneAuth } from '../auth'
 
 /**
  * POST /api/campagne-individuazione/resume
@@ -15,6 +15,10 @@ import { createClient } from '@supabase/supabase-js'
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireCampagneIndividuazioneAuth(req)
+    if (!auth.authenticated) return auth.response
+    const userId = auth.userId
+
     const body = await req.json()
     const { campagne_programmazione_id } = body
 
@@ -33,48 +37,40 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // User dall'authorization header
-    const authHeader = req.headers.get('authorization')
-    let userId: string | null = null
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.substring(7)
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      const tempClient = createClient(supabaseUrl, supabaseAnonKey)
-      const { data: { user } } = await tempClient.auth.getUser(token)
-      userId = user?.id || null
-    }
+    const campaignAuthorization = await requireCampagnaProgrammazioneOwner(
+      campagne_programmazione_id,
+      userId
+    )
+    if (!campaignAuthorization.authorized) return campaignAuthorization.response
 
     // Acquisisci/rinnova il lock (stesso utente → rinnovo, altro utente entro
     // il timeout → LOCKED_BY_OTHER)
-    if (userId) {
-      const { data: lockResult, error: lockError } = await (supabaseServer as any)
-        .rpc('acquire_campagna_processing_lock', {
-          p_campagna_id: campagne_programmazione_id,
-          p_user_id: userId,
-          p_timeout_hours: 2
-        })
+    const { data: lockResult, error: lockError } = await (supabaseServer as any)
+      .rpc('acquire_campagna_processing_lock', {
+        p_campagna_id: campagne_programmazione_id,
+        p_user_id: userId,
+        p_timeout_hours: 2
+      })
 
-      if (lockError) {
-        return NextResponse.json({ success: false, error: lockError.message }, { status: 500 })
-      }
+    if (lockError) {
+      return NextResponse.json({ success: false, error: lockError.message }, { status: 500 })
+    }
 
-      if (!lockResult?.success) {
-        if (lockResult?.error_code === 'LOCKED_BY_OTHER') {
-          return NextResponse.json({
-            success: false,
-            error: 'Campagna già in elaborazione',
-            error_code: 'LOCKED_BY_OTHER',
-            locked_by: lockResult.locked_by,
-            locked_since: lockResult.locked_since,
-            message: 'Un altro utente sta già elaborando questa campagna. Attendi il completamento o riprova più tardi.'
-          }, { status: 409 })
-        }
-        return NextResponse.json(
-          { success: false, error: lockResult?.error || 'Errore acquisizione lock' },
-          { status: 400 }
-        )
+    if (!lockResult?.success) {
+      if (lockResult?.error_code === 'LOCKED_BY_OTHER') {
+        return NextResponse.json({
+          success: false,
+          error: 'Campagna già in elaborazione',
+          error_code: 'LOCKED_BY_OTHER',
+          locked_by: lockResult.locked_by,
+          locked_since: lockResult.locked_since,
+          message: 'Un altro utente sta già elaborando questa campagna. Attendi il completamento o riprova più tardi.'
+        }, { status: 409 })
       }
+      return NextResponse.json(
+        { success: false, error: lockResult?.error || 'Errore acquisizione lock' },
+        { status: 400 }
+      )
     }
 
     // Trova la campagna_individuazione esistente da riprendere
@@ -91,13 +87,11 @@ export async function POST(req: NextRequest) {
 
     if (!ci?.id) {
       // Niente da riprendere: nessuna individuazione esistente. Rilascia il lock.
-      if (userId) {
-        await (supabaseServer as any).rpc('release_campagna_processing_lock', {
-          p_campagna_id: campagne_programmazione_id,
-          p_user_id: userId,
-          p_new_stato: 'in_review'
-        })
-      }
+      await (supabaseServer as any).rpc('release_campagna_processing_lock', {
+        p_campagna_id: campagne_programmazione_id,
+        p_user_id: userId,
+        p_new_stato: 'in_review'
+      })
       return NextResponse.json(
         { success: false, error: 'Nessuna individuazione da riprendere. Avvia un nuovo processo.', error_code: 'NOTHING_TO_RESUME' },
         { status: 400 }
