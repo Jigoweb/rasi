@@ -2,6 +2,7 @@ import { supabaseService } from '../supabase.js'
 import {
   buildProgrammazioniPayloads,
   parseProgrammazioniFile,
+  type ProgrammazioneImportPayload,
   type UploadMappingSnapshot,
 } from './programmazioni-import-core.js'
 import { patchUploadJob } from './upload-job-store.js'
@@ -46,6 +47,22 @@ async function removeUploadedFile(storagePath: string): Promise<void> {
   if (error) {
     console.warn(`[upload-programmazioni] cleanup storage fallito per ${storagePath}: ${error.message}`)
   }
+}
+
+export async function upsertProgrammazioniChunk(
+  payloads: ProgrammazioneImportPayload[]
+): Promise<{ processed: number }> {
+  if (payloads.length === 0) return { processed: 0 }
+
+  const { error } = await supabaseService
+    .from('programmazioni')
+    .upsert(payloads, {
+      onConflict: 'import_row_uid',
+      ignoreDuplicates: true,
+    })
+
+  if (error) throw error
+  return { processed: payloads.length }
 }
 
 export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promise<void> {
@@ -96,18 +113,12 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
       )
 
       if (payloads.length > 0) {
-        const { data, error } = await supabaseService
-          .from('programmazioni')
-          .upsert(payloads, {
-            onConflict: 'import_row_uid',
-            ignoreDuplicates: true,
-          })
-          .select('id')
-
-        if (error) throw new Error(`insert chunk ${offset / chunkSize + 1}: ${error.message}`)
-        const inserted = data?.length ?? 0
-        righeInserite += inserted
-        righeDuplicateSaltate += Math.max(payloads.length - inserted, 0)
+        try {
+          const { processed } = await upsertProgrammazioniChunk(payloads)
+          righeInserite += processed
+        } catch (error: any) {
+          throw new Error(`insert chunk ${offset / chunkSize + 1}: ${error.message}`)
+        }
       }
 
       await patchUploadJob(jobId, {

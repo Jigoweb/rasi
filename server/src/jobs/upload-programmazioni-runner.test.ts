@@ -77,7 +77,13 @@ describe('upload programmazioni runner', () => {
       from: () => ({
         download: async () => ({
           data: {
-            arrayBuffer: async () => Buffer.from(csv).buffer,
+            arrayBuffer: async () => {
+              const encoded = new TextEncoder().encode(csv)
+              return encoded.buffer.slice(
+                encoded.byteOffset,
+                encoded.byteOffset + encoded.byteLength
+              )
+            },
           },
           error: null,
         }),
@@ -143,5 +149,42 @@ describe('upload programmazioni runner', () => {
       ),
       true
     )
+  })
+
+  it('does not select inserted row ids for every uploaded chunk', async () => {
+    const upsertCalls: QueryCall[] = []
+    let selectedInsertedIds = false
+
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      if (table === 'programmazioni') {
+        return {
+          upsert: (...args: unknown[]) => {
+            upsertCalls.push({ method: 'upsert', args })
+            return {
+              data: null,
+              error: null,
+              select: async () => {
+                selectedInsertedIds = true
+                return { data: [{ id: 'row-1' }], error: null }
+              },
+            }
+          },
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    }
+
+    const result = await (runner as any).upsertProgrammazioniChunk([
+      {
+        campagna_programmazione_id: 'campagna-1',
+        emittente_id: 'emittente-1',
+        import_row_uid: 'row-1',
+        titolo: 'Film A',
+      },
+    ])
+
+    assert.equal(upsertCalls.length, 1)
+    assert.equal(selectedInsertedIds, false)
+    assert.deepEqual(result, { processed: 1 })
   })
 })

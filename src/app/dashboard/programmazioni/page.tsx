@@ -6,76 +6,47 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { supabase } from '@/shared/lib/supabase'
-import { Database } from '@/shared/lib/supabase'
 import {
   createCampagnaProgrammazione,
-  deleteCampagnaProgrammazione,
   type CampagnaProgrammazione,
-  type DeleteCampagnaProgrammazioneInfo,
   getCampagneProgrammazione,
-  getDeleteCampagnaProgrammazioneInfo,
   getLatestProcessingJobsForCampagne,
   getProcessingProgress,
   type ProcessingActivityJob,
   type ProcessingProgress,
-  type ProgrammazionePayload,
-  updateCampagnaStatus,
-  uploadProgrammazioni,
 } from '@/features/programmazioni/services/programmazioni.service'
 import {
-  decideUploadPath,
-  applyMapping,
-  buildLegacyPayload,
-  detectColumns,
-  readAllRows,
-  saveMapping,
-  summarizeImportMapping,
-  type ImportMappingConfig,
-  type UploadDecision,
-  type ColumnDiff,
-} from '@/features/programmazioni/services/import-mapping.service'
-import {
-  computeImportRowUid,
   getLatestUploadJobsForCampagne,
-  getUploadMappingSnapshot,
-  pollUploadProgrammazioniJob,
-  startUploadProgrammazioniJob,
-  type UploadJobSnapshot,
-  uploadProgrammazioniFileToStorage,
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
-import {
-  getProgrammazioneRowState,
-} from '@/features/programmazioni/services/programmazioni-state.service'
 import {
   filterCampagneProgrammazione,
   getUniqueAnni,
   getUniqueEmittenti,
 } from '@/features/programmazioni/services/programmazioni-filters.service'
+import { createCoalescedOperationalSnapshotLoader } from '@/features/programmazioni/services/programmazioni-operational-snapshot.service'
 import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
-import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
-import EmittenteMappingSection from './components/EmittenteMappingSection'
+import EmittentiTab from './components/EmittentiTab'
 import MappingWizard from './components/MappingWizard'
-import ProgrammazioneStatusBadge from './components/ProgrammazioneStatusBadge'
+import ProgrammazioniTable from './components/ProgrammazioniTable'
+import UploadProgrammazioniDialog from './components/UploadProgrammazioniDialog'
+import { useProgrammazioniDelete } from './hooks/useProgrammazioniDelete'
+import { useProgrammazioniEmittenti } from './hooks/useProgrammazioniEmittenti'
+import { useProgrammazioniUpload } from './hooks/useProgrammazioniUpload'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { ProcessBlockedDialog } from '@/shared/components/individuazione-progress-indicator'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Textarea } from '@/shared/components/ui/textarea'
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, FileSpreadsheet, Loader2, FileUp, X, Sparkles, Info, Database as DatabaseIcon, Users, Check, ChevronDown, ChevronUp, AlertCircle, RotateCw } from 'lucide-react'
+import { Search, Plus, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp } from 'lucide-react'
 
-type Emittente = Database['public']['Tables']['emittenti']['Row']
 type ImportRow = Record<string, unknown>
 type ArtistOption = { id: string; nome: string; cognome: string; nome_arte: string | null }
-type CampagnaWithRuntimeError = CampagnaProgrammazione & { last_error?: string }
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -87,10 +58,6 @@ function getErrorMessage(error: unknown): string {
     return JSON.stringify(error)
   }
   return String(error)
-}
-
-function getCampagnaLastError(campagna: CampagnaProgrammazione): string | undefined {
-  return (campagna as CampagnaWithRuntimeError).last_error
 }
 
 const formSchema = z.object({
@@ -131,57 +98,46 @@ export default function ProgrammazioniPage() {
   const [annoFilter, setAnnoFilter] = useState<string>('all')
   const [selectedCampagna, setSelectedCampagna] = useState<CampagnaProgrammazione | null>(null)
 
-  // Emittenti State
-  const [emittenti, setEmittenti] = useState<Emittente[]>([])
-  const [loadingEmittenti, setLoadingEmittenti] = useState(false)
-  const [searchEmittentiQuery, setSearchEmittentiQuery] = useState('')
-  const [debouncedSearchEmittentiQuery, setDebouncedSearchEmittentiQuery] = useState('')
-  const [filteredEmittenti, setFilteredEmittenti] = useState<Emittente[]>([])
-  const [selectedEmittente, setSelectedEmittente] = useState<Emittente | null>(null)
-  const [showEmittenteDetails, setShowEmittenteDetails] = useState(false)
-  const [showEmittenteForm, setShowEmittenteForm] = useState(false)
-  const [emittenteFormMode, setEmittenteFormMode] = useState<'create' | 'edit'>('create')
-  const [emittenteFormData, setEmittenteFormData] = useState({
-    codice: '',
-    nome: '',
-    tipo: 'tv_generalista' as Emittente['tipo'],
-    paese: 'IT',
-    attiva: true,
-  })
-  const [emittenteFormSaving, setEmittenteFormSaving] = useState(false)
-  const [emittenteFormError, setEmittenteFormError] = useState<string | null>(null)
+  const {
+    emittenti,
+    loadingEmittenti,
+    searchEmittentiQuery,
+    debouncedSearchEmittentiQuery,
+    filteredEmittenti,
+    selectedEmittente,
+    showEmittenteDetails,
+    showEmittenteForm,
+    emittenteFormMode,
+    emittenteFormData,
+    emittenteFormSaving,
+    emittenteFormError,
+    fetchEmittenti,
+    setSearchEmittentiQuery,
+    setShowEmittenteDetails,
+    setShowEmittenteForm,
+    setEmittenteFormData,
+    openCreateEmittente,
+    openEditEmittente,
+    handleSaveEmittente,
+    openManageEmittente,
+  } = useProgrammazioniEmittenti()
 
   // Watch values to auto-generate name
   const watchedEmittenteId = form.watch('emittente_id')
   const watchedAnno = form.watch('anno')
 
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [parsedRows, setParsedRows] = useState<ImportRow[]>([])
-  const [parsedRowCount, setParsedRowCount] = useState(0)
-  const [parsedColumns, setParsedColumns] = useState<string[]>([])
-  const [uploadDecision, setUploadDecision] = useState<UploadDecision | null>(null)
-  const [headerError, setHeaderError] = useState<string | null>(null)
-  const [isUploadReady, setIsUploadReady] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [deleteProgress] = useState<Record<string, { done: number; total: number }>>({})
-  const [uploadError, setUploadError] = useState<string | null>(null)
-
-  // Mapping wizard state (inline durante upload)
-  const [mappingWizardOpen, setMappingWizardOpen] = useState(false)
-  const [mappingWizardInitial, setMappingWizardInitial] = useState<ImportMappingConfig | null>(null)
-  // Format-changed warning dialog
-  const [formatWarning, setFormatWarning] = useState<{
-    mapping: ImportMappingConfig
-    diff: ColumnDiff
-    mappedRemoved: string[]
-  } | null>(null)
   const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, ProcessingProgress | null>>({})
   const [processingJobMap, setProcessingJobMap] = useState<Record<string, ProcessingActivityJob | null>>({})
   const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
-  const progressFetchedRef = useRef<Set<string>>(new Set())
-  const uploadPollingJobsRef = useRef<Set<string>>(new Set())
+  const refreshCampagneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const operationalSnapshotLoaderRef = useRef(createCoalescedOperationalSnapshotLoader({
+    workerMode: getIndividuazioneRuntimeMode() === 'worker',
+    getCampagneProgrammazione,
+    getLatestProcessingJobsForCampagne,
+    getLatestUploadJobsForCampagne,
+    getProcessingProgress,
+  }))
 
   // Individuazioni - use global context
   const { startProcess, canStartProcess, isCampagnaProcessing } = useIndividuazioneProcess()
@@ -196,12 +152,50 @@ export default function ProgrammazioniPage() {
   const [selectedArtistIds, setSelectedArtistIds] = useState<Set<string>>(new Set())
   const [artistSearchQuery, setArtistSearchQuery] = useState('')
 
-  // Delete Campagna State
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [campagnaToDelete, setCampagnaToDelete] = useState<CampagnaProgrammazione | null>(null)
-  const [deleteInfo, setDeleteInfo] = useState<DeleteCampagnaProgrammazioneInfo | null>(null)
-  const [isLoadingDeleteInfo, setIsLoadingDeleteInfo] = useState(false)
-  const [isDeletingCampagna, setIsDeletingCampagna] = useState(false)
+  const {
+    isDeleteDialogOpen,
+    campagnaToDelete,
+    deleteInfo,
+    isLoadingDeleteInfo,
+    isDeletingCampagna,
+    openDeleteDialog,
+    closeDeleteDialog,
+    confirmDelete,
+  } = useProgrammazioniDelete({ updateCampagne: setCampagne })
+
+  const {
+    fileInputRef,
+    selectedFile,
+    parsedRows,
+    parsedRowCount,
+    uploadDecision,
+    headerError,
+    isUploadReady,
+    isUploading,
+    isPreparingUpload,
+    uploadProgress,
+    uploadError,
+    mappingWizardOpen,
+    mappingWizardInitial,
+    formatWarning,
+    setUploadError,
+    setFormatWarning,
+    setMappingWizardOpen,
+    resetUploadState,
+    applyUploadJobSnapshot,
+    attachUploadJobPolling,
+    handleFileUpload,
+    handleWizardSave,
+    proceedDespiteFormatChange: handleProceedDespiteFormatChange,
+    updateMappingFromWarning: handleUpdateMappingFromWarning,
+    handleUploadDatabase,
+  } = useProgrammazioniUpload({
+    selectedCampagna,
+    updateCampagne: setCampagne,
+    refreshCampagne: requestCampagneRefresh,
+    refreshEmittenti: fetchEmittenti,
+    closeModal: handleCloseModal,
+  })
 
   // Load all artists for filter selection
   const loadArtists = useCallback(async () => {
@@ -317,389 +311,12 @@ export default function ProgrammazioniPage() {
     }
   }
 
-  // Delete Campagna Handlers
-  const handleOpenDeleteDialog = async (campagna: CampagnaProgrammazione) => {
-    setCampagnaToDelete(campagna)
-    setIsDeleteDialogOpen(true)
-    setIsLoadingDeleteInfo(true)
-    setDeleteInfo(null)
-
-    try {
-      const { data, error } = await getDeleteCampagnaProgrammazioneInfo(campagna.id)
-      if (error) throw error
-      setDeleteInfo(data)
-    } catch (error) {
-      console.error('Error loading delete info:', error)
-    } finally {
-      setIsLoadingDeleteInfo(false)
-    }
-  }
-
-  const handleCloseDeleteDialog = () => {
-    setIsDeleteDialogOpen(false)
-    setCampagnaToDelete(null)
-    setDeleteInfo(null)
-  }
-
-  const handleConfirmDelete = async () => {
-    if (!campagnaToDelete) return
-
-    setIsDeletingCampagna(true)
-    try {
-      // Update UI immediately
-      setCampagne(prev => prev.map(c => c.id === campagnaToDelete.id ? { ...c, stato: 'deleting' } : c))
-      
-      const { error, blocked, blockReason } = await deleteCampagnaProgrammazione(campagnaToDelete.id)
-      
-      if (blocked) {
-        // Shouldn't happen as we check in dialog, but handle it
-        alert(blockReason)
-        setCampagne(prev => prev.map(c => c.id === campagnaToDelete.id ? { ...c, stato: 'error' } : c))
-        return
-      }
-
-      if (error) throw error
-      
-      // Remove from list
-      setCampagne(prev => prev.filter(c => c.id !== campagnaToDelete.id))
-      handleCloseDeleteDialog()
-    } catch (error) {
-      console.error('Error deleting campagna:', error)
-      alert('Errore durante l\'eliminazione della campagna')
-      setCampagne(prev => prev.map(c => c.id === campagnaToDelete.id ? { ...c, stato: 'error' } : c))
-    } finally {
-      setIsDeletingCampagna(false)
-    }
-  }
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !selectedCampagna) return
-
-    setIsSubmitting(true)
-    setSelectedFile(file)
-
-    try {
-      const workerMode = getIndividuazioneRuntimeMode() === 'worker'
-      const { columns, preview } = await detectColumns(file)
-      const rows = workerMode ? [] : await readAllRows(file)
-      const rowCount = workerMode ? preview.length : rows.length
-
-      if (rowCount === 0) {
-        setHeaderError('Il file non contiene righe.')
-        setParsedRows([])
-        setParsedRowCount(0)
-        setParsedColumns([])
-        setUploadDecision(null)
-        setIsUploadReady(false)
-        return
-      }
-
-      setParsedRows(rows)
-      setParsedRowCount(rowCount)
-      setParsedColumns(columns)
-
-      // Decisione upload in base al mapping_import dell'emittente
-      const decision = await decideUploadPath(selectedCampagna.emittente_id, columns)
-      setUploadDecision(decision)
-
-      if (decision.kind === 'need_wizard') {
-        // Apri wizard inline; il salvataggio del wizard farà setUploadDecision('apply_existing')
-        setHeaderError(null)
-        setIsUploadReady(false)
-        setMappingWizardInitial(null)
-        setMappingWizardOpen(true)
-      } else if (decision.kind === 'warn_format_changed') {
-        // Mostra warning e blocca upload finché utente decide
-        setHeaderError(null)
-        setIsUploadReady(false)
-        setFormatWarning({
-          mapping: decision.mapping,
-          diff: decision.diff,
-          mappedRemoved: decision.mappedRemoved,
-        })
-      } else {
-        // legacy_template oppure apply_existing → pronto
-        setHeaderError(null)
-        setIsUploadReady(true)
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error)
-      alert(error instanceof Error ? error.message : 'Errore durante la lettura del file.')
-    } finally {
-      setIsSubmitting(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  // Callback wizard inline: salva mapping e abilita upload
-  const handleWizardSave = async (config: ImportMappingConfig) => {
-    if (!selectedCampagna) return
-    const { error } = await saveMapping(selectedCampagna.emittente_id, config)
-    if (error) throw new Error(error.message ?? 'Errore salvataggio mapping')
-    setUploadDecision({ kind: 'apply_existing', mapping: config })
-    setIsUploadReady(true)
-    await fetchEmittenti()
-    setMappingWizardOpen(false)
-  }
-
-  // Procedi nonostante format change (usa mapping corrente)
-  const handleProceedDespiteFormatChange = () => {
-    if (!formatWarning) return
-    setUploadDecision({ kind: 'apply_existing', mapping: formatWarning.mapping })
-    setIsUploadReady(true)
-    setFormatWarning(null)
-  }
-
-  // Apri wizard in modalità modifica dal format-warning
-  const handleUpdateMappingFromWarning = () => {
-    if (!formatWarning) return
-    setMappingWizardInitial(formatWarning.mapping)
-    setFormatWarning(null)
-    setMappingWizardOpen(true)
-  }
-
-  const clearUploadProgress = (campagnaId: string) => {
-    setUploadProgress(prev => {
-      const next = { ...prev }
-      delete next[campagnaId]
-      return next
-    })
-  }
-
-  const applyUploadJobSnapshot = (job: UploadJobSnapshot, fallbackTotal = 0) => {
-    if (job.stato === 'completed') {
-      setCampagne(prev => prev.map(c => (
-        c.id === job.campagna_programmazione_id ? { ...c, stato: 'in_review' } : c
-      )))
-      clearUploadProgress(job.campagna_programmazione_id)
-      return
-    }
-
-    if (job.stato === 'error' || job.stato === 'cancelled') {
-      const errorMessage = job.error || 'Upload programmazioni terminato con errore'
-      setCampagne(prev => prev.map(c => (
-        c.id === job.campagna_programmazione_id
-          ? { ...c, stato: 'error', last_error: errorMessage }
-          : c
-      )))
-      clearUploadProgress(job.campagna_programmazione_id)
-      return
-    }
-
-    const total = Math.max(
-      job.righe_totali || 0,
-      job.righe_processate || 0,
-      fallbackTotal,
-      1
-    )
-    setUploadProgress(prev => ({
-      ...prev,
-      [job.campagna_programmazione_id]: {
-        done: job.righe_processate,
-        total,
-      },
-    }))
-  }
-
-  const attachUploadJobPolling = (job: UploadJobSnapshot, fallbackTotal = 0) => {
-    if (uploadPollingJobsRef.current.has(job.id)) return
-    uploadPollingJobsRef.current.add(job.id)
-
-    applyUploadJobSnapshot(job, fallbackTotal)
-
-    void pollUploadProgrammazioniJob(job.id, (nextJob) => {
-      applyUploadJobSnapshot(nextJob, fallbackTotal)
-    }).then(async (result) => {
-      uploadPollingJobsRef.current.delete(job.id)
-      if (result.success && result.job) {
-        applyUploadJobSnapshot(result.job, fallbackTotal)
-        await fetchCampagne()
-        return
-      }
-
-      if (result.job) {
-        applyUploadJobSnapshot(result.job, fallbackTotal)
-      } else {
-        setUploadError(result.error || 'Errore polling upload programmazioni')
-        clearUploadProgress(job.campagna_programmazione_id)
-      }
-    })
-  }
-
-  const reconcileUploadJobs = async (campagneList: CampagnaProgrammazione[]) => {
-    if (getIndividuazioneRuntimeMode() !== 'worker') return
-
-    const uploadingCampagne = campagneList.filter(c => c.stato === 'uploading')
-    if (uploadingCampagne.length === 0) return
-
-    const { data: jobs, error } = await getLatestUploadJobsForCampagne(uploadingCampagne.map(c => c.id))
-    if (error) {
-      console.warn('[programmazioni] Upload job recovery unavailable:', error)
-      return
-    }
-
-    for (const job of jobs) {
-      const campagna = uploadingCampagne.find(c => c.id === job.campagna_programmazione_id)
-      const fallbackTotal = campagna?.programmazioni_count ?? 0
-
-      if (job.stato === 'queued' || job.stato === 'running') {
-        attachUploadJobPolling(job, fallbackTotal)
-      } else {
-        applyUploadJobSnapshot(job, fallbackTotal)
-      }
-    }
-  }
-
-  const reconcileProcessingJobs = async (campagneList: CampagnaProgrammazione[]) => {
-    if (getIndividuazioneRuntimeMode() !== 'worker') return
-
-    const { data: jobs, error } = await getLatestProcessingJobsForCampagne(campagneList.map(c => c.id))
-    if (error) {
-      console.warn('[programmazioni] Processing job recovery unavailable:', error)
-      return
-    }
-
-    const nextMap: Record<string, ProcessingActivityJob | null> = {}
-    for (const job of jobs) {
-      if (job.campagne_programmazione_id) {
-        nextMap[job.campagne_programmazione_id] = job
-      }
-    }
-
-    setProcessingJobMap(nextMap)
-  }
-
-  const handleUploadDatabase = async () => {
-    const workerMode = getIndividuazioneRuntimeMode() === 'worker'
-    if (!selectedCampagna || !uploadDecision) return
-    if (workerMode && !selectedFile) return
-    if (!workerMode && parsedRows.length === 0) return
-    setIsUploading(true)
-    try {
-      const campagna = selectedCampagna
-      const file = selectedFile
-      setCampagne(prev => prev.map(c => c.id === campagna.id ? { ...c, stato: 'uploading' } : c))
-      setUploadProgress(prev => ({ ...prev, [campagna.id]: { done: 0, total: workerMode ? parsedRowCount : parsedRows.length } }))
-      await updateCampagnaStatus(campagna.id, 'uploading')
-
-      if (workerMode && file) {
-        const { storagePath, error: storageError } = await uploadProgrammazioniFileToStorage(file, campagna.id)
-        if (storageError) throw storageError
-
-        const startResult = await startUploadProgrammazioniJob({
-          campagneProgrammazioneId: campagna.id,
-          emittenteId: campagna.emittente_id,
-          storagePath,
-          fileName: file.name,
-          fileType: file.type || 'application/octet-stream',
-          mappingSnapshot: getUploadMappingSnapshot(uploadDecision),
-          chunkSize: 500,
-        })
-        if (!startResult.success || !startResult.jobId) {
-          throw new Error(startResult.error || 'Errore avvio upload su Railway')
-        }
-
-        handleCloseModal()
-        setIsUploading(false)
-
-        attachUploadJobPolling({
-          id: startResult.jobId,
-          campagna_programmazione_id: campagna.id,
-          stato: 'queued',
-          fase: 'queued',
-          righe_totali: 0,
-          righe_processate: 0,
-          righe_inserite: 0,
-          righe_duplicate_saltate: 0,
-          current_chunk: 0,
-          total_chunks: 0,
-          error: null,
-        }, parsedRowCount)
-
-        return
-      }
-
-      const ctx = {
-        campagnaProgrammazioneId: campagna.id,
-        emittenteId: campagna.emittente_id,
-      }
-
-      // Build payload secondo la decisione:
-      // - legacy_template: parser legacy (template canonico)
-      // - apply_existing: applyMapping con la config emittente
-      const buildAll = (rows: ImportRow[]): ProgrammazionePayload[] => {
-        if (uploadDecision.kind === 'apply_existing') {
-          return applyMapping(rows, uploadDecision.mapping.mapping, ctx, uploadDecision.mapping.rules, uploadDecision.mapping.transforms)
-        }
-        return buildLegacyPayload(rows, ctx)
-      }
-
-      // 500 rows/batch: programmazioni has 13 indexes incl. 3 GIN (trgm titolo
-      // 297MB, full-text 96MB). Larger batches exceed authenticated role's 8s
-      // statement_timeout (INSERT 2000 rows ≈ 6-8s on 4M-row table).
-      const CHUNK_SIZE = 500
-      for (let i = 0; i < parsedRows.length; i += CHUNK_SIZE) {
-        const chunk = parsedRows.slice(i, i + CHUNK_SIZE)
-        const programmazioni = await Promise.all(
-          buildAll(chunk).map(async (programmazione, index) => ({
-            ...programmazione,
-            import_row_uid: await computeImportRowUid(campagna.id, i + index + 1, chunk[index]),
-          }))
-        )
-        const { error } = await uploadProgrammazioni(programmazioni)
-        if (error) {
-          const startRow = i + 2
-          const endRow = Math.min(i + CHUNK_SIZE, parsedRows.length) + 1
-          const enhancedError = new Error(
-            `Errore nelle righe ${startRow}-${endRow}: ${error.message || JSON.stringify(error)}`
-          )
-          throw enhancedError
-        }
-        setUploadProgress(prev => {
-          const curr = prev[campagna.id]
-          const done = (curr?.done || 0) + chunk.length
-          return { ...prev, [campagna.id]: { done, total: parsedRows.length } }
-        })
-      }
-
-      // Aggiorna colonne_rilevate + ultimo_upload se è stato usato un mapping
-      if (uploadDecision.kind === 'apply_existing' && parsedColumns.length > 0) {
-        const updated: ImportMappingConfig = {
-          ...uploadDecision.mapping,
-          version: 1,
-          colonne_rilevate: parsedColumns,
-          ultimo_upload: new Date().toISOString(),
-        }
-        await saveMapping(selectedCampagna.emittente_id, updated).catch(err => {
-          console.warn('Errore aggiornamento ultimo_upload mapping:', err)
-        })
-      }
-
-      await updateCampagnaStatus(selectedCampagna.id, 'in_review')
-      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'in_review' } : c))
-      handleCloseModal()
-      setUploadProgress(prev => {
-        const next = { ...prev }
-        delete next[selectedCampagna.id]
-        return next
-      })
-      await fetchCampagne()
-    } catch (error: unknown) {
-      const errorMessage = getErrorMessage(error)
-      console.error('Error uploading database:', errorMessage, error)
-      setUploadError(errorMessage)
-      await updateCampagnaStatus(selectedCampagna.id, 'error')
-      // Store error message in local state for tooltip display
-      setCampagne(prev => prev.map(c => c.id === selectedCampagna.id ? { ...c, stato: 'error', last_error: errorMessage } : c))
-      setUploadProgress(prev => {
-        const next = { ...prev }
-        delete next[selectedCampagna.id]
-        return next
-      })
-    } finally {
-      setIsUploading(false)
-    }
+  function requestCampagneRefresh() {
+    if (refreshCampagneTimeoutRef.current) return
+    refreshCampagneTimeoutRef.current = setTimeout(() => {
+      refreshCampagneTimeoutRef.current = null
+      void fetchCampagne()
+    }, 250)
   }
 
   useEffect(() => {
@@ -728,23 +345,13 @@ export default function ProgrammazioniPage() {
     }
   }
 
-  const handleCloseModal = () => {
+  function handleCloseModal() {
     setIsNewModalOpen(false)
     setNewProgrammazioneStep(1)
     setIsResumingUpload(false)
     setSelectedCampagna(null)
     form.reset()
-    setSelectedFile(null)
-    setParsedRows([])
-    setParsedRowCount(0)
-    setParsedColumns([])
-    setUploadDecision(null)
-    setIsUploadReady(false)
-    setHeaderError(null)
-    setUploadError(null)
-    setMappingWizardOpen(false)
-    setMappingWizardInitial(null)
-    setFormatWarning(null)
+    resetUploadState()
   }
 
   const filterCampagne = useCallback(() => {
@@ -762,19 +369,6 @@ export default function ProgrammazioniPage() {
   // Get unique emittenti from campagne for filter dropdown
   const uniqueEmittenti = useMemo(() => getUniqueEmittenti(campagne), [campagne])
 
-  const filterEmittenti = useCallback(() => {
-    let filtered = emittenti
-
-    if (debouncedSearchEmittentiQuery) {
-      filtered = filtered.filter(emittente =>
-        emittente.nome.toLowerCase().includes(debouncedSearchEmittentiQuery.toLowerCase()) ||
-        emittente.codice.toLowerCase().includes(debouncedSearchEmittentiQuery.toLowerCase())
-      )
-    }
-
-    setFilteredEmittenti(filtered)
-  }, [emittenti, debouncedSearchEmittentiQuery])
-
   useEffect(() => {
     if (isNewModalOpen && emittenti.length === 0) {
       fetchEmittenti()
@@ -789,30 +383,17 @@ export default function ProgrammazioniPage() {
     }
   }, [currentTab])
 
-  // Load processing progress for all in_corso campaigns when campagne are loaded.
-  // Use a ref to track initiated fetches so the effect only re-runs when `campagne` changes,
-  // not on every map state update (which would cause an infinite loop).
   useEffect(() => {
-    campagne
-      .filter(c => (
-        c.stato === 'in_corso' ||
-        processingJobMap[c.id]?.stato === 'queued' ||
-        processingJobMap[c.id]?.stato === 'running' ||
-        processingJobMap[c.id]?.stato === 'error'
-      ) && !progressFetchedRef.current.has(c.id))
-      .forEach(c => {
-        progressFetchedRef.current.add(c.id)
-        fetchProcessingProgress(c.id)
-      })
-  }, [campagne, processingJobMap, fetchProcessingProgress])
+    return () => {
+      if (refreshCampagneTimeoutRef.current) {
+        clearTimeout(refreshCampagneTimeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     filterCampagne()
   }, [filterCampagne])
-
-  useEffect(() => {
-    filterEmittenti()
-  }, [filterEmittenti])
 
   // Debounce search inputs
   useEffect(() => {
@@ -820,31 +401,40 @@ export default function ProgrammazioniPage() {
     return () => clearTimeout(t)
   }, [searchQuery])
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearchEmittentiQuery(searchEmittentiQuery), 300)
-    return () => clearTimeout(t)
-  }, [searchEmittentiQuery])
-
   const fetchCampagne = async () => {
     setLoading(true)
     try {
-      const { data, error } = await getCampagneProgrammazione()
+      const snapshot = await operationalSnapshotLoaderRef.current.load()
 
-      if (error) {
-        const errorMessage = error instanceof Error 
-          ? error.message 
-          : typeof error === 'object' && error !== null
-          ? JSON.stringify(error)
-          : String(error)
-        console.error('Error fetching campagne:', errorMessage, error)
-        // Still set empty array to prevent UI from breaking
+      if (snapshot.error && snapshot.campagne.length === 0) {
+        const errorMessage = getErrorMessage(snapshot.error)
+        console.error('Error fetching campagne:', errorMessage, snapshot.error)
         setCampagne([])
         return
       }
-      const campagneList = data || []
+
+      if (snapshot.error) {
+        console.warn('[programmazioni] Operational snapshot partially unavailable:', snapshot.error)
+      }
+
+      const campagneList = snapshot.campagne
       setCampagne(campagneList)
-      await reconcileProcessingJobs(campagneList)
-      await reconcileUploadJobs(campagneList)
+      setProcessingJobMap(snapshot.processingJobMap)
+      setProcessingProgressMap(prev => ({
+        ...prev,
+        ...snapshot.processingProgressMap,
+      }))
+
+      for (const job of snapshot.uploadJobs) {
+        const campagna = campagneList.find(c => c.id === job.campagna_programmazione_id)
+        const fallbackTotal = campagna?.programmazioni_count ?? 0
+
+        if (job.stato === 'queued' || job.stato === 'running') {
+          attachUploadJobPolling(job, fallbackTotal)
+        } else {
+          applyUploadJobSnapshot(job, fallbackTotal)
+        }
+      }
     } catch (error) {
       const errorMessage = error instanceof Error 
         ? error.message 
@@ -856,124 +446,6 @@ export default function ProgrammazioniPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const fetchEmittenti = async () => {
-    try {
-      setLoadingEmittenti(true)
-      const { data, error } = await supabase
-        .from('emittenti')
-        .select('*')
-        .order('nome', { ascending: true })
-
-      if (error) throw error
-      setEmittenti(data || [])
-    } catch (error) {
-      console.error('Error fetching emittenti:', error)
-    } finally {
-      setLoadingEmittenti(false)
-    }
-  }
-
-  const openCreateEmittente = () => {
-    const maxN = emittenti.reduce((max, e) => {
-      const m = e.codice.match(/^EMT_(\d+)$/)
-      return m ? Math.max(max, parseInt(m[1], 10)) : max
-    }, 0)
-    const nextCodice = `EMT_${maxN + 1}`
-    setEmittenteFormMode('create')
-    setEmittenteFormData({ codice: nextCodice, nome: '', tipo: 'tv_generalista', paese: 'IT', attiva: true })
-    setEmittenteFormError(null)
-    setShowEmittenteForm(true)
-  }
-
-  const openEditEmittente = (em: Emittente) => {
-    setSelectedEmittente(em)
-    setEmittenteFormMode('edit')
-    setEmittenteFormData({
-      codice: em.codice,
-      nome: em.nome,
-      tipo: em.tipo,
-      paese: em.paese ?? 'IT',
-      attiva: em.attiva ?? true,
-    })
-    setEmittenteFormError(null)
-    setShowEmittenteForm(true)
-  }
-
-  const handleSaveEmittente = async () => {
-    if (!emittenteFormData.codice.trim() || !emittenteFormData.nome.trim()) {
-      setEmittenteFormError('Codice e nome sono obbligatori.')
-      return
-    }
-    setEmittenteFormSaving(true)
-    setEmittenteFormError(null)
-    try {
-      if (emittenteFormMode === 'create') {
-        const { error } = await supabase.from('emittenti').insert(emittenteFormData)
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('emittenti')
-          .update(emittenteFormData)
-          .eq('id', selectedEmittente!.id)
-        if (error) throw error
-      }
-      setShowEmittenteForm(false)
-      if (emittenteFormMode === 'edit') setShowEmittenteDetails(false)
-      await fetchEmittenti()
-    } catch (error: unknown) {
-      setEmittenteFormError(getErrorMessage(error) || 'Errore salvataggio')
-    } finally {
-      setEmittenteFormSaving(false)
-    }
-  }
-
-  const getAttivaBadge = (attiva: boolean | null) => {
-    if (attiva === true) return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><CheckCircle className="w-3 h-3 mr-1" /> Attiva</Badge>
-    if (attiva === false) return <Badge variant="outline" className="bg-gray-50 text-gray-700"><XCircle className="w-3 h-3 mr-1" /> Inattiva</Badge>
-    return <Badge variant="outline" className="bg-gray-50 text-gray-700">Non specificato</Badge>
-  }
-
-  const getImportMappingSummary = (emittente: Emittente) =>
-    summarizeImportMapping(emittente.mapping_import as ImportMappingConfig | null)
-
-  const getImportMappingBadge = (emittente: Emittente) => {
-    const summary = getImportMappingSummary(emittente)
-    if (summary.status === 'configured') {
-      return (
-        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-          <CheckCircle className="w-3 h-3 mr-1" /> Configurato
-        </Badge>
-      )
-    }
-    if (summary.status === 'incomplete') {
-      return (
-        <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-          <AlertCircle className="w-3 h-3 mr-1" /> Da completare
-        </Badge>
-      )
-    }
-    return (
-      <Badge variant="outline" className="bg-gray-50 text-gray-700">
-        <XCircle className="w-3 h-3 mr-1" /> Non configurato
-      </Badge>
-    )
-  }
-
-  const getImportMappingMeta = (emittente: Emittente) => {
-    const summary = getImportMappingSummary(emittente)
-    if (summary.status === 'not_configured') return 'Nessun mapping salvato'
-
-    const updated = summary.lastConfiguredAt
-      ? new Date(summary.lastConfiguredAt).toLocaleDateString('it-IT')
-      : 'data non disponibile'
-    return `${summary.mappedCount} / ${TEMPLATE_FIELDS.length} campi · ${updated}`
-  }
-
-  const openManageEmittente = (emittente: Emittente) => {
-    setSelectedEmittente(emittente)
-    setShowEmittenteDetails(true)
   }
 
   const formatDate = (dateString: string) => {
@@ -1000,6 +472,94 @@ export default function ProgrammazioniPage() {
     a.click()
     window.URL.revokeObjectURL(url)
   }
+
+  const programmazioneDetailsForm = (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="emittente_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Emittente</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona emittente" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {emittenti.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="anno"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Anno</FormLabel>
+              <FormControl>
+                <Input type="number" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="nome"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Nome Campagna</FormLabel>
+              <FormControl>
+                <Input {...field} readOnly className="bg-gray-50" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="descrizione"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Descrizione / Note (opzionale)</FormLabel>
+              <FormControl>
+                <Textarea
+                  {...field}
+                  placeholder="Aggiungi informazioni aggiuntive sulla campagna..."
+                  className="resize-none"
+                  rows={3}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={handleCloseModal}>
+            Annulla
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Aggiungi Programmazione
+          </Button>
+        </DialogFooter>
+      </form>
+    </Form>
+  )
 
   if (loading) {
     return (
@@ -1174,1082 +734,82 @@ export default function ProgrammazioniPage() {
             </CardContent>
           </Card>
 
-          {/* Programming Table */}
-          <Card>
-            <CardContent className="p-0">
-              {/* Desktop */}
-              <div className="hidden lg:block relative overflow-x-auto">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow>
-                    <TableHead className="py-4">Nome</TableHead>
-                    <TableHead className="py-4">Emittente</TableHead>
-                    <TableHead className="py-4 w-24 text-center">Anno</TableHead>
-                    <TableHead className="py-4 w-44">Stato</TableHead>
-                    <TableHead className="py-4 w-36">Creato il</TableHead>
-                    <TableHead className="py-4 w-72">Operazioni</TableHead>
-                    <TableHead className="py-4 w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCampagne.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-gray-500">
-                        Nessuna campagna trovata con i criteri di ricerca attuali
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredCampagne.map((campagna) => {
-                      const hasData = (campagna.programmazioni_count || 0) > 0
-                      const isGlobalProcessingThisCampagna = isCampagnaProcessing(campagna.id)
-                      const rowState = getProgrammazioneRowState({
-                        datasetStatus: campagna.stato,
-                        uploadJob: uploadProgress[campagna.id]
-                          ? {
-                            stato: 'running',
-                            righe_processate: uploadProgress[campagna.id].done,
-                            righe_totali: uploadProgress[campagna.id].total,
-                          }
-                          : null,
-                        progress: processingProgressMap[campagna.id],
-                        campaignJob: processingJobMap[campagna.id],
-                        hasLocalRuntimeProcess: isGlobalProcessingThisCampagna,
-                        hasData,
-                      })
-                      const canCreateIndividuazioni = rowState.canCreateIndividuazione
-                      const isCompleted = rowState.badge === 'individuata'
-                      
-                      return (
-                      <TableRow
-                        key={campagna.id}
-                        className="hover:bg-muted/50 cursor-pointer"
-                        tabIndex={0}
-                        onClick={() => router.push(`/dashboard/programmazioni/${campagna.id}`)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/programmazioni/${campagna.id}`) }}
-                      >
-                        <TableCell className="py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground">{campagna.nome}</span>
-                            <Tooltip
-                              onOpenChange={(open) => {
-                                // Load processing progress when tooltip opens for in_corso campaigns
-                                if (open && campagna.stato === 'in_corso' && !processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id]) {
-                                  fetchProcessingProgress(campagna.id)
-                                }
-                              }}
-                            >
-                              <TooltipTrigger asChild>
-                                <button 
-                                  className="text-muted-foreground hover:text-foreground transition-colors"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <Info className="h-4 w-4" />
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-sm">
-                                <div className="space-y-3">
-                                  <div>
-                                    <p className="font-semibold mb-1">Informazioni Campagna</p>
-                                    <div className="flex items-center gap-2 text-sm">
-                                      <DatabaseIcon className="h-3.5 w-3.5 shrink-0" />
-                                      <span>Record caricati: <strong>{(campagna.programmazioni_count || 0).toLocaleString()}</strong></span>
-                                    </div>
-                                  </div>
-                                  {campagna.descrizione && (
-                                    <div className="pt-2 border-t border-primary-foreground/20">
-                                      <p className="font-medium text-sm mb-1">Note:</p>
-                                      <p className="text-xs opacity-90">{campagna.descrizione}</p>
-                                    </div>
-                                  )}
-                                  <div className="pt-2 border-t border-primary-foreground/20">
-                                    <p className="font-medium text-sm mb-1">Stato: {campagna.stato}</p>
-                                    <p className="text-xs opacity-90">
-                                      {campagna.stato === 'bozza' && 'La campagna è stata creata ma non sono ancora stati caricati dati. Utilizza il pulsante "Carica Dati" per importare un file CSV o Excel.'}
-                                      {campagna.stato === 'in_review' && 'I dati sono stati caricati correttamente. Puoi procedere con la creazione delle individuazioni oppure caricare ulteriori file per aggiungere altri record.'}
-                                      {campagna.stato === 'individuata' && 'Il processo di individuazione è stato completato con successo. Le individuazioni sono state create e sono pronte per la revisione.'}
-                                      {campagna.stato === 'error' && 'Si è verificato un errore durante l\'elaborazione. Verifica i dati e riprova il caricamento.'}
-                                      {campagna.stato === 'in_corso' && 'Esiste una campagna individuazione in corso o interrotta per questi dati. Gestiscila dalla pagina Individuazioni.'}
-                                      {campagna.stato === 'uploading' && 'Caricamento dati in corso. Attendere il completamento...'}
-                                    </p>
-                                    
-                                    {/* Processing progress for in_corso state */}
-                                    {campagna.stato === 'in_corso' && (
-                                      <div className="pt-2 border-t border-primary-foreground/20">
-                                        <p className="font-medium text-sm mb-2 flex items-center gap-1.5">
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                          Elaborazione in corso
-                                        </p>
-                                        {!processingProgressMap[campagna.id] && !loadingProgressMap[campagna.id] ? (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              fetchProcessingProgress(campagna.id)
-                                            }}
-                                            className="text-xs opacity-80 hover:opacity-100 underline"
-                                          >
-                                            Mostra avanzamento dettagliato
-                                          </button>
-                                        ) : loadingProgressMap[campagna.id] ? (
-                                          <div className="flex items-center gap-2 text-xs opacity-80">
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                            <span>Caricamento...</span>
-                                          </div>
-                                        ) : processingProgressMap[campagna.id] ? (
-                                          <div className="space-y-2 text-xs">
-                                            <div className="space-y-1.5">
-                                              <div className="flex justify-between opacity-90">
-                                                <span>Individuazioni create:</span>
-                                                <span className="font-medium">{processingProgressMap[campagna.id]!.individuazioni_create.toLocaleString()} / {processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()} programmazioni</span>
-                                              </div>
-                                              {(() => {
-                                                // Calculate estimated progress based on individuazioni created
-                                                // Use individuazioni_create as proxy for progress
-                                                // Estimate: ~1-2% of programmazioni generate individuazioni on average
-                                                // Scale by 10x to make progress more visible (so 1% completion = 10% bar)
-                                                const estimatedProgress = processingProgressMap[campagna.id]!.programmazioni_totali > 0
-                                                  ? Math.min(100, Math.round((processingProgressMap[campagna.id]!.individuazioni_create / processingProgressMap[campagna.id]!.programmazioni_totali) * 10 * 100))
-                                                  : 0
-                                                
-                                                return (
-                                                  <div className="h-1.5 bg-primary-foreground/20 rounded-full overflow-hidden">
-                                                    <div 
-                                                      className="h-full bg-primary-foreground/80 rounded-full transition-all"
-                                                      style={{ width: `${estimatedProgress}%` }}
-                                                    />
-                                                  </div>
-                                                )
-                                              })()}
-                                              <div className="flex justify-between opacity-70 text-[11px]">
-                                                <span>Programmazioni totali:</span>
-                                                <span>{processingProgressMap[campagna.id]!.programmazioni_totali.toLocaleString()}</span>
-                                              </div>
-                                            </div>
-                                            {processingProgressMap[campagna.id]!.processing_started_at && (
-                                              <div className="flex justify-between opacity-70 pt-1.5 border-t border-primary-foreground/10 text-[11px]">
-                                                <span>Avviato il:</span>
-                                                <span>{new Date(processingProgressMap[campagna.id]!.processing_started_at!).toLocaleString('it-IT')}</span>
-                                              </div>
-                                            )}
-                                            {processingProgressMap[campagna.id]!.last_activity_at && (() => {
-                                              const lastActivity = new Date(processingProgressMap[campagna.id]!.last_activity_at!)
-                                              const minutesSinceActivity = Math.floor((Date.now() - lastActivity.getTime()) / 1000 / 60)
-                                              const isStale = minutesSinceActivity > 10
-                                              
-                                              return (
-                                                <>
-                                                  <div className={`flex justify-between pt-1.5 border-t border-primary-foreground/10 text-[11px] ${isStale ? 'text-yellow-300' : 'opacity-70'}`}>
-                                                    <span>Ultima attività:</span>
-                                                    <span>{lastActivity.toLocaleString('it-IT')}</span>
-                                                  </div>
-                                                  {isStale && (
-                                                    <div className="pt-1.5 text-[11px] text-yellow-300 flex items-center gap-1.5">
-                                                      <span>⚠️</span>
-                                                      <span>Processo interrotto ({minutesSinceActivity} minuti senza attività) — riprendibile</span>
-                                                    </div>
-                                                  )}
-                                                </>
-                                              )
-                                            })()}
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                fetchProcessingProgress(campagna.id)
-                                              }}
-                                              className="opacity-70 hover:opacity-100 text-[11px] flex items-center gap-1"
-                                            >
-                                              ↻ Aggiorna stato
-                                            </button>
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    )}
-                                    
-                                    {campagna.stato === 'error' && getCampagnaLastError(campagna) && (
-                                      <div className="pt-2 border-t border-red-500/30">
-                                        <p className="font-medium text-sm text-red-300 mb-1">Dettaglio errore:</p>
-                                        <p className="text-xs text-red-200/90 wrap-break-word">{getCampagnaLastError(campagna)}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="flex items-center gap-2">
-                            <Tv className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-muted-foreground">{campagna.emittenti?.nome || '—'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4 text-center">
-                          <span className="font-mono text-muted-foreground">{campagna.anno}</span>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="flex items-center gap-2">
-                            {uploadProgress[campagna.id] ? (
-                              <div className="space-y-1.5">
-                                <Badge variant="secondary">
-                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Uploading
-                                </Badge>
-                                <div className="h-1.5 w-28 bg-muted rounded-full">
-                                  <div
-                                    className="h-1.5 bg-primary rounded-full transition-all"
-                                    style={{ width: `${Math.min(100, Math.round((uploadProgress[campagna.id].done / uploadProgress[campagna.id].total) * 100))}%` }}
-                                  />
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {uploadProgress[campagna.id].done.toLocaleString()} / {uploadProgress[campagna.id].total.toLocaleString()}
-                                </div>
-                              </div>
-                            ) : deleteProgress[campagna.id] ? (
-                              <div className="space-y-1.5">
-                                <Badge variant="outline">
-                                  <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Eliminazione
-                                </Badge>
-                                <div className="h-1.5 w-28 bg-muted rounded-full">
-                                  <div
-                                    className="h-1.5 bg-destructive rounded-full transition-all"
-                                    style={{ width: `${Math.min(100, Math.round((deleteProgress[campagna.id].done / deleteProgress[campagna.id].total) * 100))}%` }}
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                <ProgrammazioneStatusBadge badge={rowState.badge} />
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="py-4">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Calendar className="h-4 w-4" />
-                            <span className="text-sm">{formatDate(campagna.created_at)}</span>
-                          </div>
-                        </TableCell>
-                        {/* Colonna Operazioni Primarie */}
-                        <TableCell className="py-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-3">
-                            {/* CTA Carica Dati */}
-                            {!isCompleted && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!rowState.canUpload}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSelectedCampagna(campagna)
-                                  setNewProgrammazioneStep(2)
-                                  setIsResumingUpload(true)
-                                  setIsNewModalOpen(true)
-                                }}
-                                className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
-                              >
-                                {campagna.stato === 'uploading' || uploadProgress[campagna.id] ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <FileUp className="h-3.5 w-3.5" />
-                                )}
-                                Carica Dati
-                              </Button>
-                            )}
-                            
-                            {/* CTA Crea Individuazioni - sempre visibile ma disabilitato se non ci sono dati */}
-                            {!isCompleted && rowState.badge !== 'uploading' && rowState.badge !== 'deleting' && (
-                              <Button
-                                size="sm"
-                                disabled={!canCreateIndividuazioni}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStartIndividuazioni(campagna)
-                                }}
-                                className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
-                              >
-                                <Sparkles className="h-3.5 w-3.5" />
-                                Crea Individuazioni
-                              </Button>
-                            )}
-
-                            {/* CTA Riprendi — processo individuazione interrotto */}
-                            {rowState.canResumeIndividuazione && !isGlobalProcessingThisCampagna && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={!canStartProcess(campagna.id)}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleResumeIndividuazioni(campagna)
-                                }}
-                                className="gap-1.5 cursor-pointer disabled:cursor-not-allowed border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
-                              >
-                                <RotateCw className="h-3.5 w-3.5" />
-                                Riprendi
-                              </Button>
-                            )}
-
-                            {/* Badge stato completato */}
-                            {isCompleted && (
-                              <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 gap-1.5 py-1.5 px-3">
-                                <CheckCircle className="h-3.5 w-3.5" />
-                                Completata
-                              </Badge>
-                            )}
-
-                            {/* Badge operativo individuazione, distinto dallo stato dataset. */}
-                            {(rowState.badge === 'individuazione_running' || rowState.badge === 'individuazione_stale') && (
-                              rowState.badge === 'individuazione_stale' ? (
-                                <Badge variant="outline" className="gap-1.5 py-1.5 px-3 border-yellow-500 text-yellow-600 dark:text-yellow-400">
-                                  <AlertCircle className="h-3.5 w-3.5" />
-                                  Individuazione interrotta
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary" className="gap-1.5 py-1.5 px-3">
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  Individuazione in corso
-                                </Badge>
-                              )
-                            )}
-                          </div>
-                        </TableCell>
-                        {/* Colonna Azioni Secondarie */}
-                        <TableCell className="py-4">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={(e) => e.stopPropagation()}>
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/programmazioni/${campagna.id}`) }}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                Dettaglio
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Edit className="h-4 w-4 mr-2" />
-                                Modifica
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                variant="destructive"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleOpenDeleteDialog(campagna)
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Elimina
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-              </div>
-              {/* Mobile Cards */}
-              <div className="lg:hidden space-y-4 p-4">
-                {filteredCampagne.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">Nessuna campagna trovata</div>
-                ) : (
-                  filteredCampagne.map((campagna) => {
-                    const hasData = (campagna.programmazioni_count || 0) > 0
-                    const rowState = getProgrammazioneRowState({
-                      datasetStatus: campagna.stato,
-                      uploadJob: uploadProgress[campagna.id]
-                        ? {
-                          stato: 'running',
-                          righe_processate: uploadProgress[campagna.id].done,
-                          righe_totali: uploadProgress[campagna.id].total,
-                        }
-                        : null,
-                      progress: processingProgressMap[campagna.id],
-                      campaignJob: processingJobMap[campagna.id],
-                      hasLocalRuntimeProcess: isCampagnaProcessing(campagna.id),
-                      hasData,
-                    })
-                    const isCompleted = rowState.badge === 'individuata'
-
-                    return (
-                    <Card
-                      key={campagna.id}
-                      className="p-4 cursor-pointer"
-                      tabIndex={0}
-                      onClick={() => router.push(`/dashboard/programmazioni/${campagna.id}`)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/dashboard/programmazioni/${campagna.id}`) }}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                          <h3 className="font-medium text-lg">{campagna.nome}</h3>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                              </TooltipTrigger>
-                              <TooltipContent side="right" className="max-w-xs">
-                                <div className="space-y-2">
-                                  <p className="font-semibold">Informazioni</p>
-                                  <p className="text-sm">Record: <strong>{(campagna.programmazioni_count || 0).toLocaleString()}</strong></p>
-                                  {campagna.descrizione && (
-                                    <div className="pt-1 border-t">
-                                      <p className="text-xs font-medium">Note:</p>
-                                      <p className="text-xs">{campagna.descrizione}</p>
-                                    </div>
-                                  )}
-                                  {campagna.stato === 'error' && getCampagnaLastError(campagna) && (
-                                    <div className="pt-1 border-t">
-                                      <p className="text-xs font-medium text-red-500">Errore:</p>
-                                      <p className="text-xs text-red-400">{getCampagnaLastError(campagna)}</p>
-                                    </div>
-                                  )}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <div className="mt-1 text-sm text-gray-600 flex items-center gap-2">
-                            <Tv className="h-4 w-4 text-gray-400" />
-                            <span>{campagna.emittenti?.nome || '—'}</span>
-                            <span className="font-mono">{campagna.anno}</span>
-                          </div>
-                          <div className="mt-1 text-sm text-gray-600 flex items-center gap-2">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            <span>{formatDate(campagna.created_at)}</span>
-                          </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2">
-                            <ProgrammazioneStatusBadge badge={rowState.badge} />
-                            {!isCompleted && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={!rowState.canUpload}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSelectedCampagna(campagna)
-                                  setNewProgrammazioneStep(2)
-                                  setIsResumingUpload(true)
-                                  setIsNewModalOpen(true)
-                                }}
-                              >
-                                <FileUp className="h-3.5 w-3.5 mr-1" />
-                                Carica
-                              </Button>
-                            )}
-                            {!isCompleted && rowState.badge !== 'uploading' && rowState.badge !== 'deleting' && (
-                              <Button
-                                size="sm"
-                                disabled={!rowState.canCreateIndividuazione}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStartIndividuazioni(campagna)
-                                }}
-                              >
-                                <Sparkles className="h-3.5 w-3.5 mr-1" />
-                                Individuazioni
-                              </Button>
-                            )}
-                            {rowState.canResumeIndividuazione && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={!canStartProcess(campagna.id)}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleResumeIndividuazioni(campagna)
-                                }}
-                                className="border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
-                              >
-                                <RotateCw className="h-3.5 w-3.5 mr-1" />
-                                Riprendi
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button aria-label="Azioni" variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/programmazioni/${campagna.id}`) }}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              Dettaglio
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </Card>
-                    )
-                  })
-                )}
-              </div>
-            </CardContent>
-          </Card>
+          <ProgrammazioniTable
+            campagne={filteredCampagne}
+            uploadProgress={uploadProgress}
+            deleteProgress={deleteProgress}
+            processingProgressMap={processingProgressMap}
+            processingJobMap={processingJobMap}
+            loadingProgressMap={loadingProgressMap}
+            isCampagnaProcessing={isCampagnaProcessing}
+            canStartProcess={canStartProcess}
+            fetchProcessingProgress={fetchProcessingProgress}
+            onUpload={(campagna) => {
+              setSelectedCampagna(campagna)
+              setNewProgrammazioneStep(2)
+              setIsResumingUpload(true)
+              setIsNewModalOpen(true)
+            }}
+            onStartIndividuazioni={handleStartIndividuazioni}
+            onResumeIndividuazioni={handleResumeIndividuazioni}
+            onDelete={openDeleteDialog}
+          />
         </>
       )}
 
       {/* Emittenti Content */}
       {currentTab === 'emittenti' && (
-        <>
-          <div className="flex justify-end">
-            <Button onClick={openCreateEmittente}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuova Emittente
-            </Button>
-          </div>
-          <Card>
-            <CardContent>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Cerca per nome o codice emittente..."
-                      value={searchEmittentiQuery}
-                      onChange={(e) => setSearchEmittentiQuery(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-              </div>
-              {/* Filter Chips */}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {debouncedSearchEmittentiQuery && (
-                  <Button variant="outline" size="sm" onClick={() => setSearchEmittentiQuery('')}>
-                    <X className="h-3 w-3 mr-1" /> Ricerca: {debouncedSearchEmittentiQuery}
-                  </Button>
-                )}
-              </div>
-              <div className="mt-4 text-sm text-gray-600">
-                Mostrando {filteredEmittenti.length} di {emittenti.length} emittenti
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-0">
-              {/* Desktop */}
-              <div className="hidden lg:block relative overflow-x-auto">
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow>
-                    <TableHead>Codice</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Paese</TableHead>
-                    <TableHead>Attiva</TableHead>
-                    <TableHead>Import</TableHead>
-                    <TableHead className="w-24">Azioni</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingEmittenti ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        <div className="flex justify-center items-center">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : filteredEmittenti.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                        Nessuna emittente trovata
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredEmittenti.map((emittente) => (
-                      <TableRow key={emittente.id} className="hover:bg-gray-50">
-                        <TableCell className="font-mono text-xs">{emittente.codice}</TableCell>
-                        <TableCell className="font-medium">{emittente.nome}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{emittente.tipo}</Badge>
-                        </TableCell>
-                        <TableCell>{emittente.paese || '-'}</TableCell>
-                        <TableCell>{getAttivaBadge(emittente.attiva)}</TableCell>
-                        <TableCell>
-                          <div className="space-y-1">
-                            {getImportMappingBadge(emittente)}
-                            <div className="text-xs text-muted-foreground">
-                              {getImportMappingMeta(emittente)}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm" onClick={() => openManageEmittente(emittente)}>
-                            <Eye className="h-4 w-4 mr-1.5" /> Gestisci
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-              </div>
-              {/* Mobile Cards */}
-              <div className="lg:hidden space-y-4 p-4">
-                {filteredEmittenti.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">Nessuna emittente trovata</div>
-                ) : (
-                  filteredEmittenti.map((emittente) => (
-                    <Card key={emittente.id} className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium">{emittente.nome}</div>
-                          <div className="text-xs text-gray-600 mt-1">
-                            Codice: <span className="font-mono">{emittente.codice}</span>
-                          </div>
-                          <div className="text-xs text-gray-600">{emittente.paese || '—'}</div>
-                          <div className="mt-3 space-y-1">
-                            {getImportMappingBadge(emittente)}
-                            <div className="text-xs text-muted-foreground">
-                              {getImportMappingMeta(emittente)}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="shrink-0">
-                          <Button variant="outline" size="sm" onClick={() => openManageEmittente(emittente)}>
-                            <Eye className="h-4 w-4 mr-1.5" /> Gestisci
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </>
+        <EmittentiTab
+          emittenti={emittenti}
+          loadingEmittenti={loadingEmittenti}
+          searchEmittentiQuery={searchEmittentiQuery}
+          debouncedSearchEmittentiQuery={debouncedSearchEmittentiQuery}
+          filteredEmittenti={filteredEmittenti}
+          selectedEmittente={selectedEmittente}
+          showEmittenteDetails={showEmittenteDetails}
+          showEmittenteForm={showEmittenteForm}
+          emittenteFormMode={emittenteFormMode}
+          emittenteFormData={emittenteFormData}
+          emittenteFormSaving={emittenteFormSaving}
+          emittenteFormError={emittenteFormError}
+          fetchEmittenti={fetchEmittenti}
+          setSearchEmittentiQuery={setSearchEmittentiQuery}
+          setShowEmittenteDetails={setShowEmittenteDetails}
+          setShowEmittenteForm={setShowEmittenteForm}
+          setEmittenteFormData={setEmittenteFormData}
+          openCreateEmittente={openCreateEmittente}
+          openEditEmittente={openEditEmittente}
+          handleSaveEmittente={handleSaveEmittente}
+          openManageEmittente={openManageEmittente}
+        />
       )}
 
       {/* Dettaglio campagna spostato su pagina dedicata */}
 
-      {/* Emittenti Details Dialog */}
-      <Dialog open={showEmittenteDetails} onOpenChange={setShowEmittenteDetails}>
-        <DialogContent className="top-0! left-0! translate-x-0! translate-y-0! w-screen max-w-none! sm:max-w-none! h-dvh max-h-none! rounded-none border-0 overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Gestisci Emittente</DialogTitle>
-            <DialogDescription>
-              Anagrafica e configurazione import per &quot;{selectedEmittente?.nome}&quot;.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedEmittente && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Codice</label>
-                  <p className="font-mono">{selectedEmittente.codice}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Nome</label>
-                  <p className="font-medium">{selectedEmittente.nome}</p>
-                </div>
-                 <div>
-                  <label className="text-sm font-medium text-gray-500">Tipo</label>
-                  <p><Badge variant="outline">{selectedEmittente.tipo}</Badge></p>
-                </div>
-                 <div>
-                  <label className="text-sm font-medium text-gray-500">Paese</label>
-                  <p>{selectedEmittente.paese || '-'}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Stato</label>
-                  <div className="mt-1">{getAttivaBadge(selectedEmittente.attiva)}</div>
-                </div>
-                 <div>
-                  <label className="text-sm font-medium text-gray-500">Data Creazione</label>
-                  <p>{selectedEmittente.created_at ? new Date(selectedEmittente.created_at).toLocaleString('it-IT') : '-'}</p>
-                </div>
-              </div>
-
-              <EmittenteMappingSection emittenteId={selectedEmittente.id} onChange={fetchEmittenti} />
-
-               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowEmittenteDetails(false)}>
-                  Chiudi
-                </Button>
-                <Button onClick={() => openEditEmittente(selectedEmittente)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Modifica anagrafica
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-      {/* Emittente Create/Edit Dialog */}
-      <Dialog open={showEmittenteForm} onOpenChange={v => { if (!v) setShowEmittenteForm(false) }}>
-        <DialogContent className={emittenteFormMode === 'edit' ? 'max-h-[90vh] max-w-2xl overflow-y-auto overflow-x-hidden' : 'max-w-md'}>
-          <DialogHeader>
-            <DialogTitle>
-              {emittenteFormMode === 'create' ? 'Nuova Emittente' : 'Modifica Emittente'}
-            </DialogTitle>
-            <DialogDescription>
-              {emittenteFormMode === 'create'
-                ? 'Inserisci i dati della nuova emittente.'
-                : `Modifica i dati di "${selectedEmittente?.nome}".`}
-            </DialogDescription>
-          </DialogHeader>
-
-          {emittenteFormError && (
-            <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-700 flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" /> {emittenteFormError}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Codice</label>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm bg-gray-100 rounded px-3 py-2 border border-gray-200">
-                  {emittenteFormData.codice}
-                </span>
-                <span className="text-xs text-gray-500">
-                  {emittenteFormMode === 'create' ? 'assegnato automaticamente' : 'non modificabile'}
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Nome <span className="text-red-500">*</span></label>
-              <Input
-                placeholder="es. Rai 1, Pluto TV, Paramount Plus"
-                value={emittenteFormData.nome}
-                onChange={e => setEmittenteFormData(prev => ({ ...prev, nome: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Tipo</label>
-              <Select
-                value={emittenteFormData.tipo}
-                onValueChange={v => setEmittenteFormData(prev => ({ ...prev, tipo: v as Emittente['tipo'] }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tv_generalista">TV Generalista</SelectItem>
-                  <SelectItem value="tv_tematica">TV Tematica</SelectItem>
-                  <SelectItem value="streaming">Streaming</SelectItem>
-                  <SelectItem value="pay_tv">Pay TV</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Paese</label>
-              <Input
-                placeholder="IT"
-                value={emittenteFormData.paese}
-                onChange={e => setEmittenteFormData(prev => ({ ...prev, paese: e.target.value.toUpperCase() }))}
-                maxLength={2}
-                className="w-24"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="attiva-check"
-                checked={emittenteFormData.attiva}
-                onCheckedChange={v => setEmittenteFormData(prev => ({ ...prev, attiva: Boolean(v) }))}
-              />
-              <label htmlFor="attiva-check" className="text-sm font-medium cursor-pointer">
-                Emittente attiva
-              </label>
-            </div>
-          </div>
-
-          {emittenteFormMode === 'edit' && selectedEmittente && (
-            <div className="mt-4 pt-4 border-t">
-              <EmittenteMappingSection
-                emittenteId={selectedEmittente.id}
-                onChange={fetchEmittenti}
-                compact
-              />
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowEmittenteForm(false)} disabled={emittenteFormSaving}>
-              Annulla
-            </Button>
-            <Button onClick={handleSaveEmittente} disabled={emittenteFormSaving}>
-              {emittenteFormSaving
-                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                : <Check className="h-4 w-4 mr-2" />}
-              {emittenteFormMode === 'create' ? 'Crea' : 'Salva'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* New Programmazione Modal */}
-      <Dialog open={isNewModalOpen} onOpenChange={handleCloseModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {newProgrammazioneStep === 1 ? 'Nuova Programmazione' : 'Caricamento Dati'}
-            </DialogTitle>
-            <DialogDescription>
-              {newProgrammazioneStep === 1 
-                ? 'Inserisci i dettagli per creare una nuova campagna di programmazione.' 
-                : 'Carica il file con i dati della programmazione.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          {newProgrammazioneStep === 1 && (
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="emittente_id"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Emittente</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleziona emittente" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {emittenti.map((e) => (
-                            <SelectItem key={e.id} value={e.id}>
-                              {e.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="anno"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Anno</FormLabel>
-                      <FormControl>
-                        <Input type="number" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="nome"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome Campagna</FormLabel>
-                      <FormControl>
-                        <Input {...field} readOnly className="bg-gray-50" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="descrizione"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descrizione / Note (opzionale)</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          {...field} 
-                          placeholder="Aggiungi informazioni aggiuntive sulla campagna..."
-                          className="resize-none"
-                          rows={3}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={handleCloseModal}>
-                    Annulla
-                  </Button>
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Aggiungi Programmazione
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          )}
-
-          {newProgrammazioneStep === 2 && (
-            <div className="space-y-6 py-4">
-              {!isResumingUpload ? (
-                <div className="flex flex-col items-center justify-center space-y-2 text-center">
-                  <div className="rounded-full bg-green-100 p-3">
-                    <CheckCircle className="h-8 w-8 text-green-600" />
-                  </div>
-                  <h3 className="font-semibold text-lg">Campagna creata con successo!</h3>
-                  <p className="text-sm text-gray-500">
-                    Ora puoi procedere con il caricamento del file Excel o CSV contenente i dati della programmazione.
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center space-y-2 mb-6">
-                  <h3 className="font-semibold text-lg">Caricamento Dati</h3>
-                  <p className="text-sm text-gray-500">
-                    Carica il file per la campagna <span className="font-medium text-gray-900">{selectedCampagna?.nome}</span>
-                  </p>
-                </div>
-              )}
-
-            <div 
-            className="border-2 border-dashed border-gray-200 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer overflow-hidden"
-            onClick={() => { if (!isUploading) fileInputRef.current?.click() }}
-          >
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileUpload}
-              />
-              {!selectedFile ? (
-                <>
-                  <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-4" />
-                  <p className="text-sm font-medium">Clicca per selezionare il file</p>
-                  <p className="text-xs text-gray-500 mt-1">Formati supportati: CSV, Excel (.xlsx, .xls)</p>
-                  <p className="text-xs text-gray-400 mt-1">Colonne obbligatorie: titolo, emittente</p>
-                  <Button variant="outline" className="mt-4" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Caricamento...
-                      </>
-                    ) : (
-                      'Seleziona File'
-                    )}
-                  </Button>
-                </>
-              ) : (
-                <div className="flex flex-col items-center gap-3 w-full max-w-full">
-                  <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg w-full max-w-full overflow-hidden">
-                    <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                      <FileSpreadsheet className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0 text-left overflow-hidden">
-                      <p className="text-sm font-medium truncate max-w-[200px]">{selectedFile.name}</p>
-                      <p className="text-xs text-muted-foreground">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                    <Button variant="ghost" size="sm" className="shrink-0" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }} disabled={isSubmitting || isUploading}>
-                      Cambia
-                    </Button>
-                  </div>
-                  {isSubmitting ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                      <span>Analisi file in corso...</span>
-                    </div>
-                  ) : parsedRows.length > 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                      <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                        {parsedRows.length.toLocaleString()} righe pronte
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            </div>
-            {headerError && (
-              <div className="mt-3 text-sm text-red-600">{headerError}</div>
-            )}
-            
-            {/* Upload Progress Bar */}
-            {isUploading && selectedCampagna && uploadProgress[selectedCampagna.id] && (
-              <div className="mt-4 p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-primary/10 rounded-lg">
-                      <Loader2 className="h-4 w-4 text-primary animate-spin" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">Caricamento in corso</p>
-                      <p className="text-xs text-muted-foreground">
-                        {uploadProgress[selectedCampagna.id].done.toLocaleString()} di {uploadProgress[selectedCampagna.id].total.toLocaleString()} record
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-lg font-semibold text-primary">
-                    {Math.round((uploadProgress[selectedCampagna.id].done / uploadProgress[selectedCampagna.id].total) * 100)}%
-                  </span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                  <div
-                    className="bg-primary h-2 rounded-full transition-all duration-300 ease-out"
-                    style={{ 
-                      width: `${Math.min(100, Math.round((uploadProgress[selectedCampagna.id].done / uploadProgress[selectedCampagna.id].total) * 100))}%` 
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {uploadError && (
-              <div className="mt-4 p-4 bg-destructive/5 border border-destructive/20 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-destructive/10 rounded-lg shrink-0">
-                    <XCircle className="h-4 w-4 text-destructive" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-destructive">Errore durante l&apos;upload</p>
-                    <p className="text-sm text-muted-foreground mt-1 wrap-break-word">{uploadError}</p>
-                  </div>
-                </div>
-                <div className="flex justify-end mt-3">
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => setUploadError(null)}
-                  >
-                    Chiudi
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end">
-              <Button className="mt-4" disabled={!isUploadReady || isUploading} onClick={handleUploadDatabase}>
-                {isUploading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Upload in corso
-                  </>
-                ) : (
-                  'Upload dati database'
-                )}
-              </Button>
-            </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={handleCloseModal}>
-                  {isResumingUpload ? 'Annulla' : 'Chiudi e completa dopo'}
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <UploadProgrammazioniDialog
+        open={isNewModalOpen}
+        onOpenChange={handleCloseModal}
+        step={newProgrammazioneStep}
+        isResumingUpload={isResumingUpload}
+        detailsForm={programmazioneDetailsForm}
+        selectedCampagna={selectedCampagna}
+        selectedFile={selectedFile}
+        fileInputRef={fileInputRef}
+        onFileUpload={handleFileUpload}
+        isPreparingUpload={isPreparingUpload}
+        isUploading={isUploading}
+        parsedRowCount={parsedRowCount}
+        headerError={headerError}
+        uploadError={uploadError}
+        onDismissUploadError={() => setUploadError(null)}
+        uploadProgress={uploadProgress}
+        isUploadReady={isUploadReady}
+        onUploadDatabase={handleUploadDatabase}
+        onClose={handleCloseModal}
+      />
 
       {/* Delete Campagna Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={handleCloseDeleteDialog}>
+      <Dialog open={isDeleteDialogOpen} onOpenChange={closeDeleteDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -2326,13 +886,13 @@ export default function ProgrammazioniPage() {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={handleCloseDeleteDialog} disabled={isDeletingCampagna}>
+            <Button variant="outline" onClick={closeDeleteDialog} disabled={isDeletingCampagna}>
               Annulla
             </Button>
             {deleteInfo?.scenario !== 'has_individuazione' && (
               <Button 
                 variant="destructive" 
-                onClick={handleConfirmDelete}
+                onClick={confirmDelete}
                 disabled={isLoadingDeleteInfo || isDeletingCampagna}
               >
                 {isDeletingCampagna ? (
@@ -2350,7 +910,7 @@ export default function ProgrammazioniPage() {
             )}
             {deleteInfo?.scenario === 'has_individuazione' && (
               <Button onClick={() => {
-                handleCloseDeleteDialog()
+                closeDeleteDialog()
                 router.push('/dashboard/individuazioni')
               }}>
                 <Eye className="mr-2 h-4 w-4" />
