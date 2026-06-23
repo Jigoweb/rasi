@@ -48,6 +48,18 @@ export interface DataHealthPolicySummary {
   fields: ResolvedDataHealthField[]
 }
 
+export type ProgrammazioniTableColumnKey =
+  | 'processato'
+  | DataHealthFieldKey
+  | 'fascia_oraria'
+
+export interface ProgrammazioniTableColumn {
+  key: ProgrammazioniTableColumnKey
+  label: string
+}
+
+type ProgrammazioniTablePolicy = DataHealthPolicy | DataHealthPolicySummary
+
 export const DATA_HEALTH_FIELD_DEFINITIONS: Record<DataHealthFieldKey, DataHealthFieldDefinition> = {
   titolo: {
     key: 'titolo',
@@ -145,6 +157,40 @@ export const DATA_HEALTH_PRESET_LABELS: Record<DataHealthPreset, string> = {
   streaming_catalogo: 'Streaming catalogo',
   custom: 'Personalizzato',
 }
+
+const TABLE_COLUMN_LABELS: Record<ProgrammazioniTableColumnKey, string> = {
+  processato: 'Stato',
+  titolo: 'Titolo',
+  tipo: 'Tipo',
+  data_trasmissione: 'Data',
+  ora_inizio: 'Ora',
+  durata_minuti: 'Durata',
+  canale: 'Canale',
+  anno: 'Anno',
+  sales_month: 'Sales month',
+  views: 'Views',
+  retail_price: 'Retail price',
+  total_revenue: 'Ricavi totali',
+  total_net_ad_revenue: 'Net ad revenue',
+  fascia_oraria: 'Fascia',
+}
+
+const ALL_TABLE_COLUMNS: ProgrammazioniTableColumnKey[] = [
+  'processato',
+  'data_trasmissione',
+  'ora_inizio',
+  'canale',
+  'titolo',
+  'tipo',
+  'durata_minuti',
+  'fascia_oraria',
+  'anno',
+  'sales_month',
+  'views',
+  'retail_price',
+  'total_revenue',
+  'total_net_ad_revenue',
+]
 
 const DEFAULT_FIELD_STATUS: Record<DataHealthFieldKey, DataHealthFieldStatus> = {
   titolo: 'required',
@@ -283,6 +329,30 @@ export function getFieldsForHealthCounts(policy: DataHealthPolicy): ResolvedData
 export function getMissingFieldFilter(field: ResolvedDataHealthField): string {
   if (field.valueType === 'text') return `${field.key}.is.null,${field.key}.eq.`
   return `${field.key}.is.null`
+}
+
+export function getProgrammazioniTableColumns(
+  policy: ProgrammazioniTablePolicy,
+  options: { showAll?: boolean } = {}
+): ProgrammazioniTableColumn[] {
+  const keys = options.showAll
+    ? ALL_TABLE_COLUMNS
+    : compactTableColumnKeys(policy)
+
+  return keys.map(key => ({
+    key,
+    label: TABLE_COLUMN_LABELS[key],
+  }))
+}
+
+function compactTableColumnKeys(policy: ProgrammazioniTablePolicy): ProgrammazioniTableColumnKey[] {
+  const fields = 'presetLabel' in policy ? policy.fields : resolveDataHealthPolicy(policy).fields
+  const visible = new Set<ProgrammazioniTableColumnKey>(['processato', 'titolo'])
+  for (const field of fields) {
+    if (field.status === 'required' || field.status === 'recommended') visible.add(field.key)
+  }
+
+  return ALL_TABLE_COLUMNS.filter(key => visible.has(key))
 }
 
 export async function getDataHealthPolicyByEmittente(emittenteId: string): Promise<{

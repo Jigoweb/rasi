@@ -644,8 +644,8 @@ export interface ProgrammazioneRow {
   id: string
   campagna_programmazione_id: string
   emittente_id: string
-  data_trasmissione: string
-  ora_inizio: string
+  data_trasmissione?: string | null
+  ora_inizio?: string | null
   ora_fine?: string | null
   durata_minuti?: number | null
   titolo: string
@@ -655,6 +655,12 @@ export interface ProgrammazioneRow {
   tipo?: string | null
   canale?: string | null
   emittente?: string | null
+  anno?: number | null
+  sales_month?: string | number | null
+  views?: number | null
+  retail_price?: number | null
+  total_revenue?: number | null
+  total_net_ad_revenue?: number | null
   processato: boolean
   errori_processamento?: any | null
   created_at: string

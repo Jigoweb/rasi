@@ -3,6 +3,11 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getCampagnaProgrammazioneById, listProgrammazioniByCampagnaKeyset, getProgrammazioniHealth, CampagnaProgrammazione, ProgrammazioneRow, ProgrammazioniCursor, ProgrammazioniHealth } from '@/features/programmazioni/services/programmazioni.service'
+import {
+  getProgrammazioniTableColumns,
+  type ProgrammazioniTableColumn,
+  type ProgrammazioniTableColumnKey,
+} from '@/features/programmazioni/services/data-health-policy.service'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -28,12 +33,18 @@ export default function CampagnaDettaglioPage() {
   const [processato, setProcessato] = useState<string>('all')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
+  const [showAllColumns, setShowAllColumns] = useState(false)
 
   const processatoBool = useMemo(() => {
     if (processato === 'true') return true
     if (processato === 'false') return false
     return undefined
   }, [processato])
+
+  const tableColumns = useMemo(() => getProgrammazioniTableColumns(
+    health?.policy ?? { preset: 'lineare', fields: {} },
+    { showAll: showAllColumns }
+  ), [health?.policy, showAllColumns])
 
   // Debounce search query
   useEffect(() => {
@@ -180,6 +191,68 @@ export default function CampagnaDettaglioPage() {
     if (status === 'recommended') return 'Consigliato'
     if (status === 'optional') return 'Opzionale'
     return 'Non applicabile'
+  }
+
+  const formatNumber = (value: number | null | undefined) =>
+    typeof value === 'number' ? value.toLocaleString('it-IT') : '-'
+
+  const formatCurrencyLike = (value: number | null | undefined) =>
+    typeof value === 'number'
+      ? value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '-'
+
+  const renderProgrammazioneCell = (row: ProgrammazioneRow, column: ProgrammazioniTableColumn) => {
+    switch (column.key) {
+      case 'processato':
+        return row.processato ? (
+          <div title="Processato"><CheckCircle2 className="h-5 w-5 text-green-500" /></div>
+        ) : row.errori_processamento ? (
+          <div title={typeof row.errori_processamento === 'string' ? row.errori_processamento : JSON.stringify(row.errori_processamento)}>
+            <AlertCircle className="h-5 w-5 text-red-500" />
+          </div>
+        ) : (
+          <div title="In attesa"><Clock className="h-5 w-5 text-gray-400" /></div>
+        )
+      case 'data_trasmissione':
+        return row.data_trasmissione ? formatDate(row.data_trasmissione) : '-'
+      case 'ora_inizio':
+        return row.ora_inizio || '-'
+      case 'canale':
+        return row.canale || row.emittente || '-'
+      case 'titolo':
+        return (
+          <div className="font-medium">
+            <div>{row.titolo}</div>
+            {row.descrizione && <div className="text-xs text-gray-500 truncate max-w-[300px]">{row.descrizione}</div>}
+          </div>
+        )
+      case 'tipo':
+        return row.tipo_trasmissione || row.tipo || '-'
+      case 'durata_minuti':
+        return row.durata_minuti != null ? `${row.durata_minuti} min` : '-'
+      case 'fascia_oraria':
+        return row.fascia_oraria || '-'
+      case 'anno':
+        return row.anno ?? '-'
+      case 'sales_month':
+        return row.sales_month ?? '-'
+      case 'views':
+        return formatNumber(row.views)
+      case 'retail_price':
+        return formatCurrencyLike(row.retail_price)
+      case 'total_revenue':
+        return formatCurrencyLike(row.total_revenue)
+      case 'total_net_ad_revenue':
+        return formatCurrencyLike(row.total_net_ad_revenue)
+      default:
+        return '-'
+    }
+  }
+
+  const getColumnClassName = (key: ProgrammazioniTableColumnKey) => {
+    if (key === 'processato') return 'w-[50px]'
+    if (key === 'titolo') return 'min-w-[300px]'
+    return undefined
   }
 
   if (loading && rows.length === 0) {
@@ -353,46 +426,44 @@ export default function CampagnaDettaglioPage() {
 
       <Card>
         <CardContent className="p-0">
+          <div className="flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="font-medium">Programmazioni caricate</div>
+              <div className="text-xs text-gray-500">
+                Colonne adattate al profilo {health?.policy?.presetLabel ?? 'Rete lineare'}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAllColumns(prev => !prev)}
+            >
+              {showAllColumns ? 'Mostra colonne profilo' : 'Mostra tutte le colonne'}
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[50px]">Stato</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Ora</TableHead>
-                <TableHead>Canale</TableHead>
-                <TableHead className="min-w-[300px]">Titolo</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Durata</TableHead>
-                <TableHead>Fascia</TableHead>
+                {tableColumns.map(column => (
+                  <TableHead key={column.key} className={getColumnClassName(column.key)}>
+                    {column.label}
+                  </TableHead>
+                ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">Nessun risultato</TableCell>
+                  <TableCell colSpan={tableColumns.length} className="text-center py-8 text-gray-500">Nessun risultato</TableCell>
                 </TableRow>
               ) : (
                 rows.map(r => (
                   <TableRow key={r.id} className="hover:bg-gray-50">
-                    <TableCell>
-                      {r.processato ? (
-                        <div title="Processato"><CheckCircle2 className="h-5 w-5 text-green-500" /></div>
-                      ) : r.errori_processamento ? (
-                        <div title={typeof r.errori_processamento === 'string' ? r.errori_processamento : JSON.stringify(r.errori_processamento)}><AlertCircle className="h-5 w-5 text-red-500" /></div>
-                      ) : (
-                        <div title="In attesa"><Clock className="h-5 w-5 text-gray-400" /></div>
-                      )}
-                    </TableCell>
-                    <TableCell>{r.data_trasmissione ? formatDate(r.data_trasmissione) : '-'}</TableCell>
-                    <TableCell>{r.ora_inizio}</TableCell>
-                    <TableCell>{r.canale || r.emittente || '-'}</TableCell>
-                    <TableCell className="font-medium">
-                      <div>{r.titolo}</div>
-                      {r.descrizione && <div className="text-xs text-gray-500 truncate max-w-[300px]">{r.descrizione}</div>}
-                    </TableCell>
-                    <TableCell>{r.tipo_trasmissione || r.tipo || '-'}</TableCell>
-                    <TableCell>{r.durata_minuti ? `${r.durata_minuti} min` : '-'}</TableCell>
-                    <TableCell>{r.fascia_oraria || '-'}</TableCell>
+                    {tableColumns.map(column => (
+                      <TableCell key={column.key}>
+                        {renderProgrammazioneCell(r, column)}
+                      </TableCell>
+                    ))}
                   </TableRow>
                 ))
               )}

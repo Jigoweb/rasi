@@ -2,6 +2,7 @@ import {
   getDataHealthPolicyFromConfig,
   getFieldsForHealthCounts,
   getMissingFieldFilter,
+  getProgrammazioniTableColumns,
   inferDataHealthPreset,
   resolveDataHealthPolicy,
 } from './data-health-policy.service'
@@ -73,5 +74,35 @@ describe('data health policy', () => {
     const [titleField] = resolveDataHealthPolicy({ preset: 'lineare' }).fields
       .filter(field => field.key === 'titolo')
     expect(getMissingFieldFilter(titleField)).toBe('titolo.is.null,titolo.eq.')
+  })
+
+  it('derives compact table columns from the resolved health preset', () => {
+    expect(getProgrammazioniTableColumns({ preset: 'lineare' }).map(column => column.key)).toEqual([
+      'processato',
+      'data_trasmissione',
+      'ora_inizio',
+      'canale',
+      'titolo',
+      'tipo',
+      'durata_minuti',
+    ])
+
+    expect(getProgrammazioniTableColumns({ preset: 'tvod' }).map(column => column.key)).toEqual([
+      'processato',
+      'titolo',
+      'tipo',
+      'anno',
+      'sales_month',
+      'views',
+      'retail_price',
+      'total_revenue',
+    ])
+  })
+
+  it('can expose all supported table columns for troubleshooting', () => {
+    const columns = getProgrammazioniTableColumns({ preset: 'svod' }, { showAll: true }).map(column => column.key)
+    expect(columns).toContain('data_trasmissione')
+    expect(columns).toContain('ora_inizio')
+    expect(columns).toContain('total_net_ad_revenue')
   })
 })
