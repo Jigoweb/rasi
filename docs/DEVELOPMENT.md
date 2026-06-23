@@ -36,9 +36,22 @@ Open `http://localhost:3000`.
 
 ## Worker
 
+Worker-primary local mode:
+
 ```bash
+NEXT_PUBLIC_WORKER_URL=http://localhost:8080
+npm run dev
 npm --prefix server run dev
 ```
+
+Legacy fallback local mode:
+
+```bash
+# Leave NEXT_PUBLIC_WORKER_URL unset.
+npm run dev
+```
+
+In worker-primary mode, keep the Next.js app and worker running together. In legacy fallback mode, the frontend uses the serverless routes because `NEXT_PUBLIC_WORKER_URL` is absent.
 
 The worker handles long-running operations such as individuazione jobs outside serverless timeouts.
 By default it listens on `http://localhost:8080/health`; keep `NEXT_PUBLIC_WORKER_URL` aligned with the worker `PORT`.
@@ -61,9 +74,12 @@ Before the Task 7 baseline is resolved, `npm run verify` may still fail on known
 npm run lint
 npm run typecheck
 npm test
+npm --prefix server test
 npm run build
 npm --prefix server run typecheck
 ```
+
+Root Jest ignores `server/` because worker tests use Node's `node:test` runner through `npm --prefix server test`.
 
 ## Troubleshooting
 

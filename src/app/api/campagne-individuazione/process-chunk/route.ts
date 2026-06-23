@@ -1,5 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/shared/lib/supabase-server'
+import { requireCampagnaIndividuazioneAccess, requireCampagneIndividuazioneAuth } from '../auth'
+
+const PROGRAMMAZIONI_UNAUTHORIZED_ERROR = 'Programmazioni non autorizzate per questa campagna'
+
+type ProgrammazioniValidationResult =
+  | { authorized: true; validatedIds: string[] }
+  | { authorized: false; response: NextResponse }
+
+const validateProgrammazioniForCampaign = async (
+  requestedIds: string[],
+  campagneProgrammazioneId: string
+): Promise<ProgrammazioniValidationResult> => {
+  const validatedIds = Array.from(new Set(requestedIds))
+
+  const { data, error } = await (supabaseServer as any)
+    .from('programmazioni')
+    .select('id')
+    .eq('campagna_programmazione_id', campagneProgrammazioneId)
+    .in('id', validatedIds)
+
+  if (error) {
+    console.error('Errore verifica autorizzazione programmazioni:', error)
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { success: false, error: 'Errore verifica autorizzazione programmazioni' },
+        { status: 500 }
+      ),
+    }
+  }
+
+  const authorizedIds = new Set((data ?? []).map((row: { id: string }) => row.id))
+  const allRequestedIdsAuthorized = validatedIds.every(id => authorizedIds.has(id))
+
+  if (!allRequestedIdsAuthorized) {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { success: false, error: PROGRAMMAZIONI_UNAUTHORIZED_ERROR },
+        { status: 403 }
+      ),
+    }
+  }
+
+  return { authorized: true, validatedIds }
+}
 
 /**
  * POST /api/campagne-individuazione/process-chunk
@@ -25,6 +71,9 @@ export async function POST(req: NextRequest) {
     // #region agent log
     log('A', 'route.ts:15', 'Request received', { timestamp: requestStartTime })
     // #endregion
+
+    const auth = await requireCampagneIndividuazioneAuth(req)
+    if (!auth.authenticated) return auth.response
 
     const body = await req.json()
     const {
@@ -61,6 +110,20 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    const campaignAuthorization = await requireCampagnaIndividuazioneAccess(
+      campagne_individuazione_id,
+      auth.userId
+    )
+    if (!campaignAuthorization.authorized) return campaignAuthorization.response
+
+    const programmazioniAuthorization = await validateProgrammazioniForCampaign(
+      programmazione_ids,
+      campaignAuthorization.campagneProgrammazioneId
+    )
+    if (!programmazioniAuthorization.authorized) return programmazioniAuthorization.response
+
+    const validatedProgrammazioneIds = programmazioniAuthorization.validatedIds
 
     // #region agent log
     const rpcStartTime = Date.now()
@@ -104,7 +167,7 @@ export async function POST(req: NextRequest) {
         const rpcPromise = (supabaseServer as any)
           .rpc('process_programmazioni_chunk', {
             p_campagne_individuazione_id: campagne_individuazione_id,
-            p_programmazione_ids: programmazione_ids,
+            p_programmazione_ids: validatedProgrammazioneIds,
             p_soglia_titolo: soglia_titolo,
             p_artista_ids: artista_ids,
             p_tolleranza_anno_soft: tolleranza_anno_soft,
@@ -239,7 +302,7 @@ export async function POST(req: NextRequest) {
         error_hint: finalError.hint,
         error_stack: finalError.stack?.substring(0, 500),
         total_attempts: maxRetries + 1,
-        chunk_size: programmazione_ids.length
+        chunk_size: validatedProgrammazioneIds.length
       })
       // #endregion
       console.error('Errore processamento chunk dopo tutti i retry:', finalError)
@@ -251,8 +314,8 @@ export async function POST(req: NextRequest) {
         errorMessage.includes('502') ||
         finalError.code === 'ECONNRESET'
       
-      if (isIncompleteError && programmazione_ids.length > 10) {
-        errorMessage += ` (Suggerimento: prova a ridurre la dimensione del chunk da ${programmazione_ids.length} a 10-15 programmazioni)`
+      if (isIncompleteError && validatedProgrammazioneIds.length > 10) {
+        errorMessage += ` (Suggerimento: prova a ridurre la dimensione del chunk da ${validatedProgrammazioneIds.length} a 10-15 programmazioni)`
       }
       
       return NextResponse.json(
@@ -260,8 +323,8 @@ export async function POST(req: NextRequest) {
           success: false, 
           error: errorMessage,
           retryable: isIncompleteError,
-          chunk_size: programmazione_ids.length,
-          suggestion: isIncompleteError && programmazione_ids.length > 10 
+          chunk_size: validatedProgrammazioneIds.length,
+          suggestion: isIncompleteError && validatedProgrammazioneIds.length > 10
             ? 'Consider reducing chunk size' 
             : null
         },

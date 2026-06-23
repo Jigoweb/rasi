@@ -65,43 +65,26 @@ Recommended default: keep current imports stable for Task 10; decide the canonic
 
 If `src/shared/components/ui` is approved as canonical, the migration must include `components.json`, import paths, and a duplicate cleanup plan.
 
-## Individuazione Workflow Decision
+## Individuazione Workflow Transition
 
-Current state:
+Approved transition:
 
-- Serverless/API legacy path exists under `src/app/api/campagne-individuazione`.
-- Worker path exists under `server/src/jobs/individuazione-runner.ts`.
-- Frontend service logic exists under `src/features/campagne-individuazione/services`.
+- The worker path is primary for individuazione jobs.
+- The legacy serverless/API path under `src/app/api/campagne-individuazione` remains a fallback only when `NEXT_PUBLIC_WORKER_URL` is absent.
+- Frontend service logic under `src/features/campagne-individuazione/services` must preserve the shared worker/serverless contract while both paths exist.
 
-Decision required before removal:
+Deletion gate for the legacy serverless path:
 
-1. Worker-only canonical path.
-   - Impact: simplifies runtime ownership and removes serverless duplication.
-   - Prerequisite: prove endpoint parity, worker availability, tests/checklists, and rollback coverage.
-   - Risk: operational regression if worker routing, env, or queue behavior differs from serverless behavior.
+- Worker contract tests pass.
+- Legacy serverless auth parity is enforced before service-role work.
+- Job reads are scoped by campaign and owner.
+- The campaign job owner RLS policy is applied.
+- Worker stale recovery is live.
+- Fallback criteria are documented.
+- A rollback path exists.
+- At least one staging or production individuazione run has been verified.
 
-2. Worker primary plus serverless fallback.
-   - Impact: makes the worker the preferred path while keeping a recovery path during transition.
-   - Prerequisite: define env flag or worker URL behavior, fallback criteria, endpoint parity, and rollback path.
-   - Risk: two paths remain active and can diverge without explicit monitoring and tests.
-
-3. Keep both until test coverage exists.
-   - Impact: defers deletion while the team builds confidence.
-   - Prerequisite: add or identify behavior tests/checklists and document the canonical contract.
-   - Risk: duplication persists and future fixes may land in only one path.
-
-Recommended default: worker primary plus documented serverless fallback until tests and operational confidence support removal.
-
-Safety checklist before removal:
-
-- Confirm env flag or worker URL configuration for choosing the worker path.
-- Define fallback criteria for when serverless remains acceptable.
-- Document rollback path if worker execution fails in production.
-- Verify endpoint parity between worker/API behavior and frontend service expectations.
-- Confirm tests or behavior checklist before removing either path.
-- Delete legacy serverless only after worker parity, rollback, and production confidence are explicitly approved.
-
-Final approval question: should Task 10 proceed with worker primary plus serverless fallback as the approved transition model?
+This slice approves the worker-primary transition hardening, not deletion. Do not remove or archive the legacy serverless routes until every gate above is verified and the deletion is separately approved.
 
 ## Refactor Strategy
 
@@ -143,10 +126,8 @@ Gates before the first refactor:
   - Approval question: which UI namespace should become canonical?
 
 - Individuazione workflow:
-  - Options: worker-only, worker primary plus serverless fallback, or keep both until coverage exists.
-  - Recommended default: worker primary plus documented serverless fallback.
-  - Gate: no legacy serverless deletion until endpoint parity, fallback criteria, rollback path, and tests/checklist are approved.
-  - Approval question: should the worker-primary fallback model be approved for the next cleanup slice?
+  - Decision: worker primary with legacy serverless fallback only when `NEXT_PUBLIC_WORKER_URL` is absent.
+  - Gate: no legacy serverless deletion until contract tests, auth parity, scoped job reads, RLS owner policy, stale recovery, fallback criteria, rollback path, and at least one staging/production run are verified.
 
 - First hotspot/refactor direction:
   - Options: approve the proposed order, choose `src/app/dashboard/opere/[id]/page.tsx` first, or defer page refactors until more coverage is confirmed.

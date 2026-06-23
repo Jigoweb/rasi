@@ -1,4 +1,9 @@
 import { supabase } from '@/shared/lib/supabase'
+import {
+  WORKER_MAX_NETWORK_ERRORS,
+  WORKER_POLL_INTERVAL_MS,
+} from './individuazione-contract'
+import type { WorkerJobSnapshot } from './individuazione-contract'
 
 // ============================================
 // HELPER: Get auth token for API requests
@@ -195,9 +200,10 @@ export const processChunk = async (
   const baseDelayMs = 1000
 
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch('/api/campagne-individuazione/process-chunk', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(request),
     })
 
@@ -336,9 +342,10 @@ export const getBatchIds = async (
   request: GetBatchIdsRequest
 ): Promise<GetBatchIdsResponse> => {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch('/api/campagne-individuazione/get-batch-ids', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(request),
     })
 
@@ -374,7 +381,7 @@ export const processCampagnaIndividuazioneBatch = async (
   // Se è configurato il worker Node.js (Railway), delega a lui l'intera
   // orchestrazione: il browser fa solo start + polling e può chiudersi senza
   // fermare il processo. Altrimenti resta il path serverless legacy qui sotto.
-  if (getWorkerUrl()) {
+  if (getIndividuazioneRuntimeMode() === 'worker') {
     return processCampagnaIndividuazioneViaWorker(campagneProgrammazioneId, onProgress, options)
   }
 
@@ -562,18 +569,64 @@ export const getWorkerUrl = (): string | null => {
   return url ? url.replace(/\/+$/, '') : null
 }
 
+export const getIndividuazioneRuntimeMode = (): 'worker' | 'legacy-serverless' =>
+  getWorkerUrl() ? 'worker' : 'legacy-serverless'
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-const WORKER_POLL_INTERVAL_MS = 2500
+export const mapWorkerJobToProgress = (job: WorkerJobSnapshot): BatchProcessingProgress => ({
+  phase: job.fase || 'processing',
+  programmazioni_totali: job.programmazioni_totali ?? 0,
+  programmazioni_processate: job.programmazioni_processate ?? 0,
+  individuazioni_create: job.individuazioni_create ?? 0,
+  current_chunk: job.current_chunk ?? 0,
+  total_chunks: job.total_chunks ?? 0,
+  error: job.error ?? undefined,
+})
 
-/** Cerca il job attivo (queued/running) più recente su campaign_jobs. */
-export const findActiveWorkerJob = async (): Promise<{
+export const mapCompletedWorkerJob = (
+  job: WorkerJobSnapshot,
+  startTime: number
+): FinalizeCampagnaResponse => ({
+  success: true,
+  data: {
+    statistiche: {
+      programmazioni_totali: job.programmazioni_totali ?? 0,
+      programmazioni_processate: job.programmazioni_processate ?? 0,
+      individuazioni_create: job.individuazioni_create ?? 0,
+      artisti_distinti: 0,
+      opere_distinte: 0,
+      campagne_individuazione_id: job.campagne_individuazione_id,
+      tempo_processamento_ms: Date.now() - startTime,
+    } as any,
+  },
+})
+
+export const mapTerminalWorkerJobError = (
+  job: WorkerJobSnapshot
+): FinalizeCampagnaResponse | null => {
+  if (job.stato !== 'error' && job.stato !== 'cancelled') return null
+  return { success: false, error: job.error || 'Job terminato con errore' }
+}
+
+/** Cerca il job attivo (queued/running) più recente per una campagna. */
+export const findActiveWorkerJob = async (
+  campagneProgrammazioneId?: string | null
+): Promise<{
   jobId: string
   campagneProgrammazioneId: string
 } | null> => {
+  if (!campagneProgrammazioneId) return null
+
+  const { data: { session } } = await supabase.auth.getSession()
+  const userId = session?.user?.id
+  if (!userId) return null
+
   const { data, error } = await (supabase as any)
     .from('campaign_jobs')
     .select('id, campagne_programmazione_id')
+    .eq('campagne_programmazione_id', campagneProgrammazioneId)
+    .eq('created_by', userId)
     .in('stato', ['queued', 'running'])
     .order('created_at', { ascending: false })
     .limit(1)
@@ -606,62 +659,33 @@ export const pollWorkerJob = async (
     await sleep(WORKER_POLL_INTERVAL_MS)
     if (signal?.aborted) return { success: false, error: 'Polling annullato' }
 
-    let job: any
+    let job: WorkerJobSnapshot | null
     try {
       const pollHeaders = await getAuthHeaders()
       const res = await fetch(`${workerUrl}/api/jobs/${jobId}`, { headers: pollHeaders })
       if (!res.ok) {
-        if (++networkErrors > 10) throw new Error(`Worker non raggiungibile (${res.status})`)
+        if (++networkErrors > WORKER_MAX_NETWORK_ERRORS) throw new Error(`Worker non raggiungibile (${res.status})`)
         continue
       }
       const payload = await res.json()
-      job = payload?.data
+      job = payload?.data as WorkerJobSnapshot | null
       networkErrors = 0
     } catch (e) {
-      if (++networkErrors > 10) throw e as any
+      if (++networkErrors > WORKER_MAX_NETWORK_ERRORS) throw e as any
       continue
     }
 
     if (!job) continue
 
-    onProgress({
-      phase: (job.fase as BatchProcessingProgress['phase']) || 'processing',
-      programmazioni_totali: job.programmazioni_totali ?? 0,
-      programmazioni_processate: job.programmazioni_processate ?? 0,
-      individuazioni_create: job.individuazioni_create ?? 0,
-      current_chunk: job.current_chunk ?? 0,
-      total_chunks: job.total_chunks ?? 0,
-      error: job.error ?? undefined,
-    })
+    onProgress(mapWorkerJobToProgress(job))
 
     if (job.stato === 'completed') {
-      onProgress({
-        phase: 'completed',
-        programmazioni_totali: job.programmazioni_totali ?? 0,
-        programmazioni_processate: job.programmazioni_processate ?? 0,
-        individuazioni_create: job.individuazioni_create ?? 0,
-        current_chunk: job.current_chunk ?? 0,
-        total_chunks: job.total_chunks ?? 0,
-      })
-      return {
-        success: true,
-        data: {
-          statistiche: {
-            programmazioni_totali: job.programmazioni_totali ?? 0,
-            programmazioni_processate: job.programmazioni_processate ?? 0,
-            individuazioni_create: job.individuazioni_create ?? 0,
-            artisti_distinti: 0,
-            opere_distinte: 0,
-            campagne_individuazione_id: job.campagne_individuazione_id,
-            tempo_processamento_ms: Date.now() - startTime,
-          } as any,
-        },
-      }
+      onProgress({ ...mapWorkerJobToProgress(job), phase: 'completed' })
+      return mapCompletedWorkerJob(job, startTime)
     }
 
-    if (job.stato === 'error' || job.stato === 'cancelled') {
-      return { success: false, error: job.error || 'Job terminato con errore' }
-    }
+    const terminalError = mapTerminalWorkerJobError(job)
+    if (terminalError) return terminalError
   }
 }
 
@@ -758,11 +782,10 @@ export const processCampagnaIndividuazione = async (
   request: ProcessCampagnaIndividuazioneRequest
 ): Promise<ProcessCampagnaIndividuazioneResponse> => {
   try {
+    const headers = await getAuthHeaders()
     const response = await fetch('/api/campagne-individuazione/process', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(request),
     })
 
