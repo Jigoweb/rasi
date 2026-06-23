@@ -11,6 +11,10 @@ export type DataHealthFieldKey =
   | 'ora_inizio'
   | 'durata_minuti'
   | 'canale'
+  | 'titolo_episodio'
+  | 'titolo_episodio_originale'
+  | 'numero_stagione'
+  | 'numero_episodio'
   | 'anno'
   | 'sales_month'
   | 'views'
@@ -97,6 +101,30 @@ export const DATA_HEALTH_FIELD_DEFINITIONS: Record<DataHealthFieldKey, DataHealt
     valueType: 'text',
     description: 'Canale o servizio sorgente del record.',
   },
+  titolo_episodio: {
+    key: 'titolo_episodio',
+    label: 'Titolo episodio',
+    valueType: 'text',
+    description: 'Titolo episodio pulito, quando il contenuto è seriale.',
+  },
+  titolo_episodio_originale: {
+    key: 'titolo_episodio_originale',
+    label: 'Titolo episodio originale',
+    valueType: 'text',
+    description: 'Titolo episodio come fornito dalla sorgente.',
+  },
+  numero_stagione: {
+    key: 'numero_stagione',
+    label: 'Stagione',
+    valueType: 'number',
+    description: 'Numero stagione, quando disponibile.',
+  },
+  numero_episodio: {
+    key: 'numero_episodio',
+    label: 'Episodio',
+    valueType: 'number',
+    description: 'Numero episodio, quando disponibile.',
+  },
   anno: {
     key: 'anno',
     label: 'Anno',
@@ -142,6 +170,10 @@ export const DATA_HEALTH_FIELD_ORDER: DataHealthFieldKey[] = [
   'ora_inizio',
   'durata_minuti',
   'canale',
+  'titolo_episodio',
+  'titolo_episodio_originale',
+  'numero_stagione',
+  'numero_episodio',
   'anno',
   'sales_month',
   'views',
@@ -166,6 +198,10 @@ const TABLE_COLUMN_LABELS: Record<ProgrammazioniTableColumnKey, string> = {
   ora_inizio: 'Ora',
   durata_minuti: 'Durata',
   canale: 'Canale',
+  titolo_episodio: 'Titolo episodio',
+  titolo_episodio_originale: 'Titolo episodio orig.',
+  numero_stagione: 'Stagione',
+  numero_episodio: 'Episodio',
   anno: 'Anno',
   sales_month: 'Sales month',
   views: 'Views',
@@ -183,6 +219,10 @@ const ALL_TABLE_COLUMNS: ProgrammazioniTableColumnKey[] = [
   'titolo',
   'tipo',
   'durata_minuti',
+  'titolo_episodio',
+  'titolo_episodio_originale',
+  'numero_stagione',
+  'numero_episodio',
   'fascia_oraria',
   'anno',
   'sales_month',
@@ -199,6 +239,10 @@ const DEFAULT_FIELD_STATUS: Record<DataHealthFieldKey, DataHealthFieldStatus> = 
   ora_inizio: 'optional',
   durata_minuti: 'recommended',
   canale: 'optional',
+  titolo_episodio: 'optional',
+  titolo_episodio_originale: 'optional',
+  numero_stagione: 'optional',
+  numero_episodio: 'optional',
   anno: 'optional',
   sales_month: 'not_applicable',
   views: 'not_applicable',
@@ -223,6 +267,8 @@ export const DATA_HEALTH_PRESETS: Record<DataHealthPreset, Record<DataHealthFiel
     sales_month: 'optional',
     views: 'recommended',
     total_net_ad_revenue: 'recommended',
+    titolo_episodio_originale: 'recommended',
+    numero_episodio: 'recommended',
   },
   tvod: {
     ...DEFAULT_FIELD_STATUS,

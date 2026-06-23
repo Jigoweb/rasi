@@ -66,6 +66,8 @@ describe('getProgrammazioniHealth', () => {
       { count: 0, error: null }, // titolo
       { count: 2, error: null }, // tipo
       { count: 4, error: null }, // durata_minuti
+      { count: 0, error: null }, // titolo_episodio_originale
+      { count: 8, error: null }, // numero_episodio
       { count: 1, error: null }, // anno
       { count: 5, error: null }, // views
       { count: 6, error: null }, // total_net_ad_revenue
@@ -88,6 +90,10 @@ describe('getProgrammazioniHealth', () => {
     expect(data?.field_metrics.find(metric => metric.key === 'durata_minuti')).toMatchObject({
       missing: 4,
       percent: 40,
+    })
+    expect(data?.field_metrics.find(metric => metric.key === 'numero_episodio')).toMatchObject({
+      missing: 8,
+      percent: 80,
     })
   })
 

@@ -230,6 +230,14 @@ export default function CampagnaDettaglioPage() {
         return row.tipo_trasmissione || row.tipo || '-'
       case 'durata_minuti':
         return row.durata_minuti != null ? `${row.durata_minuti} min` : '-'
+      case 'titolo_episodio':
+        return row.titolo_episodio || '-'
+      case 'titolo_episodio_originale':
+        return row.titolo_episodio_originale || '-'
+      case 'numero_stagione':
+        return row.numero_stagione ?? '-'
+      case 'numero_episodio':
+        return row.numero_episodio ?? '-'
       case 'fascia_oraria':
         return row.fascia_oraria || '-'
       case 'anno':
@@ -328,7 +336,7 @@ export default function CampagnaDettaglioPage() {
         <CardContent>
           <div className="flex items-center justify-between mb-2">
             <div>
-              <div className="font-medium">Data Health</div>
+              <div className="font-medium">Copertura dati</div>
               {health?.policy && (
                 <div className="text-xs text-gray-500">
                   Profilo: {health.policy.presetLabel}
@@ -340,7 +348,7 @@ export default function CampagnaDettaglioPage() {
           {healthError && (
             <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
               <AlertCircle className="h-4 w-4 mt-0.5" />
-              <span>Data Health non disponibile: {healthError}</span>
+              <span>Copertura dati non disponibile: {healthError}</span>
             </div>
           )}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">

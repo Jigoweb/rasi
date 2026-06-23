@@ -103,7 +103,7 @@ export default function EmittenteMappingSection({
     const { error } = await saveDataHealthPolicy(emittenteId, healthPolicy)
     setSavingHealth(false)
     if (error) {
-      alert('Errore salvataggio Data Health: ' + (getErrorMessage(error) ?? 'sconosciuto'))
+      alert('Errore salvataggio copertura dati: ' + (getErrorMessage(error) ?? 'sconosciuto'))
       return
     }
     onChange?.()
@@ -218,7 +218,7 @@ export default function EmittenteMappingSection({
       <div className="border rounded-lg p-4 space-y-3 overflow-hidden">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <h4 className="font-medium text-sm">Data Health</h4>
+            <h4 className="font-medium text-sm">Copertura dati</h4>
             <p className="text-xs text-gray-500 mt-0.5">
               Scegli il preset della sorgente e adatta i campi attesi per questa emittente.
             </p>
@@ -296,7 +296,7 @@ export default function EmittenteMappingSection({
         <div className="flex justify-end">
           <Button size="sm" onClick={handleSaveHealthPolicy} disabled={savingHealth || !healthPolicy}>
             {savingHealth && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
-            Salva Data Health
+            Salva copertura dati
           </Button>
         </div>
       </div>

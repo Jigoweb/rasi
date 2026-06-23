@@ -70,6 +70,13 @@ describe('data health policy', () => {
     expect(fields.map(field => field.key)).not.toContain('data_trasmissione')
   })
 
+  it('tracks episodic fields for SVOD coverage without provider-specific transforms', () => {
+    const fields = getFieldsForHealthCounts({ preset: 'svod' }).map(field => field.key)
+    expect(fields).toContain('titolo_episodio_originale')
+    expect(fields).toContain('numero_episodio')
+    expect(fields).not.toContain('numero_stagione')
+  })
+
   it('uses blank-aware missing filter for text fields', () => {
     const [titleField] = resolveDataHealthPolicy({ preset: 'lineare' }).fields
       .filter(field => field.key === 'titolo')
@@ -97,6 +104,18 @@ describe('data health policy', () => {
       'retail_price',
       'total_revenue',
     ])
+
+    expect(getProgrammazioniTableColumns({ preset: 'svod' }).map(column => column.key)).toEqual([
+      'processato',
+      'titolo',
+      'tipo',
+      'durata_minuti',
+      'titolo_episodio_originale',
+      'numero_episodio',
+      'anno',
+      'views',
+      'total_net_ad_revenue',
+    ])
   })
 
   it('can expose all supported table columns for troubleshooting', () => {
@@ -104,5 +123,7 @@ describe('data health policy', () => {
     expect(columns).toContain('data_trasmissione')
     expect(columns).toContain('ora_inizio')
     expect(columns).toContain('total_net_ad_revenue')
+    expect(columns).toContain('titolo_episodio_originale')
+    expect(columns).toContain('numero_episodio')
   })
 })

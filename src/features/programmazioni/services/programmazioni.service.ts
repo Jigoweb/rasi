@@ -655,6 +655,10 @@ export interface ProgrammazioneRow {
   tipo?: string | null
   canale?: string | null
   emittente?: string | null
+  titolo_episodio?: string | null
+  titolo_episodio_originale?: string | null
+  numero_stagione?: number | null
+  numero_episodio?: number | null
   anno?: number | null
   sales_month?: string | number | null
   views?: number | null
