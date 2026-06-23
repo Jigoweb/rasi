@@ -185,6 +185,10 @@ describe('upload programmazioni runner', () => {
 
     assert.equal(upsertCalls.length, 1)
     assert.equal(selectedInsertedIds, false)
-    assert.deepEqual(result, { processed: 1 })
+    assert.deepEqual(result, {
+      attempted: 1,
+      insertedExact: null,
+      duplicateSkippedExact: null,
+    })
   })
 })

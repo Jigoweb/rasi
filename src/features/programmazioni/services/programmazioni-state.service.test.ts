@@ -1,4 +1,7 @@
-import { getProgrammazioneRowState } from './programmazioni-state.service'
+import {
+  classifyProcessingOperationalState,
+  getProgrammazioneRowState,
+} from './programmazioni-state.service'
 
 describe('getProgrammazioneRowState', () => {
   const now = Date.parse('2026-06-23T12:00:00.000Z')
@@ -87,5 +90,54 @@ describe('getProgrammazioneRowState', () => {
       badge: 'individuazione_stale',
       canResumeIndividuazione: true,
     })
+  })
+})
+
+describe('classifyProcessingOperationalState', () => {
+  const now = Date.parse('2026-06-23T12:00:00.000Z')
+  const minutesAgo = (minutes: number) => new Date(now - minutes * 60 * 1000).toISOString()
+
+  it('classifies active jobs as running even when activity is old', () => {
+    expect(classifyProcessingOperationalState({
+      datasetStatus: 'in_corso',
+      campaignJob: { stato: 'running', updated_at: minutesAgo(30) },
+      progress: { last_activity_at: null, job_stato: null },
+      hasLocalRuntimeProcess: false,
+      now,
+    })).toBe('running')
+  })
+
+  it('classifies in_corso without activity as recoverable_unknown', () => {
+    expect(classifyProcessingOperationalState({
+      datasetStatus: 'in_corso',
+      progress: { last_activity_at: null, job_stato: null },
+      hasLocalRuntimeProcess: false,
+      now,
+    })).toBe('recoverable_unknown')
+  })
+
+  it('classifies old activity as stale', () => {
+    expect(classifyProcessingOperationalState({
+      datasetStatus: 'in_corso',
+      progress: { last_activity_at: minutesAgo(20), job_stato: null },
+      hasLocalRuntimeProcess: false,
+      now,
+    })).toBe('stale')
+  })
+
+  it('classifies recent and old job errors explicitly', () => {
+    expect(classifyProcessingOperationalState({
+      datasetStatus: 'in_corso',
+      campaignJob: { stato: 'error', updated_at: minutesAgo(3), error: 'timeout' },
+      hasLocalRuntimeProcess: false,
+      now,
+    })).toBe('error_recent')
+
+    expect(classifyProcessingOperationalState({
+      datasetStatus: 'in_corso',
+      campaignJob: { stato: 'error', updated_at: minutesAgo(20), error: 'timeout' },
+      hasLocalRuntimeProcess: false,
+      now,
+    })).toBe('error_old')
   })
 })
