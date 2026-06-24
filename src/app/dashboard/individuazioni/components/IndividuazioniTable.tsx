@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  Edit,
   Eye,
   Info,
   Loader2,
@@ -43,6 +44,7 @@ interface IndividuazioniTableProps {
   resumingId: string | null
   canStartProcess: (campagneProgrammazioneId: string) => boolean
   onOpenDetail: (campagnaId: string) => void
+  onOpenEdit: (campagna: CampagnaIndividuazione) => void
   onOpenDelete: (campagna: CampagnaIndividuazione) => void
   onResume: (campagna: CampagnaIndividuazione) => void
   onFetchProcessingProgress: (campagnaId: string) => void
@@ -59,6 +61,7 @@ export default function IndividuazioniTable({
   resumingId,
   canStartProcess,
   onOpenDetail,
+  onOpenEdit,
   onOpenDelete,
   onResume,
   onFetchProcessingProgress,
@@ -197,6 +200,10 @@ export default function IndividuazioniTable({
                               <Eye className="h-4 w-4 mr-2" />
                               Dettaglio
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onOpenEdit(campagna)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Modifica
+                            </DropdownMenuItem>
                             <DropdownMenuItem variant="destructive" onClick={() => onOpenDelete(campagna)}>
                               <Trash2 className="h-4 w-4 mr-2" />
                               Elimina
@@ -277,6 +284,10 @@ export default function IndividuazioniTable({
                       <Button variant="outline" size="sm" onClick={() => onOpenDetail(campagna.id)}>
                         <Eye className="h-4 w-4" />
                         Dettaglio
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => onOpenEdit(campagna)}>
+                        <Edit className="h-4 w-4" />
+                        Modifica
                       </Button>
                     </div>
                   </div>

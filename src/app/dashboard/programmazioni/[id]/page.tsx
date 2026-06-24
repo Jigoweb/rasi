@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { getCampagnaProgrammazioneById, listProgrammazioniByCampagnaKeyset, getProgrammazioniHealth, CampagnaProgrammazione, ProgrammazioneRow, ProgrammazioniCursor, ProgrammazioniHealth } from '@/features/programmazioni/services/programmazioni.service'
+import { getCampagnaProgrammazioneById, listProgrammazioniByCampagnaKeyset, getProgrammazioniHealth, updateCampagnaProgrammazioneMetadata, CampagnaProgrammazione, ProgrammazioneRow, ProgrammazioniCursor, ProgrammazioniHealth } from '@/features/programmazioni/services/programmazioni.service'
 import {
   getProgrammazioniTableColumns,
   type ProgrammazioniTableColumn,
@@ -13,11 +13,13 @@ import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { Textarea } from '@/shared/components/ui/textarea'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
 import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll'
-import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
+import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock, Edit } from 'lucide-react'
 
 export default function CampagnaDettaglioPage() {
   const params = useParams()
@@ -37,6 +39,9 @@ export default function CampagnaDettaglioPage() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [showAllColumns, setShowAllColumns] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false)
 
   const processatoBool = useMemo(() => {
     if (processato === 'true') return true
@@ -219,6 +224,42 @@ export default function CampagnaDettaglioPage() {
       ? value.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '-'
 
+  function openEditDialog() {
+    if (!campagna) return
+    setEditDraft({
+      nome: campagna.nome,
+      descrizione: campagna.descrizione || '',
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  async function handleSaveMetadata() {
+    if (!campagna) return
+    const nome = editDraft.nome.trim()
+    if (!nome) return
+
+    setIsSavingMetadata(true)
+    try {
+      const { data, error } = await updateCampagnaProgrammazioneMetadata(campagna.id, {
+        nome,
+        descrizione: editDraft.descrizione,
+      })
+      if (error) throw error
+
+      setCampagna({
+        ...campagna,
+        ...(data || {}),
+        nome,
+        descrizione: editDraft.descrizione.trim() || null,
+      })
+      setIsEditDialogOpen(false)
+    } catch (error) {
+      console.error('Errore aggiornamento programmazione:', error)
+    } finally {
+      setIsSavingMetadata(false)
+    }
+  }
+
   const renderProgrammazioneCell = (row: ProgrammazioneRow, column: ProgrammazioniTableColumn) => {
     switch (column.key) {
       case 'processato':
@@ -365,6 +406,9 @@ export default function CampagnaDettaglioPage() {
           <p className="text-gray-600">Programmazioni associate</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={openEditDialog} disabled={!campagna}>
+            <Edit className="h-4 w-4 mr-2" /> Modifica dettagli
+          </Button>
           <Button variant="outline" asChild>
             <Link href="/dashboard/programmazioni">
             <ArrowLeft className="h-4 w-4 mr-2" /> Indietro
@@ -405,6 +449,43 @@ export default function CampagnaDettaglioPage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifica dettagli programmazione</DialogTitle>
+            <DialogDescription>
+              Aggiorna nome e note della campagna. Le righe caricate non vengono modificate.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="detail-programmazione-name">Nome campagna</label>
+              <Input
+                id="detail-programmazione-name"
+                value={editDraft.nome}
+                onChange={event => setEditDraft(prev => ({ ...prev, nome: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="detail-programmazione-description">Note</label>
+              <Textarea
+                id="detail-programmazione-description"
+                value={editDraft.descrizione}
+                onChange={event => setEditDraft(prev => ({ ...prev, descrizione: event.target.value }))}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Annulla</Button>
+            <Button onClick={handleSaveMetadata} disabled={isSavingMetadata || !editDraft.nome.trim()}>
+              {isSavingMetadata && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salva dettagli
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardContent>

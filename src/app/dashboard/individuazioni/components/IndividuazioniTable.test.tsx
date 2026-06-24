@@ -22,6 +22,7 @@ describe('IndividuazioniTable', () => {
         resumingId={null}
         canStartProcess={() => true}
         onOpenDetail={jest.fn()}
+        onOpenEdit={jest.fn()}
         onOpenDelete={jest.fn()}
         onResume={jest.fn()}
         onFetchProcessingProgress={jest.fn()}

@@ -35,6 +35,11 @@ export interface CampagnaProgrammazione {
   programmazioni_count?: number
 }
 
+export interface CampagnaProgrammazioneMetadataPayload {
+  nome: string
+  descrizione?: string | null
+}
+
 export const getCampagneProgrammazione = async () => {
   try {
     const { data, error } = await (supabase as any).rpc('get_campagne_programmazione_with_counts')
@@ -73,6 +78,24 @@ export const createCampagnaProgrammazione = async (payload: CampagnaProgrammazio
     .single()
 
   return { data, error }
+}
+
+export const updateCampagnaProgrammazioneMetadata = async (
+  campagnaId: string,
+  payload: CampagnaProgrammazioneMetadataPayload
+) => {
+  const { data, error } = await (supabase as any)
+    .from('campagne_programmazione')
+    .update({
+      nome: payload.nome.trim(),
+      descrizione: payload.descrizione?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', campagnaId)
+    .select()
+    .single()
+
+  return { data: data as CampagnaProgrammazione | null, error }
 }
 
 export interface ProgrammazionePayload {

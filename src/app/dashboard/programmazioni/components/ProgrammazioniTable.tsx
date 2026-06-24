@@ -66,6 +66,7 @@ export interface ProgrammazioniTableProps {
   onUpload: (campagna: CampagnaProgrammazione) => void
   onStartIndividuazioni: (campagna: CampagnaProgrammazione) => void
   onResumeIndividuazioni: (campagna: CampagnaProgrammazione) => void
+  onEdit: (campagna: CampagnaProgrammazione) => void
   onDelete: (campagna: CampagnaProgrammazione) => void
 }
 
@@ -82,6 +83,7 @@ export default function ProgrammazioniTable({
   onUpload,
   onStartIndividuazioni,
   onResumeIndividuazioni,
+  onEdit,
   onDelete,
 }: ProgrammazioniTableProps) {
   const router = useRouter()
@@ -190,6 +192,7 @@ export default function ProgrammazioniTable({
                           campagna={campagna}
                           onNavigate={navigateToCampagna}
                           onDelete={onDelete}
+                          onEdit={onEdit}
                           onUpload={onUpload}
                           rowState={rowState}
                           showEdit
@@ -271,6 +274,7 @@ export default function ProgrammazioniTable({
                       campagna={campagna}
                       onNavigate={navigateToCampagna}
                       onDelete={onDelete}
+                      onEdit={onEdit}
                       onUpload={onUpload}
                       rowState={rowState}
                     />
@@ -358,10 +362,18 @@ function PrimaryWorkflowAction({
 }: PrimaryWorkflowActionProps) {
   if (isCompleted) {
     return (
-      <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 gap-1.5 py-1.5 px-3">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={(event) => {
+          event.stopPropagation()
+          onStartIndividuazioni(campagna)
+        }}
+        className="gap-1.5 cursor-pointer disabled:cursor-not-allowed text-green-700 border-green-200 hover:bg-green-50"
+      >
         <CheckCircle className="h-3.5 w-3.5" />
-        Completata
-      </Badge>
+        {compact ? 'Nuovo test' : 'Nuova Individuazione'}
+      </Button>
     )
   }
 
@@ -733,6 +745,7 @@ interface SecondaryActionsProps {
   campagna: CampagnaProgrammazione
   onNavigate: (campagnaId: string) => void
   onDelete: (campagna: CampagnaProgrammazione) => void
+  onEdit: (campagna: CampagnaProgrammazione) => void
   onUpload?: (campagna: CampagnaProgrammazione) => void
   rowState?: ProgrammazioneRowState
   showEdit?: boolean
@@ -742,6 +755,7 @@ function SecondaryActions({
   campagna,
   onNavigate,
   onDelete,
+  onEdit,
   onUpload,
   rowState,
   showEdit = false,
@@ -771,7 +785,7 @@ function SecondaryActions({
           </DropdownMenuItem>
         )}
         {showEdit && (
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={(event) => { event.stopPropagation(); onEdit(campagna) }}>
             <Edit className="h-4 w-4 mr-2" />
             Modifica
           </DropdownMenuItem>

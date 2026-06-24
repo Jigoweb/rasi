@@ -7,7 +7,7 @@ import {
 } from '@/features/individuazioni/services/individuazioni.service'
 
 interface UseIndividuazioniListOptions {
-  resumeById: (campagneProgrammazioneId: string, nome?: string) => Promise<unknown>
+  resumeById: (campagneProgrammazioneId: string, nome?: string, campagneIndividuazioneId?: string) => Promise<unknown>
   canStartProcess: (campagneProgrammazioneId: string) => boolean
 }
 
@@ -74,7 +74,8 @@ export function useIndividuazioniList({
     try {
       await resumeById(
         campagna.campagne_programmazione_id,
-        campagna.campagne_programmazione?.nome ?? campagna.nome
+        campagna.campagne_programmazione?.nome ?? campagna.nome,
+        campagna.id
       )
       await loadCampagne()
     } finally {

@@ -36,6 +36,7 @@ function renderTable(overrides: Partial<ComponentProps<typeof ProgrammazioniTabl
     onUpload: jest.fn(),
     onStartIndividuazioni: jest.fn(),
     onResumeIndividuazioni: jest.fn(),
+    onEdit: jest.fn(),
     onDelete: jest.fn(),
     ...overrides,
   }

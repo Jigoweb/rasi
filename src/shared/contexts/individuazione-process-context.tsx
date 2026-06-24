@@ -39,7 +39,9 @@ export interface IndividuazioneProcessState {
 
 export interface StartProcessOptions {
   artistaIds?: string[] | null  // Filtro artisti opzionale
+  nomeCampagna?: string | null  // Nome libero per la campagna individuazione
   descrizione?: string | null   // Descrizione pre-compilata dalla campagna programmazione
+  campagneIndividuazioneId?: string
   resume?: boolean              // Riprende un processo interrotto (skip righe già processate)
 }
 
@@ -71,7 +73,7 @@ export interface IndividuazioneProcessContextValue {
   /** Ricarica la lista dei job interrotti dal server. */
   refreshInterrupted: () => Promise<void>
   /** Riprende un job interrotto dato il suo campagne_programmazione_id. */
-  resumeById: (campagneProgrammazioneId: string, nome?: string) => Promise<FinalizeCampagnaResponse>
+  resumeById: (campagneProgrammazioneId: string, nome?: string, campagneIndividuazioneId?: string) => Promise<FinalizeCampagnaResponse>
   /** Nasconde una card "interrotto" senza riprenderla (solo lato UI). */
   dismissInterrupted: (campagneProgrammazioneId: string) => void
 }
@@ -199,7 +201,9 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         {
           chunkSize: 25,
           artistaIds: options?.artistaIds,  // Passa il filtro artisti
+          nomeCampagna: options?.nomeCampagna || undefined,
           descrizione: options?.descrizione || campagna.descrizione || undefined,  // Usa descrizione passata o quella della campagna
+          campagneIndividuazioneId: options?.campagneIndividuazioneId,
           resume: options?.resume,  // Riprende un processo interrotto
         }
       )
@@ -307,13 +311,14 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
   const resumeById = useCallback(async (
     campagneProgrammazioneId: string,
     nome?: string,
+    campagneIndividuazioneId?: string,
   ): Promise<FinalizeCampagnaResponse> => {
     const campagna = {
       id: campagneProgrammazioneId,
       nome: nome ?? 'Campagna',
       stato: 'in_corso',
     } as CampagnaProgrammazione
-    const result = await startProcess(campagna, { resume: true })
+    const result = await startProcess(campagna, { resume: true, campagneIndividuazioneId })
     if (!result.success) {
       // resume fallito (es. lock di altro utente): risincronizza con il server
       refreshInterrupted()

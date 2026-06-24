@@ -46,6 +46,7 @@ export interface InitCampagnaResponse {
 
 export interface GetBatchIdsRequest {
   campagne_programmazione_id: string
+  campagne_individuazione_id?: string
   last_id?: string | null  // Cursor: ultimo ID processato (null per il primo batch)
   limit: number
   only_unprocessed?: boolean  // Resume: salta le programmazioni già processate
@@ -160,7 +161,7 @@ export const initCampagnaIndividuazione = async (
  * processate. Rinnova il lock server-side per lo stesso utente.
  */
 export const resumeCampagnaIndividuazione = async (
-  request: { campagne_programmazione_id: string }
+  request: { campagne_programmazione_id: string; campagne_individuazione_id?: string }
 ): Promise<InitCampagnaResponse> => {
   try {
     const headers = await getAuthHeaders()
@@ -370,6 +371,7 @@ type BatchProcessingOptions = {
   nomeCampagna?: string
   descrizione?: string
   artistaIds?: string[] | null  // Filtro artisti opzionale
+  campagneIndividuazioneId?: string
   resume?: boolean              // Riprende un processo interrotto (skip righe già fatte)
 }
 
@@ -407,7 +409,8 @@ export const processCampagnaIndividuazioneBatch = async (
 
     const initResult = isResume
       ? await resumeCampagnaIndividuazione({
-          campagne_programmazione_id: campagneProgrammazioneId
+          campagne_programmazione_id: campagneProgrammazioneId,
+          campagne_individuazione_id: options?.campagneIndividuazioneId,
         })
       : await initCampagnaIndividuazione({
           campagne_programmazione_id: campagneProgrammazioneId,
@@ -459,6 +462,7 @@ export const processCampagnaIndividuazioneBatch = async (
       console.log(`[Batch] Fetching IDs batch with cursor: ${lastId || 'START'}`)
       const batchResult = await getBatchIds({
         campagne_programmazione_id,
+        campagne_individuazione_id,
         last_id: lastId,
         limit: chunkSize,
         // Sempre true: init azzera `processato` a inizio run fresh e il chunk lo
@@ -724,6 +728,7 @@ const processCampagnaIndividuazioneViaWorker = async (
         artista_ids: options?.artistaIds ?? null,
         nome_campagna: options?.nomeCampagna,
         descrizione: options?.descrizione,
+        campagne_individuazione_id: options?.campagneIndividuazioneId,
         resume: options?.resume === true,
       }),
     })

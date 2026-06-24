@@ -12,9 +12,13 @@ import {
   getCampagneProgrammazione,
   getLatestProcessingJobsForCampagne,
   getProcessingProgress,
+  updateCampagnaProgrammazioneMetadata,
   type ProcessingActivityJob,
   type ProcessingProgress,
 } from '@/features/programmazioni/services/programmazioni.service'
+import {
+  getCampagneIndividuazioneCountForProgrammazione,
+} from '@/features/individuazioni/services/individuazioni.service'
 import {
   getLatestUploadJobsForCampagne,
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
@@ -76,6 +80,9 @@ export default function ProgrammazioniPage() {
   const [newProgrammazioneStep, setNewProgrammazioneStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isResumingUpload, setIsResumingUpload] = useState(false)
+  const [campagnaToEdit, setCampagnaToEdit] = useState<CampagnaProgrammazione | null>(null)
+  const [editMetadataDraft, setEditMetadataDraft] = useState({ nome: '', descrizione: '' })
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -144,6 +151,9 @@ export default function ProgrammazioniPage() {
   const [showProcessBlockedDialog, setShowProcessBlockedDialog] = useState(false)
   const [showIndividuazioniConfirmDialog, setShowIndividuazioniConfirmDialog] = useState(false)
   const [campagnaForIndividuazioni, setCampagnaForIndividuazioni] = useState<CampagnaProgrammazione | null>(null)
+  const [individuazioneName, setIndividuazioneName] = useState('')
+  const [individuazioneDescription, setIndividuazioneDescription] = useState('')
+  const lastSuggestedNameRef = useRef('')
   
   // Artist filter for individuazioni
   const [showArtistFilter, setShowArtistFilter] = useState(false)
@@ -249,10 +259,19 @@ export default function ProgrammazioniPage() {
 
     // Show confirmation dialog first
     setCampagnaForIndividuazioni(campagna)
+    setIndividuazioneName(buildIndividuazioneName(campagna.nome, 1))
+    setIndividuazioneDescription(campagna.descrizione || '')
     setShowIndividuazioniConfirmDialog(true)
     setShowArtistFilter(false) // Reset filter panel
     setArtistSearchQuery('') // Reset search
     loadArtists() // Load artists if not already loaded
+    void getCampagneIndividuazioneCountForProgrammazione(campagna.id).then(({ data }) => {
+      setIndividuazioneName(current => (
+        current === buildIndividuazioneName(campagna.nome, 1)
+          ? buildIndividuazioneName(campagna.nome, data + 1)
+          : current
+      ))
+    })
   }
 
   // Actually start the process after confirmation
@@ -273,7 +292,11 @@ export default function ProgrammazioniPage() {
       : Array.from(selectedArtistIds)
 
     // Start the global process with optional artist filter
-    const result = await startProcess(campagnaForIndividuazioni, { artistaIds })
+    const result = await startProcess(campagnaForIndividuazioni, {
+      artistaIds,
+      nomeCampagna: individuazioneName.trim() || undefined,
+      descrizione: individuazioneDescription.trim() || undefined,
+    })
 
     // Update local state based on result
     if (result.success) {
@@ -323,7 +346,12 @@ export default function ProgrammazioniPage() {
     if (watchedEmittenteId && watchedAnno) {
       const emittente = emittenti.find(e => e.id === watchedEmittenteId)
       if (emittente) {
-        form.setValue('nome', `${emittente.nome} ${watchedAnno}`)
+        const suggestedName = `${emittente.nome} ${watchedAnno}`
+        const currentName = form.getValues('nome')
+        if (!currentName || currentName === lastSuggestedNameRef.current) {
+          form.setValue('nome', suggestedName, { shouldValidate: true })
+        }
+        lastSuggestedNameRef.current = suggestedName
       }
     }
   }, [watchedEmittenteId, watchedAnno, emittenti, form])
@@ -331,7 +359,11 @@ export default function ProgrammazioniPage() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true)
     try {
-      const { data, error } = await createCampagnaProgrammazione(values)
+      const { data, error } = await createCampagnaProgrammazione({
+        ...values,
+        nome: values.nome.trim(),
+        descrizione: values.descrizione?.trim() || undefined,
+      })
       if (error) throw error
       
       await fetchCampagne()
@@ -351,7 +383,47 @@ export default function ProgrammazioniPage() {
     setIsResumingUpload(false)
     setSelectedCampagna(null)
     form.reset()
+    lastSuggestedNameRef.current = ''
     resetUploadState()
+  }
+
+  function openEditMetadataDialog(campagna: CampagnaProgrammazione) {
+    setCampagnaToEdit(campagna)
+    setEditMetadataDraft({
+      nome: campagna.nome,
+      descrizione: campagna.descrizione || '',
+    })
+  }
+
+  async function handleSaveProgrammazioneMetadata() {
+    if (!campagnaToEdit) return
+    const nome = editMetadataDraft.nome.trim()
+    if (!nome) return
+
+    setIsSavingMetadata(true)
+    try {
+      const { data, error } = await updateCampagnaProgrammazioneMetadata(campagnaToEdit.id, {
+        nome,
+        descrizione: editMetadataDraft.descrizione,
+      })
+      if (error) throw error
+
+      setCampagne(prev => prev.map(campagna => (
+        campagna.id === campagnaToEdit.id
+          ? {
+              ...campagna,
+              ...(data || {}),
+              nome,
+              descrizione: editMetadataDraft.descrizione.trim() || null,
+            }
+          : campagna
+      )))
+      setCampagnaToEdit(null)
+    } catch (error) {
+      console.error('Error updating campagna metadata:', error)
+    } finally {
+      setIsSavingMetadata(false)
+    }
   }
 
   const filterCampagne = useCallback(() => {
@@ -522,7 +594,20 @@ export default function ProgrammazioniPage() {
             <FormItem>
               <FormLabel>Nome Campagna</FormLabel>
               <FormControl>
-                <Input {...field} readOnly className="bg-gray-50" />
+                <div className="space-y-2">
+                  <Input {...field} placeholder="Es. Rai 1 2026 - Test palinsesto A" />
+                  {lastSuggestedNameRef.current && field.value !== lastSuggestedNameRef.current && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto px-0 text-xs text-muted-foreground"
+                      onClick={() => form.setValue('nome', lastSuggestedNameRef.current, { shouldValidate: true })}
+                    >
+                      Ripristina suggerimento: {lastSuggestedNameRef.current}
+                    </Button>
+                  )}
+                </div>
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -752,6 +837,7 @@ export default function ProgrammazioniPage() {
             }}
             onStartIndividuazioni={handleStartIndividuazioni}
             onResumeIndividuazioni={handleResumeIndividuazioni}
+            onEdit={openEditMetadataDialog}
             onDelete={openDeleteDialog}
           />
         </>
@@ -807,6 +893,48 @@ export default function ProgrammazioniPage() {
         onUploadDatabase={handleUploadDatabase}
         onClose={handleCloseModal}
       />
+
+      <Dialog open={Boolean(campagnaToEdit)} onOpenChange={(open) => { if (!open) setCampagnaToEdit(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifica dettagli programmazione</DialogTitle>
+            <DialogDescription>
+              Aggiorna il nome visualizzato e le note della campagna. I dati caricati e il matching non vengono modificati.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-programmazione-name">Nome campagna</label>
+              <Input
+                id="edit-programmazione-name"
+                value={editMetadataDraft.nome}
+                onChange={(event) => setEditMetadataDraft(prev => ({ ...prev, nome: event.target.value }))}
+                placeholder="Es. Rai 1 2026 - Test palinsesto A"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-programmazione-description">Note</label>
+              <Textarea
+                id="edit-programmazione-description"
+                value={editMetadataDraft.descrizione}
+                onChange={(event) => setEditMetadataDraft(prev => ({ ...prev, descrizione: event.target.value }))}
+                placeholder="Annotazioni interne, test, iterazioni o contesto del caricamento..."
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCampagnaToEdit(null)}>Annulla</Button>
+            <Button
+              onClick={handleSaveProgrammazioneMetadata}
+              disabled={isSavingMetadata || !editMetadataDraft.nome.trim()}
+            >
+              {isSavingMetadata && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salva dettagli
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Campagna Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={closeDeleteDialog}>
@@ -935,6 +1063,27 @@ export default function ProgrammazioniPage() {
           </DialogHeader>
           
             <div className="py-4 space-y-4">
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="individuazione-name">Nome individuazione</label>
+                  <Input
+                    id="individuazione-name"
+                    value={individuazioneName}
+                    onChange={(event) => setIndividuazioneName(event.target.value)}
+                    placeholder="Es. Individuazione - Rai 1 2026 - Test 1"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium" htmlFor="individuazione-description">Note individuazione</label>
+                  <Textarea
+                    id="individuazione-description"
+                    value={individuazioneDescription}
+                    onChange={(event) => setIndividuazioneDescription(event.target.value)}
+                    placeholder="Annotazioni su soglia, subset artisti, ipotesi o obiettivo del test..."
+                    rows={3}
+                  />
+                </div>
+              </div>
               <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
                 <p className="text-sm text-muted-foreground">
                   <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
@@ -1100,7 +1249,7 @@ export default function ProgrammazioniPage() {
                 </Button>
                 <Button 
               onClick={handleConfirmStartIndividuazioni}
-              disabled={selectedArtistIds.size === 0}
+              disabled={selectedArtistIds.size === 0 || !individuazioneName.trim()}
                 >
               <Sparkles className="mr-2 h-4 w-4" />
               {selectedArtistIds.size === allArtists.length 
@@ -1178,4 +1327,8 @@ export default function ProgrammazioniPage() {
       </Dialog>
     </div>
   )
+}
+
+function buildIndividuazioneName(programmazioneName: string, testNumber: number): string {
+  return `Individuazione - ${programmazioneName} - Test ${testNumber}`
 }

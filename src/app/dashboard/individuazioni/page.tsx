@@ -1,13 +1,21 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BarChart3, Calendar, CheckCircle, Filter, Sparkles, Tv, Users, X } from 'lucide-react'
+import { BarChart3, Calendar, CheckCircle, Filter, Loader2, Sparkles, Tv, Users, X } from 'lucide-react'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Textarea } from '@/shared/components/ui/textarea'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { PageErrorState, PageLoadingState } from '@/shared/components/page-states'
 import { SearchInput } from '@/shared/components/search-input'
+import {
+  updateCampagnaIndividuazioneMetadata,
+  type CampagnaIndividuazione,
+} from '@/features/individuazioni/services/individuazioni.service'
 import DeleteIndividuazioneDialog from './components/DeleteIndividuazioneDialog'
 import IndividuazioniTable from './components/IndividuazioniTable'
 import { useIndividuazioniDelete } from './hooks/useIndividuazioniDelete'
@@ -16,6 +24,9 @@ import { useIndividuazioniList } from './hooks/useIndividuazioniList'
 
 export default function IndividuazioniPage() {
   const router = useRouter()
+  const [campagnaToEdit, setCampagnaToEdit] = useState<CampagnaIndividuazione | null>(null)
+  const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false)
   const { resumeById, canStartProcess } = useIndividuazioneProcess()
   const {
     campagne,
@@ -55,6 +66,45 @@ export default function IndividuazioniPage() {
     closeDeleteDialog,
     confirmDelete,
   } = useIndividuazioniDelete({ updateCampagne: setCampagne })
+
+  function openEditDialog(campagna: CampagnaIndividuazione) {
+    setCampagnaToEdit(campagna)
+    setEditDraft({
+      nome: campagna.nome,
+      descrizione: campagna.descrizione || '',
+    })
+  }
+
+  async function handleSaveMetadata() {
+    if (!campagnaToEdit) return
+    const nome = editDraft.nome.trim()
+    if (!nome) return
+
+    setIsSavingMetadata(true)
+    try {
+      const { data, error } = await updateCampagnaIndividuazioneMetadata(campagnaToEdit.id, {
+        nome,
+        descrizione: editDraft.descrizione,
+      })
+      if (error) throw error
+
+      setCampagne(prev => prev.map(campagna => (
+        campagna.id === campagnaToEdit.id
+          ? {
+              ...campagna,
+              ...(data || {}),
+              nome,
+              descrizione: editDraft.descrizione.trim() || null,
+            }
+          : campagna
+      )))
+      setCampagnaToEdit(null)
+    } catch (error) {
+      console.error('Errore aggiornamento individuazione:', error)
+    } finally {
+      setIsSavingMetadata(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -230,6 +280,7 @@ export default function IndividuazioniPage() {
         resumingId={resumingId}
         canStartProcess={canStartProcess}
         onOpenDetail={campagnaId => router.push(`/dashboard/individuazioni/${campagnaId}`)}
+        onOpenEdit={openEditDialog}
         onOpenDelete={openDeleteDialog}
         onResume={handleResume}
         onFetchProcessingProgress={fetchProcessingProgress}
@@ -247,6 +298,45 @@ export default function IndividuazioniPage() {
         onOpenChange={closeDeleteDialog}
         onConfirm={confirmDelete}
       />
+
+      <Dialog open={Boolean(campagnaToEdit)} onOpenChange={(open) => { if (!open) setCampagnaToEdit(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifica dettagli individuazione</DialogTitle>
+            <DialogDescription>
+              Aggiorna nome e note della campagna di individuazione. I risultati già generati non vengono ricalcolati.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-individuazione-name">Nome individuazione</label>
+              <Input
+                id="edit-individuazione-name"
+                value={editDraft.nome}
+                onChange={(event) => setEditDraft(prev => ({ ...prev, nome: event.target.value }))}
+                placeholder="Es. Individuazione - Rai 1 2026 - Test 1"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="edit-individuazione-description">Note</label>
+              <Textarea
+                id="edit-individuazione-description"
+                value={editDraft.descrizione}
+                onChange={(event) => setEditDraft(prev => ({ ...prev, descrizione: event.target.value }))}
+                placeholder="Annotazioni su obiettivo, soglia, subset o risultati del test..."
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCampagnaToEdit(null)}>Annulla</Button>
+            <Button onClick={handleSaveMetadata} disabled={isSavingMetadata || !editDraft.nome.trim()}>
+              {isSavingMetadata && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salva dettagli
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const userId = auth.userId
 
     const body = await req.json()
-    const { campagne_programmazione_id } = body
+    const { campagne_programmazione_id, campagne_individuazione_id = null } = body
 
     if (!campagne_programmazione_id) {
       return NextResponse.json(
@@ -73,13 +73,20 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Trova la campagna_individuazione esistente da riprendere
-    const { data: ci, error: ciError } = await (supabaseServer as any)
+    // Trova la campagna_individuazione esistente da riprendere. Nei flussi
+    // multi-run deve essere esplicita; il fallback mantiene compatibilità.
+    let ciQuery = (supabaseServer as any)
       .from('campagne_individuazione')
       .select('id')
       .eq('campagne_programmazione_id', campagne_programmazione_id)
-      .limit(1)
-      .maybeSingle()
+
+    if (campagne_individuazione_id) {
+      ciQuery = ciQuery.eq('id', campagne_individuazione_id)
+    } else {
+      ciQuery = ciQuery.order('updated_at', { ascending: false }).limit(1)
+    }
+
+    const { data: ci, error: ciError } = await ciQuery.maybeSingle()
 
     if (ciError) {
       return NextResponse.json({ success: false, error: ciError.message }, { status: 500 })

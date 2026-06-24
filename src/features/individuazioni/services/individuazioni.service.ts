@@ -3,7 +3,7 @@ import { supabase } from '@/shared/lib/supabase'
 export interface CampagnaIndividuazione {
   id: string
   nome: string
-  descrizione?: string
+  descrizione?: string | null
   emittente_id: string
   campagne_programmazione_id: string
   anno: number
@@ -25,6 +25,11 @@ export interface CampagnaIndividuazione {
   emittenti?: { nome: string }
   campagne_programmazione?: { nome: string }
   individuazioni_count?: number
+}
+
+export interface CampagnaIndividuazioneMetadataPayload {
+  nome: string
+  descrizione?: string | null
 }
 
 export interface Individuazione {
@@ -153,6 +158,39 @@ export const getCampagnaIndividuazione = async (id: string) => {
     data: (data as unknown) as CampagnaIndividuazione, 
     error 
   }
+}
+
+export const getCampagneIndividuazioneCountForProgrammazione = async (
+  campagneProgrammazioneId: string
+) => {
+  const { count, error } = await (supabase as any)
+    .from('campagne_individuazione')
+    .select('id', { count: 'exact', head: true })
+    .eq('campagne_programmazione_id', campagneProgrammazioneId)
+
+  return { data: count ?? 0, error }
+}
+
+export const updateCampagnaIndividuazioneMetadata = async (
+  campagnaId: string,
+  payload: CampagnaIndividuazioneMetadataPayload
+) => {
+  const { data, error } = await (supabase as any)
+    .from('campagne_individuazione')
+    .update({
+      nome: payload.nome.trim(),
+      descrizione: payload.descrizione?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', campagnaId)
+    .select(`
+      *,
+      emittenti(nome),
+      campagne_programmazione(nome)
+    `)
+    .single()
+
+  return { data: data as CampagnaIndividuazione | null, error }
 }
 
 // ============================================

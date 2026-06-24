@@ -225,6 +225,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
 
   return {
     campagna,
+    setCampagna,
     individuazioni,
     loading,
     loadingData,

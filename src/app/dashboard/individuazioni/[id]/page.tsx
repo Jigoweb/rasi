@@ -1,15 +1,21 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Download, Loader2, Search, Sparkles } from 'lucide-react'
+import { ArrowLeft, Download, Edit, Loader2, Search, Sparkles } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { Textarea } from '@/shared/components/ui/textarea'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
-import type { SearchField } from '@/features/individuazioni/services/individuazioni.service'
+import {
+  updateCampagnaIndividuazioneMetadata,
+  type SearchField,
+} from '@/features/individuazioni/services/individuazioni.service'
 import ExportIndividuazioniDialog from './components/ExportIndividuazioniDialog'
 import IndividuazioniDetailTable from './components/IndividuazioniDetailTable'
 import { useIndividuazioneDetail } from './hooks/useIndividuazioneDetail'
@@ -17,8 +23,12 @@ import { useIndividuazioneDetail } from './hooks/useIndividuazioneDetail'
 export default function IndividuazioneDetailPage() {
   const params = useParams()
   const campagnaId = params.id as string
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
+  const [isSavingMetadata, setIsSavingMetadata] = useState(false)
   const {
     campagna,
+    setCampagna,
     individuazioni,
     loading,
     loadingData,
@@ -44,6 +54,42 @@ export default function IndividuazioneDetailPage() {
     handleConfirmExport,
     loadMore,
   } = useIndividuazioneDetail(campagnaId)
+
+  function openEditDialog() {
+    if (!campagna) return
+    setEditDraft({
+      nome: campagna.nome,
+      descrizione: campagna.descrizione || '',
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  async function handleSaveMetadata() {
+    if (!campagna) return
+    const nome = editDraft.nome.trim()
+    if (!nome) return
+
+    setIsSavingMetadata(true)
+    try {
+      const { data, error } = await updateCampagnaIndividuazioneMetadata(campagna.id, {
+        nome,
+        descrizione: editDraft.descrizione,
+      })
+      if (error) throw error
+
+      setCampagna({
+        ...campagna,
+        ...(data || {}),
+        nome,
+        descrizione: editDraft.descrizione.trim() || null,
+      })
+      setIsEditDialogOpen(false)
+    } catch (error) {
+      console.error('Errore aggiornamento individuazione:', error)
+    } finally {
+      setIsSavingMetadata(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -98,7 +144,11 @@ export default function IndividuazioneDetailPage() {
           )}
         </div>
 
-        <div ref={exportButtonRef}>
+        <div ref={exportButtonRef} className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={openEditDialog}>
+            <Edit className="h-4 w-4 mr-2" />
+            Modifica dettagli
+          </Button>
           <Button onClick={() => setShowExportDialog(true)} disabled={isCalculatingEstimate}>
             {isCalculatingEstimate ? (
               <>
@@ -184,6 +234,43 @@ export default function IndividuazioneDetailPage() {
         onFormatSelect={handleFormatSelect}
         onConfirmExport={handleConfirmExport}
       />
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifica dettagli individuazione</DialogTitle>
+            <DialogDescription>
+              Aggiorna nome e note della campagna di individuazione. I risultati non vengono ricalcolati.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="detail-individuazione-name">Nome individuazione</label>
+              <Input
+                id="detail-individuazione-name"
+                value={editDraft.nome}
+                onChange={event => setEditDraft(prev => ({ ...prev, nome: event.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="detail-individuazione-description">Note</label>
+              <Textarea
+                id="detail-individuazione-description"
+                value={editDraft.descrizione}
+                onChange={event => setEditDraft(prev => ({ ...prev, descrizione: event.target.value }))}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Annulla</Button>
+            <Button onClick={handleSaveMetadata} disabled={isSavingMetadata || !editDraft.nome.trim()}>
+              {isSavingMetadata && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salva dettagli
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

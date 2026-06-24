@@ -45,7 +45,7 @@ describe('useIndividuazioniList', () => {
       await result.current.handleResume(result.current.campagne[0])
     })
 
-    expect(resumeById).toHaveBeenCalledWith('programmazione-1', 'Programmazione Rai')
+    expect(resumeById).toHaveBeenCalledWith('programmazione-1', 'Programmazione Rai', 'individuazione-1')
     expect(getCampagneIndividuazione).toHaveBeenCalledTimes(2)
   })
 })

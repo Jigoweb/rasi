@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       campagne_programmazione_id,
+      campagne_individuazione_id = null,
       last_id = null,  // Cursor: ultimo ID processato
       limit = 500,
       only_unprocessed = false  // Resume: salta le programmazioni già processate
@@ -37,27 +38,48 @@ export async function POST(req: NextRequest) {
     // Cursor-based pagination: molto più veloce di OFFSET per grandi dataset
     // Invece di "OFFSET 19000" che deve saltare 19000 righe,
     // usiamo "WHERE id > last_id" che usa l'indice direttamente
+    if (only_unprocessed) {
+      const { data, error } = await (supabaseServer as any)
+        .rpc('get_campagna_unprocessed_programmazione_ids', {
+          p_campagne_programmazione_id: campagne_programmazione_id,
+          p_campagne_individuazione_id: campagne_individuazione_id,
+          p_limit: limit,
+        })
+
+      if (error) {
+        console.error('Errore caricamento batch:', error)
+        return NextResponse.json(
+          { success: false, error: error.message },
+          { status: 500 }
+        )
+      }
+
+      const programmazioneIds = data?.map((p: { id: string }) => p.id) || []
+      const newLastId = programmazioneIds.length > 0
+        ? programmazioneIds[programmazioneIds.length - 1]
+        : null
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          programmazione_ids: programmazioneIds,
+          count: programmazioneIds.length,
+          last_id: newLastId,
+          has_more: programmazioneIds.length === limit
+        }
+      })
+    }
+
     let query = supabaseServer
       .from('programmazioni')
       .select('id')
       .eq('campagna_programmazione_id', campagne_programmazione_id)
       .limit(limit)
 
-    if (only_unprocessed) {
-      // Prende solo le programmazioni non ancora processate, SENZA ORDER BY/cursor.
-      // CRITICO: con `ORDER BY id LIMIT n` il planner sceglie un Index Scan sulla
-      // PK (id) filtrando per campagna → per campagne con id alti scansiona
-      // milioni di righe prima di trovarne n → statement timeout.
-      // Senza order-by usa l'indice su campagna_programmazione_id (cost ~21).
-      // L'avanzamento è garantito: il chunk marca processato=true e le righe
-      // spariscono dal filtro, quindi non serve il cursore.
-      query = query.or('processato.is.null,processato.eq.false')
-    } else {
-      // Primo passaggio classico: cursor su id crescente.
-      query = query.order('id', { ascending: true })
-      if (last_id) {
-        query = query.gt('id', last_id)
-      }
+    // Primo passaggio classico: cursor su id crescente.
+    query = query.order('id', { ascending: true })
+    if (last_id) {
+      query = query.gt('id', last_id)
     }
 
     const { data: programmazioni, error: progError } = await query

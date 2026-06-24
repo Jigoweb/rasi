@@ -20,6 +20,7 @@ export interface RunOptions {
   jobId: string
   sogliaItolo?: number
   artistaIds?: string[] | null
+  campagneIndividuazioneId?: string | null
   nomeCampagna?: string
   descrizione?: string
   resume?: boolean
@@ -73,14 +74,17 @@ async function releaseLock(
  */
 async function getUnprocessedBatch(
   campagnaProgrammazioneId: string,
+  campagnaIndividuazioneId: string | null,
   limit: number
 ): Promise<string[]> {
-  const { data, error } = await supabaseService
-    .from('programmazioni')
-    .select('id')
-    .eq('campagna_programmazione_id', campagnaProgrammazioneId)
-    .or('processato.is.null,processato.eq.false')
-    .limit(limit)
+  const { data, error } = await supabaseService.rpc(
+    'get_campagna_unprocessed_programmazione_ids',
+    {
+      p_campagne_programmazione_id: campagnaProgrammazioneId,
+      p_campagne_individuazione_id: campagnaIndividuazioneId,
+      p_limit: limit,
+    }
+  )
 
   if (error) throw new Error(`getUnprocessedBatch: ${error.message}`)
   return (data ?? []).map((r: { id: string }) => r.id)
@@ -234,6 +238,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     jobId,
     sogliaItolo = 0.7,
     artistaIds = null,
+    campagneIndividuazioneId: requestedCampagneIndividuazioneId = null,
     nomeCampagna,
     descrizione,
     resume = false,
@@ -258,12 +263,18 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     let programmazioniTotali: number
 
     if (resume) {
-      const { data: ci, error } = await supabaseService
+      let ciQuery = supabaseService
         .from('campagne_individuazione')
         .select('id')
         .eq('campagne_programmazione_id', campagneProgrammazioneId)
-        .limit(1)
-        .maybeSingle()
+
+      if (requestedCampagneIndividuazioneId) {
+        ciQuery = ciQuery.eq('id', requestedCampagneIndividuazioneId)
+      } else {
+        ciQuery = ciQuery.order('updated_at', { ascending: false }).limit(1)
+      }
+
+      const { data: ci, error } = await ciQuery.maybeSingle()
 
       if (error) throw new Error(error.message)
       if (!ci?.id) {
@@ -321,7 +332,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     let chunkIndex = 0
 
     while (true) {
-      const ids = await getUnprocessedBatch(campagneProgrammazioneId, config.chunkSize)
+      const ids = await getUnprocessedBatch(campagneProgrammazioneId, campagneIndividuazioneId, config.chunkSize)
       if (ids.length === 0) break
 
       const result = await processChunk(
