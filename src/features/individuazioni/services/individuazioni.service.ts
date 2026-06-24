@@ -50,6 +50,7 @@ export interface Individuazione {
   titolo_originale?: string
   numero_episodio?: number
   titolo_episodio?: string
+  titolo_episodio_originale?: string
   numero_stagione?: number
   anno?: number
   production?: string

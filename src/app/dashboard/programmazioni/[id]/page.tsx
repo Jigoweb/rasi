@@ -224,6 +224,14 @@ export default function CampagnaDettaglioPage() {
         return (
           <div className="font-medium">
             <div>{row.titolo}</div>
+            {getEpisodeDisplay(row) && (
+              <div
+                className="text-xs text-gray-500 truncate max-w-[300px]"
+                title={getEpisodeDisplay(row) ?? undefined}
+              >
+                {getEpisodeDisplay(row)}
+              </div>
+            )}
             {row.descrizione && <div className="text-xs text-gray-500 truncate max-w-[300px]">{row.descrizione}</div>}
           </div>
         )
@@ -262,6 +270,18 @@ export default function CampagnaDettaglioPage() {
     if (key === 'processato') return 'w-[50px]'
     if (key === 'titolo') return 'min-w-[300px]'
     return undefined
+  }
+
+  const getEpisodeDisplay = (row: ProgrammazioneRow) => {
+    const title = row.titolo_episodio || row.titolo_episodio_originale
+    const hasEpisodeNumber = row.numero_stagione != null || row.numero_episodio != null
+    if (!title && !hasEpisodeNumber) return null
+
+    const code = hasEpisodeNumber
+      ? `S${row.numero_stagione ?? '?'}E${row.numero_episodio ?? '?'}`
+      : 'Episodio'
+
+    return title ? `${code}: ${title}` : code
   }
 
   if (loading && rows.length === 0) {

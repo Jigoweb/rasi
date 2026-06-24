@@ -77,9 +77,9 @@ export default function IndividuazioniDetailTable({
                   <TableCell className="py-4">
                     <div className="max-w-[200px]">
                       <p className="font-medium truncate" title={ind.titolo || ''}>{ind.titolo || '-'}</p>
-                      {ind.titolo_episodio && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          S{ind.numero_stagione || '?'}E{ind.numero_episodio || '?'}: {ind.titolo_episodio}
+                      {getEpisodeDisplay(ind) && (
+                        <p className="text-xs text-muted-foreground truncate" title={getEpisodeDisplay(ind) ?? undefined}>
+                          {getEpisodeDisplay(ind)}
                         </p>
                       )}
                     </div>
@@ -103,7 +103,7 @@ export default function IndividuazioniDetailTable({
                   </TableCell>
                   <TableCell className="py-4 text-center">
                     <span className={`font-medium ${getMatchColor(ind.punteggio_matching)}`}>
-                      {(ind.punteggio_matching * 100).toFixed(0)}%
+                      {formatMatchPercent(ind.punteggio_matching)}
                     </span>
                   </TableCell>
                   <TableCell className="py-4">
@@ -157,9 +157,30 @@ function getArtistaDisplay(ind: Individuazione) {
   return nome || '-'
 }
 
+function getEpisodeDisplay(ind: Individuazione) {
+  const title = ind.titolo_episodio || ind.titolo_episodio_originale
+  const hasEpisodeNumber = ind.numero_stagione != null || ind.numero_episodio != null
+  if (!title && !hasEpisodeNumber) return null
+
+  const code = hasEpisodeNumber
+    ? `S${ind.numero_stagione ?? '?'}E${ind.numero_episodio ?? '?'}`
+    : 'Episodio'
+
+  return title ? `${code}: ${title}` : code
+}
+
+function normalizeMatchScore(score: number) {
+  return score > 1 ? score : score * 100
+}
+
+function formatMatchPercent(score: number) {
+  return `${Math.round(normalizeMatchScore(score))}%`
+}
+
 function getMatchColor(score: number) {
-  if (score >= 0.9) return 'text-green-600'
-  if (score >= 0.7) return 'text-yellow-600'
+  const normalized = normalizeMatchScore(score)
+  if (normalized >= 90) return 'text-green-600'
+  if (normalized >= 70) return 'text-yellow-600'
   return 'text-red-600'
 }
 
