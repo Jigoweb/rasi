@@ -16,6 +16,9 @@ describe('IndividuazioniDetailTable', () => {
           numero_stagione: null,
           numero_episodio: 2008,
           titolo_episodio_originale: 'Stranger Things 2: "Chapter Eight: The Mind Flayer"',
+          dettagli_matching: {
+            episode_normalization_fallback: { confidence: 'high' },
+          },
           artisti: { nome: 'Mario', cognome: 'Rossi', nome_arte: 'Mario R' },
           opere: { titolo: 'Opera matchata' },
           ruoli_tipologie: { nome: 'Attore' },
@@ -35,6 +38,7 @@ describe('IndividuazioniDetailTable', () => {
     expect(screen.getByText('Mario R')).toBeInTheDocument()
     expect(screen.getByText('Opera matchata')).toBeInTheDocument()
     expect(screen.getByText('80%')).toBeInTheDocument()
+    expect(screen.getByText('normalizzato')).toBeInTheDocument()
     expect(screen.getByText('Validato')).toBeInTheDocument()
   })
 })

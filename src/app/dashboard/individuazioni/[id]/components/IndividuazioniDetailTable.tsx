@@ -82,6 +82,14 @@ export default function IndividuazioniDetailTable({
                           {getEpisodeDisplay(ind)}
                         </p>
                       )}
+                      {getEpisodeNormalizationLabel(ind) && (
+                        <Badge
+                          variant="outline"
+                          className={`mt-1 text-[10px] ${getEpisodeNormalizationBadgeClass(ind)}`}
+                        >
+                          {getEpisodeNormalizationLabel(ind)}
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="py-4">
@@ -167,6 +175,26 @@ function getEpisodeDisplay(ind: Individuazione) {
     : 'Episodio'
 
   return title ? `${code}: ${title}` : code
+}
+
+function getEpisodeNormalizationLabel(ind: Individuazione) {
+  const fallback = getEpisodeNormalizationFallback(ind)
+  if (fallback?.confidence === 'review_required' || ind.dettagli_matching?.episodio_mancante === true) {
+    return 'review episodio'
+  }
+  if (fallback?.confidence === 'high') return 'normalizzato'
+  return null
+}
+
+function getEpisodeNormalizationBadgeClass(ind: Individuazione) {
+  return getEpisodeNormalizationLabel(ind) === 'review episodio'
+    ? 'border-yellow-200 bg-yellow-50 text-yellow-800'
+    : 'border-blue-200 bg-blue-50 text-blue-800'
+}
+
+function getEpisodeNormalizationFallback(ind: Individuazione): { confidence?: string } | null {
+  const fallback = ind.dettagli_matching?.episode_normalization_fallback
+  return fallback && typeof fallback === 'object' ? fallback : null
 }
 
 function normalizeMatchScore(score: number) {

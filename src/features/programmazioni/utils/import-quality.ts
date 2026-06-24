@@ -1,3 +1,8 @@
+import {
+  normalizeEpisodeSignals,
+  type EpisodeNormalizationWarningCode,
+} from './episode-normalization'
+
 export const IMPORT_QUALITY_REPORT_VERSION = 1
 
 export type ImportQualityWarningCode =
@@ -7,6 +12,7 @@ export type ImportQualityWarningCode =
   | 'mojibake_suspected'
   | 'type_non_canonical'
   | 'non_work_row_suspected'
+  | EpisodeNormalizationWarningCode
 
 export interface ImportQualityWarning {
   code: ImportQualityWarningCode
@@ -101,6 +107,15 @@ export function assessProgrammazioneImportQuality(
     })
   }
 
+  const episodeAssessment = normalizeEpisodeSignals(row)
+  for (const code of episodeAssessment.warnings) {
+    warnings.push({
+      code,
+      field: getEpisodeWarningField(code, episodeAssessment.sourceFields),
+      message: getEpisodeWarningMessage(code),
+    })
+  }
+
   return { warnings }
 }
 
@@ -152,4 +167,21 @@ function isLikelyNonWorkTitle(value: unknown): boolean {
   const words = title.split(/\s+/)
   const productionCompanyHits = words.filter(word => PRODUCTION_COMPANY_RX.test(word)).length
   return title.length > 40 && productionCompanyHits >= 2
+}
+
+function getEpisodeWarningField(code: EpisodeNormalizationWarningCode, sourceFields: string[]): string {
+  if (code === 'episode_packed_number_detected') return 'numero_episodio'
+  if (code === 'episode_range_requires_review') return sourceFields[0] ?? 'titolo_episodio_originale'
+  if (code === 'episode_season_mismatch') return 'numero_stagione'
+  return sourceFields[0] ?? 'titolo_episodio_originale'
+}
+
+function getEpisodeWarningMessage(code: EpisodeNormalizationWarningCode): string {
+  const messages: Record<EpisodeNormalizationWarningCode, string> = {
+    episode_packed_number_detected: 'Numero episodio compatto rilevato e normalizzabile',
+    episode_title_embedded_detected: 'Titolo episodio incorporato in un campo testuale',
+    episode_range_requires_review: 'Range o multiplo episodio da revisionare manualmente',
+    episode_season_mismatch: 'Stagione inferita da titolo e numero episodio non coerenti',
+  }
+  return messages[code]
 }

@@ -73,6 +73,27 @@ describe('assessProgrammazioneImportQuality', () => {
       expect.objectContaining({ code: 'non_work_row_suspected', field: 'titolo' }),
     ])
   })
+
+  it('flags non-blocking episode normalization signals', () => {
+    expect(codes({
+      titolo: 'Stranger Things 3',
+      titolo_originale: 'Stranger Things',
+      numero_episodio: 3005,
+      titolo_episodio_originale: 'Stranger Things 3: "chapter Five: the Flayed"',
+    })).toEqual(expect.arrayContaining([
+      'episode_packed_number_detected',
+      'episode_title_embedded_detected',
+    ]))
+
+    expect(codes({ titolo_episodio_originale: 'Episodes 1-2' }))
+      .toContain('episode_range_requires_review')
+
+    expect(codes({
+      titolo: 'Stranger Things 2',
+      titolo_originale: 'Stranger Things',
+      numero_episodio: 3005,
+    })).toContain('episode_season_mismatch')
+  })
 })
 
 describe('summarizeImportQuality', () => {
@@ -89,6 +110,25 @@ describe('summarizeImportQuality', () => {
     expect(summary.warningCounts).toEqual({
       year_out_of_range: 1,
       duration_placeholder: 1,
+    })
+  })
+
+  it('aggregates episode warning counts', () => {
+    const summary = summarizeImportQuality([
+      {
+        titolo: 'Stranger Things 3',
+        titolo_originale: 'Stranger Things',
+        numero_episodio: 3005,
+        titolo_episodio_originale: 'Stranger Things 3: "chapter Five: the Flayed"',
+      },
+      { titolo_episodio_originale: 'Episodes 1-2' },
+    ])
+
+    expect(summary.rowsWithWarnings).toBe(2)
+    expect(summary.warningCounts).toMatchObject({
+      episode_packed_number_detected: 1,
+      episode_title_embedded_detected: 1,
+      episode_range_requires_review: 1,
     })
   })
 })

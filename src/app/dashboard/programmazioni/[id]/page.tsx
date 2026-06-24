@@ -232,6 +232,14 @@ export default function CampagnaDettaglioPage() {
                 {getEpisodeDisplay(row)}
               </div>
             )}
+            {getEpisodeNormalizationLabel(row) && (
+              <Badge
+                variant="outline"
+                className={`mt-1 text-[10px] ${getEpisodeNormalizationBadgeClass(row)}`}
+              >
+                {getEpisodeNormalizationLabel(row)}
+              </Badge>
+            )}
             {row.descrizione && <div className="text-xs text-gray-500 truncate max-w-[300px]">{row.descrizione}</div>}
           </div>
         )
@@ -282,6 +290,25 @@ export default function CampagnaDettaglioPage() {
       : 'Episodio'
 
     return title ? `${code}: ${title}` : code
+  }
+
+  const getEpisodeNormalizationLabel = (row: ProgrammazioneRow) => {
+    const normalization = getEpisodeNormalizationMetadata(row)
+    if (normalization?.confidence === 'review_required') return 'review episodio'
+    if (normalization?.confidence === 'high') return 'normalizzato'
+    return null
+  }
+
+  const getEpisodeNormalizationBadgeClass = (row: ProgrammazioneRow) => {
+    return getEpisodeNormalizationLabel(row) === 'review episodio'
+      ? 'border-yellow-200 bg-yellow-50 text-yellow-800'
+      : 'border-blue-200 bg-blue-50 text-blue-800'
+  }
+
+  const getEpisodeNormalizationMetadata = (row: ProgrammazioneRow): { confidence?: string } | null => {
+    const metadata = row.metadati_trasmissione
+    const normalization = metadata?.episode_normalization
+    return normalization && typeof normalization === 'object' ? normalization as { confidence?: string } : null
   }
 
   if (loading && rows.length === 0) {

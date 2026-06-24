@@ -38,4 +38,27 @@ describe('worker import quality report', () => {
 
     assert.deepEqual(assessment.warnings, [])
   })
+
+  it('flags and aggregates non-blocking episode normalization signals', () => {
+    const summary = summarizeImportQuality([
+      {
+        titolo: 'Stranger Things 3',
+        titolo_originale: 'Stranger Things',
+        numero_episodio: 3005,
+        titolo_episodio_originale: 'Stranger Things 3: "chapter Five: the Flayed"',
+      },
+      { titolo_episodio_originale: 'Episodes 1-2' },
+      {
+        titolo: 'Stranger Things 2',
+        titolo_originale: 'Stranger Things',
+        numero_episodio: 3005,
+      },
+    ])
+
+    assert.equal(summary.rowsWithWarnings, 3)
+    assert.equal(summary.warningCounts.episode_packed_number_detected, 2)
+    assert.equal(summary.warningCounts.episode_title_embedded_detected, 1)
+    assert.equal(summary.warningCounts.episode_range_requires_review, 1)
+    assert.equal(summary.warningCounts.episode_season_mismatch, 1)
+  })
 })

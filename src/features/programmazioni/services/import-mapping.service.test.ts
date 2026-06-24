@@ -1,4 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, summarizeImportMapping, reconcileImportMappingColumns, type FieldRule, type ImportMappingConfig } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, buildLegacyPayload, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, summarizeImportMapping, reconcileImportMappingColumns, type FieldRule, type ImportMappingConfig } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -46,6 +46,42 @@ describe('applyMapping with title normalization', () => {
     expect(out).toHaveLength(1)
     expect(out[0].titolo).toBe('Valid')
   })
+
+  it('normalizes dirty Netflix episode signals into canonical episode fields', () => {
+    const rows = [{
+      show_name: 'Stranger Things 3',
+      show_original_name: 'Stranger Things',
+      episode_nbr: '3005',
+      episode_name: 'Stranger Things 3: "chapter Five: the Flayed"',
+      type: 'series',
+    }]
+    const mapping = {
+      show_name: 'titolo',
+      show_original_name: 'titolo_originale',
+      episode_nbr: 'numero_episodio',
+      episode_name: 'titolo_episodio_originale',
+      type: 'tipo',
+    }
+
+    const out = applyMapping(rows, mapping, ctx)
+
+    expect(out[0]).toMatchObject({
+      titolo: 'Stranger Things',
+      titolo_originale: 'Stranger Things',
+      numero_stagione: 3,
+      numero_episodio: 5,
+      titolo_episodio: 'Chapter Five: The Flayed',
+      titolo_episodio_originale: 'Stranger Things 3: "chapter Five: the Flayed"',
+      metadati_trasmissione: {
+        episode_normalization: expect.objectContaining({
+          season: 3,
+          episode: 5,
+          episodeTitle: 'Chapter Five: The Flayed',
+          confidence: 'high',
+        }),
+      },
+    })
+  })
 })
 
 describe('applyMappingWithTransforms', () => {
@@ -82,6 +118,51 @@ describe('applyMappingWithTransforms', () => {
     const out = applyMappingWithTransforms(rows, config, ctx)
     expect(out[0].titolo).toBe('Centovetrine')
     expect(out[0].titolo_episodio).toBe('Episodio 26')
+  })
+
+  it('applies episode normalization after transform/coercion', () => {
+    const rows = [{
+      show_name: 'Stranger Things 3',
+      show_original_name: 'Stranger Things',
+      episode_nbr: '3005',
+      episode_name: 'Stranger Things 3: "chapter Five: the Flayed"',
+    }]
+    const config = {
+      fields: {
+        show_name: 'titolo',
+        show_original_name: 'titolo_originale',
+        episode_nbr: 'numero_episodio',
+        episode_name: 'titolo_episodio_originale',
+      },
+      transforms: {},
+    }
+
+    const out = applyMappingWithTransforms(rows, config, ctx)
+
+    expect(out[0].numero_stagione).toBe(3)
+    expect(out[0].numero_episodio).toBe(5)
+    expect(out[0].titolo_episodio).toBe('Chapter Five: The Flayed')
+  })
+})
+
+describe('buildLegacyPayload episode normalization', () => {
+  const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
+
+  it('normalizes canonical-template rows without losing original episode title', () => {
+    const out = buildLegacyPayload([{
+      titolo: 'Stranger Things 3',
+      titolo_originale: 'Stranger Things',
+      numero_episodio: '3005',
+      titolo_episodio_originale: 'Stranger Things 3: "chapter Five: the Flayed"',
+      tipo: 'serie',
+    }], ctx)
+
+    expect(out[0]).toMatchObject({
+      numero_stagione: 3,
+      numero_episodio: 5,
+      titolo_episodio: 'Chapter Five: The Flayed',
+      titolo_episodio_originale: 'Stranger Things 3: "chapter Five: the Flayed"',
+    })
   })
 })
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
+import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 
 export interface FieldRule {
   sources: string[]
@@ -142,6 +143,7 @@ function buildProgrammazionePayload(
     }
   }
 
+  applyEpisodeNormalizationToPayload(payload)
   return payload as ProgrammazioneImportPayload
 }
 

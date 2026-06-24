@@ -103,6 +103,7 @@ export interface ProgrammazionePayload {
   total_revenue?: number
   canale?: string
   emittente?: string
+  metadati_trasmissione?: Record<string, unknown>
 }
 
 // ============================================
@@ -667,6 +668,7 @@ export interface ProgrammazioneRow {
   total_net_ad_revenue?: number | null
   processato: boolean
   errori_processamento?: any | null
+  metadati_trasmissione?: Record<string, unknown> | null
   created_at: string
 }
 
