@@ -15,6 +15,8 @@ import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
+import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
+import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll'
 import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
 
 export default function CampagnaDettaglioPage() {
@@ -41,6 +43,8 @@ export default function CampagnaDettaglioPage() {
     if (processato === 'false') return false
     return undefined
   }, [processato])
+
+  const hasActiveFilters = Boolean(debouncedQ || typeof processatoBool === 'boolean' || fromDate || toDate)
 
   const tableColumns = useMemo(() => getProgrammazioniTableColumns(
     health?.policy ?? { preset: 'lineare', fields: {} },
@@ -149,18 +153,31 @@ export default function CampagnaDettaglioPage() {
   }, [campagnaId])
 
   const loadMore = useCallback(async () => {
-    if (!cursor) return
+    if (!cursor || loadingMore) return
     setLoadingMore(true)
-    const { data, nextCursor } = await listProgrammazioniByCampagnaKeyset(
-      campagnaId,
-      200,
-      cursor,
-      { q: q || undefined, processato: typeof processatoBool === 'boolean' ? processatoBool : undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }
-    )
-    setRows(prev => [...prev, ...(data || [])])
-    setCursor(nextCursor)
-    setLoadingMore(false)
-  }, [campagnaId, cursor, q, processatoBool, fromDate, toDate])
+    try {
+      const { data, nextCursor, error } = await listProgrammazioniByCampagnaKeyset(
+        campagnaId,
+        200,
+        cursor,
+        { q: debouncedQ || undefined, processato: typeof processatoBool === 'boolean' ? processatoBool : undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }
+      )
+      if (error) {
+        console.error('Errore caricamento altre programmazioni:', error)
+        return
+      }
+      setRows(prev => [...prev, ...(data || [])])
+      setCursor(nextCursor)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [campagnaId, cursor, debouncedQ, loadingMore, processatoBool, fromDate, toDate])
+
+  const loadMoreRef = useInfiniteScroll<HTMLDivElement>({
+    enabled: Boolean(cursor),
+    isLoading: loading || loadingMore,
+    onLoadMore: loadMore,
+  })
 
   // Load campagna metadata and health on mount
   useEffect(() => {
@@ -506,42 +523,57 @@ export default function CampagnaDettaglioPage() {
               {showAllColumns ? 'Mostra colonne profilo' : 'Mostra tutte le colonne'}
             </Button>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {tableColumns.map(column => (
-                  <TableHead key={column.key} className={getColumnClassName(column.key)}>
-                    {column.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={tableColumns.length} className="text-center py-8 text-gray-500">Nessun risultato</TableCell>
+                  {tableColumns.map(column => (
+                    <TableHead key={column.key} className={getColumnClassName(column.key)}>
+                      {column.label}
+                    </TableHead>
+                  ))}
                 </TableRow>
-              ) : (
-                rows.map(r => (
-                  <TableRow key={r.id} className="hover:bg-gray-50">
-                    {tableColumns.map(column => (
-                      <TableCell key={column.key}>
-                        {renderProgrammazioneCell(r, column)}
-                      </TableCell>
-                    ))}
+              </TableHeader>
+              <TableBody>
+                {rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={tableColumns.length} className="text-center py-8 text-gray-500">Nessun risultato</TableCell>
                   </TableRow>
-                ))
+                ) : (
+                  rows.map(r => (
+                    <TableRow key={r.id} className="hover:bg-gray-50">
+                      {tableColumns.map(column => (
+                        <TableCell key={column.key}>
+                          {renderProgrammazioneCell(r, column)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <div ref={loadMoreRef} className="h-1" aria-hidden="true" />
+          <div className="p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-gray-600">
+              Mostrando {rows.length} risultati
+              {!hasActiveFilters && typeof health?.total === 'number' ? ` di ${formatNumber(health.total)}` : ''}
+            </div>
+            <div className="text-sm text-gray-500" aria-live="polite">
+              {loadingMore ? (
+                <span className="inline-flex items-center">
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Caricamento...
+                </span>
+              ) : cursor ? (
+                'Scorri per caricare altri risultati'
+              ) : (
+                'Fine elenco'
               )}
-            </TableBody>
-          </Table>
-          <div className="p-4 flex justify-between items-center">
-            <div className="text-sm text-gray-600">Mostrando {rows.length} risultati</div>
-            <Button onClick={loadMore} disabled={!cursor || loadingMore}>
-              {loadingMore ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Caricamento...</> : (cursor ? 'Carica altri' : 'Fine elenco')}
-            </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
+      <FloatingScrollUpButton />
     </div>
   )
 }

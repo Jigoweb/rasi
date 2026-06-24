@@ -40,7 +40,7 @@ BEGIN
     IF v_text ~* '\y(episodes?|episodi?|eps?)\.?\s*[0-9]{1,3}\s*[-/]\s*[0-9]{1,3}\y'
        OR v_text ~* '\ys[0-9]{1,2}\s*e[0-9]{1,3}\s*[-/]\s*e?[0-9]{1,3}\y' THEN
         confidence := 'review_required';
-        warnings := warnings || 'episode_range_requires_review';
+        warnings := array_append(warnings, 'episode_range_requires_review');
         numero_stagione := NULL;
         numero_episodio := NULL;
         RETURN NEXT;
@@ -62,12 +62,12 @@ BEGIN
             END IF;
 
             IF v_title_season IS NOT NULL AND v_title_season <> v_packed_season THEN
-                warnings := warnings || 'episode_season_mismatch';
+                warnings := array_append(warnings, 'episode_season_mismatch');
                 confidence := 'review_required';
             ELSE
                 numero_stagione := COALESCE(numero_stagione, v_packed_season);
                 numero_episodio := v_packed_episode;
-                warnings := warnings || 'episode_packed_number_detected';
+                warnings := array_append(warnings, 'episode_packed_number_detected');
                 confidence := 'high';
             END IF;
         END IF;
@@ -104,7 +104,7 @@ BEGIN
         v_match := regexp_match(p_titolo_episodio_originale, '["“”]([^"“”]+)["“”]', 'i');
         IF v_match IS NOT NULL THEN
             titolo_episodio := initcap(trim(v_match[1]));
-            warnings := warnings || 'episode_title_embedded_detected';
+            warnings := array_append(warnings, 'episode_title_embedded_detected');
             IF confidence = 'none' THEN
                 confidence := 'medium';
             END IF;

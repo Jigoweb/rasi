@@ -724,7 +724,9 @@ export const listProgrammazioniByCampagnaKeyset = async (
   const { data, error } = await query
 
   const rows = (data as unknown) as ProgrammazioneRow[]
-  const nextCursor = rows && rows.length > 0 ? { created_at: rows[rows.length - 1].created_at, id: rows[rows.length - 1].id } : undefined
+  const nextCursor = rows && rows.length === limit
+    ? { created_at: rows[rows.length - 1].created_at, id: rows[rows.length - 1].id }
+    : undefined
   return { data: rows, nextCursor, error }
 }
 

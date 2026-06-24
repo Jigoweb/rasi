@@ -1,7 +1,9 @@
-import { Calendar, ChevronLeft, ChevronRight, Film, Loader2, User } from 'lucide-react'
+'use client'
+
+import { Calendar, Film, Loader2, User } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
-import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
+import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll'
 import {
   Table,
   TableBody,
@@ -15,127 +17,137 @@ import type { Individuazione } from '@/features/individuazioni/services/individu
 interface IndividuazioniDetailTableProps {
   individuazioni: Individuazione[]
   loadingData: boolean
+  loadingMore: boolean
   searchTerm: string
-  page: number
-  pageSize: number
-  totalPages: number
   totalCount: number
-  onPageChange: (page: number) => void
+  hasMore: boolean
+  onLoadMore: () => void
 }
 
 export default function IndividuazioniDetailTable({
   individuazioni,
   loadingData,
+  loadingMore,
   searchTerm,
-  page,
-  pageSize,
-  totalPages,
   totalCount,
-  onPageChange,
+  hasMore,
+  onLoadMore,
 }: IndividuazioniDetailTableProps) {
+  const loadMoreRef = useInfiniteScroll<HTMLDivElement>({
+    enabled: hasMore,
+    isLoading: loadingData || loadingMore,
+    onLoadMore,
+  })
+
   return (
     <Card>
       <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="py-4 px-6">Data</TableHead>
-              <TableHead className="py-4">Orario</TableHead>
-              <TableHead className="py-4">Titolo Programmazione</TableHead>
-              <TableHead className="py-4">Artista</TableHead>
-              <TableHead className="py-4">Opera Matchata</TableHead>
-              <TableHead className="py-4">Ruolo</TableHead>
-              <TableHead className="py-4 text-center">Match %</TableHead>
-              <TableHead className="py-4">Stato</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loadingData ? (
-              <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
-                </TableCell>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="py-4 px-6">Data</TableHead>
+                <TableHead className="py-4">Orario</TableHead>
+                <TableHead className="py-4">Titolo Programmazione</TableHead>
+                <TableHead className="py-4">Artista</TableHead>
+                <TableHead className="py-4">Opera Matchata</TableHead>
+                <TableHead className="py-4">Ruolo</TableHead>
+                <TableHead className="py-4 text-center">Match %</TableHead>
+                <TableHead className="py-4">Stato</TableHead>
               </TableRow>
-            ) : individuazioni.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                  {searchTerm ? 'Nessuna individuazione trovata' : 'Nessuna individuazione'}
-                </TableCell>
-              </TableRow>
-            ) : (
-              individuazioni.map(ind => (
-                <TableRow key={ind.id} className="hover:bg-muted/50">
-                  <TableCell className="py-4 px-6">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      {formatDate(ind.data_trasmissione)}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <span className="text-sm">{formatTime(ind.ora_inizio)} - {formatTime(ind.ora_fine)}</span>
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <div className="max-w-[200px]">
-                      <p className="font-medium truncate" title={ind.titolo || ''}>{ind.titolo || '-'}</p>
-                      {getEpisodeDisplay(ind) && (
-                        <p className="text-xs text-muted-foreground truncate" title={getEpisodeDisplay(ind) ?? undefined}>
-                          {getEpisodeDisplay(ind)}
-                        </p>
-                      )}
-                      {getEpisodeNormalizationLabel(ind) && (
-                        <Badge
-                          variant="outline"
-                          className={`mt-1 text-[10px] ${getEpisodeNormalizationBadgeClass(ind)}`}
-                        >
-                          {getEpisodeNormalizationLabel(ind)}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">{getArtistaDisplay(ind)}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <div className="flex items-center gap-2">
-                      <Film className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate max-w-[150px]" title={ind.opere?.titolo || ''}>
-                        {ind.opere?.titolo || '-'}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <Badge variant="outline">{ind.ruoli_tipologie?.nome || '-'}</Badge>
-                  </TableCell>
-                  <TableCell className="py-4 text-center">
-                    <span className={`font-medium ${getMatchColor(ind.punteggio_matching)}`}>
-                      {formatMatchPercent(ind.punteggio_matching)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="py-4">
-                    <StatusBadge stato={ind.stato} />
+            </TableHeader>
+            <TableBody>
+              {loadingData && individuazioni.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-32 text-center">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : individuazioni.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                    {searchTerm ? 'Nessuna individuazione trovata' : 'Nessuna individuazione'}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                individuazioni.map(ind => (
+                  <TableRow key={ind.id} className="hover:bg-muted/50">
+                    <TableCell className="py-4 px-6">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        {formatDate(ind.data_trasmissione)}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <span className="text-sm">{formatTime(ind.ora_inizio)} - {formatTime(ind.ora_fine)}</span>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <div className="max-w-[200px]">
+                        <p className="font-medium truncate" title={ind.titolo || ''}>{ind.titolo || '-'}</p>
+                        {getEpisodeDisplay(ind) && (
+                          <p className="text-xs text-muted-foreground truncate" title={getEpisodeDisplay(ind) ?? undefined}>
+                            {getEpisodeDisplay(ind)}
+                          </p>
+                        )}
+                        {getEpisodeNormalizationLabel(ind) && (
+                          <Badge
+                            variant="outline"
+                            className={`mt-1 text-[10px] ${getEpisodeNormalizationBadgeClass(ind)}`}
+                          >
+                            {getEpisodeNormalizationLabel(ind)}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{getArtistaDisplay(ind)}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <div className="flex items-center gap-2">
+                        <Film className="h-4 w-4 text-muted-foreground" />
+                        <span className="truncate max-w-[150px]" title={ind.opere?.titolo || ''}>
+                          {ind.opere?.titolo || '-'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <Badge variant="outline">{ind.ruoli_tipologie?.nome || '-'}</Badge>
+                    </TableCell>
+                    <TableCell className="py-4 text-center">
+                      <span className={`font-medium ${getMatchColor(ind.punteggio_matching)}`}>
+                        {formatMatchPercent(ind.punteggio_matching)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-4">
+                      <StatusBadge stato={ind.stato} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
 
-        {!loadingData && individuazioni.length > 0 && (
-          <div className="px-6 py-4 border-t flex items-center justify-between">
+        <div ref={loadMoreRef} className="h-1" aria-hidden="true" />
+
+        {individuazioni.length > 0 && (
+          <div className="px-6 py-4 border-t flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, totalCount)} di {formatNumber(totalCount)} individuazioni
+              Mostrando {formatNumber(individuazioni.length)} di {formatNumber(totalCount)} individuazioni
             </p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm">Pagina {page} di {totalPages}</span>
-              <Button variant="outline" size="sm" onClick={() => onPageChange(Math.min(totalPages, page + 1))} disabled={page >= totalPages}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+            <div className="text-sm text-muted-foreground" aria-live="polite">
+              {loadingMore ? (
+                <span className="inline-flex items-center">
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Caricamento...
+                </span>
+              ) : hasMore ? (
+                'Scorri per caricare altri risultati'
+              ) : (
+                'Fine elenco'
+              )}
             </div>
           </div>
         )}

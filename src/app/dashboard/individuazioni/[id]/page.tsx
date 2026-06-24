@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
+import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
 import type { SearchField } from '@/features/individuazioni/services/individuazioni.service'
 import ExportIndividuazioniDialog from './components/ExportIndividuazioniDialog'
 import IndividuazioniDetailTable from './components/IndividuazioniDetailTable'
@@ -27,14 +28,12 @@ export default function IndividuazioneDetailPage() {
     estimatedTime,
     isCalculatingEstimate,
     exportButtonRef,
-    page,
-    pageSize,
-    totalPages,
     totalCount,
+    loadingMore,
+    hasMore,
     searchTerm,
     searchField,
     statoFilter,
-    setPage,
     setShowExportDialog,
     setShowTimeEstimateDialog,
     handleSearch,
@@ -43,6 +42,7 @@ export default function IndividuazioneDetailPage() {
     handleExportDialogOpenChange,
     handleFormatSelect,
     handleConfirmExport,
+    loadMore,
   } = useIndividuazioneDetail(campagnaId)
 
   if (loading) {
@@ -164,13 +164,14 @@ export default function IndividuazioneDetailPage() {
       <IndividuazioniDetailTable
         individuazioni={individuazioni}
         loadingData={loadingData}
+        loadingMore={loadingMore}
         searchTerm={searchTerm}
-        page={page}
-        pageSize={pageSize}
-        totalPages={totalPages}
         totalCount={totalCount}
-        onPageChange={setPage}
+        hasMore={hasMore}
+        onLoadMore={loadMore}
       />
+
+      <FloatingScrollUpButton />
 
       <ExportIndividuazioniDialog
         campagna={campagna}

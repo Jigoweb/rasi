@@ -24,12 +24,11 @@ describe('IndividuazioniDetailTable', () => {
           ruoli_tipologie: { nome: 'Attore' },
         } as any]}
         loadingData={false}
+        loadingMore={false}
         searchTerm=""
-        page={1}
-        pageSize={50}
-        totalPages={1}
         totalCount={1}
-        onPageChange={jest.fn()}
+        hasMore={false}
+        onLoadMore={jest.fn()}
       />
     )
 

@@ -169,12 +169,14 @@ export const getIndividuazioni = async (
     search?: string
     searchField?: SearchField
     stato?: string
+    withCount?: boolean
   }
 ) => {
   const page = options?.page || 1
   const pageSize = options?.pageSize || 50
   const offset = (page - 1) * pageSize
   const searchField = options?.searchField || 'titolo'
+  const withCount = options?.withCount ?? true
 
   // Se si cerca per artista o opera, dobbiamo prima trovare gli ID corrispondenti
   let filterIds: string[] | null = null
@@ -210,7 +212,7 @@ export const getIndividuazioni = async (
       artisti(nome, cognome, nome_arte),
       opere(titolo, titolo_originale),
       ruoli_tipologie(nome)
-    `, { count: 'exact' })
+    `, withCount ? { count: 'exact' } : undefined)
     .eq('campagna_individuazioni_id', campagnaId)
     .order('data_trasmissione', { ascending: false })
     .range(offset, offset + pageSize - 1)

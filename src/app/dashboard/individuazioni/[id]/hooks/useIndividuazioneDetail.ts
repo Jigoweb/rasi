@@ -13,13 +13,14 @@ import {
 } from '@/features/individuazioni/services/individuazioni.service'
 
 type ExportFormat = 'csv' | 'xlsx'
-const pageSize = 50
+const pageSize = 100
 
 export function useIndividuazioneDetail(campagnaId: string) {
   const [campagna, setCampagna] = useState<CampagnaIndividuazione | null>(null)
   const [individuazioni, setIndividuazioni] = useState<Individuazione[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [showTimeEstimateDialog, setShowTimeEstimateDialog] = useState(false)
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat | null>(null)
@@ -68,7 +69,13 @@ export function useIndividuazioneDetail(campagnaId: string) {
   }, [campagnaId])
 
   const loadIndividuazioni = useCallback(async () => {
-    setLoadingData(true)
+    const isFirstPage = page === 1
+    if (isFirstPage) {
+      setLoadingData(true)
+    } else {
+      setLoadingMore(true)
+    }
+
     try {
       const { data, error, count, totalPages: pages } = await getIndividuazioni(campagnaId, {
         page,
@@ -76,20 +83,27 @@ export function useIndividuazioneDetail(campagnaId: string) {
         search: debouncedSearchTerm || undefined,
         searchField,
         stato: statoFilter !== 'all' ? statoFilter : undefined,
+        withCount: isFirstPage,
       })
       if (error) {
         logError('Errore caricamento individuazioni:', error)
-        resetIndividuazioni()
+        if (isFirstPage) resetIndividuazioni()
         return
       }
-      setIndividuazioni(data ?? [])
-      setTotalPages(pages)
-      setTotalCount(count || 0)
+      setIndividuazioni(prev => isFirstPage ? data ?? [] : [...prev, ...(data ?? [])])
+      if (isFirstPage) {
+        setTotalPages(pages)
+        setTotalCount(count || 0)
+      }
     } catch (error) {
       logError('Errore caricamento individuazioni:', error)
-      resetIndividuazioni()
+      if (isFirstPage) resetIndividuazioni()
     } finally {
-      setLoadingData(false)
+      if (isFirstPage) {
+        setLoadingData(false)
+      } else {
+        setLoadingMore(false)
+      }
     }
   }, [campagnaId, debouncedSearchTerm, page, searchField, statoFilter])
 
@@ -110,6 +124,13 @@ export function useIndividuazioneDetail(campagnaId: string) {
     setStatoFilter(value)
     setPage(1)
   }, [])
+
+  const hasMore = totalCount > individuazioni.length
+
+  const loadMore = useCallback(() => {
+    if (loadingData || loadingMore || !hasMore) return
+    setPage(prev => prev + 1)
+  }, [hasMore, loadingData, loadingMore])
 
   const handleExportDialogOpenChange = useCallback((open: boolean) => {
     if (!isCalculatingEstimate && exportState.status === 'idle') {
@@ -207,6 +228,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
     individuazioni,
     loading,
     loadingData,
+    loadingMore,
     showExportDialog,
     showTimeEstimateDialog,
     selectedFormat,
@@ -217,6 +239,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
     pageSize,
     totalPages,
     totalCount,
+    hasMore,
     searchTerm,
     searchField,
     statoFilter,
@@ -226,6 +249,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
     handleSearch,
     handleSearchFieldChange,
     handleStatoFilterChange,
+    loadMore,
     handleExportDialogOpenChange,
     handleFormatSelect,
     handleConfirmExport,
