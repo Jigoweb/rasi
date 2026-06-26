@@ -34,11 +34,11 @@ IS 'Returns whether an artist mandate covers the annual competence year, with pe
 
 CREATE OR REPLACE FUNCTION public.match_programmazione_to_partecipazioni(
     p_programmazione_id uuid,
-    p_soglia_titolo numeric DEFAULT 0.7,
-    p_artista_ids uuid[] DEFAULT NULL::uuid[],
-    p_tolleranza_anno_soft integer DEFAULT 3,
-    p_tolleranza_anno_hard integer DEFAULT 5,
-    p_mandato_override_artist_ids uuid[] DEFAULT NULL::uuid[]
+    p_soglia_titolo numeric,
+    p_artista_ids uuid[],
+    p_tolleranza_anno_soft integer,
+    p_tolleranza_anno_hard integer,
+    p_mandato_override_artist_ids uuid[]
 )
 RETURNS TABLE (
     partecipazione_id uuid,
