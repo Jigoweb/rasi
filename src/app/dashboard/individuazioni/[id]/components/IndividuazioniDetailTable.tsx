@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment } from 'react'
+import Link from 'next/link'
 import { ArrowUpDown, Calendar, Film, Layers3, Loader2, RotateCcw, User } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -63,9 +64,10 @@ export default function IndividuazioniDetailTable({
     isLoading: loadingData || loadingMore,
     onLoadMore,
   })
-  const sortValue = `${sortBy}:${sortDirection}`
   const groupedRows = getGroupedRows(individuazioni, groupBy)
-  const hasCustomTableView = sortValue !== 'review_priority:asc' || groupBy !== 'none'
+  const matchSortDirection = sortBy === 'punteggio_matching' ? sortDirection : 'asc'
+  const nextMatchSortDirection: IndividuazioneSortDirection = matchSortDirection === 'asc' ? 'desc' : 'asc'
+  const hasCustomTableView = sortBy !== 'review_priority' || sortDirection !== 'asc' || groupBy !== 'none'
 
   return (
     <Card>
@@ -75,24 +77,10 @@ export default function IndividuazioniDetailTable({
             <div>
               <h2 className="font-semibold">Risultati individuazione</h2>
               <p className="text-sm text-muted-foreground">
-                Ordina e raggruppa le righe per far emergere i match da rivedere.
+                Ordine predefinito: match da rivedere prima, con motivo esplicito per ogni riga.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Select value={sortValue} onValueChange={onSortChange}>
-                <SelectTrigger className="w-full sm:w-[220px]">
-                  <ArrowUpDown className="h-4 w-4 mr-2 shrink-0" />
-                  <SelectValue placeholder="Ordina risultati" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="review_priority:asc">Da rivedere prima</SelectItem>
-                  <SelectItem value="punteggio_matching:asc">Match più bassi</SelectItem>
-                  <SelectItem value="punteggio_matching:desc">Match più alti</SelectItem>
-                  <SelectItem value="data_trasmissione:desc">Più recenti</SelectItem>
-                  <SelectItem value="stato:asc">Per stato</SelectItem>
-                  <SelectItem value="titolo:asc">Titolo A-Z</SelectItem>
-                </SelectContent>
-              </Select>
               <Select value={groupBy} onValueChange={value => onGroupByChange?.(value as IndividuazioneGroupBy)}>
                 <SelectTrigger className="w-full sm:w-[190px]">
                   <Layers3 className="h-4 w-4 mr-2 shrink-0" />
@@ -119,7 +107,7 @@ export default function IndividuazioniDetailTable({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">Ordine: {getSortLabel(sortValue)}</Badge>
+            <Badge variant="secondary">Vista: {getSortSummaryLabel(sortBy, sortDirection)}</Badge>
             {groupBy !== 'none' && <Badge variant="outline">Gruppo: {getGroupLabel(groupBy)}</Badge>}
           </div>
         </div>
@@ -133,21 +121,45 @@ export default function IndividuazioniDetailTable({
                 <TableHead className="py-4">Artista</TableHead>
                 <TableHead className="py-4">Opera Matchata</TableHead>
                 <TableHead className="py-4">Ruolo</TableHead>
-                <TableHead className="py-4 text-center">Match %</TableHead>
+                <TableHead className="py-4">Motivo revisione</TableHead>
+                <TableHead
+                  className="py-4 text-center"
+                  aria-sort={sortBy === 'punteggio_matching' ? getAriaSort(sortDirection) : 'none'}
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mx-auto h-auto px-2 font-medium"
+                    onClick={() => onSortChange?.(`punteggio_matching:${nextMatchSortDirection}`)}
+                    aria-label={`Ordina per match percentuale: ${getMatchSortLabel(nextMatchSortDirection)}`}
+                  >
+                    Match %
+                    <ArrowUpDown className="ml-1 h-3.5 w-3.5 text-primary" />
+                  </Button>
+                </TableHead>
                 <TableHead className="py-4">Stato</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loadingData && individuazioni.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center">
+                  <TableCell colSpan={9} className="h-32 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : individuazioni.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                    {searchTerm ? 'Nessuna individuazione trovata' : 'Nessuna individuazione'}
+                  <TableCell colSpan={9} className="h-32 text-center">
+                    <div className="mx-auto max-w-sm space-y-1">
+                      <p className="font-medium text-foreground">
+                        {searchTerm ? 'Nessuna individuazione trovata' : 'Nessuna individuazione da mostrare'}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {searchTerm
+                          ? 'Modifica la ricerca o resetta i filtri per tornare alla vista di revisione.'
+                          : 'Quando la campagna produce match, li vedrai ordinati per priorità di revisione.'}
+                      </p>
+                    </div>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -155,7 +167,7 @@ export default function IndividuazioniDetailTable({
                   <Fragment key={group.key}>
                     {groupBy !== 'none' && (
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={8} className="px-6 py-3 text-sm font-semibold text-muted-foreground">
+                        <TableCell colSpan={9} className="px-6 py-3 text-sm font-semibold text-muted-foreground">
                           {group.label} <span className="font-normal">({formatNumber(group.rows.length)})</span>
                         </TableCell>
                       </TableRow>
@@ -196,6 +208,10 @@ export default function IndividuazioniDetailTable({
 }
 
 function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuazione }) {
+  const artistaDisplay = getArtistaDisplay(ind)
+  const operaDisplay = ind.opere?.titolo || '-'
+  const reviewReasons = getReviewReasons(ind)
+
   return (
     <TableRow className="hover:bg-muted/50">
       <TableCell className="py-4 px-6">
@@ -228,22 +244,55 @@ function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuaz
       <TableCell className="py-4">
         <div className="flex items-center gap-2">
           <User className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium">{getArtistaDisplay(ind)}</span>
+          {ind.artista_id && artistaDisplay !== '-' ? (
+            <Link
+              href={`/dashboard/artisti/${ind.artista_id}`}
+              className="font-medium hover:text-primary hover:underline"
+              aria-label={`Apri scheda artista ${artistaDisplay}`}
+            >
+              {artistaDisplay}
+            </Link>
+          ) : (
+            <span className="font-medium">{artistaDisplay}</span>
+          )}
         </div>
       </TableCell>
       <TableCell className="py-4">
         <div className="flex items-center gap-2">
           <Film className="h-4 w-4 text-muted-foreground" />
-          <span className="truncate max-w-[150px]" title={ind.opere?.titolo || ''}>
-            {ind.opere?.titolo || '-'}
-          </span>
+          {ind.opera_id && operaDisplay !== '-' ? (
+            <Link
+              href={`/dashboard/opere/${ind.opera_id}`}
+              className="truncate max-w-[150px] hover:text-primary hover:underline"
+              title={operaDisplay}
+              aria-label={`Apri scheda opera ${operaDisplay}`}
+            >
+              {operaDisplay}
+            </Link>
+          ) : (
+            <span className="truncate max-w-[150px]" title={operaDisplay}>
+              {operaDisplay}
+            </span>
+          )}
         </div>
       </TableCell>
       <TableCell className="py-4">
         <Badge variant="outline">{ind.ruoli_tipologie?.nome || '-'}</Badge>
       </TableCell>
+      <TableCell className="py-4">
+        <div className="flex max-w-[220px] flex-wrap gap-1.5">
+          {reviewReasons.map(reason => (
+            <Badge key={reason.label} variant={reason.variant} className={reason.className}>
+              {reason.label}
+            </Badge>
+          ))}
+        </div>
+      </TableCell>
       <TableCell className="py-4 text-center">
-        <span className={`font-medium ${getMatchColor(ind.punteggio_matching)}`}>
+        <span
+          className={`font-medium tabular-nums ${getMatchColor(ind.punteggio_matching)}`}
+          aria-label={`Match ${formatMatchPercent(ind.punteggio_matching)}, ${getMatchScoreBandLabel(getMatchScoreBand(ind.punteggio_matching)).toLowerCase()}`}
+        >
           {formatMatchPercent(ind.punteggio_matching)}
         </span>
       </TableCell>
@@ -252,6 +301,58 @@ function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuaz
       </TableCell>
     </TableRow>
   )
+}
+
+type ReviewReason = {
+  label: string
+  variant: 'default' | 'secondary' | 'destructive' | 'outline'
+  className?: string
+}
+
+function getReviewReasons(ind: Individuazione): ReviewReason[] {
+  const reasons: ReviewReason[] = []
+  const normalizedStatus = normalizeIndividuazioneStatus(ind.stato)
+  const scoreBand = getMatchScoreBand(ind.punteggio_matching)
+  const needsEpisodeReview = getEpisodeNormalizationLabel(ind) === 'review episodio'
+
+  if (normalizedStatus === 'dubbioso') {
+    reasons.push({
+      label: 'stato in revisione',
+      variant: 'outline',
+      className: 'border-amber-200 bg-amber-50 text-amber-900',
+    })
+  }
+
+  if (scoreBand === 'low') {
+    reasons.push({
+      label: normalizedStatus === 'individuato' ? 'individuato con score basso' : 'score basso',
+      variant: 'outline',
+      className: 'border-red-200 bg-red-50 text-red-800',
+    })
+  } else if (scoreBand === 'medium' && normalizedStatus !== 'validato') {
+    reasons.push({
+      label: 'score medio da confermare',
+      variant: 'outline',
+      className: 'border-amber-200 bg-amber-50 text-amber-900',
+    })
+  }
+
+  if (needsEpisodeReview) {
+    reasons.push({
+      label: 'episodio da verificare',
+      variant: 'outline',
+      className: 'border-amber-200 bg-amber-50 text-amber-900',
+    })
+  }
+
+  if (reasons.length === 0) {
+    reasons.push({
+      label: normalizedStatus === 'validato' ? 'validato' : 'nessun segnale critico',
+      variant: 'secondary',
+    })
+  }
+
+  return reasons
 }
 
 function StatusBadge({ stato }: { stato: string | undefined }) {
@@ -376,23 +477,27 @@ function getGroupKey(individuazione: Individuazione, groupBy: IndividuazioneGrou
   }
 }
 
-function getSortLabel(sortValue: string) {
-  switch (sortValue) {
-    case 'review_priority:asc':
+function getMatchSortLabel(direction: IndividuazioneSortDirection) {
+  return direction === 'asc' ? 'match più bassi' : 'match più alti'
+}
+
+function getSortSummaryLabel(sortBy: IndividuazioneSortBy, direction: IndividuazioneSortDirection) {
+  switch (sortBy) {
+    case 'review_priority':
       return 'da rivedere prima'
-    case 'punteggio_matching:asc':
-      return 'match più bassi'
-    case 'punteggio_matching:desc':
-      return 'match più alti'
-    case 'data_trasmissione:desc':
-      return 'più recenti'
-    case 'stato:asc':
-      return 'stato'
-    case 'titolo:asc':
-      return 'titolo A-Z'
-    default:
-      return 'personalizzato'
+    case 'punteggio_matching':
+      return getMatchSortLabel(direction)
+    case 'stato':
+      return direction === 'asc' ? 'stato A-Z' : 'stato Z-A'
+    case 'titolo':
+      return direction === 'asc' ? 'titolo A-Z' : 'titolo Z-A'
+    case 'data_trasmissione':
+      return direction === 'asc' ? 'date meno recenti' : 'date più recenti'
   }
+}
+
+function getAriaSort(direction: IndividuazioneSortDirection) {
+  return direction === 'asc' ? 'ascending' : 'descending'
 }
 
 function getGroupLabel(groupBy: IndividuazioneGroupBy) {

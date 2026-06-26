@@ -1,13 +1,17 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import IndividuazioniDetailTable from './IndividuazioniDetailTable'
 import type { Individuazione } from '@/features/individuazioni/services/individuazioni.service'
 
 describe('IndividuazioniDetailTable', () => {
   it('renders individuazione rows with key match fields', () => {
+    const onSortChange = jest.fn()
+
     render(
       <IndividuazioniDetailTable
         individuazioni={[{
           id: 'individuazione-1',
+          artista_id: 'artista-1',
+          opera_id: 'opera-1',
           titolo: 'Film della sera',
           data_trasmissione: '2026-06-23',
           ora_inizio: '21:10:00',
@@ -33,6 +37,9 @@ describe('IndividuazioniDetailTable', () => {
         searchTerm=""
         totalCount={1}
         hasMore={false}
+        sortBy="punteggio_matching"
+        sortDirection="asc"
+        onSortChange={onSortChange}
         onLoadMore={jest.fn()}
       />
     )
@@ -41,10 +48,15 @@ describe('IndividuazioniDetailTable', () => {
     expect(screen.getByText('S2E8: Stranger Things 2: "Chapter Eight: The Mind Flayer"')).toBeInTheDocument()
     expect(screen.getByText('Mario R')).toBeInTheDocument()
     expect(screen.getByText('Opera matchata')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Apri scheda artista Mario R' })).toHaveAttribute('href', '/dashboard/artisti/artista-1')
+    expect(screen.getByRole('link', { name: 'Apri scheda opera Opera matchata' })).toHaveAttribute('href', '/dashboard/opere/opera-1')
     expect(screen.getByText('80%')).toBeInTheDocument()
     expect(screen.getByText('normalizzato')).toBeInTheDocument()
     expect(screen.getByText('Validato')).toBeInTheDocument()
-    expect(screen.getByText('Ordine: da rivedere prima')).toBeInTheDocument()
+    expect(screen.getByText('Vista: match più bassi')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ordina per match percentuale: match più alti' }))
+    expect(onSortChange).toHaveBeenCalledWith('punteggio_matching:desc')
   })
 
   it('groups rows by database status labels', () => {
@@ -73,6 +85,7 @@ describe('IndividuazioniDetailTable', () => {
     )
 
     expect(screen.getAllByText('In revisione').length).toBeGreaterThan(0)
+    expect(screen.getByText('score basso')).toBeInTheDocument()
     expect(screen.getByText('(1)')).toBeInTheDocument()
     expect(screen.getByText('Serie da controllare')).toBeInTheDocument()
   })
