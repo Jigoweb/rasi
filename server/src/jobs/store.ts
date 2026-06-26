@@ -32,6 +32,7 @@ export type NewJob = {
 const TABLE = 'campaign_jobs'
 const STALE_JOB_ERROR =
   'Job interrotto dal riavvio del worker. Usa Riprendi per continuare.'
+const CAMPAIGN_OPERATOR_ROLES = new Set(['admin', 'operatore'])
 
 export async function createJob(input: NewJob): Promise<CampaignJob> {
   const { data, error } = await supabaseService
@@ -85,6 +86,26 @@ export async function userOwnsCampagnaProgrammazione(
     .maybeSingle()
 
   if (error) throw new Error(`userOwnsCampagnaProgrammazione: ${error.message}`)
+  return Boolean(data?.id)
+}
+
+export async function userCanManageCampagnaProgrammazione(
+  campagneProgrammazioneId: string,
+  userId: string,
+  userRole: string | null | undefined
+): Promise<boolean> {
+  const query = supabaseService
+    .from('campagne_programmazione')
+    .select('id')
+    .eq('id', campagneProgrammazioneId)
+
+  if (!CAMPAIGN_OPERATOR_ROLES.has(userRole ?? '')) {
+    query.eq('created_by', userId)
+  }
+
+  const { data, error } = await query.maybeSingle()
+
+  if (error) throw new Error(`userCanManageCampagnaProgrammazione: ${error.message}`)
   return Boolean(data?.id)
 }
 

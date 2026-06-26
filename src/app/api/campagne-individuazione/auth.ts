@@ -4,10 +4,12 @@ import { supabaseServer } from '@/shared/lib/supabase-server'
 
 const AUTH_REQUIRED_ERROR = 'Autenticazione richiesta'
 const CAMPAIGN_ACCESS_ERROR = 'Campagna non trovata o non autorizzata'
+const CAMPAIGN_OPERATOR_ROLES = new Set(['admin', 'operatore'])
 
 type AuthSuccess = {
   authenticated: true
   userId: string
+  userRole: string | null
 }
 
 type AuthFailure = {
@@ -75,25 +77,34 @@ export const requireCampagneIndividuazioneAuth = async (
       return { authenticated: false, response: authRequiredResponse() }
     }
 
-    return { authenticated: true, userId: user.id }
+    return {
+      authenticated: true,
+      userId: user.id,
+      userRole: typeof user.user_metadata?.ruolo === 'string' ? user.user_metadata.ruolo : null,
+    }
   } catch {
     return { authenticated: false, response: authRequiredResponse() }
   }
 }
 
-export const requireCampagnaProgrammazioneOwner = async (
+export const requireCampagnaProgrammazioneAccess = async (
   campagneProgrammazioneId: string,
-  userId: string
+  userId: string,
+  userRole?: string | null
 ): Promise<CampagneIndividuazioneAuthorizationResult> => {
-  const { data, error } = await (supabaseServer as any)
+  const query = (supabaseServer as any)
     .from('campagne_programmazione')
     .select('id')
     .eq('id', campagneProgrammazioneId)
-    .eq('created_by', userId)
-    .maybeSingle()
+
+  if (!CAMPAIGN_OPERATOR_ROLES.has(userRole ?? '')) {
+    query.eq('created_by', userId)
+  }
+
+  const { data, error } = await query.maybeSingle()
 
   if (error) {
-    console.error('Errore verifica owner campagna:', error)
+    console.error('Errore verifica accesso campagna:', error)
     return { authorized: false, response: authorizationQueryErrorResponse() }
   }
 
@@ -107,6 +118,7 @@ export const requireCampagnaProgrammazioneOwner = async (
 export const requireCampagnaIndividuazioneAccess = async (
   campagneIndividuazioneId: string,
   userId: string,
+  userRole?: string | null,
   expectedCampagneProgrammazioneId?: string
 ): Promise<CampagneIndividuazioneAuthorizationResult> => {
   const { data, error } = await (supabaseServer as any)
@@ -130,11 +142,12 @@ export const requireCampagnaIndividuazioneAccess = async (
     return { authorized: false, response: campaignAccessDeniedResponse() }
   }
 
-  const ownerAuthorization = await requireCampagnaProgrammazioneOwner(
+  const campaignAuthorization = await requireCampagnaProgrammazioneAccess(
     campagneProgrammazioneId,
-    userId
+    userId,
+    userRole
   )
-  if (!ownerAuthorization.authorized) return ownerAuthorization
+  if (!campaignAuthorization.authorized) return campaignAuthorization
 
   return {
     authorized: true,

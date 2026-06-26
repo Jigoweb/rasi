@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     const campaignAuthorization = await requireCampagnaIndividuazioneAccess(
       campagne_individuazione_id,
       userId,
+      auth.userRole,
       campagne_programmazione_id
     )
     if (!campaignAuthorization.authorized) return campaignAuthorization.response

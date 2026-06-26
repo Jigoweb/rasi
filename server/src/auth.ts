@@ -7,6 +7,7 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string
+      userRole?: string | null
     }
   }
 }
@@ -23,11 +24,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   const token = authHeader.substring(7)
   try {
-    const userId = await verifyToken(token)
-    if (!userId) {
+    const user = await verifyToken(token)
+    if (!user) {
       return res.status(401).json({ success: false, error: 'Token non valido' })
     }
-    req.userId = userId
+    req.userId = user.id
+    req.userRole = user.role
     next()
   } catch (error: any) {
     return res.status(401).json({ success: false, error: 'Errore verifica token' })

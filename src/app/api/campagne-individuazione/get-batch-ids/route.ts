@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/shared/lib/supabase-server'
-import { requireCampagnaProgrammazioneOwner, requireCampagneIndividuazioneAuth } from '../auth'
+import { requireCampagnaProgrammazioneAccess, requireCampagneIndividuazioneAuth } from '../auth'
 
 /**
  * POST /api/campagne-individuazione/get-batch-ids
@@ -29,9 +29,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const campaignAuthorization = await requireCampagnaProgrammazioneOwner(
+    const campaignAuthorization = await requireCampagnaProgrammazioneAccess(
       campagne_programmazione_id,
-      auth.userId
+      auth.userId,
+      auth.userRole
     )
     if (!campaignAuthorization.authorized) return campaignAuthorization.response
 

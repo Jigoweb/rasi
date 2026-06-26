@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from '../auth.js'
-import { createJob, findActiveJob, userOwnsCampagnaProgrammazione } from '../jobs/store.js'
+import { createJob, findActiveJob, userCanManageCampagnaProgrammazione } from '../jobs/store.js'
 import { runIndividuazioneJob } from '../jobs/individuazione-runner.js'
 import { findActiveUploadJob } from '../jobs/upload-job-store.js'
 
@@ -31,9 +31,10 @@ individuazioneRouter.post('/start', requireAuth, async (req, res) => {
   }
 
   try {
-    const hasCampaignAccess = await userOwnsCampagnaProgrammazione(
+    const hasCampaignAccess = await userCanManageCampagnaProgrammazione(
       campagne_programmazione_id,
-      req.userId!
+      req.userId!,
+      req.userRole
     )
     if (!hasCampaignAccess) {
       return res.status(404).json({

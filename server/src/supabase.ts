@@ -37,9 +37,19 @@ const supabaseAnon = createClient(config.supabaseUrl, config.supabaseAnonKey, {
 /**
  * Verifica un access token Supabase e ritorna l'id utente, oppure null.
  */
-export async function verifyToken(token: string): Promise<string | null> {
+export type VerifiedUser = {
+  id: string
+  role: string | null
+}
+
+export async function verifyToken(token: string): Promise<VerifiedUser | null> {
   const {
     data: { user },
   } = await supabaseAnon.auth.getUser(token)
-  return user?.id ?? null
+  if (!user?.id) return null
+
+  return {
+    id: user.id,
+    role: typeof user.user_metadata?.ruolo === 'string' ? user.user_metadata.ruolo : null,
+  }
 }

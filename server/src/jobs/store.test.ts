@@ -161,6 +161,56 @@ describe('campaign job store', () => {
     )
   })
 
+  it('allows operator roles to manage an existing campaign without ownership', async () => {
+    const query = createQueryMock({
+      data: { id: 'campagna-1' },
+      error: null,
+    })
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      fromCalls.push(table)
+      return query
+    }
+
+    const canManage = await store.userCanManageCampagnaProgrammazione(
+      'campagna-1',
+      'operator-user',
+      'operatore'
+    )
+
+    assert.equal(canManage, true)
+    assert.deepEqual(fromCalls, ['campagne_programmazione'])
+    assert.deepEqual(
+      query.calls.filter((call) => call.method === 'eq').map((call) => call.args),
+      [['id', 'campagna-1']]
+    )
+  })
+
+  it('keeps non-operator campaign management scoped to ownership', async () => {
+    const query = createQueryMock({
+      data: { id: 'campagna-1' },
+      error: null,
+    })
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      fromCalls.push(table)
+      return query
+    }
+
+    const canManage = await store.userCanManageCampagnaProgrammazione(
+      'campagna-1',
+      'artist-user',
+      'artista'
+    )
+
+    assert.equal(canManage, true)
+    assert.deepEqual(
+      query.calls.filter((call) => call.method === 'eq').map((call) => call.args),
+      [
+        ['id', 'campagna-1'],
+        ['created_by', 'artist-user'],
+      ]
+    )
+  })
+
   it('keeps findActiveJob scoped to campaign and active states', async () => {
     const query = createQueryMock({
       data: {
