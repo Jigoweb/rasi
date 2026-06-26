@@ -39,6 +39,7 @@ export interface IndividuazioneProcessState {
 
 export interface StartProcessOptions {
   artistaIds?: string[] | null  // Filtro artisti opzionale
+  mandatoOverrideArtistIds?: string[] | null  // Artisti inclusi anche se fuori periodo mandato
   nomeCampagna?: string | null  // Nome libero per la campagna individuazione
   descrizione?: string | null   // Descrizione pre-compilata dalla campagna programmazione
   campagneIndividuazioneId?: string
@@ -201,6 +202,7 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
         {
           chunkSize: 25,
           artistaIds: options?.artistaIds,  // Passa il filtro artisti
+          mandatoOverrideArtistIds: options?.mandatoOverrideArtistIds,
           nomeCampagna: options?.nomeCampagna || undefined,
           descrizione: options?.descrizione || campagna.descrizione || undefined,  // Usa descrizione passata o quella della campagna
           campagneIndividuazioneId: options?.campagneIndividuazioneId,

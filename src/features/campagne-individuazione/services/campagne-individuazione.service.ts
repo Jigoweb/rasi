@@ -28,6 +28,7 @@ export interface InitCampagnaRequest {
   campagne_programmazione_id: string
   nome_campagna_individuazione?: string
   descrizione?: string
+  mandato_override_artist_ids?: string[] | null
 }
 
 export interface InitCampagnaResponse {
@@ -68,6 +69,7 @@ export interface ProcessChunkRequest {
   programmazione_ids: string[]
   soglia_titolo?: number
   artista_ids?: string[] | null  // Filtro artisti opzionale
+  mandato_override_artist_ids?: string[] | null
 }
 
 export interface ProcessChunkResponse {
@@ -371,6 +373,7 @@ type BatchProcessingOptions = {
   nomeCampagna?: string
   descrizione?: string
   artistaIds?: string[] | null  // Filtro artisti opzionale
+  mandatoOverrideArtistIds?: string[] | null
   campagneIndividuazioneId?: string
   resume?: boolean              // Riprende un processo interrotto (skip righe già fatte)
 }
@@ -390,6 +393,7 @@ export const processCampagnaIndividuazioneBatch = async (
   const chunkSize = options?.chunkSize || 500
   const sogliaItolo = options?.sogliaItolo || 0.7
   const artistaIds = options?.artistaIds || null
+  const mandatoOverrideArtistIds = options?.mandatoOverrideArtistIds || null
   const isResume = options?.resume === true
   const startTime = Date.now()
 
@@ -415,7 +419,8 @@ export const processCampagnaIndividuazioneBatch = async (
       : await initCampagnaIndividuazione({
           campagne_programmazione_id: campagneProgrammazioneId,
           nome_campagna_individuazione: options?.nomeCampagna,
-          descrizione: options?.descrizione
+          descrizione: options?.descrizione,
+          mandato_override_artist_ids: mandatoOverrideArtistIds,
         })
 
     console.log('[Batch] Init result:', JSON.stringify(initResult, null, 2))
@@ -490,7 +495,8 @@ export const processCampagnaIndividuazioneBatch = async (
         campagne_individuazione_id,
         programmazione_ids,
         soglia_titolo: sogliaItolo,
-        artista_ids: artistaIds  // Passa il filtro artisti
+        artista_ids: artistaIds,  // Passa il filtro artisti
+        mandato_override_artist_ids: mandatoOverrideArtistIds,
       })
 
       console.log(`[Batch] Chunk ${chunkIndex + 1} result:`, chunkResult.success ? 'success' : 'failed', chunkResult.data || chunkResult.error)
@@ -726,6 +732,7 @@ const processCampagnaIndividuazioneViaWorker = async (
         campagne_programmazione_id: campagneProgrammazioneId,
         soglia_titolo: options?.sogliaItolo,
         artista_ids: options?.artistaIds ?? null,
+        mandato_override_artist_ids: options?.mandatoOverrideArtistIds ?? null,
         nome_campagna: options?.nomeCampagna,
         descrizione: options?.descrizione,
         campagne_individuazione_id: options?.campagneIndividuazioneId,

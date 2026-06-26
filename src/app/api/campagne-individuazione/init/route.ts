@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
     const { 
       campagne_programmazione_id,
       nome_campagna_individuazione,
-      descrizione 
+      descrizione,
+      mandato_override_artist_ids = null,
     } = body
 
     console.log('Received request body:', JSON.stringify(body, null, 2))
@@ -91,7 +92,8 @@ export async function POST(req: NextRequest) {
       .rpc('init_campagna_individuazione', {
         p_campagne_programmazione_id: campagne_programmazione_id,
         p_nome_campagna_individuazione: nome_campagna_individuazione || null,
-        p_descrizione: descrizione || null
+        p_descrizione: descrizione || null,
+        p_mandato_override_artist_ids: mandato_override_artist_ids,
       })
 
     console.log('Init result:', JSON.stringify(initResult, null, 2))

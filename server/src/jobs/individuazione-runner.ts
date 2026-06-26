@@ -20,6 +20,7 @@ export interface RunOptions {
   jobId: string
   sogliaItolo?: number
   artistaIds?: string[] | null
+  mandatoOverrideArtistIds?: string[] | null
   campagneIndividuazioneId?: string | null
   nomeCampagna?: string
   descrizione?: string
@@ -127,7 +128,8 @@ async function processChunk(
   campagneIndividuazioneId: string,
   programmazioneIds: string[],
   sogliaItolo: number,
-  artistaIds: string[] | null
+  artistaIds: string[] | null,
+  mandatoOverrideArtistIds: string[] | null
 ): Promise<ChunkResult> {
   const maxRetries = 3
   const baseDelayMs = 1000
@@ -148,6 +150,7 @@ async function processChunk(
         p_artista_ids: artistaIds,
         p_tolleranza_anno_soft: 3,
         p_tolleranza_anno_hard: 5,
+        p_mandato_override_artist_ids: mandatoOverrideArtistIds,
       })
 
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -169,7 +172,8 @@ async function processChunk(
               campagneIndividuazioneId,
               programmazioneIds,
               sogliaItolo,
-              artistaIds
+              artistaIds,
+              mandatoOverrideArtistIds
             )
           }
           return { success: false, error: error.message }
@@ -190,7 +194,8 @@ async function processChunk(
             campagneIndividuazioneId,
             programmazioneIds,
             sogliaItolo,
-            artistaIds
+            artistaIds,
+            mandatoOverrideArtistIds
           )
         }
         return { success: false, error: err.message || 'Errore chunk' }
@@ -205,14 +210,16 @@ async function processChunkInHalves(
   campagneIndividuazioneId: string,
   programmazioneIds: string[],
   sogliaItolo: number,
-  artistaIds: string[] | null
+  artistaIds: string[] | null,
+  mandatoOverrideArtistIds: string[] | null
 ): Promise<ChunkResult> {
   const midpoint = Math.ceil(programmazioneIds.length / 2)
   const left = await processChunk(
     campagneIndividuazioneId,
     programmazioneIds.slice(0, midpoint),
     sogliaItolo,
-    artistaIds
+    artistaIds,
+    mandatoOverrideArtistIds
   )
   if (!left.success) return left
 
@@ -220,7 +227,8 @@ async function processChunkInHalves(
     campagneIndividuazioneId,
     programmazioneIds.slice(midpoint),
     sogliaItolo,
-    artistaIds
+    artistaIds,
+    mandatoOverrideArtistIds
   )
   if (!right.success) return right
 
@@ -238,6 +246,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     jobId,
     sogliaItolo = 0.7,
     artistaIds = null,
+    mandatoOverrideArtistIds = null,
     campagneIndividuazioneId: requestedCampagneIndividuazioneId = null,
     nomeCampagna,
     descrizione,
@@ -300,6 +309,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
           p_campagne_programmazione_id: campagneProgrammazioneId,
           p_nome_campagna_individuazione: nomeCampagna ?? null,
           p_descrizione: descrizione ?? null,
+          p_mandato_override_artist_ids: mandatoOverrideArtistIds,
         }
       )
 
@@ -339,7 +349,8 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
         campagneIndividuazioneId,
         ids,
         sogliaItolo,
-        artistaIds
+        artistaIds,
+        mandatoOverrideArtistIds
       )
 
       if (!result.success) {

@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
       programmazione_ids,
       soglia_titolo = 0.7,
       artista_ids = null,           // Filtro artisti opzionale
+      mandato_override_artist_ids = null,
       tolleranza_anno_soft = 3,     // ±N anni senza penalità
       tolleranza_anno_hard = 5,     // Oltre N anni: scarto duro
     } = body
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
       programmazione_ids_count: programmazione_ids?.length,
       soglia_titolo,
       artista_ids_count: artista_ids?.length,
+      mandato_override_artist_ids_count: mandato_override_artist_ids?.length,
       tolleranza_anno_soft,
       tolleranza_anno_hard,
       payload_size_bytes: JSON.stringify(body).length
@@ -172,6 +174,7 @@ export async function POST(req: NextRequest) {
             p_artista_ids: artista_ids,
             p_tolleranza_anno_soft: tolleranza_anno_soft,
             p_tolleranza_anno_hard: tolleranza_anno_hard,
+            p_mandato_override_artist_ids: mandato_override_artist_ids,
           })
 
         const timeoutPromise = new Promise((_, reject) => {

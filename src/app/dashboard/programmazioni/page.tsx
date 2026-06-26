@@ -50,7 +50,15 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { Search, Plus, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp } from 'lucide-react'
 
 type ImportRow = Record<string, unknown>
-type ArtistOption = { id: string; nome: string; cognome: string; nome_arte: string | null }
+type ArtistOption = {
+  id: string
+  nome: string
+  cognome: string
+  nome_arte: string | null
+  data_inizio_mandato: string
+  data_fine_mandato: string | null
+  stato: string | null
+}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -62,6 +70,46 @@ function getErrorMessage(error: unknown): string {
     return JSON.stringify(error)
   }
   return String(error)
+}
+
+function getYearFromDate(dateString: string | null | undefined): number | null {
+  if (!dateString) return null
+  const year = new Date(dateString).getFullYear()
+  return Number.isFinite(year) ? year : null
+}
+
+function artistMandateCoversYear(artist: ArtistOption, year: number | null | undefined): boolean {
+  if (!year) return true
+  const startYear = getYearFromDate(artist.data_inizio_mandato)
+  const endYear = getYearFromDate(artist.data_fine_mandato)
+
+  if (startYear !== null && startYear > year) return false
+  if (endYear !== null && endYear < year) return false
+  return true
+}
+
+function getMandateExclusionReason(artist: ArtistOption, year: number): string {
+  const startYear = getYearFromDate(artist.data_inizio_mandato)
+  const endYear = getYearFromDate(artist.data_fine_mandato)
+
+  if (startYear !== null && startYear > year) {
+    return `Mandato dal ${startYear}, programmazione ${year}`
+  }
+
+  if (endYear !== null && endYear < year) {
+    return `Mandato terminato nel ${endYear}, programmazione ${year}`
+  }
+
+  return `Mandato non valido per programmazione ${year}`
+}
+
+function artistMatchesSearch(artist: ArtistOption, query: string): boolean {
+  if (!query) return true
+  const searchLower = query.toLowerCase()
+  const fullName = `${artist.nome} ${artist.cognome}`.toLowerCase()
+  const reverseName = `${artist.cognome} ${artist.nome}`.toLowerCase()
+  const nomeArte = artist.nome_arte?.toLowerCase() || ''
+  return fullName.includes(searchLower) || reverseName.includes(searchLower) || nomeArte.includes(searchLower)
 }
 
 const formSchema = z.object({
@@ -160,6 +208,7 @@ export default function ProgrammazioniPage() {
   const [allArtists, setAllArtists] = useState<ArtistOption[]>([])
   const [loadingArtists, setLoadingArtists] = useState(false)
   const [selectedArtistIds, setSelectedArtistIds] = useState<Set<string>>(new Set())
+  const [mandatoOverrideArtistIds, setMandatoOverrideArtistIds] = useState<Set<string>>(new Set())
   const [artistSearchQuery, setArtistSearchQuery] = useState('')
 
   const {
@@ -215,7 +264,7 @@ export default function ProgrammazioniPage() {
     try {
       const { data, error } = await supabase
         .from('artisti')
-        .select('id, nome, cognome, nome_arte')
+        .select('id, nome, cognome, nome_arte, data_inizio_mandato, data_fine_mandato, stato')
         .order('cognome', { ascending: true })
         .order('nome', { ascending: true })
         .limit(5000)
@@ -264,6 +313,7 @@ export default function ProgrammazioniPage() {
     setShowIndividuazioniConfirmDialog(true)
     setShowArtistFilter(false) // Reset filter panel
     setArtistSearchQuery('') // Reset search
+    setMandatoOverrideArtistIds(new Set())
     loadArtists() // Load artists if not already loaded
     void getCampagneIndividuazioneCountForProgrammazione(campagna.id).then(({ data }) => {
       setIndividuazioneName(current => (
@@ -285,15 +335,19 @@ export default function ProgrammazioniPage() {
         c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_corso' } : c
       ))
 
-    // Determine if we should filter by artists
-    // If all artists are selected (or none selected), pass null (no filter)
-    const artistaIds = selectedArtistIds.size === allArtists.length || selectedArtistIds.size === 0
+    const mandatoOverrideIds = Array.from(mandatoOverrideArtistIds)
+    const effectiveArtistIds = new Set([...selectedArtistIds, ...mandatoOverrideIds])
+
+    // Determine if we should filter by artists.
+    // Overrides must be included in the allowlist too when the run uses a subset.
+    const artistaIds = effectiveArtistIds.size === allArtists.length || effectiveArtistIds.size === 0
       ? null 
-      : Array.from(selectedArtistIds)
+      : Array.from(effectiveArtistIds)
 
     // Start the global process with optional artist filter
     const result = await startProcess(campagnaForIndividuazioni, {
       artistaIds,
+      mandatoOverrideArtistIds: mandatoOverrideIds.length > 0 ? mandatoOverrideIds : null,
       nomeCampagna: individuazioneName.trim() || undefined,
       descrizione: individuazioneDescription.trim() || undefined,
     })
@@ -440,6 +494,32 @@ export default function ProgrammazioniPage() {
 
   // Get unique emittenti from campagne for filter dropdown
   const uniqueEmittenti = useMemo(() => getUniqueEmittenti(campagne), [campagne])
+
+  const annoIndividuazione = campagnaForIndividuazioni?.anno ?? null
+  const mandateExcludedArtists = useMemo(() => {
+    if (!annoIndividuazione) return []
+    return allArtists.filter(artist => !artistMandateCoversYear(artist, annoIndividuazione))
+  }, [allArtists, annoIndividuazione])
+  const mandateExcludedArtistIds = useMemo(
+    () => new Set(mandateExcludedArtists.map(artist => artist.id)),
+    [mandateExcludedArtists]
+  )
+  const eligibleArtists = useMemo(
+    () => allArtists.filter(artist => !mandateExcludedArtistIds.has(artist.id)),
+    [allArtists, mandateExcludedArtistIds]
+  )
+  const filteredEligibleArtists = useMemo(
+    () => eligibleArtists.filter(artist => artistMatchesSearch(artist, artistSearchQuery)),
+    [eligibleArtists, artistSearchQuery]
+  )
+  const filteredMandateExcludedArtists = useMemo(
+    () => mandateExcludedArtists.filter(artist => artistMatchesSearch(artist, artistSearchQuery)),
+    [mandateExcludedArtists, artistSearchQuery]
+  )
+  const effectiveSelectedArtistCount = useMemo(
+    () => new Set([...selectedArtistIds, ...mandatoOverrideArtistIds]).size,
+    [selectedArtistIds, mandatoOverrideArtistIds]
+  )
 
   useEffect(() => {
     if (isNewModalOpen && emittenti.length === 0) {
@@ -1156,7 +1236,7 @@ export default function ProgrammazioniPage() {
               {showArtistFilter && (
                 <div className="border-t p-3 space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    Di default tutti gli artisti sono selezionati. Deseleziona quelli che vuoi escludere dal processo.
+                    Di default tutti gli artisti sono selezionati. Il backend esclude automaticamente gli artisti fuori periodo mandato per l&apos;anno {annoIndividuazione || 'della programmazione'}; puoi includerli comunque nella sezione dedicata.
                   </p>
 
                   {/* Search and bulk actions */}
@@ -1174,7 +1254,10 @@ export default function ProgrammazioniPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setSelectedArtistIds(new Set(allArtists.map(a => a.id)))}
+                      onClick={() => {
+                        setSelectedArtistIds(new Set(allArtists.map(a => a.id)))
+                        setMandatoOverrideArtistIds(new Set())
+                      }}
                       className="text-xs"
                     >
                       Tutti
@@ -1183,7 +1266,10 @@ export default function ProgrammazioniPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setSelectedArtistIds(new Set())}
+                      onClick={() => {
+                        setSelectedArtistIds(new Set())
+                        setMandatoOverrideArtistIds(new Set())
+                      }}
                       className="text-xs"
                     >
                       Nessuno
@@ -1197,46 +1283,93 @@ export default function ProgrammazioniPage() {
                       <span className="ml-2 text-sm text-muted-foreground">Caricamento artisti...</span>
                 </div>
                   ) : (
-                    <div className="max-h-48 overflow-y-auto border rounded-md">
-                      {allArtists
-                        .filter(artist => {
-                          if (!artistSearchQuery) return true
-                          const searchLower = artistSearchQuery.toLowerCase()
-                          const fullName = `${artist.nome} ${artist.cognome}`.toLowerCase()
-                          const nomeArte = artist.nome_arte?.toLowerCase() || ''
-                          return fullName.includes(searchLower) || nomeArte.includes(searchLower)
-                        })
-                        .map(artist => (
-                          <label
-                            key={artist.id}
-                            className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
-                          >
-                            <Checkbox
-                              checked={selectedArtistIds.has(artist.id)}
-                              onCheckedChange={(checked) => {
-                                const newSet = new Set(selectedArtistIds)
-                                if (checked) {
-                                  newSet.add(artist.id)
-                    } else {
-                                  newSet.delete(artist.id)
-                                }
-                                setSelectedArtistIds(newSet)
-                              }}
-                            />
-                            <span className="text-sm">
-                              {artist.cognome} {artist.nome}
-                              {artist.nome_arte && (
-                                <span className="text-muted-foreground ml-1">({artist.nome_arte})</span>
-                              )}
-                            </span>
-                          </label>
-                        ))}
-            </div>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-medium text-foreground">Artisti eleggibili</p>
+                          <span className="text-xs text-muted-foreground">{filteredEligibleArtists.length}</span>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto border rounded-md">
+                          {filteredEligibleArtists.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-muted-foreground">Nessun artista eleggibile trovato.</p>
+                          ) : filteredEligibleArtists.map(artist => (
+                            <label
+                              key={artist.id}
+                              className="flex items-center gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
+                            >
+                              <Checkbox
+                                checked={selectedArtistIds.has(artist.id)}
+                                onCheckedChange={(checked) => {
+                                  const newSet = new Set(selectedArtistIds)
+                                  if (checked) {
+                                    newSet.add(artist.id)
+                                  } else {
+                                    newSet.delete(artist.id)
+                                  }
+                                  setSelectedArtistIds(newSet)
+                                }}
+                              />
+                              <span className="text-sm">
+                                {artist.cognome} {artist.nome}
+                                {artist.nome_arte && (
+                                  <span className="text-muted-foreground ml-1">({artist.nome_arte})</span>
+                                )}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {mandateExcludedArtists.length > 0 && (
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs font-medium text-foreground">Esclusi per mandato</p>
+                            <span className="text-xs text-muted-foreground">{filteredMandateExcludedArtists.length} di {mandateExcludedArtists.length}</span>
+                          </div>
+                          <div className="max-h-40 overflow-y-auto border rounded-md bg-muted/20">
+                            {filteredMandateExcludedArtists.length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-muted-foreground">Nessun escluso per mandato trovato.</p>
+                            ) : filteredMandateExcludedArtists.map(artist => (
+                              <label
+                                key={artist.id}
+                                className="flex items-start gap-3 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
+                              >
+                                <Checkbox
+                                  checked={mandatoOverrideArtistIds.has(artist.id)}
+                                  onCheckedChange={(checked) => {
+                                    const newSet = new Set(mandatoOverrideArtistIds)
+                                    if (checked) {
+                                      newSet.add(artist.id)
+                                    } else {
+                                      newSet.delete(artist.id)
+                                    }
+                                    setMandatoOverrideArtistIds(newSet)
+                                  }}
+                                />
+                                <span className="text-sm">
+                                  {artist.cognome} {artist.nome}
+                                  {artist.nome_arte && (
+                                    <span className="text-muted-foreground ml-1">({artist.nome_arte})</span>
+                                  )}
+                                  {annoIndividuazione && (
+                                    <span className="block text-xs text-muted-foreground">
+                                      {getMandateExclusionReason(artist, annoIndividuazione)}. Seleziona per includere comunque.
+                                    </span>
+                                  )}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
           )}
 
                   {/* Summary */}
                   <p className="text-xs text-muted-foreground text-right">
                     {selectedArtistIds.size} di {allArtists.length} artisti selezionati
+                    {mandateExcludedArtists.length > 0 && ` · ${mandateExcludedArtists.length} esclusi per mandato`}
+                    {mandatoOverrideArtistIds.size > 0 && ` · ${mandatoOverrideArtistIds.size} inclusi comunque`}
                   </p>
             </div>
           )}
@@ -1249,11 +1382,13 @@ export default function ProgrammazioniPage() {
                 </Button>
                 <Button 
               onClick={handleConfirmStartIndividuazioni}
-              disabled={selectedArtistIds.size === 0 || !individuazioneName.trim()}
+              disabled={effectiveSelectedArtistCount === 0 || !individuazioneName.trim()}
                 >
               <Sparkles className="mr-2 h-4 w-4" />
-              {selectedArtistIds.size === allArtists.length 
-                ? 'Avvia Processamento' 
+              {mandatoOverrideArtistIds.size > 0
+                ? `Avvia con ${mandatoOverrideArtistIds.size} override mandato`
+                : selectedArtistIds.size === allArtists.length
+                ? 'Avvia Processamento'
                 : `Avvia con ${selectedArtistIds.size} Artisti`}
                 </Button>
           </DialogFooter>

@@ -2,9 +2,11 @@ import {
   findActiveWorkerJob,
   getIndividuazioneRuntimeMode,
   getWorkerUrl,
+  initCampagnaIndividuazione,
   mapCompletedWorkerJob,
   mapTerminalWorkerJobError,
   mapWorkerJobToProgress,
+  processChunk,
 } from './campagne-individuazione.service'
 import type { WorkerJobSnapshot } from './individuazione-contract'
 
@@ -37,6 +39,7 @@ const baseWorkerJob = (overrides: Partial<WorkerJobSnapshot> = {}): WorkerJobSna
 
 describe('individuazione worker service helpers', () => {
   const originalWorkerUrl = process.env.NEXT_PUBLIC_WORKER_URL
+  const originalFetch = global.fetch
 
   afterEach(() => {
     if (originalWorkerUrl === undefined) {
@@ -44,6 +47,7 @@ describe('individuazione worker service helpers', () => {
     } else {
       process.env.NEXT_PUBLIC_WORKER_URL = originalWorkerUrl
     }
+    global.fetch = originalFetch
     mockFrom.mockReset()
     mockGetSession.mockReset()
   })
@@ -180,5 +184,73 @@ describe('individuazione worker service helpers', () => {
     await expect(findActiveWorkerJob('campagna-programmazione-1')).resolves.toBeNull()
 
     expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('sends mandate override artist ids when initializing an individuazione run', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'token-1' } },
+      error: null,
+    })
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        success: true,
+        data: {
+          campagne_individuazione_id: 'campagna-individuazione-1',
+          programmazioni_totali: 1,
+          campagne_programmazione_id: 'campagna-programmazione-1',
+        },
+      }),
+    } as unknown as Response)
+
+    await initCampagnaIndividuazione({
+      campagne_programmazione_id: 'campagna-programmazione-1',
+      mandato_override_artist_ids: ['artist-override-1'],
+    })
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/campagne-individuazione/init', expect.objectContaining({
+      body: JSON.stringify({
+        campagne_programmazione_id: 'campagna-programmazione-1',
+        mandato_override_artist_ids: ['artist-override-1'],
+      }),
+    }))
+  })
+
+  it('sends mandate override artist ids when processing a chunk', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'token-1' } },
+      error: null,
+    })
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: {
+        get: jest.fn().mockReturnValue('application/json'),
+      },
+      json: jest.fn().mockResolvedValue({
+        success: true,
+        data: {
+          programmazioni_processate: 1,
+          programmazioni_con_match: 1,
+          individuazioni_create: 1,
+          match_trovati: 1,
+        },
+      }),
+    } as unknown as Response)
+
+    await processChunk({
+      campagne_individuazione_id: 'campagna-individuazione-1',
+      programmazione_ids: ['programmazione-1'],
+      artista_ids: ['artist-selected-1'],
+      mandato_override_artist_ids: ['artist-override-1'],
+    })
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/campagne-individuazione/process-chunk', expect.objectContaining({
+      body: JSON.stringify({
+        campagne_individuazione_id: 'campagna-individuazione-1',
+        programmazione_ids: ['programmazione-1'],
+        artista_ids: ['artist-selected-1'],
+        mandato_override_artist_ids: ['artist-override-1'],
+      }),
+    }))
   })
 })

@@ -1190,6 +1190,7 @@ export type Database = {
         Args: {
           p_campagne_programmazione_id: string
           p_descrizione?: string
+          p_mandato_override_artist_ids?: string[] | null
           p_nome_campagna_individuazione?: string
         }
         Returns: Json
@@ -1212,6 +1213,25 @@ export type Database = {
               p_artista_ids?: string[]
               p_programmazione_id: string
               p_soglia_titolo?: number
+            }
+            Returns: {
+              artista_id: string
+              dettagli_matching: Json
+              episodio_id: string
+              opera_id: string
+              partecipazione_id: string
+              punteggio: number
+              ruolo_id: string
+            }[]
+          }
+        | {
+            Args: {
+              p_artista_ids?: string[] | null
+              p_mandato_override_artist_ids?: string[] | null
+              p_programmazione_id: string
+              p_soglia_titolo?: number
+              p_tolleranza_anno_hard?: number
+              p_tolleranza_anno_soft?: number
             }
             Returns: {
               artista_id: string
@@ -1272,10 +1292,22 @@ export type Database = {
           }
         | {
             Args: {
-              p_artista_ids?: string[]
+              p_artista_ids?: string[] | null
               p_campagne_individuazione_id: string
               p_programmazione_ids: string[]
               p_soglia_titolo?: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_artista_ids?: string[] | null
+              p_campagne_individuazione_id: string
+              p_mandato_override_artist_ids?: string[] | null
+              p_programmazione_ids: string[]
+              p_soglia_titolo?: number
+              p_tolleranza_anno_hard?: number
+              p_tolleranza_anno_soft?: number
             }
             Returns: Json
           }
