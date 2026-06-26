@@ -1,4 +1,12 @@
 import { supabase } from '@/shared/lib/supabase'
+import {
+  normalizeIndividuazioneDetailStats,
+  normalizeIndividuazioneStatus,
+  type IndividuazioneDetailStats,
+  type IndividuazioneStatus,
+} from '../utils/individuazioni-detail'
+
+export type { IndividuazioneDetailStats, IndividuazioneStatus }
 
 export interface CampagnaIndividuazione {
   id: string
@@ -7,7 +15,7 @@ export interface CampagnaIndividuazione {
   emittente_id: string
   campagne_programmazione_id: string
   anno: number
-  configurazione_matching?: any
+  configurazione_matching?: unknown
   stato: 'bozza' | 'in_corso' | 'completata' | 'archiviata'
   statistiche?: {
     programmazioni_totali?: number
@@ -63,9 +71,17 @@ export interface Individuazione {
   
   // Matching
   punteggio_matching: number
-  dettagli_matching?: any
+  dettagli_matching?: {
+    episodio_mancante?: boolean
+    episode_normalization_fallback?: {
+      confidence?: string
+      numero_stagione?: number
+      numero_episodio?: number
+    }
+    [key: string]: unknown
+  }
   metodo?: 'automatico' | 'manuale' | 'suggerito'
-  stato?: 'individuato' | 'validato' | 'rifiutato' | 'in_revisione'
+  stato?: IndividuazioneStatus
   
   // Validazione
   validato_da?: string
@@ -86,7 +102,7 @@ export interface Individuazione {
 
 export const getCampagneIndividuazione = async () => {
   try {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('campagne_individuazione')
     .select(`
       *,
@@ -105,10 +121,11 @@ export const getCampagneIndividuazione = async () => {
     }
 
     // Fetch all counts in a single batch query using IN clause
-    const campagnaIds = data.map((item: any) => item.id)
+    const campagneData = data as CampagnaIndividuazione[]
+    const campagnaIds = campagneData.map(item => item.id)
     
     // Get counts for all campagne at once
-    const { data: countsData, error: countsError } = await (supabase as any)
+    const { data: countsData, error: countsError } = await supabase
       .from('individuazioni')
       .select('campagna_individuazioni_id')
       .in('campagna_individuazioni_id', campagnaIds)
@@ -116,7 +133,7 @@ export const getCampagneIndividuazione = async () => {
     // Create a map of counts
     const countsMap = new Map<string, number>()
     if (countsData && !countsError) {
-      countsData.forEach((item: any) => {
+      countsData.forEach((item: { campagna_individuazioni_id: string }) => {
         const id = item.campagna_individuazioni_id
         countsMap.set(id, (countsMap.get(id) || 0) + 1)
       })
@@ -125,7 +142,7 @@ export const getCampagneIndividuazione = async () => {
     }
 
     // Transform data with counts
-    const transformedData = data.map((item: any) => ({
+    const transformedData = campagneData.map(item => ({
       ...item,
       individuazioni_count: countsMap.get(item.id) || 0
     }))
@@ -134,7 +151,7 @@ export const getCampagneIndividuazione = async () => {
       data: (transformedData as unknown) as CampagnaIndividuazione[], 
       error: null 
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[getCampagneIndividuazione] Unexpected error:', error)
   return { 
       data: null, 
@@ -144,7 +161,7 @@ export const getCampagneIndividuazione = async () => {
 }
 
 export const getCampagnaIndividuazione = async (id: string) => {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('campagne_individuazione')
     .select(`
       *,
@@ -164,7 +181,7 @@ export const updateCampagnaIndividuazioneMetadata = async (
   campagnaId: string,
   payload: CampagnaIndividuazioneMetadataPayload
 ) => {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('campagne_individuazione')
     .update({
       nome: payload.nome.trim(),
@@ -187,6 +204,9 @@ export const updateCampagnaIndividuazioneMetadata = async (
 // ============================================
 
 export type SearchField = 'titolo' | 'artista' | 'opera'
+export type IndividuazioneSortBy = 'review_priority' | 'punteggio_matching' | 'data_trasmissione' | 'stato' | 'titolo'
+export type IndividuazioneSortDirection = 'asc' | 'desc'
+export type IndividuazioneGroupBy = 'none' | 'stato' | 'match_band'
 
 export const getIndividuazioni = async (
   campagnaId: string,
@@ -197,6 +217,8 @@ export const getIndividuazioni = async (
     searchField?: SearchField
     stato?: string
     withCount?: boolean
+    sortBy?: IndividuazioneSortBy
+    sortDirection?: IndividuazioneSortDirection
   }
 ) => {
   const page = options?.page || 1
@@ -204,6 +226,8 @@ export const getIndividuazioni = async (
   const offset = (page - 1) * pageSize
   const searchField = options?.searchField || 'titolo'
   const withCount = options?.withCount ?? true
+  const sortBy = options?.sortBy || 'data_trasmissione'
+  const sortDirection = options?.sortDirection || 'desc'
 
   // Se si cerca per artista o opera, dobbiamo prima trovare gli ID corrispondenti
   let filterIds: string[] | null = null
@@ -232,7 +256,7 @@ export const getIndividuazioni = async (
     }
   }
 
-  let query = (supabase as any)
+  let query = supabase
     .from('individuazioni')
     .select(`
       *,
@@ -241,8 +265,6 @@ export const getIndividuazioni = async (
       ruoli_tipologie(nome)
     `, withCount ? { count: 'exact' } : undefined)
     .eq('campagna_individuazioni_id', campagnaId)
-    .order('data_trasmissione', { ascending: false })
-    .range(offset, offset + pageSize - 1)
 
   // Applica filtro di ricerca
   if (options?.search) {
@@ -255,9 +277,13 @@ export const getIndividuazioni = async (
     }
   }
 
-  if (options?.stato) {
-    query = query.eq('stato', options.stato)
+  const normalizedStatus = normalizeIndividuazioneStatus(options?.stato)
+  if (normalizedStatus) {
+    query = query.eq('stato', normalizedStatus)
   }
+
+  query = applyIndividuazioniSort(query, sortBy, sortDirection)
+    .range(offset, offset + pageSize - 1)
 
   const { data, error, count } = await query
 
@@ -266,6 +292,56 @@ export const getIndividuazioni = async (
     error,
     count,
     totalPages: count ? Math.ceil(count / pageSize) : 0
+  }
+}
+
+type QueryOrderOptions = {
+  ascending?: boolean
+  nullsFirst?: boolean
+}
+
+type OrderableQuery<T> = {
+  order: (column: string, options?: QueryOrderOptions) => T
+}
+
+type SupabaseRpcClient = {
+  rpc: (
+    fn: string,
+    args?: Record<string, unknown>
+  ) => PromiseLike<{ data: unknown; error: unknown }>
+}
+
+function applyIndividuazioniSort<T extends OrderableQuery<T>>(
+  query: T,
+  sortBy: IndividuazioneSortBy,
+  sortDirection: IndividuazioneSortDirection
+) {
+  const ascending = sortDirection === 'asc'
+
+  switch (sortBy) {
+    case 'review_priority':
+      return query
+        .order('stato', { ascending: true })
+        .order('punteggio_matching', { ascending: true })
+        .order('data_trasmissione', { ascending: false })
+    case 'punteggio_matching':
+      return query
+        .order('punteggio_matching', { ascending, nullsFirst: false })
+        .order('data_trasmissione', { ascending: false })
+    case 'stato':
+      return query
+        .order('stato', { ascending })
+        .order('punteggio_matching', { ascending: true })
+        .order('data_trasmissione', { ascending: false })
+    case 'titolo':
+      return query
+        .order('titolo', { ascending, nullsFirst: false })
+        .order('data_trasmissione', { ascending: false })
+    case 'data_trasmissione':
+    default:
+      return query
+        .order('data_trasmissione', { ascending, nullsFirst: false })
+        .order('ora_inizio', { ascending, nullsFirst: false })
   }
 }
 
@@ -279,13 +355,27 @@ export {
 // ============================================
 
 export const getCampagnaStatistiche = async (campagnaId: string) => {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from('campagne_individuazione')
     .select('statistiche')
     .eq('id', campagnaId)
     .single()
 
-  return { data: (data as any)?.statistiche, error }
+  return { data: (data as { statistiche?: CampagnaIndividuazione['statistiche'] } | null)?.statistiche, error }
+}
+
+export const getCampagnaIndividuazioneDetailStats = async (
+  campagnaId: string
+): Promise<{ data: IndividuazioneDetailStats; error: unknown }> => {
+  const rpcClient = supabase as unknown as SupabaseRpcClient
+  const { data, error } = await rpcClient.rpc('get_individuazione_detail_stats', {
+    p_campagna_id: campagnaId,
+  })
+
+  return {
+    data: normalizeIndividuazioneDetailStats(data),
+    error,
+  }
 }
 
 export {
@@ -306,13 +396,26 @@ export interface DeleteCampagnaIndividuazioneInfo {
   campagne_programmazione_nome?: string
 }
 
+type DeleteCampagnaInfoRow = {
+  campagne_programmazione_id: string
+  campagne_programmazione?: { nome?: string | null } | null
+}
+
+type DeleteCampagnaResult = {
+  success?: boolean
+  error?: string
+  [key: string]: unknown
+}
+
 /**
  * Ottiene le informazioni per la dialog di conferma cancellazione
  */
-export const getDeleteCampagnaIndividuazioneInfo = async (campagnaId: string): Promise<{ data: DeleteCampagnaIndividuazioneInfo | null; error: any }> => {
+export const getDeleteCampagnaIndividuazioneInfo = async (
+  campagnaId: string
+): Promise<{ data: DeleteCampagnaIndividuazioneInfo | null; error: unknown }> => {
   try {
     // Get campagna with related info
-    const { data: campagna, error: campagnaError } = await (supabase as any)
+    const { data: campagna, error: campagnaError } = await supabase
       .from('campagne_individuazione')
       .select('campagne_programmazione_id, campagne_programmazione(nome)')
       .eq('id', campagnaId)
@@ -321,18 +424,20 @@ export const getDeleteCampagnaIndividuazioneInfo = async (campagnaId: string): P
     if (campagnaError || !campagna) throw campagnaError || new Error('Campagna non trovata')
 
     // Count individuazioni
-    const { count: individuazioni_count, error: countError } = await (supabase as any)
+    const { count: individuazioni_count, error: countError } = await supabase
       .from('individuazioni')
       .select('*', { count: 'exact', head: true })
       .eq('campagna_individuazioni_id', campagnaId)
 
     if (countError) throw countError
 
+    const campagnaInfo = campagna as DeleteCampagnaInfoRow
+
     return {
       data: {
         individuazioni_count: individuazioni_count || 0,
-        campagne_programmazione_id: (campagna as any).campagne_programmazione_id,
-        campagne_programmazione_nome: ((campagna as any).campagne_programmazione as any)?.nome
+        campagne_programmazione_id: campagnaInfo.campagne_programmazione_id,
+        campagne_programmazione_nome: campagnaInfo.campagne_programmazione?.nome || undefined
       },
       error: null
     }
@@ -350,12 +455,12 @@ export const getDeleteCampagnaIndividuazioneInfo = async (campagnaId: string): P
 export const deleteCampagnaIndividuazione = async (
   campagnaId: string,
   onProgress?: (progress: { phase: 'deleting_individuazioni' | 'updating_programmazione' | 'deleting_campagna'; deleted?: number; total?: number }) => void
-): Promise<{ data: any; error: any }> => {
+): Promise<{ data: DeleteCampagnaResult | null; error: Error | null }> => {
   try {
     const { data: info, error: infoError } = await getDeleteCampagnaIndividuazioneInfo(campagnaId)
     if (infoError) {
       console.error('[deleteCampagnaIndividuazione] Error getting info:', infoError)
-      throw new Error(`Errore nel recupero info: ${infoError.message || JSON.stringify(infoError)}`)
+      throw new Error(`Errore nel recupero info: ${getErrorMessage(infoError)}`)
     }
     if (!info) throw new Error('Campagna non trovata')
 
@@ -367,23 +472,33 @@ export const deleteCampagnaIndividuazione = async (
     const userId = session?.user?.id
     if (!userId) throw new Error('Utente non autenticato')
 
-    const { data, error } = await (supabase as any).rpc('delete_campagna_individuazione_safe', {
+    const rpcClient = supabase as unknown as SupabaseRpcClient
+    const { data, error } = await rpcClient.rpc('delete_campagna_individuazione_safe', {
       p_campagna_individuazione_id: campagnaId,
       p_user_id: userId,
     })
 
     if (error) throw error
-    if (!data?.success) {
-      throw new Error(data?.error || 'Errore eliminazione campagna individuazione')
+    const result = data as DeleteCampagnaResult | null
+    if (!result?.success) {
+      throw new Error(result?.error || 'Errore eliminazione campagna individuazione')
     }
 
     onProgress?.({ phase: 'deleting_individuazioni', deleted: info.individuazioni_count, total: info.individuazioni_count })
     onProgress?.({ phase: 'updating_programmazione' })
     onProgress?.({ phase: 'deleting_campagna' })
 
-    return { data, error: null }
-  } catch (error: any) {
+    return { data: result, error: null }
+  } catch (error: unknown) {
     console.error('[deleteCampagnaIndividuazione] Caught error:', error)
     return { data: null, error: error instanceof Error ? error : new Error(String(error)) }
   }
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    return String((error as { message?: unknown }).message)
+  }
+  return JSON.stringify(error)
 }

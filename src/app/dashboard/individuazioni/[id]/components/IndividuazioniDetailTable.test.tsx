@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import IndividuazioniDetailTable from './IndividuazioniDetailTable'
+import type { Individuazione } from '@/features/individuazioni/services/individuazioni.service'
 
 describe('IndividuazioniDetailTable', () => {
   it('renders individuazione rows with key match fields', () => {
@@ -26,7 +27,7 @@ describe('IndividuazioniDetailTable', () => {
           artisti: { nome: 'Mario', cognome: 'Rossi', nome_arte: 'Mario R' },
           opere: { titolo: 'Opera matchata' },
           ruoli_tipologie: { nome: 'Attore' },
-        } as any]}
+        } as unknown as Individuazione]}
         loadingData={false}
         loadingMore={false}
         searchTerm=""
@@ -43,5 +44,36 @@ describe('IndividuazioniDetailTable', () => {
     expect(screen.getByText('80%')).toBeInTheDocument()
     expect(screen.getByText('normalizzato')).toBeInTheDocument()
     expect(screen.getByText('Validato')).toBeInTheDocument()
+    expect(screen.getByText('Ordine: da rivedere prima')).toBeInTheDocument()
+  })
+
+  it('groups rows by database status labels', () => {
+    render(
+      <IndividuazioniDetailTable
+        individuazioni={[{
+          id: 'individuazione-2',
+          titolo: 'Serie da controllare',
+          data_trasmissione: '2026-06-24',
+          ora_inizio: '20:00:00',
+          ora_fine: '20:45:00',
+          punteggio_matching: 0.66,
+          stato: 'dubbioso',
+          artisti: { nome: 'Anna', cognome: 'Verdi' },
+          opere: { titolo: 'Opera dubbia' },
+          ruoli_tipologie: { nome: 'Doppiatrice' },
+        } as unknown as Individuazione]}
+        loadingData={false}
+        loadingMore={false}
+        searchTerm=""
+        totalCount={1}
+        hasMore={false}
+        groupBy="stato"
+        onLoadMore={jest.fn()}
+      />
+    )
+
+    expect(screen.getAllByText('In revisione').length).toBeGreaterThan(0)
+    expect(screen.getByText('(1)')).toBeInTheDocument()
+    expect(screen.getByText('Serie da controllare')).toBeInTheDocument()
   })
 })

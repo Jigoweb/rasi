@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Download, Edit, Loader2, Search, Sparkles } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BarChart3, CheckCircle, Download, Edit, Loader2, Search, Sparkles, Users } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
@@ -14,6 +14,7 @@ import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
 import {
   updateCampagnaIndividuazioneMetadata,
+  type IndividuazioneDetailStats,
   type SearchField,
 } from '@/features/individuazioni/services/individuazioni.service'
 import ExportIndividuazioniDialog from './components/ExportIndividuazioniDialog'
@@ -29,6 +30,7 @@ export default function IndividuazioneDetailPage() {
   const {
     campagna,
     setCampagna,
+    detailStats,
     individuazioni,
     loading,
     loadingData,
@@ -44,11 +46,16 @@ export default function IndividuazioneDetailPage() {
     searchTerm,
     searchField,
     statoFilter,
+    sortBy,
+    sortDirection,
+    groupBy,
     setShowExportDialog,
     setShowTimeEstimateDialog,
     handleSearch,
     handleSearchFieldChange,
     handleStatoFilterChange,
+    handleSortChange,
+    handleGroupByChange,
     handleExportDialogOpenChange,
     handleFormatSelect,
     handleConfirmExport,
@@ -113,6 +120,8 @@ export default function IndividuazioneDetailPage() {
     )
   }
 
+  const stats = detailStats ?? getFallbackDetailStats(campagna)
+
   return (
     <div className="space-y-6">
       <DashboardBreadcrumbs
@@ -165,12 +174,49 @@ export default function IndividuazioneDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <MetricCard value={formatNumber(campagna.statistiche?.individuazioni_create)} label="Individuazioni" />
-        <MetricCard value={formatNumber(campagna.statistiche?.programmazioni_con_match)} label="Prog. con match" />
-        <MetricCard value={formatNumber(campagna.statistiche?.artisti_distinti)} label="Artisti" />
-        <MetricCard value={formatNumber(campagna.statistiche?.opere_distinte)} label="Opere" />
-        <MetricCard value={formatNumber(campagna.statistiche?.programmazioni_totali)} label="Prog. totali" />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <InsightCard
+          icon={<BarChart3 className="h-5 w-5 text-blue-600" />}
+          iconClassName="bg-blue-100"
+          title="Copertura programmazioni"
+          value={`${formatNumber(stats.coverage.programmazioniConMatch)}/${formatNumber(stats.coverage.programmazioniTotali)}`}
+          description={`${formatPercent(stats.coverage.coperturaPercentuale)} con almeno un match`}
+          details={`${formatNumber(stats.coverage.programmazioniSenzaMatch)} senza match`}
+        />
+        <InsightCard
+          icon={<CheckCircle className="h-5 w-5 text-green-600" />}
+          iconClassName="bg-green-100"
+          title="Esito match"
+          value={formatNumber(stats.outcomes.totale)}
+          description={`${formatNumber(stats.outcomes.sicuri)} sicuri o validati`}
+          details={`${formatNumber(stats.outcomes.dubbiosi)} in revisione, ${formatNumber(stats.outcomes.respinti)} respinti`}
+        />
+        <InsightCard
+          icon={<Sparkles className="h-5 w-5 text-purple-600" />}
+          iconClassName="bg-purple-100"
+          title="Qualità matching"
+          value={formatPercent(stats.quality.scoreMedio)}
+          description={`Score medio (${formatPercent(stats.quality.scoreMin)}-${formatPercent(stats.quality.scoreMax)})`}
+          details={`${formatNumber(stats.quality.matchAlti)} alti, ${formatNumber(stats.quality.matchBassi)} bassi`}
+        />
+        <InsightCard
+          icon={<Users className="h-5 w-5 text-indigo-600" />}
+          iconClassName="bg-indigo-100"
+          title="Catalogo coinvolto"
+          value={`${formatNumber(stats.catalog.artistiDistinti)} / ${formatNumber(stats.catalog.opereDistinte)}`}
+          description="Artisti / opere distinti"
+          details={stats.catalog.ruoloPrincipale
+            ? `Ruolo più frequente: ${stats.catalog.ruoloPrincipale.nome} (${formatNumber(stats.catalog.ruoloPrincipale.count)})`
+            : 'Ruoli non disponibili'}
+        />
+        <InsightCard
+          icon={<AlertTriangle className="h-5 w-5 text-yellow-600" />}
+          iconClassName="bg-yellow-100"
+          title="Da controllare"
+          value={formatNumber(stats.review.daControllare)}
+          description="Priorità per operatori"
+          details={`${formatNumber(stats.review.scoreBasso)} score bassi, ${formatNumber(stats.review.episodioDaControllare)} episodi`}
+        />
       </div>
 
       <Card>
@@ -203,8 +249,8 @@ export default function IndividuazioneDetailPage() {
                 <SelectItem value="all">Tutti gli stati</SelectItem>
                 <SelectItem value="individuato">Individuato</SelectItem>
                 <SelectItem value="validato">Validato</SelectItem>
-                <SelectItem value="in_revisione">In revisione</SelectItem>
-                <SelectItem value="rifiutato">Rifiutato</SelectItem>
+                <SelectItem value="dubbioso">In revisione</SelectItem>
+                <SelectItem value="respinto">Respinto</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -218,6 +264,11 @@ export default function IndividuazioneDetailPage() {
         searchTerm={searchTerm}
         totalCount={totalCount}
         hasMore={hasMore}
+        sortBy={sortBy}
+        sortDirection={sortDirection}
+        groupBy={groupBy}
+        onSortChange={handleSortChange}
+        onGroupByChange={handleGroupByChange}
         onLoadMore={loadMore}
       />
 
@@ -275,21 +326,100 @@ export default function IndividuazioneDetailPage() {
   )
 }
 
-function MetricCard({ value, label }: { value: string; label: string }) {
+function InsightCard({
+  icon,
+  iconClassName,
+  title,
+  value,
+  description,
+  details,
+}: {
+  icon: React.ReactNode
+  iconClassName: string
+  title: string
+  value: string
+  description: string
+  details: string
+}) {
   return (
     <Card>
       <CardContent className="pt-6">
-        <div className="text-center">
-          <p className="text-2xl font-bold">{value}</p>
-          <p className="text-sm text-muted-foreground">{label}</p>
+        <div className="flex items-start gap-3">
+          <div className={`p-2 rounded-lg ${iconClassName}`}>
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold leading-tight">{value}</p>
+            <p className="text-sm text-foreground">{description}</p>
+            <p className="text-xs text-muted-foreground mt-1">{details}</p>
+          </div>
         </div>
       </CardContent>
     </Card>
   )
 }
 
+type CampagnaStatisticheFallback = {
+  programmazioni_totali?: number
+  programmazioni_processate?: number
+  programmazioni_con_match?: number
+  programmazioni_senza_match?: number
+  individuazioni_create?: number
+  artisti_distinti?: number
+  opere_distinte?: number
+}
+
+function getFallbackDetailStats(campagna: { statistiche?: CampagnaStatisticheFallback }): IndividuazioneDetailStats {
+  const statistiche = campagna.statistiche || {}
+  const programmazioniTotali = statistiche.programmazioni_totali || 0
+  const programmazioniConMatch = statistiche.programmazioni_con_match || 0
+  const individuazioniCreate = statistiche.individuazioni_create || 0
+
+  return {
+    coverage: {
+      programmazioniTotali,
+      programmazioniProcessate: statistiche.programmazioni_processate || 0,
+      programmazioniConMatch,
+      programmazioniSenzaMatch: statistiche.programmazioni_senza_match || Math.max(programmazioniTotali - programmazioniConMatch, 0),
+      coperturaPercentuale: programmazioniTotali > 0 ? (programmazioniConMatch / programmazioniTotali) * 100 : 0,
+    },
+    outcomes: {
+      totale: individuazioniCreate,
+      individuati: individuazioniCreate,
+      validati: 0,
+      dubbiosi: 0,
+      respinti: 0,
+      sicuri: individuazioniCreate,
+    },
+    quality: {
+      scoreMedio: 0,
+      scoreMin: 0,
+      scoreMax: 0,
+      matchAlti: 0,
+      matchMedi: 0,
+      matchBassi: 0,
+    },
+    review: {
+      daControllare: 0,
+      dubbiosi: 0,
+      scoreBasso: 0,
+      episodioDaControllare: 0,
+    },
+    catalog: {
+      artistiDistinti: statistiche.artisti_distinti || 0,
+      opereDistinte: statistiche.opere_distinte || 0,
+      ruoloPrincipale: null,
+    },
+  }
+}
+
 function formatNumber(num: number | undefined) {
   return (num || 0).toLocaleString('it-IT')
+}
+
+function formatPercent(num: number | undefined) {
+  return `${Math.round((num || 0) * 10) / 10}%`
 }
 
 function getSearchPlaceholder(searchField: SearchField): string {

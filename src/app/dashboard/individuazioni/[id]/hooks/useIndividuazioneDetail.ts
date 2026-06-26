@@ -4,11 +4,16 @@ import { supabase } from '@/shared/lib/supabase'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import {
   formatIndividuazioniForExport,
+  getCampagnaIndividuazioneDetailStats,
   getCampagnaIndividuazione,
   getIndividuazioni,
   getIndividuazioniForExport,
   type CampagnaIndividuazione,
+  type IndividuazioneDetailStats,
+  type IndividuazioneGroupBy,
   type Individuazione,
+  type IndividuazioneSortBy,
+  type IndividuazioneSortDirection,
   type SearchField,
 } from '@/features/individuazioni/services/individuazioni.service'
 
@@ -17,6 +22,7 @@ const pageSize = 100
 
 export function useIndividuazioneDetail(campagnaId: string) {
   const [campagna, setCampagna] = useState<CampagnaIndividuazione | null>(null)
+  const [detailStats, setDetailStats] = useState<IndividuazioneDetailStats | null>(null)
   const [individuazioni, setIndividuazioni] = useState<Individuazione[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
@@ -33,6 +39,9 @@ export function useIndividuazioneDetail(campagnaId: string) {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [searchField, setSearchField] = useState<SearchField>('titolo')
   const [statoFilter, setStatoFilter] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<IndividuazioneSortBy>('review_priority')
+  const [sortDirection, setSortDirection] = useState<IndividuazioneSortDirection>('asc')
+  const [groupBy, setGroupBy] = useState<IndividuazioneGroupBy>('none')
   const exportButtonRef = useRef<HTMLDivElement>(null)
   const { startExport, state: exportState } = useExportProcess()
 
@@ -50,16 +59,24 @@ export function useIndividuazioneDetail(campagnaId: string) {
     async function loadCampagna() {
       setLoading(true)
       try {
-        const { data, error } = await getCampagnaIndividuazione(campagnaId)
-        if (error) {
-          logError('Errore caricamento campagna:', error)
+        const [campagnaResult, statsResult] = await Promise.all([
+          getCampagnaIndividuazione(campagnaId),
+          getCampagnaIndividuazioneDetailStats(campagnaId),
+        ])
+        if (campagnaResult.error) {
+          logError('Errore caricamento campagna:', campagnaResult.error)
           setCampagna(null)
           return
         }
-        setCampagna(data ?? null)
+        if (statsResult.error) {
+          logError('Errore caricamento statistiche individuazione:', statsResult.error)
+        }
+        setCampagna(campagnaResult.data ?? null)
+        setDetailStats(statsResult.error ? null : statsResult.data)
       } catch (error) {
         logError('Errore caricamento campagna:', error)
         setCampagna(null)
+        setDetailStats(null)
       } finally {
         setLoading(false)
       }
@@ -84,6 +101,8 @@ export function useIndividuazioneDetail(campagnaId: string) {
         searchField,
         stato: statoFilter !== 'all' ? statoFilter : undefined,
         withCount: isFirstPage,
+        sortBy,
+        sortDirection,
       })
       if (error) {
         logError('Errore caricamento individuazioni:', error)
@@ -105,7 +124,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
         setLoadingMore(false)
       }
     }
-  }, [campagnaId, debouncedSearchTerm, page, searchField, statoFilter])
+  }, [campagnaId, debouncedSearchTerm, page, searchField, sortBy, sortDirection, statoFilter])
 
   useEffect(() => {
     if (!campagna) return
@@ -125,6 +144,17 @@ export function useIndividuazioneDetail(campagnaId: string) {
     setPage(1)
   }, [])
 
+  const handleSortChange = useCallback((value: string) => {
+    const [nextSortBy, nextDirection] = value.split(':') as [IndividuazioneSortBy, IndividuazioneSortDirection]
+    setSortBy(nextSortBy)
+    setSortDirection(nextDirection)
+    setPage(1)
+  }, [])
+
+  const handleGroupByChange = useCallback((value: IndividuazioneGroupBy) => {
+    setGroupBy(value)
+  }, [])
+
   const hasMore = totalCount > individuazioni.length
 
   const loadMore = useCallback(() => {
@@ -140,7 +170,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
 
   const estimateExportTime = useCallback(async (): Promise<number> => {
     try {
-      const { count } = await (supabase as any)
+      const { count } = await supabase
         .from('individuazioni')
         .select('*', { count: 'exact', head: true })
         .eq('campagna_individuazioni_id', campagnaId)
@@ -226,6 +256,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
   return {
     campagna,
     setCampagna,
+    detailStats,
     individuazioni,
     loading,
     loadingData,
@@ -244,12 +275,17 @@ export function useIndividuazioneDetail(campagnaId: string) {
     searchTerm,
     searchField,
     statoFilter,
+    sortBy,
+    sortDirection,
+    groupBy,
     setPage,
     setShowExportDialog,
     setShowTimeEstimateDialog,
     handleSearch,
     handleSearchFieldChange,
     handleStatoFilterChange,
+    handleSortChange,
+    handleGroupByChange,
     loadMore,
     handleExportDialogOpenChange,
     handleFormatSelect,
