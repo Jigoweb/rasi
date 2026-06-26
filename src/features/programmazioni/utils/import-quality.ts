@@ -182,6 +182,7 @@ function getEpisodeWarningMessage(code: EpisodeNormalizationWarningCode): string
     episode_title_embedded_detected: 'Titolo episodio incorporato in un campo testuale',
     episode_range_requires_review: 'Range o multiplo episodio da revisionare manualmente',
     episode_season_mismatch: 'Stagione inferita da titolo e numero episodio non coerenti',
+    episode_compound_number_requires_review: 'Codice episodio emittente non canonico da revisionare',
   }
   return messages[code]
 }

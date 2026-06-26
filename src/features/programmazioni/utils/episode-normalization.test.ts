@@ -94,6 +94,24 @@ describe('normalizeEpisodeSignals', () => {
     })
     expect(result.warnings).toContain('episode_season_mismatch')
   })
+
+  it.each([16366, 13259, 1226])('marks non-canonical broadcaster episode code %s as review-required', code => {
+    const result = normalizeEpisodeSignals({
+      titolo: 'Bleach: The Lost Agent',
+      titolo_originale: 'Bleach',
+      numero_episodio: code,
+      titolo_episodio_originale: 'Bleach: The Lost Agent: "Changing History, Unchanging Heart"',
+    })
+
+    expect(result).toMatchObject({
+      season: null,
+      episode: null,
+      episodeTitle: 'Changing History, Unchanging Heart',
+      confidence: 'review_required',
+    })
+    expect(result.warnings).toContain('episode_compound_number_requires_review')
+    expect(result.strategies).not.toContain('existing_episode')
+  })
 })
 
 describe('applyEpisodeNormalizationToPayload', () => {
@@ -118,6 +136,28 @@ describe('applyEpisodeNormalizationToPayload', () => {
           confidence: 'high',
         }),
       },
+    })
+  })
+
+  it('does not apply non-canonical broadcaster episode codes to canonical fields', () => {
+    const payload = applyEpisodeNormalizationToPayload({
+      titolo: 'Bleach: The Lost Agent',
+      titolo_originale: 'Bleach',
+      numero_episodio: 16366,
+      titolo_episodio_originale: 'Bleach: The Lost Agent: "Changing History, Unchanging Heart"',
+    })
+
+    expect(payload.numero_stagione).toBeUndefined()
+    expect(payload.numero_episodio).toBe(16366)
+    expect(payload.titolo_episodio).toBeUndefined()
+    expect(payload.metadati_trasmissione).toMatchObject({
+      episode_normalization: expect.objectContaining({
+        season: null,
+        episode: null,
+        episodeTitle: 'Changing History, Unchanging Heart',
+        confidence: 'review_required',
+        warnings: expect.arrayContaining(['episode_compound_number_requires_review']),
+      }),
     })
   })
 })

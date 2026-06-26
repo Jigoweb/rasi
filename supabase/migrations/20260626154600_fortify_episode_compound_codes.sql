@@ -1,6 +1,8 @@
--- Fix derive_programmazione_episode_signals warning accumulation.
--- In PostgreSQL, text[] || 'value' tries to parse 'value' as an array literal.
--- Use array_append(text[], text) so warning codes are appended as scalar values.
+-- Fortify episode signal derivation for broadcaster-specific episode codes.
+-- Netflix/anime rows can carry values such as 16366, 13259 or 1226 in
+-- programmazioni.numero_episodio. These are not canonical episode numbers:
+-- keep the original value on programmazioni, but do not expose it as a
+-- normalized episode signal for matching.
 
 CREATE OR REPLACE FUNCTION public.derive_programmazione_episode_signals(
     p_numero_stagione integer,

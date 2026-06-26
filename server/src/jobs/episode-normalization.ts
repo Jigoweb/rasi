@@ -4,6 +4,7 @@ export type EpisodeNormalizationStrategy =
   | 'existing_season'
   | 'existing_episode'
   | 'existing_episode_title'
+  | 'broadcaster_episode_code'
   | 'packed_episode_number'
   | 'textual_season_episode'
   | 'absolute_episode_number'
@@ -16,6 +17,7 @@ export type EpisodeNormalizationWarningCode =
   | 'episode_title_embedded_detected'
   | 'episode_range_requires_review'
   | 'episode_season_mismatch'
+  | 'episode_compound_number_requires_review'
 
 export interface EpisodeNormalizationResult {
   season: number | null
@@ -52,14 +54,17 @@ export function normalizeEpisodeSignals(row: Record<string, unknown>): EpisodeNo
   const original = snapshotOriginal(row)
 
   let season = toPositiveInteger(row.numero_stagione)
-  let episode = toPositiveInteger(row.numero_episodio)
+  const rawEpisode = toPositiveInteger(row.numero_episodio)
+  let episode = isCanonicalEpisodeNumber(rawEpisode, season) ? rawEpisode : null
   let episodeTitle = normalizeEpisodeTitle(row.titolo_episodio)
 
   if (season !== null) {
     strategies.push('existing_season')
     sourceFields.add('numero_stagione')
   }
-  if (episode !== null) {
+  if (rawEpisode !== null && episode === null) {
+    sourceFields.add('numero_episodio')
+  } else if (episode !== null) {
     strategies.push('existing_episode')
     sourceFields.add('numero_episodio')
   }
@@ -93,6 +98,12 @@ export function normalizeEpisodeSignals(row: Record<string, unknown>): EpisodeNo
     episode = packedSignal.episode
     strategies.push('packed_episode_number')
     warnings.push('episode_packed_number_detected')
+    sourceFields.add('numero_episodio')
+  }
+
+  if (rawEpisode !== null && episode === null && !packedSignal) {
+    strategies.push('broadcaster_episode_code')
+    warnings.push('episode_compound_number_requires_review')
     sourceFields.add('numero_episodio')
   }
 
@@ -186,7 +197,11 @@ function resolveConfidence(
   episodeTitle: string | null,
   warnings: EpisodeNormalizationWarningCode[]
 ): EpisodeNormalizationConfidence {
-  if (warnings.includes('episode_range_requires_review') || warnings.includes('episode_season_mismatch')) {
+  if (
+    warnings.includes('episode_range_requires_review') ||
+    warnings.includes('episode_season_mismatch') ||
+    warnings.includes('episode_compound_number_requires_review')
+  ) {
     return 'review_required'
   }
   if (season !== null && episode !== null) return 'high'
@@ -201,6 +216,12 @@ function extractPackedSeasonEpisode(value: unknown): { season: number; episode: 
   const episode = numberValue % 1000
   if (season < 1 || season > MAX_SEASON || episode < 1 || episode > MAX_EPISODE) return null
   return { season, episode }
+}
+
+function isCanonicalEpisodeNumber(episode: number | null, season: number | null): boolean {
+  if (episode === null) return false
+  if (episode <= MAX_EPISODE) return true
+  return season !== null && episode <= MAX_EPISODE
 }
 
 function extractTextualSeasonEpisode(text: string): { season: number; episode: number } | null {

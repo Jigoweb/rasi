@@ -93,6 +93,13 @@ describe('assessProgrammazioneImportQuality', () => {
       titolo_originale: 'Stranger Things',
       numero_episodio: 3005,
     })).toContain('episode_season_mismatch')
+
+    expect(codes({
+      titolo: 'Bleach: The Lost Agent',
+      titolo_originale: 'Bleach',
+      numero_episodio: 16366,
+      titolo_episodio_originale: 'Bleach: The Lost Agent: "Changing History, Unchanging Heart"',
+    })).toContain('episode_compound_number_requires_review')
   })
 })
 

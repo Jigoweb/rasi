@@ -340,6 +340,13 @@ export default function CampagnaDettaglioPage() {
 
   const getEpisodeDisplay = (row: ProgrammazioneRow) => {
     const title = row.titolo_episodio || row.titolo_episodio_originale
+    const normalized = getNormalizedEpisodeCode(row)
+    if (normalized) return title ? `${normalized}: ${title}` : normalized
+
+    if (isBroadcasterEpisodeCode(row.numero_episodio, row.numero_stagione)) {
+      return title ? `Codice emittente ${row.numero_episodio}: ${title}` : `Codice emittente ${row.numero_episodio}`
+    }
+
     const hasEpisodeNumber = row.numero_stagione != null || row.numero_episodio != null
     if (!title && !hasEpisodeNumber) return null
 
@@ -352,8 +359,11 @@ export default function CampagnaDettaglioPage() {
 
   const getEpisodeNormalizationLabel = (row: ProgrammazioneRow) => {
     const normalization = getEpisodeNormalizationMetadata(row)
-    if (normalization?.confidence === 'review_required') return 'review episodio'
-    if (normalization?.confidence === 'high') return 'normalizzato'
+    if (normalization?.confidence === 'high' && getNormalizedEpisodeCode(row)) return 'normalizzato'
+    if (
+      normalization?.confidence === 'review_required' ||
+      isBroadcasterEpisodeCode(row.numero_episodio, row.numero_stagione)
+    ) return 'review episodio'
     return null
   }
 
@@ -367,6 +377,21 @@ export default function CampagnaDettaglioPage() {
     const metadata = row.metadati_trasmissione
     const normalization = metadata?.episode_normalization
     return normalization && typeof normalization === 'object' ? normalization as { confidence?: string } : null
+  }
+
+  const getNormalizedEpisodeCode = (row: ProgrammazioneRow) => {
+    const normalization = row.metadati_trasmissione?.episode_normalization
+    if (!normalization || typeof normalization !== 'object') return null
+    const signal = normalization as { confidence?: string; season?: unknown; episode?: unknown }
+    if (signal.confidence !== 'high') return null
+    const season = typeof signal.season === 'number' ? signal.season : null
+    const episode = typeof signal.episode === 'number' ? signal.episode : null
+    if (season == null && episode == null) return null
+    return `S${season ?? '?'}E${episode ?? '?'}`
+  }
+
+  const isBroadcasterEpisodeCode = (episode?: number | null, season?: number | null) => {
+    return season == null && typeof episode === 'number' && episode > 200
   }
 
   if (loading && rows.length === 0) {

@@ -62,6 +62,24 @@ describe('worker episode normalization', () => {
     assert.ok(result.strategies.includes('existing_episode'))
   })
 
+  for (const code of [16366, 13259, 1226]) {
+    it(`marks non-canonical broadcaster episode code ${code} as review-required`, () => {
+      const result = normalizeEpisodeSignals({
+        titolo: 'Bleach: The Lost Agent',
+        titolo_originale: 'Bleach',
+        numero_episodio: code,
+        titolo_episodio_originale: 'Bleach: The Lost Agent: "Changing History, Unchanging Heart"',
+      })
+
+      assert.equal(result.season, null)
+      assert.equal(result.episode, null)
+      assert.equal(result.episodeTitle, 'Changing History, Unchanging Heart')
+      assert.equal(result.confidence, 'review_required')
+      assert.ok(result.warnings.includes('episode_compound_number_requires_review'))
+      assert.equal(result.strategies.includes('existing_episode'), false)
+    })
+  }
+
   it('fills canonical fields and stores provenance metadata for high-confidence signals', () => {
     const payload = applyEpisodeNormalizationToPayload({
       titolo: 'Stranger Things 3',
@@ -80,7 +98,7 @@ describe('worker episode normalization', () => {
         episode: 5,
         episodeTitle: 'Chapter Five: The Flayed',
         confidence: 'high',
-        strategies: ['existing_episode', 'packed_episode_number', 'quoted_episode_title'],
+        strategies: ['packed_episode_number', 'quoted_episode_title'],
         warnings: ['episode_packed_number_detected', 'episode_title_embedded_detected'],
         sourceFields: ['numero_episodio', 'titolo_episodio_originale'],
         original: {
@@ -93,5 +111,24 @@ describe('worker episode normalization', () => {
         },
       }
     )
+  })
+
+  it('does not apply non-canonical broadcaster episode codes to canonical fields', () => {
+    const payload = applyEpisodeNormalizationToPayload({
+      titolo: 'Bleach: The Lost Agent',
+      titolo_originale: 'Bleach',
+      numero_episodio: 16366,
+      titolo_episodio_originale: 'Bleach: The Lost Agent: "Changing History, Unchanging Heart"',
+    })
+
+    assert.equal(payload.numero_stagione, undefined)
+    assert.equal(payload.numero_episodio, 16366)
+    assert.equal(payload.titolo_episodio, undefined)
+    const normalization = (payload.metadati_trasmissione as Record<string, unknown>).episode_normalization as Record<string, unknown>
+    assert.equal(normalization.confidence, 'review_required')
+    assert.deepEqual(normalization.warnings, [
+      'episode_compound_number_requires_review',
+      'episode_title_embedded_detected',
+    ])
   })
 })

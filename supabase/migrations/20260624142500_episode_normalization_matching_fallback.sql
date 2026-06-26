@@ -28,7 +28,7 @@ DECLARE
 BEGIN
     numero_stagione := NULLIF(p_numero_stagione, 0);
     numero_episodio := CASE
-        WHEN p_numero_episodio IS NOT NULL AND p_numero_episodio > 0 THEN p_numero_episodio
+        WHEN p_numero_episodio IS NOT NULL AND p_numero_episodio BETWEEN 1 AND 200 THEN p_numero_episodio
         ELSE NULL
     END;
     titolo_episodio := NULLIF(trim(COALESCE(p_titolo_episodio, '')), '');
@@ -71,6 +71,14 @@ BEGIN
                 confidence := 'high';
             END IF;
         END IF;
+    END IF;
+
+    IF p_numero_episodio IS NOT NULL
+       AND p_numero_episodio > 200
+       AND confidence = 'none' THEN
+        warnings := array_append(warnings, 'episode_compound_number_requires_review');
+        confidence := 'review_required';
+        numero_episodio := NULL;
     END IF;
 
     IF confidence <> 'review_required' THEN

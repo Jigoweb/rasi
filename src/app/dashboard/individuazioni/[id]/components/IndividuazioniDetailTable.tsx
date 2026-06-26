@@ -179,6 +179,13 @@ function getArtistaDisplay(ind: Individuazione) {
 
 function getEpisodeDisplay(ind: Individuazione) {
   const title = ind.titolo_episodio || ind.titolo_episodio_originale
+  const normalized = getNormalizedEpisodeCode(ind)
+  if (normalized) return title ? `${normalized}: ${title}` : normalized
+
+  if (isBroadcasterEpisodeCode(ind.numero_episodio, ind.numero_stagione)) {
+    return title ? `Codice emittente ${ind.numero_episodio}: ${title}` : `Codice emittente ${ind.numero_episodio}`
+  }
+
   const hasEpisodeNumber = ind.numero_stagione != null || ind.numero_episodio != null
   if (!title && !hasEpisodeNumber) return null
 
@@ -191,10 +198,14 @@ function getEpisodeDisplay(ind: Individuazione) {
 
 function getEpisodeNormalizationLabel(ind: Individuazione) {
   const fallback = getEpisodeNormalizationFallback(ind)
-  if (fallback?.confidence === 'review_required' || ind.dettagli_matching?.episodio_mancante === true) {
+  if (fallback?.confidence === 'high' && getNormalizedEpisodeCode(ind)) return 'normalizzato'
+  if (
+    fallback?.confidence === 'review_required' ||
+    ind.dettagli_matching?.episodio_mancante === true ||
+    isBroadcasterEpisodeCode(ind.numero_episodio, ind.numero_stagione)
+  ) {
     return 'review episodio'
   }
-  if (fallback?.confidence === 'high') return 'normalizzato'
   return null
 }
 
@@ -207,6 +218,19 @@ function getEpisodeNormalizationBadgeClass(ind: Individuazione) {
 function getEpisodeNormalizationFallback(ind: Individuazione): { confidence?: string } | null {
   const fallback = ind.dettagli_matching?.episode_normalization_fallback
   return fallback && typeof fallback === 'object' ? fallback : null
+}
+
+function getNormalizedEpisodeCode(ind: Individuazione) {
+  const fallback = ind.dettagli_matching?.episode_normalization_fallback
+  if (!fallback || typeof fallback !== 'object' || fallback.confidence !== 'high') return null
+  const season = typeof fallback.numero_stagione === 'number' ? fallback.numero_stagione : null
+  const episode = typeof fallback.numero_episodio === 'number' ? fallback.numero_episodio : null
+  if (season == null && episode == null) return null
+  return `S${season ?? '?'}E${episode ?? '?'}`
+}
+
+function isBroadcasterEpisodeCode(episode?: number | null, season?: number | null) {
+  return season == null && typeof episode === 'number' && episode > 200
 }
 
 function normalizeMatchScore(score: number) {

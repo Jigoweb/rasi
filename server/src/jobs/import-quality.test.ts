@@ -53,12 +53,19 @@ describe('worker import quality report', () => {
         titolo_originale: 'Stranger Things',
         numero_episodio: 3005,
       },
+      {
+        titolo: 'Bleach: The Lost Agent',
+        titolo_originale: 'Bleach',
+        numero_episodio: 16366,
+        titolo_episodio_originale: 'Bleach: The Lost Agent: "Changing History, Unchanging Heart"',
+      },
     ])
 
-    assert.equal(summary.rowsWithWarnings, 3)
+    assert.equal(summary.rowsWithWarnings, 4)
     assert.equal(summary.warningCounts.episode_packed_number_detected, 2)
-    assert.equal(summary.warningCounts.episode_title_embedded_detected, 1)
+    assert.equal(summary.warningCounts.episode_title_embedded_detected, 2)
     assert.equal(summary.warningCounts.episode_range_requires_review, 1)
     assert.equal(summary.warningCounts.episode_season_mismatch, 1)
+    assert.equal(summary.warningCounts.episode_compound_number_requires_review, 1)
   })
 })
