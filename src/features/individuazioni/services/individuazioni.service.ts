@@ -160,17 +160,6 @@ export const getCampagnaIndividuazione = async (id: string) => {
   }
 }
 
-export const getCampagneIndividuazioneCountForProgrammazione = async (
-  campagneProgrammazioneId: string
-) => {
-  const { count, error } = await (supabase as any)
-    .from('campagne_individuazione')
-    .select('id', { count: 'exact', head: true })
-    .eq('campagne_programmazione_id', campagneProgrammazioneId)
-
-  return { data: count ?? 0, error }
-}
-
 export const updateCampagnaIndividuazioneMetadata = async (
   campagnaId: string,
   payload: CampagnaIndividuazioneMetadataPayload

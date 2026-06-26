@@ -41,6 +41,7 @@ jest.mock('@/shared/lib/supabase', () => ({
 jest.mock('@/features/programmazioni/services/programmazioni.service', () => ({
   createCampagnaProgrammazione: jest.fn(),
   getCampagneProgrammazione: jest.fn(),
+  isProcessingStale: jest.fn(() => false),
   uploadProgrammazioni: jest.fn(),
   updateCampagnaStatus: jest.fn()
 }))
@@ -113,6 +114,17 @@ describe('ProgrammazioniPage', () => {
           })
         }
       }
+      if (table === 'artisti') {
+        return {
+          select: jest.fn().mockReturnValue({
+            order: jest.fn().mockReturnValue({
+              order: jest.fn().mockReturnValue({
+                limit: jest.fn().mockResolvedValue({ data: [], error: null })
+              })
+            })
+          })
+        }
+      }
       return {
         select: jest.fn().mockReturnValue({
           order: jest.fn().mockResolvedValue({ data: [], error: null })
@@ -161,5 +173,31 @@ describe('ProgrammazioniPage', () => {
     // Note: Testing Radix UI Select options rendering in JSDOM is flaky due to Portals and Pointer events.
     // Since we verified that the fetch is called when the modal opens, we can assume the data flow is correct.
     // The visual rendering of options is handled by the library.
+  })
+
+  it('uses the programmazione name only as the default individuazione name', async () => {
+    const user = userEvent.setup()
+    ;(getCampagneProgrammazione as jest.Mock).mockResolvedValue({
+      data: [{
+        id: 'campagna-1',
+        emittente_id: 'emittente-1',
+        anno: 2026,
+        nome: 'Rai 1 2026',
+        descrizione: null,
+        stato: 'in_review',
+        created_at: '2026-06-24T10:00:00.000Z',
+        created_by: 'user-1',
+        emittenti: { nome: 'Rai 1' },
+        programmazioni_count: 10,
+      }],
+      error: null,
+    })
+
+    render(<ProgrammazioniPage />)
+
+    expect((await screen.findAllByText('Rai 1 2026')).length).toBeGreaterThan(0)
+    await user.click(screen.getByText('Crea Individuazioni'))
+
+    expect(screen.getByLabelText('Nome individuazione')).toHaveValue('Individuazione - Rai 1 2026')
   })
 })

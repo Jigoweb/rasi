@@ -314,7 +314,7 @@ export default function IndividuazioniPage() {
                 id="edit-individuazione-name"
                 value={editDraft.nome}
                 onChange={(event) => setEditDraft(prev => ({ ...prev, nome: event.target.value }))}
-                placeholder="Es. Individuazione - Rai 1 2026 - Test 1"
+                placeholder="Es. Individuazione - Rai 1 2026"
               />
             </div>
             <div className="space-y-2">

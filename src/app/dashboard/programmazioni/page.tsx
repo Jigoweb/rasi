@@ -17,9 +17,6 @@ import {
   type ProcessingProgress,
 } from '@/features/programmazioni/services/programmazioni.service'
 import {
-  getCampagneIndividuazioneCountForProgrammazione,
-} from '@/features/individuazioni/services/individuazioni.service'
-import {
   getLatestUploadJobsForCampagne,
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
 import {
@@ -308,20 +305,13 @@ export default function ProgrammazioniPage() {
 
     // Show confirmation dialog first
     setCampagnaForIndividuazioni(campagna)
-    setIndividuazioneName(buildIndividuazioneName(campagna.nome, 1))
+    setIndividuazioneName(buildIndividuazioneName(campagna.nome))
     setIndividuazioneDescription(campagna.descrizione || '')
     setShowIndividuazioniConfirmDialog(true)
     setShowArtistFilter(false) // Reset filter panel
     setArtistSearchQuery('') // Reset search
     setMandatoOverrideArtistIds(new Set())
     loadArtists() // Load artists if not already loaded
-    void getCampagneIndividuazioneCountForProgrammazione(campagna.id).then(({ data }) => {
-      setIndividuazioneName(current => (
-        current === buildIndividuazioneName(campagna.nome, 1)
-          ? buildIndividuazioneName(campagna.nome, data + 1)
-          : current
-      ))
-    })
   }
 
   // Actually start the process after confirmation
@@ -1150,7 +1140,7 @@ export default function ProgrammazioniPage() {
                     id="individuazione-name"
                     value={individuazioneName}
                     onChange={(event) => setIndividuazioneName(event.target.value)}
-                    placeholder="Es. Individuazione - Rai 1 2026 - Test 1"
+                    placeholder="Es. Individuazione - Rai 1 2026"
                   />
                 </div>
                 <div className="space-y-2">
@@ -1464,6 +1454,6 @@ export default function ProgrammazioniPage() {
   )
 }
 
-function buildIndividuazioneName(programmazioneName: string, testNumber: number): string {
-  return `Individuazione - ${programmazioneName} - Test ${testNumber}`
+function buildIndividuazioneName(programmazioneName: string): string {
+  return `Individuazione - ${programmazioneName}`
 }
