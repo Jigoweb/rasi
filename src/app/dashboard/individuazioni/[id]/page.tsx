@@ -302,6 +302,8 @@ function IndividuazioneSummary({
 }) {
   const totalIndividuazioni = stats?.outcomes.totale ?? fallbackStats?.individuazioni_create ?? 0
   const processedProgrammazioni = stats?.coverage.programmazioniProcessate ?? fallbackStats?.programmazioni_processate ?? fallbackStats?.programmazioni_totali ?? 0
+  const artistiDistinti = stats?.catalog.artistiDistinti ?? fallbackStats?.artisti_distinti ?? 0
+  const opereDistinte = stats?.catalog.opereDistinte ?? fallbackStats?.opere_distinte ?? 0
 
   return (
     <Card>
@@ -313,16 +315,14 @@ function IndividuazioneSummary({
             detail={`da ${formatNumber(processedProgrammazioni)} programmazioni processate`}
           />
           <SummaryBlock
-            label="Qualità match"
-            value={stats ? `${formatNumber(stats.quality.matchAlti)} / ${formatNumber(stats.quality.matchMedi)} / ${formatNumber(stats.quality.matchBassi)}` : 'Non disponibile'}
-            detail={stats ? 'alti / medi / bassi' : 'metriche aggregate non calcolate'}
+            label="Artisti individuati"
+            value={formatNumber(artistiDistinti)}
+            detail="artisti distinti nei match generati"
           />
           <SummaryBlock
-            label="Da controllare"
-            value={stats ? formatNumber(stats.review.daControllare) : 'Non disponibile'}
-            detail={stats
-              ? `${formatNumber(stats.review.scoreBasso)} score bassi, ${formatNumber(stats.review.dubbiosi)} in revisione, ${formatNumber(stats.review.episodioDaControllare)} episodi`
-              : 'usa la tabella per il controllo riga per riga'}
+            label="Opere individuate"
+            value={formatNumber(opereDistinte)}
+            detail="opere distinte nei match generati"
           />
         </div>
       </CardContent>
