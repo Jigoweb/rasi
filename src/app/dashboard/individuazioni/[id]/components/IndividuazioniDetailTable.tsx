@@ -121,7 +121,6 @@ export default function IndividuazioniDetailTable({
                 <TableHead className="py-4">Artista</TableHead>
                 <TableHead className="py-4">Opera Matchata</TableHead>
                 <TableHead className="py-4">Ruolo</TableHead>
-                <TableHead className="py-4">Motivo revisione</TableHead>
                 <TableHead
                   className="py-4 text-center"
                   aria-sort={sortBy === 'punteggio_matching' ? getAriaSort(sortDirection) : 'none'}
@@ -138,6 +137,7 @@ export default function IndividuazioniDetailTable({
                   </Button>
                 </TableHead>
                 <TableHead className="py-4">Stato</TableHead>
+                <TableHead className="py-4">Motivo revisione</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -279,15 +279,6 @@ function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuaz
       <TableCell className="py-4">
         <Badge variant="outline">{ind.ruoli_tipologie?.nome || '-'}</Badge>
       </TableCell>
-      <TableCell className="py-4">
-        <div className="flex max-w-[220px] flex-wrap gap-1.5">
-          {reviewReasons.map(reason => (
-            <Badge key={reason.label} variant={reason.variant} className={reason.className}>
-              {reason.label}
-            </Badge>
-          ))}
-        </div>
-      </TableCell>
       <TableCell className="py-4 text-center">
         <span
           className={`font-medium tabular-nums ${getMatchColor(ind.punteggio_matching)}`}
@@ -298,6 +289,15 @@ function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuaz
       </TableCell>
       <TableCell className="py-4">
         <StatusBadge stato={ind.stato} />
+      </TableCell>
+      <TableCell className="py-4">
+        <div className="flex max-w-[220px] flex-wrap gap-1.5">
+          {reviewReasons.map(reason => (
+            <Badge key={reason.label} variant={reason.variant} className={reason.className}>
+              {reason.label}
+            </Badge>
+          ))}
+        </div>
       </TableCell>
     </TableRow>
   )
@@ -312,32 +312,24 @@ type ReviewReason = {
 function getReviewReasons(ind: Individuazione): ReviewReason[] {
   const reasons: ReviewReason[] = []
   const normalizedStatus = normalizeIndividuazioneStatus(ind.stato)
-  const scoreBand = getMatchScoreBand(ind.punteggio_matching)
+  const hasMissingEpisode = ind.dettagli_matching?.episodio_mancante === true
   const needsEpisodeReview = getEpisodeNormalizationLabel(ind) === 'review episodio'
 
-  if (normalizedStatus === 'dubbioso') {
+  if (hasMissingEpisode) {
     reasons.push({
-      label: 'stato in revisione',
+      label: 'episodio mancante',
+      variant: 'outline',
+      className: 'border-amber-200 bg-amber-50 text-amber-900',
+    })
+  } else if (normalizedStatus === 'dubbioso') {
+    reasons.push({
+      label: 'revisione senza motivo tracciato',
       variant: 'outline',
       className: 'border-amber-200 bg-amber-50 text-amber-900',
     })
   }
 
-  if (scoreBand === 'low') {
-    reasons.push({
-      label: normalizedStatus === 'individuato' ? 'individuato con score basso' : 'score basso',
-      variant: 'outline',
-      className: 'border-red-200 bg-red-50 text-red-800',
-    })
-  } else if (scoreBand === 'medium' && normalizedStatus !== 'validato') {
-    reasons.push({
-      label: 'score medio da confermare',
-      variant: 'outline',
-      className: 'border-amber-200 bg-amber-50 text-amber-900',
-    })
-  }
-
-  if (needsEpisodeReview) {
+  if (needsEpisodeReview && !hasMissingEpisode) {
     reasons.push({
       label: 'episodio da verificare',
       variant: 'outline',
@@ -347,7 +339,7 @@ function getReviewReasons(ind: Individuazione): ReviewReason[] {
 
   if (reasons.length === 0) {
     reasons.push({
-      label: normalizedStatus === 'validato' ? 'validato' : 'nessun segnale critico',
+      label: normalizedStatus === 'validato' ? 'validato' : 'nessun motivo specifico',
       variant: 'secondary',
     })
   }
@@ -398,9 +390,9 @@ function getEpisodeDisplay(ind: Individuazione) {
 function getEpisodeNormalizationLabel(ind: Individuazione) {
   const fallback = getEpisodeNormalizationFallback(ind)
   if (fallback?.confidence === 'high' && getNormalizedEpisodeCode(ind)) return 'normalizzato'
+  if (ind.dettagli_matching?.episodio_mancante === true) return 'episodio mancante'
   if (
     fallback?.confidence === 'review_required' ||
-    ind.dettagli_matching?.episodio_mancante === true ||
     isBroadcasterEpisodeCode(ind.numero_episodio, ind.numero_stagione)
   ) {
     return 'review episodio'
@@ -409,7 +401,8 @@ function getEpisodeNormalizationLabel(ind: Individuazione) {
 }
 
 function getEpisodeNormalizationBadgeClass(ind: Individuazione) {
-  return getEpisodeNormalizationLabel(ind) === 'review episodio'
+  const label = getEpisodeNormalizationLabel(ind)
+  return label === 'review episodio' || label === 'episodio mancante'
     ? 'border-yellow-200 bg-yellow-50 text-yellow-800'
     : 'border-blue-200 bg-blue-50 text-blue-800'
 }
