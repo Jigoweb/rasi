@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { AlertTriangle, ArrowLeft, BarChart3, CheckCircle, Download, Edit, Loader2, Search } from 'lucide-react'
+import { ArrowLeft, Download, Edit, Loader2, Search } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
@@ -120,8 +120,6 @@ export default function IndividuazioneDetailPage() {
     )
   }
 
-  const stats = detailStats ?? getFallbackDetailStats(campagna)
-
   return (
     <div className="space-y-6">
       <DashboardBreadcrumbs
@@ -173,7 +171,10 @@ export default function IndividuazioneDetailPage() {
         </div>
       </div>
 
-      <ReviewSummaryStrip stats={stats} />
+      <IndividuazioneSummary
+        stats={detailStats}
+        fallbackStats={campagna.statistiche}
+      />
 
       <Card>
         <CardContent className="pt-6">
@@ -282,110 +283,65 @@ export default function IndividuazioneDetailPage() {
   )
 }
 
-function ReviewSummaryStrip({ stats }: { stats: IndividuazioneDetailStats }) {
-  const hasBlockingReview = stats.review.daControllare > 0
+type CampagnaStatisticheFallback = {
+  programmazioni_totali?: number
+  programmazioni_processate?: number
+  programmazioni_con_match?: number
+  programmazioni_senza_match?: number
+  individuazioni_create?: number
+  artisti_distinti?: number
+  opere_distinte?: number
+}
+
+function IndividuazioneSummary({
+  stats,
+  fallbackStats,
+}: {
+  stats: IndividuazioneDetailStats | null
+  fallbackStats?: CampagnaStatisticheFallback
+}) {
+  const totalIndividuazioni = stats?.outcomes.totale ?? fallbackStats?.individuazioni_create ?? 0
+  const processedProgrammazioni = stats?.coverage.programmazioniProcessate ?? fallbackStats?.programmazioni_processate ?? fallbackStats?.programmazioni_totali ?? 0
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-0">
-        <div className="grid lg:grid-cols-[minmax(280px,1.05fr)_minmax(0,2fr)]">
-          <section className="border-b bg-muted/30 p-5 lg:border-b-0 lg:border-r">
-            <div className="flex items-start gap-3">
-              <div className={hasBlockingReview
-                ? 'rounded-full bg-amber-100 p-2 text-amber-800'
-                : 'rounded-full bg-emerald-100 p-2 text-emerald-800'}
-              >
-                {hasBlockingReview ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle className="h-5 w-5" />}
-              </div>
-              <div className="min-w-0 space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                  Priorità revisione
-                </p>
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight">
-                    {getReviewSummaryTitle(stats)}
-                  </h2>
-                  <p className="mt-1 max-w-[54ch] text-sm text-muted-foreground">
-                    {getReviewSummaryDescription(stats)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <span className="rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-                    {formatNumber(stats.review.scoreBasso)} score bassi
-                  </span>
-                  <span className="rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-                    {formatNumber(stats.review.episodioDaControllare)} episodi da verificare
-                  </span>
-                  <span className="rounded-full border bg-background px-2.5 py-1 text-xs font-medium">
-                    {formatNumber(stats.review.dubbiosi)} in revisione
-                  </span>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="min-w-0 p-5">
-            <div className="grid gap-5 sm:grid-cols-3">
-              <SummaryMetric
-                icon={<BarChart3 className="h-4 w-4" />}
-                label="Copertura"
-                value={`${formatNumber(stats.coverage.programmazioniConMatch)}/${formatNumber(stats.coverage.programmazioniTotali)}`}
-                detail={`${formatPercent(stats.coverage.coperturaPercentuale)} con match`}
-              />
-              <SummaryMetric
-                icon={<CheckCircle className="h-4 w-4" />}
-                label="Esito match"
-                value={formatNumber(stats.outcomes.totale)}
-                detail={`${formatNumber(stats.outcomes.sicuri)} sicuri o validati`}
-              />
-              <SummaryMetric
-                icon={<BarChart3 className="h-4 w-4" />}
-                label="Qualità"
-                value={formatPercent(stats.quality.scoreMedio)}
-                detail={`${formatNumber(stats.quality.matchBassi)} bassi, ${formatNumber(stats.quality.matchAlti)} alti`}
-              />
-            </div>
-
-            <div className="mt-5 grid gap-3 border-t pt-4 text-sm text-muted-foreground md:grid-cols-3">
-              <p>
-                <span className="font-medium text-foreground">{formatNumber(stats.coverage.programmazioniSenzaMatch)}</span>{' '}
-                programmazioni senza match
-              </p>
-              <p>
-                <span className="font-medium text-foreground">{formatNumber(stats.catalog.artistiDistinti)}</span>{' '}
-                artisti e <span className="font-medium text-foreground">{formatNumber(stats.catalog.opereDistinte)}</span> opere
-              </p>
-              <p className="min-w-0 truncate" title={stats.catalog.ruoloPrincipale?.nome}>
-                Ruolo più frequente:{' '}
-                <span className="font-medium text-foreground">
-                  {stats.catalog.ruoloPrincipale
-                    ? `${stats.catalog.ruoloPrincipale.nome} (${formatNumber(stats.catalog.ruoloPrincipale.count)})`
-                    : 'non disponibile'}
-                </span>
-              </p>
-            </div>
-          </section>
+    <Card>
+      <CardContent className="p-5">
+        <div className="grid gap-5 md:grid-cols-3">
+          <SummaryBlock
+            label="Individuazioni generate"
+            value={formatNumber(totalIndividuazioni)}
+            detail={`da ${formatNumber(processedProgrammazioni)} programmazioni processate`}
+          />
+          <SummaryBlock
+            label="Qualità match"
+            value={stats ? `${formatNumber(stats.quality.matchAlti)} / ${formatNumber(stats.quality.matchMedi)} / ${formatNumber(stats.quality.matchBassi)}` : 'Non disponibile'}
+            detail={stats ? 'alti / medi / bassi' : 'metriche aggregate non calcolate'}
+          />
+          <SummaryBlock
+            label="Da controllare"
+            value={stats ? formatNumber(stats.review.daControllare) : 'Non disponibile'}
+            detail={stats
+              ? `${formatNumber(stats.review.scoreBasso)} score bassi, ${formatNumber(stats.review.dubbiosi)} in revisione, ${formatNumber(stats.review.episodioDaControllare)} episodi`
+              : 'usa la tabella per il controllo riga per riga'}
+          />
         </div>
       </CardContent>
     </Card>
   )
 }
 
-function SummaryMetric({
-  icon,
+function SummaryBlock({
   label,
   value,
   detail,
 }: {
-  icon: React.ReactNode
   label: string
   value: string
   detail: string
 }) {
   return (
     <div className="min-w-0">
-      <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        <span className="text-primary">{icon}</span>
+      <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
       <p className="font-mono text-2xl font-semibold leading-none tracking-tight tabular-nums">
@@ -398,94 +354,8 @@ function SummaryMetric({
   )
 }
 
-function getReviewSummaryTitle(stats: IndividuazioneDetailStats) {
-  if (stats.review.daControllare > 0) {
-    return `${formatNumber(stats.review.daControllare)} da controllare`
-  }
-
-  if (stats.review.scoreBasso > 0) {
-    return 'Score bassi da verificare'
-  }
-
-  if (stats.review.episodioDaControllare > 0) {
-    return 'Episodi da verificare'
-  }
-
-  return 'Nessuna priorità bloccante'
-}
-
-function getReviewSummaryDescription(stats: IndividuazioneDetailStats) {
-  if (stats.review.daControllare > 0) {
-    return 'La vista è ordinata per far emergere prima match dubbiosi, score bassi ed episodi che richiedono verifica.'
-  }
-
-  if (stats.review.scoreBasso > 0 || stats.review.episodioDaControllare > 0) {
-    return 'Non risultano priorità bloccanti, ma la tabella evidenzia comunque i segnali da verificare riga per riga.'
-  }
-
-  return "La campagna non mostra segnali critici immediati. Usa filtri e ricerca per controlli mirati o per preparare l'export."
-}
-
-type CampagnaStatisticheFallback = {
-  programmazioni_totali?: number
-  programmazioni_processate?: number
-  programmazioni_con_match?: number
-  programmazioni_senza_match?: number
-  individuazioni_create?: number
-  artisti_distinti?: number
-  opere_distinte?: number
-}
-
-function getFallbackDetailStats(campagna: { statistiche?: CampagnaStatisticheFallback }): IndividuazioneDetailStats {
-  const statistiche = campagna.statistiche || {}
-  const programmazioniTotali = statistiche.programmazioni_totali || 0
-  const programmazioniConMatch = statistiche.programmazioni_con_match || 0
-  const individuazioniCreate = statistiche.individuazioni_create || 0
-
-  return {
-    coverage: {
-      programmazioniTotali,
-      programmazioniProcessate: statistiche.programmazioni_processate || 0,
-      programmazioniConMatch,
-      programmazioniSenzaMatch: statistiche.programmazioni_senza_match || Math.max(programmazioniTotali - programmazioniConMatch, 0),
-      coperturaPercentuale: programmazioniTotali > 0 ? (programmazioniConMatch / programmazioniTotali) * 100 : 0,
-    },
-    outcomes: {
-      totale: individuazioniCreate,
-      individuati: individuazioniCreate,
-      validati: 0,
-      dubbiosi: 0,
-      respinti: 0,
-      sicuri: individuazioniCreate,
-    },
-    quality: {
-      scoreMedio: 0,
-      scoreMin: 0,
-      scoreMax: 0,
-      matchAlti: 0,
-      matchMedi: 0,
-      matchBassi: 0,
-    },
-    review: {
-      daControllare: 0,
-      dubbiosi: 0,
-      scoreBasso: 0,
-      episodioDaControllare: 0,
-    },
-    catalog: {
-      artistiDistinti: statistiche.artisti_distinti || 0,
-      opereDistinte: statistiche.opere_distinte || 0,
-      ruoloPrincipale: null,
-    },
-  }
-}
-
 function formatNumber(num: number | undefined) {
   return (num || 0).toLocaleString('it-IT')
-}
-
-function formatPercent(num: number | undefined) {
-  return `${Math.round((num || 0) * 10) / 10}%`
 }
 
 function getSearchPlaceholder(searchField: SearchField): string {
