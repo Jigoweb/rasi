@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { getCampagnaProgrammazioneById, listProgrammazioniByCampagnaKeyset, getProgrammazioniHealth, updateCampagnaProgrammazioneMetadata, CampagnaProgrammazione, ProgrammazioneRow, ProgrammazioniCursor, ProgrammazioniHealth } from '@/features/programmazioni/services/programmazioni.service'
 import {
   getProgrammazioniTableColumns,
+  type DataHealthFieldMetric,
   type ProgrammazioniTableColumn,
   type ProgrammazioniTableColumnKey,
 } from '@/features/programmazioni/services/data-health-policy.service'
@@ -207,13 +208,6 @@ export default function CampagnaDettaglioPage() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('it-IT')
-  }
-
-  const getHealthStatusLabel = (status: string) => {
-    if (status === 'required') return 'Richiesto'
-    if (status === 'recommended') return 'Consigliato'
-    if (status === 'optional') return 'Opzionale'
-    return 'Non applicabile'
   }
 
   const formatNumber = (value: number | null | undefined) =>
@@ -512,79 +506,11 @@ export default function CampagnaDettaglioPage() {
         </DialogContent>
       </Dialog>
 
-      <Card>
-        <CardContent>
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <div className="font-medium">Copertura dati</div>
-              {health?.policy && (
-                <div className="text-xs text-gray-500">
-                  Profilo: {health.policy.presetLabel}
-                </div>
-              )}
-            </div>
-            {loadingHealth && <Loader2 className="h-4 w-4 animate-spin" />}
-          </div>
-          {healthError && (
-            <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
-              <AlertCircle className="h-4 w-4 mt-0.5" />
-              <span>Copertura dati non disponibile: {healthError}</span>
-            </div>
-          )}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            <div>
-              <div className="text-xs text-gray-500">Totale</div>
-              <div className="text-lg font-semibold">{health?.total ?? 0}</div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Processate</div>
-              <div className="text-lg font-semibold">{health?.processed ?? 0}</div>
-              <div className="h-2 bg-gray-200 rounded mt-1">
-                <div className="h-2 bg-blue-600 rounded" style={{ width: `${Math.min(100, Math.round(((health?.processed ?? 0) / Math.max(1, health?.total ?? 0)) * 100))}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Non processate</div>
-              <div className="text-lg font-semibold">{health?.unprocessed ?? 0}</div>
-              <div className="h-2 bg-gray-200 rounded mt-1">
-                <div className="h-2 bg-gray-500 rounded" style={{ width: `${Math.min(100, Math.round(((health?.unprocessed ?? 0) / Math.max(1, health?.total ?? 0)) * 100))}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500">Errori</div>
-              <div className="text-lg font-semibold">{health?.errors_count ?? 0}</div>
-            </div>
-          </div>
-          {health?.field_metrics && health.field_metrics.length > 0 && (
-            <div className="mt-5">
-              <div className="text-sm font-medium mb-2">Campi attesi</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {health.field_metrics.map(metric => (
-                  <div key={metric.key} className="rounded border bg-gray-50 p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-medium">{metric.label}</div>
-                        <div className="text-xs text-gray-500">{getHealthStatusLabel(metric.status)}</div>
-                      </div>
-                      <Badge variant={metric.status === 'required' ? 'destructive' : 'outline'}>
-                        {metric.percent}%
-                      </Badge>
-                    </div>
-                    <div className="mt-2 text-lg font-semibold">{metric.missing}</div>
-                    <div className="text-xs text-gray-500">record mancanti</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="mt-3 text-xs text-gray-600">
-            Periodo: {health?.date_min ? new Date(health.date_min).toLocaleDateString('it-IT') : '-'} → {health?.date_max ? new Date(health.date_max).toLocaleDateString('it-IT') : '-'}
-            {health?.date_range_error && (
-              <span className="ml-2 text-amber-700">({health.date_range_error})</span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <DataCoverageSummary
+        health={health}
+        healthError={healthError}
+        loadingHealth={loadingHealth}
+      />
 
       <Card>
         <CardContent>
@@ -682,4 +608,215 @@ export default function CampagnaDettaglioPage() {
       <FloatingScrollUpButton />
     </div>
   )
+}
+
+function DataCoverageSummary({
+  health,
+  healthError,
+  loadingHealth,
+}: {
+  health: ProgrammazioniHealth | null
+  healthError: string | null
+  loadingHealth: boolean
+}) {
+  const summary = buildDataCoverageSummary(health)
+
+  return (
+    <Card>
+      <CardContent>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="font-medium">Sintesi qualità dati</div>
+              {summary.processComplete ? (
+                <Badge className="bg-green-100 text-green-800 border-green-200">Completa</Badge>
+              ) : (
+                <Badge variant="outline">Da completare</Badge>
+              )}
+            </div>
+            <div className="text-xs text-gray-500">
+              Profilo: {health?.policy?.presetLabel ?? 'non disponibile'}
+            </div>
+          </div>
+          {loadingHealth && <Loader2 className="h-4 w-4 animate-spin" />}
+        </div>
+
+        {healthError && (
+          <div className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5" />
+            <span>Copertura dati non disponibile: {healthError}</span>
+          </div>
+        )}
+
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <CoverageInsight
+            icon={<CheckCircle2 className="h-4 w-4 text-green-600" />}
+            title="Processamento"
+            value={`${formatHealthNumber(summary.processed)}/${formatHealthNumber(summary.total)}`}
+            description={`${summary.processPercent}% processate`}
+            detail={`${formatHealthNumber(summary.unprocessed)} non processate, ${formatHealthNumber(summary.errors)} errori`}
+            tone={summary.errors > 0 ? 'warning' : 'success'}
+          />
+          <CoverageInsight
+            icon={summary.blockingCount > 0 ? <AlertCircle className="h-4 w-4 text-red-600" /> : <CheckCircle2 className="h-4 w-4 text-green-600" />}
+            title="Matching"
+            value={summary.blockingCount > 0 ? `${summary.blockingCount} criticità` : 'Campi critici OK'}
+            description={summary.blockingCount > 0 ? 'Campi richiesti mancanti' : 'Titolo e campi richiesti completi'}
+            detail={summary.matchingAttentionCount > 0
+              ? `${formatHealthNumber(summary.matchingAttentionCount)} record con dati utili al matching da verificare`
+              : 'Nessun allarme sui campi usati per individuare'}
+            tone={summary.blockingCount > 0 ? 'danger' : 'success'}
+          />
+          <CoverageInsight
+            icon={<Clock className="h-4 w-4 text-amber-600" />}
+            title="Episodi"
+            value={summary.episodeMissing > 0 ? formatHealthNumber(summary.episodeMissing) : 'OK'}
+            description={summary.episodeMissing > 0 ? `${summary.episodePercent}% record con episodio incompleto` : 'Dati episodio completi'}
+            detail={summary.episodeMissing > 0
+              ? 'Da controllare quando il match dipende da stagione/episodio'
+              : 'Nessuna anomalia episodio rilevata'}
+            tone={summary.episodeMissing > 0 ? 'warning' : 'success'}
+          />
+        </div>
+
+        {summary.primaryIssues.length > 0 && (
+          <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+            <div className="text-sm font-medium text-amber-900">Da verificare per matching</div>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {summary.primaryIssues.map(metric => (
+                <CoverageMetricPill key={metric.key} metric={metric} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {summary.secondaryIssues.length > 0 && (
+          <div className="mt-4 rounded-lg border bg-gray-50 p-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-medium">Diagnostica dataset</div>
+                <div className="text-xs text-gray-500">
+                  Campi informativi o economici: utili per audit, non bloccanti per l&apos;individuazione.
+                </div>
+              </div>
+              <Badge variant="outline">{summary.secondaryIssues.length} voci</Badge>
+            </div>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {summary.secondaryIssues.map(metric => (
+                <CoverageMetricPill key={metric.key} metric={metric} muted />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3 text-xs text-gray-600">
+          Periodo: {health?.date_min ? new Date(health.date_min).toLocaleDateString('it-IT') : '-'} → {health?.date_max ? new Date(health.date_max).toLocaleDateString('it-IT') : '-'}
+          {health?.date_range_error && (
+            <span className="ml-2 text-amber-700">({health.date_range_error})</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function CoverageInsight({
+  icon,
+  title,
+  value,
+  description,
+  detail,
+  tone,
+}: {
+  icon: ReactNode
+  title: string
+  value: string
+  description: string
+  detail: string
+  tone: 'success' | 'warning' | 'danger'
+}) {
+  const toneClassName = {
+    success: 'border-green-200 bg-green-50',
+    warning: 'border-amber-200 bg-amber-50',
+    danger: 'border-red-200 bg-red-50',
+  }[tone]
+
+  return (
+    <div className={`rounded-lg border p-4 ${toneClassName}`}>
+      <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+        {icon}
+        {title}
+      </div>
+      <div className="mt-3 text-2xl font-semibold">{value}</div>
+      <div className="text-sm text-gray-700">{description}</div>
+      <div className="mt-1 text-xs text-gray-500">{detail}</div>
+    </div>
+  )
+}
+
+function CoverageMetricPill({
+  metric,
+  muted = false,
+}: {
+  metric: DataHealthFieldMetric
+  muted?: boolean
+}) {
+  return (
+    <div className="rounded border bg-white p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-medium">{metric.label}</div>
+          <div className="text-xs text-gray-500">{getCoverageStatusLabel(metric.status)}</div>
+        </div>
+        <Badge variant={muted ? 'outline' : metric.status === 'required' ? 'destructive' : 'outline'}>
+          {metric.percent}%
+        </Badge>
+      </div>
+      <div className="mt-2 text-lg font-semibold">{formatHealthNumber(metric.missing)}</div>
+      <div className="text-xs text-gray-500">record mancanti</div>
+    </div>
+  )
+}
+
+function buildDataCoverageSummary(health: ProgrammazioniHealth | null) {
+  const total = health?.total ?? 0
+  const processed = health?.processed ?? 0
+  const unprocessed = health?.unprocessed ?? 0
+  const errors = health?.errors_count ?? 0
+  const metrics = health?.field_metrics ?? []
+  const missingMetrics = metrics.filter(metric => metric.missing > 0)
+  const businessKeys = new Set(['views', 'retail_price', 'total_revenue', 'total_net_ad_revenue', 'sales_month'])
+  const episodeKeys = new Set(['titolo_episodio', 'titolo_episodio_originale', 'numero_stagione', 'numero_episodio'])
+  const blockingMetrics = missingMetrics.filter(metric => metric.status === 'required')
+  const primaryIssues = missingMetrics.filter(metric => !businessKeys.has(metric.key))
+  const secondaryIssues = missingMetrics.filter(metric => businessKeys.has(metric.key))
+  const episodeMissing = Math.max(0, ...missingMetrics
+    .filter(metric => episodeKeys.has(metric.key))
+    .map(metric => metric.missing))
+
+  return {
+    total,
+    processed,
+    unprocessed,
+    errors,
+    processComplete: total > 0 && processed === total && unprocessed === 0 && errors === 0,
+    processPercent: total > 0 ? Math.round((processed / total) * 100) : 0,
+    blockingCount: blockingMetrics.length,
+    matchingAttentionCount: primaryIssues.reduce((max, metric) => Math.max(max, metric.missing), 0),
+    episodeMissing,
+    episodePercent: total > 0 ? Math.round((episodeMissing / total) * 100) : 0,
+    primaryIssues,
+    secondaryIssues,
+  }
+}
+
+function getCoverageStatusLabel(status: string) {
+  if (status === 'required') return 'Richiesto'
+  if (status === 'recommended') return 'Consigliato'
+  if (status === 'optional') return 'Opzionale'
+  return 'Non applicabile'
+}
+
+function formatHealthNumber(value: number | null | undefined) {
+  return typeof value === 'number' ? value.toLocaleString('it-IT') : '-'
 }
