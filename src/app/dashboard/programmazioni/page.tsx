@@ -306,7 +306,7 @@ export default function ProgrammazioniPage() {
     // Show confirmation dialog first
     setCampagnaForIndividuazioni(campagna)
     setIndividuazioneName(buildIndividuazioneName(campagna.nome))
-    setIndividuazioneDescription(campagna.descrizione || '')
+    setIndividuazioneDescription('')
     setShowIndividuazioniConfirmDialog(true)
     setShowArtistFilter(false) // Reset filter panel
     setArtistSearchQuery('') // Reset search
@@ -1152,6 +1152,9 @@ export default function ProgrammazioniPage() {
                     placeholder="Annotazioni su soglia, subset artisti, ipotesi o obiettivo del test..."
                     rows={3}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Queste note saranno salvate solo sulla campagna di individuazione.
+                  </p>
                 </div>
               </div>
               <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
@@ -1181,7 +1184,7 @@ export default function ProgrammazioniPage() {
               {campagnaForIndividuazioni?.descrizione && (
                 <div className="pt-2 border-t mt-2">
                   <p className="text-sm text-muted-foreground">
-                    <strong className="text-foreground">Note:</strong> {campagnaForIndividuazioni.descrizione}
+                    <strong className="text-foreground">Note programmazione:</strong> {campagnaForIndividuazioni.descrizione}
                 </p>
                 </div>
               )}
