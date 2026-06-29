@@ -15,6 +15,7 @@ import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-b
 import {
   updateCampagnaIndividuazioneMetadata,
   type IndividuazioneDetailStats,
+  type IndividuazioneEpisodeAlertSummary,
   type SearchField,
 } from '@/features/individuazioni/services/individuazioni.service'
 import ExportIndividuazioniDialog from './components/ExportIndividuazioniDialog'
@@ -31,6 +32,7 @@ export default function IndividuazioneDetailPage() {
     campagna,
     setCampagna,
     detailStats,
+    episodeAlertSummary,
     individuazioni,
     loading,
     loadingData,
@@ -175,6 +177,8 @@ export default function IndividuazioneDetailPage() {
         stats={detailStats}
         fallbackStats={campagna.statistiche}
       />
+
+      <EpisodeAlertSummary summary={episodeAlertSummary} />
 
       <Card>
         <CardContent className="pt-6">
@@ -327,6 +331,72 @@ function IndividuazioneSummary({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function EpisodeAlertSummary({
+  summary,
+}: {
+  summary: IndividuazioneEpisodeAlertSummary | null
+}) {
+  if (!summary || summary.totale === 0) return null
+
+  const topOpere = summary.topOpere.slice(0, 3)
+
+  return (
+    <Card className="border-amber-200 bg-amber-50/60">
+      <CardContent className="p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-900">
+              Alert episodi esclusi dalle individuazioni
+            </div>
+            <p className="mt-2 text-sm text-amber-950">
+              {formatNumber(summary.totale)} alert sono stati esclusi dai match automatici perché
+              richiedono revisione catalogo o dati episodio.
+            </p>
+            {topOpere.length > 0 && (
+              <p className="mt-2 text-xs text-amber-900">
+                Opere più ricorrenti: {topOpere.map(item => `${item.titolo} (${formatNumber(item.count)})`).join(', ')}
+              </p>
+            )}
+          </div>
+          <div className="grid min-w-[280px] gap-3 text-sm sm:grid-cols-2">
+            <SummaryPill
+              label="Episodi non censiti"
+              value={formatNumber(summary.catalogEpisodeNotCensito)}
+            />
+            <SummaryPill
+              label="Dati episodio invalidi"
+              value={formatNumber(summary.programmazioneEpisodeDataInvalid)}
+            />
+            <SummaryPill
+              label="Programmazioni"
+              value={formatNumber(summary.programmazioniCoinvolte)}
+            />
+            <SummaryPill
+              label="Opere"
+              value={formatNumber(summary.opereCoinvolte)}
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SummaryPill({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-md border border-amber-200 bg-white/70 px-3 py-2">
+      <div className="text-xs text-amber-900">{label}</div>
+      <div className="font-mono text-lg font-semibold text-amber-950">{value}</div>
+    </div>
   )
 }
 

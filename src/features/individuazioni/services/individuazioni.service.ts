@@ -8,6 +8,19 @@ import {
 
 export type { IndividuazioneDetailStats, IndividuazioneStatus }
 
+export interface IndividuazioneEpisodeAlertSummary {
+  totale: number
+  catalogEpisodeNotCensito: number
+  programmazioneEpisodeDataInvalid: number
+  programmazioniCoinvolte: number
+  opereCoinvolte: number
+  topOpere: Array<{
+    titolo: string
+    tipoAlert: 'catalog_episode_not_censito' | 'programmazione_episode_data_invalid'
+    count: number
+  }>
+}
+
 export interface CampagnaIndividuazione {
   id: string
   nome: string
@@ -376,6 +389,52 @@ export const getCampagnaIndividuazioneDetailStats = async (
     data: normalizeIndividuazioneDetailStats(data),
     error,
   }
+}
+
+export const getCampagnaIndividuazioneEpisodeAlertSummary = async (
+  campagnaId: string
+): Promise<{ data: IndividuazioneEpisodeAlertSummary; error: unknown }> => {
+  const rpcClient = supabase as unknown as SupabaseRpcClient
+  const { data, error } = await rpcClient.rpc('get_individuazione_episode_alert_summary', {
+    p_campagna_id: campagnaId,
+  })
+
+  return {
+    data: normalizeEpisodeAlertSummary(data),
+    error,
+  }
+}
+
+function normalizeEpisodeAlertSummary(payload: unknown): IndividuazioneEpisodeAlertSummary {
+  const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
+  const topOpere = Array.isArray(root.topOpere) ? root.topOpere : []
+
+  return {
+    totale: toNumber(root.totale),
+    catalogEpisodeNotCensito: toNumber(root.catalogEpisodeNotCensito ?? root.catalog_episode_not_censito),
+    programmazioneEpisodeDataInvalid: toNumber(root.programmazioneEpisodeDataInvalid ?? root.programmazione_episode_data_invalid),
+    programmazioniCoinvolte: toNumber(root.programmazioniCoinvolte ?? root.programmazioni_coinvolte),
+    opereCoinvolte: toNumber(root.opereCoinvolte ?? root.opere_coinvolte),
+    topOpere: topOpere.map(item => {
+      const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+      return {
+        titolo: String(record.titolo || '-'),
+        tipoAlert: normalizeEpisodeAlertType(record.tipoAlert ?? record.tipo_alert),
+        count: toNumber(record.count),
+      }
+    }),
+  }
+}
+
+function normalizeEpisodeAlertType(value: unknown): 'catalog_episode_not_censito' | 'programmazione_episode_data_invalid' {
+  return value === 'catalog_episode_not_censito'
+    ? 'catalog_episode_not_censito'
+    : 'programmazione_episode_data_invalid'
+}
+
+function toNumber(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value ?? 0)
+  return Number.isFinite(numeric) ? numeric : 0
 }
 
 export {

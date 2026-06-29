@@ -4,11 +4,13 @@ import { supabase } from '@/shared/lib/supabase'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import {
   formatIndividuazioniForExport,
+  getCampagnaIndividuazioneEpisodeAlertSummary,
   getCampagnaIndividuazioneDetailStats,
   getCampagnaIndividuazione,
   getIndividuazioni,
   getIndividuazioniForExport,
   type CampagnaIndividuazione,
+  type IndividuazioneEpisodeAlertSummary,
   type IndividuazioneDetailStats,
   type IndividuazioneGroupBy,
   type Individuazione,
@@ -23,6 +25,7 @@ const pageSize = 100
 export function useIndividuazioneDetail(campagnaId: string) {
   const [campagna, setCampagna] = useState<CampagnaIndividuazione | null>(null)
   const [detailStats, setDetailStats] = useState<IndividuazioneDetailStats | null>(null)
+  const [episodeAlertSummary, setEpisodeAlertSummary] = useState<IndividuazioneEpisodeAlertSummary | null>(null)
   const [individuazioni, setIndividuazioni] = useState<Individuazione[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
@@ -59,9 +62,10 @@ export function useIndividuazioneDetail(campagnaId: string) {
     async function loadCampagna() {
       setLoading(true)
       try {
-        const [campagnaResult, statsResult] = await Promise.all([
+        const [campagnaResult, statsResult, alertSummaryResult] = await Promise.all([
           getCampagnaIndividuazione(campagnaId),
           getCampagnaIndividuazioneDetailStats(campagnaId),
+          getCampagnaIndividuazioneEpisodeAlertSummary(campagnaId),
         ])
         if (campagnaResult.error) {
           logError('Errore caricamento campagna:', campagnaResult.error)
@@ -71,12 +75,17 @@ export function useIndividuazioneDetail(campagnaId: string) {
         if (statsResult.error) {
           logError('Errore caricamento statistiche individuazione:', statsResult.error)
         }
+        if (alertSummaryResult.error) {
+          logError('Errore caricamento alert episodi individuazione:', alertSummaryResult.error)
+        }
         setCampagna(campagnaResult.data ?? null)
         setDetailStats(statsResult.error ? null : statsResult.data)
+        setEpisodeAlertSummary(alertSummaryResult.error ? null : alertSummaryResult.data)
       } catch (error) {
         logError('Errore caricamento campagna:', error)
         setCampagna(null)
         setDetailStats(null)
+        setEpisodeAlertSummary(null)
       } finally {
         setLoading(false)
       }
@@ -257,6 +266,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
     campagna,
     setCampagna,
     detailStats,
+    episodeAlertSummary,
     individuazioni,
     loading,
     loadingData,
