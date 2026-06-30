@@ -513,7 +513,7 @@ export const getDeleteCampagnaIndividuazioneInfo = async (
  */
 export const deleteCampagnaIndividuazione = async (
   campagnaId: string,
-  onProgress?: (progress: { phase: 'deleting_individuazioni' | 'updating_programmazione' | 'deleting_campagna'; deleted?: number; total?: number }) => void
+  onProgress?: (progress: { phase: 'deleting_individuazioni' | 'deleting_campagna'; deleted?: number; total?: number }) => void
 ): Promise<{ data: DeleteCampagnaResult | null; error: Error | null }> => {
   try {
     const { data: info, error: infoError } = await getDeleteCampagnaIndividuazioneInfo(campagnaId)
@@ -544,7 +544,6 @@ export const deleteCampagnaIndividuazione = async (
     }
 
     onProgress?.({ phase: 'deleting_individuazioni', deleted: info.individuazioni_count, total: info.individuazioni_count })
-    onProgress?.({ phase: 'updating_programmazione' })
     onProgress?.({ phase: 'deleting_campagna' })
 
     return { data: result, error: null }

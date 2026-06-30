@@ -349,7 +349,19 @@ export interface DeleteCampagnaProgrammazioneInfo {
   programmazioni_count: number
   campagna_individuazione_id?: string
   campagna_individuazione_nome?: string
+  campagna_individuazione_count?: number
   individuazioni_count?: number
+}
+
+interface DeleteCampagnaProgrammazioneRpcResult {
+  success: boolean
+  error?: string
+  error_code?: 'AUTH_REQUIRED' | 'NOT_FOUND' | 'LOCKED_BY_OTHER' | 'HAS_INDIVIDUAZIONE' | string
+  campagna_individuazione_nome?: string
+  individuazione_runs?: number
+  individuazioni_count?: number
+  deleted_programmazioni?: number
+  deleted_campaign_jobs?: number
 }
 
 /**
@@ -365,28 +377,31 @@ export const getDeleteCampagnaProgrammazioneInfo = async (campagnaId: string): P
 
     if (progError) throw progError
 
-    // Check if campagna individuazione exists
-    const { data: campagnaIndividuazione, error: ciError } = await (supabase as any)
+    // Check if one or more campagne individuazione exist. `maybeSingle()` fails
+    // once multi-run individuazione creates multiple rows for the same campaign.
+    const { data: campagneIndividuazione, error: ciError } = await (supabase as any)
       .from('campagne_individuazione')
       .select('id, nome')
       .eq('campagne_programmazione_id', campagnaId)
-      .maybeSingle()
 
     if (ciError) throw ciError
 
+    const campagnaIndividuazioneRows = Array.isArray(campagneIndividuazione) ? campagneIndividuazione : []
+    const campagnaIndividuazione = campagnaIndividuazioneRows[0]
+
     let individuazioni_count = 0
-    if (campagnaIndividuazione) {
+    if (campagnaIndividuazioneRows.length > 0) {
       const { count, error: indError } = await (supabase as any)
         .from('individuazioni')
         .select('*', { count: 'exact', head: true })
-        .eq('campagna_individuazioni_id', campagnaIndividuazione.id)
+        .in('campagna_individuazioni_id', campagnaIndividuazioneRows.map((row: { id: string }) => row.id))
 
       if (indError) throw indError
       individuazioni_count = count || 0
     }
 
     const scenario: DeleteCampagnaProgrammazioneScenario = 
-      campagnaIndividuazione ? 'has_individuazione' :
+      campagnaIndividuazioneRows.length > 0 ? 'has_individuazione' :
       (programmazioni_count || 0) > 0 ? 'has_data' : 'empty'
 
     return {
@@ -395,6 +410,7 @@ export const getDeleteCampagnaProgrammazioneInfo = async (campagnaId: string): P
         programmazioni_count: programmazioni_count || 0,
         campagna_individuazione_id: campagnaIndividuazione?.id,
         campagna_individuazione_nome: campagnaIndividuazione?.nome,
+        campagna_individuazione_count: campagnaIndividuazioneRows.length,
         individuazioni_count
       },
       error: null
@@ -423,21 +439,48 @@ export const deleteCampagnaProgrammazione = async (campagnaId: string): Promise<
 
   // Scenario 1.3: Blocca se esiste campagna individuazione
   if (info.scenario === 'has_individuazione') {
+    const extraRuns = (info.campagna_individuazione_count || 0) > 1
+      ? ` e altre ${(info.campagna_individuazione_count || 0) - 1} run`
+      : ''
     return {
       data: null,
       error: null,
       blocked: true,
-      blockReason: `Esiste una campagna di individuazione collegata ("${info.campagna_individuazione_nome}") con ${info.individuazioni_count?.toLocaleString()} individuazioni. Devi prima eliminarla dalla pagina Individuazioni.`
+      blockReason: `Esiste una campagna di individuazione collegata ("${info.campagna_individuazione_nome}"${extraRuns}) con ${info.individuazioni_count?.toLocaleString()} individuazioni. Devi prima eliminarla dalla pagina Individuazioni.`
     }
   }
 
-  // Scenario 1.1 e 1.2: Procedi con la cancellazione
-  // Le programmazioni verranno cancellate in CASCADE
-  const { data, error } = await supabase
-    .from('campagne_programmazione' as any)
-    .delete()
-    .eq('id', campagnaId)
-    .select()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  const userId = session?.user?.id
+  if (!userId) {
+    return { data: null, error: new Error('Utente non autenticato') }
+  }
+
+  const { data, error } = await (supabase as any).rpc('delete_campagna_programmazione_safe', {
+    p_campagna_programmazione_id: campagnaId,
+    p_user_id: userId,
+  })
+
+  if (error) return { data: null, error }
+
+  const result = data as DeleteCampagnaProgrammazioneRpcResult | null
+  if (!result?.success) {
+    if (result?.error_code === 'HAS_INDIVIDUAZIONE') {
+      const extraRuns = (result.individuazione_runs || 0) > 1
+        ? ` e altre ${(result.individuazione_runs || 0) - 1} run`
+        : ''
+      return {
+        data: null,
+        error: null,
+        blocked: true,
+        blockReason: `Esiste una campagna di individuazione collegata ("${result.campagna_individuazione_nome}"${extraRuns}) con ${result.individuazioni_count?.toLocaleString()} individuazioni. Devi prima eliminarla dalla pagina Individuazioni.`
+      }
+    }
+
+    return { data: null, error: new Error(result?.error || 'Errore eliminazione campagna programmazione') }
+  }
 
   return { data, error }
 }
