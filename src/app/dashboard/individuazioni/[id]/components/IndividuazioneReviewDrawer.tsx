@@ -3,17 +3,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  ChevronDown,
+  AlertTriangle,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
+  CircleAlert,
   Film,
+  Info,
   Loader2,
   User,
 } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Separator } from '@/shared/components/ui/separator'
 import {
   Sheet,
   SheetContent,
@@ -31,8 +32,9 @@ import {
   type IndividuazioneStatus,
 } from '@/features/individuazioni/services/individuazioni.service'
 import {
-  buildMatchingBreakdown,
-  buildMatchingComparison,
+  buildMatchingReviewContext,
+  type ReviewAlert,
+  type SignalTone,
 } from '@/features/individuazioni/utils/matching-details'
 import {
   getMatchScoreBand,
@@ -65,7 +67,6 @@ export default function IndividuazioneReviewDrawer({
   const [detailError, setDetailError] = useState<string | null>(null)
   const [noteValidazione, setNoteValidazione] = useState('')
   const [savingStatus, setSavingStatus] = useState<IndividuazioneStatus | null>(null)
-  const [showTechnicalBreakdown, setShowTechnicalBreakdown] = useState(false)
 
   const selectedIndex = useMemo(
     () => individuazioni.findIndex(item => item.id === selectedId),
@@ -111,7 +112,6 @@ export default function IndividuazioneReviewDrawer({
     }
 
     void loadDetail()
-    setShowTechnicalBreakdown(false)
 
     return () => {
       cancelled = true
@@ -119,9 +119,12 @@ export default function IndividuazioneReviewDrawer({
   }, [open, selectedId])
 
   const individuazione = detail?.individuazione ?? selectedIndividuazione
-  const comparisonRows = useMemo(() => {
-    if (!individuazione) return []
-    return buildMatchingComparison({
+  const reviewContext = useMemo(() => {
+    if (!individuazione) return null
+    return buildMatchingReviewContext({
+      stato: individuazione.stato,
+      punteggioMatching: individuazione.punteggio_matching,
+      metodo: individuazione.metodo,
       snapshotTitolo: individuazione.titolo,
       snapshotTitoloOriginale: individuazione.titolo_originale,
       snapshotAnno: individuazione.anno,
@@ -132,21 +135,22 @@ export default function IndividuazioneReviewDrawer({
       snapshotDataTrasmissione: individuazione.data_trasmissione,
       snapshotOraInizio: individuazione.ora_inizio,
       snapshotOraFine: individuazione.ora_fine,
+      snapshotCanale: individuazione.canale,
+      snapshotTipo: individuazione.tipo,
+      artistaDisplay: getArtistaDisplay(individuazione),
+      ruoloDisplay: individuazione.ruoli_tipologie?.nome,
       operaTitolo: detail?.opera?.titolo ?? individuazione.opere?.titolo,
       operaTitoloOriginale: detail?.opera?.titolo_originale ?? individuazione.opere?.titolo_originale,
+      operaTipo: detail?.opera?.tipo,
       operaAnno: detail?.opera?.anno_produzione,
       operaRegisti: detail?.opera?.regista ?? undefined,
+      operaStatoValidazione: detail?.opera?.stato_validazione,
       episodioStagione: detail?.episodio?.numero_stagione,
       episodioNumero: detail?.episodio?.numero_episodio,
       episodioTitolo: detail?.episodio?.titolo_episodio,
       dettagliMatching: individuazione.dettagli_matching as Record<string, unknown> | undefined,
     })
   }, [detail, individuazione])
-
-  const breakdownItems = useMemo(
-    () => buildMatchingBreakdown(individuazione?.dettagli_matching as Record<string, unknown> | undefined),
-    [individuazione]
-  )
 
   async function handleStatusChange(stato: IndividuazioneStatus) {
     if (!individuazione || !canReview) return
@@ -186,7 +190,7 @@ export default function IndividuazioneReviewDrawer({
                 {individuazione?.titolo || 'Revisione individuazione'}
               </SheetTitle>
               <SheetDescription className="text-left">
-                Confronto tra programmazione e catalogo matchato
+                Verifica rapida del match proposto e dei segnali rilevanti
               </SheetDescription>
             </div>
             {selectedIndex >= 0 && (
@@ -228,17 +232,44 @@ export default function IndividuazioneReviewDrawer({
           </div>
         </SheetHeader>
 
-        <div className="space-y-6 p-4">
+        <div className="space-y-5 p-4">
           {loadingDetail ? (
             <div className="flex h-40 items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : detailError ? (
             <p className="text-sm text-destructive">{detailError}</p>
-          ) : individuazione ? (
+          ) : individuazione && reviewContext ? (
             <>
+              {reviewContext.scoreSummary && (
+                <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span>
+                      Punteggio <strong className="text-foreground">{reviewContext.scoreSummary.total}</strong>
+                    </span>
+                    <span>
+                      Soglia <strong className="text-foreground">{reviewContext.scoreSummary.threshold}</strong>
+                    </span>
+                    {reviewContext.scoreSummary.method && (
+                      <span>
+                        Metodo <strong className="text-foreground">{reviewContext.scoreSummary.method}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold">Perché rivedere</h3>
+                <div className="space-y-2">
+                  {reviewContext.alerts.map(alert => (
+                    <AlertCard key={`${alert.tone}-${alert.title}`} alert={alert} />
+                  ))}
+                </div>
+              </section>
+
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold">Match corrente</h3>
+                <h3 className="text-sm font-semibold">Match proposto</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <InfoCard
                     icon={<User className="h-4 w-4" />}
@@ -253,72 +284,42 @@ export default function IndividuazioneReviewDrawer({
                     href={individuazione.opera_id ? `/dashboard/opere/${individuazione.opera_id}` : undefined}
                   />
                 </div>
-                <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  <span>Ruolo: <strong className="text-foreground">{individuazione.ruoli_tipologie?.nome || '-'}</strong></span>
-                  {detail?.opera?.tipo && (
-                    <span>Tipo opera: <strong className="text-foreground">{detail.opera.tipo}</strong></span>
-                  )}
-                  {detail?.opera?.stato_validazione && (
-                    <span>Validazione opera: <strong className="text-foreground">{detail.opera.stato_validazione}</strong></span>
-                  )}
-                </div>
               </section>
 
-              <Separator />
+              <div className="grid gap-4 md:grid-cols-2">
+                <FactsCard title="Trasmissione" facts={reviewContext.transmission} />
+                <FactsCard title="Dettaglio catalogo" facts={reviewContext.catalog} />
+              </div>
 
-              <section className="space-y-3">
-                <h3 className="text-sm font-semibold">Confronto matching</h3>
-                <div className="overflow-hidden rounded-lg border">
-                  <div className="grid grid-cols-[120px_1fr_1fr] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-                    <span>Campo</span>
-                    <span>Programmazione</span>
-                    <span>Catalogo</span>
-                  </div>
-                  {comparisonRows.map(row => (
-                    <div
-                      key={row.label}
-                      className={`grid grid-cols-[120px_1fr_1fr] gap-3 border-b px-3 py-2 text-sm last:border-b-0 ${row.highlight ? 'bg-amber-50/70' : ''}`}
-                    >
-                      <span className="font-medium text-muted-foreground">{row.label}</span>
-                      <span className="break-words">{row.programmazione}</span>
-                      <span className="break-words">{row.catalogo}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {breakdownItems.length > 0 && (
+              {reviewContext.signals.length > 0 && (
                 <section className="space-y-3">
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-semibold"
-                    onClick={() => setShowTechnicalBreakdown(current => !current)}
-                  >
-                    Breakdown tecnico matching
-                    {showTechnicalBreakdown
-                      ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                      : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                  </button>
-                  {showTechnicalBreakdown && (
-                    <div className="space-y-3">
-                      {breakdownItems.map(item => (
-                        <div key={item.key} className="rounded-lg border p-3">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <h4 className="text-sm font-medium">{item.label}</h4>
-                            {item.score && <Badge variant="outline">Score {item.score}</Badge>}
+                  <h3 className="text-sm font-semibold">Segnali di matching</h3>
+                  <div className="space-y-2">
+                    {reviewContext.signals.map(signal => (
+                      <div
+                        key={signal.key}
+                        className={`rounded-lg border px-3 py-2.5 ${getSignalSurfaceClass(signal.tone)}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <SignalIcon tone={signal.tone} />
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium">{signal.label}</span>
+                              {signal.points && (
+                                <Badge variant="outline" className="text-[11px]">
+                                  {signal.points}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-foreground">{signal.summary}</p>
+                            {signal.detail && (
+                              <p className="text-xs text-muted-foreground">{signal.detail}</p>
+                            )}
                           </div>
-                          <dl className="space-y-1 text-sm">
-                            {item.details.map(detailItem => (
-                              <div key={`${item.key}-${detailItem.label}`} className="grid grid-cols-[140px_1fr] gap-2">
-                                <dt className="text-muted-foreground">{detailItem.label}</dt>
-                                <dd className="break-words">{detailItem.value}</dd>
-                              </div>
-                            ))}
-                          </dl>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </div>
+                    ))}
+                  </div>
                 </section>
               )}
 
@@ -385,6 +386,42 @@ export default function IndividuazioneReviewDrawer({
   )
 }
 
+function AlertCard({ alert }: { alert: ReviewAlert }) {
+  return (
+    <div className={`rounded-lg border px-3 py-2.5 ${getSignalSurfaceClass(alert.tone)}`}>
+      <div className="flex items-start gap-2">
+        <SignalIcon tone={alert.tone} />
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">{alert.title}</p>
+          {alert.description && (
+            <p className="text-xs text-muted-foreground">{alert.description}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FactsCard({ title, facts }: { title: string; facts: Array<{ label: string; value: string }> }) {
+  return (
+    <section className="rounded-lg border">
+      <div className="border-b bg-muted/30 px-3 py-2 text-sm font-semibold">{title}</div>
+      {facts.length > 0 ? (
+        <dl className="divide-y">
+          {facts.map(fact => (
+            <div key={`${title}-${fact.label}`} className="grid grid-cols-[120px_1fr] gap-3 px-3 py-2 text-sm">
+              <dt className="text-muted-foreground">{fact.label}</dt>
+              <dd className="font-medium wrap-break-word">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="px-3 py-4 text-sm text-muted-foreground">Nessun dato disponibile.</p>
+      )}
+    </section>
+  )
+}
+
 function InfoCard({
   icon,
   label,
@@ -411,6 +448,32 @@ function InfoCard({
       )}
     </div>
   )
+}
+
+function SignalIcon({ tone }: { tone: SignalTone }) {
+  switch (tone) {
+    case 'ok':
+      return <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+    case 'warning':
+      return <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+    case 'risk':
+      return <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+    default:
+      return <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+  }
+}
+
+function getSignalSurfaceClass(tone: SignalTone) {
+  switch (tone) {
+    case 'ok':
+      return 'border-green-200 bg-green-50/60'
+    case 'warning':
+      return 'border-amber-200 bg-amber-50/60'
+    case 'risk':
+      return 'border-red-200 bg-red-50/60'
+    default:
+      return 'bg-background'
+  }
 }
 
 function getArtistaDisplay(individuazione: Individuazione | null | undefined) {
