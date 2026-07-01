@@ -256,6 +256,24 @@ export function useIndividuazioneDetail(campagnaId: string) {
     )
   }, [campagna, campagnaId, selectedFormat, startExport])
 
+  const refreshDetailStats = useCallback(async () => {
+    if (!campagnaId) return
+    try {
+      const { data, error } = await getCampagnaIndividuazioneDetailStats(campagnaId)
+      if (error) {
+        logError('Errore aggiornamento statistiche individuazione:', error)
+        return
+      }
+      setDetailStats(data)
+    } catch (error) {
+      logError('Errore aggiornamento statistiche individuazione:', error)
+    }
+  }, [campagnaId])
+
+  const updateIndividuazioneInList = useCallback((updated: Individuazione) => {
+    setIndividuazioni(prev => prev.map(item => item.id === updated.id ? updated : item))
+  }, [])
+
   function resetIndividuazioni() {
     setIndividuazioni([])
     setTotalPages(0)
@@ -300,6 +318,8 @@ export function useIndividuazioneDetail(campagnaId: string) {
     handleExportDialogOpenChange,
     handleFormatSelect,
     handleConfirmExport,
+    refreshDetailStats,
+    updateIndividuazioneInList,
   }
 }
 

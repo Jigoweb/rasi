@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Download, Edit, Loader2, Search } from 'lucide-react'
@@ -12,13 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/shared/components/ui/textarea'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
+import { useAuth } from '@/shared/contexts/auth-context'
 import {
   updateCampagnaIndividuazioneMetadata,
+  type Individuazione,
   type IndividuazioneDetailStats,
   type IndividuazioneEpisodeAlertSummary,
   type SearchField,
 } from '@/features/individuazioni/services/individuazioni.service'
 import ExportIndividuazioniDialog from './components/ExportIndividuazioniDialog'
+import IndividuazioneReviewDrawer from './components/IndividuazioneReviewDrawer'
 import IndividuazioniDetailTable from './components/IndividuazioniDetailTable'
 import { useIndividuazioneDetail } from './hooks/useIndividuazioneDetail'
 
@@ -28,6 +31,10 @@ export default function IndividuazioneDetailPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
   const [isSavingMetadata, setIsSavingMetadata] = useState(false)
+  const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false)
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null)
+  const { isAdmin, isOperatore } = useAuth()
+  const canReviewIndividuazioni = isAdmin || isOperatore
   const {
     campagna,
     setCampagna,
@@ -62,7 +69,19 @@ export default function IndividuazioneDetailPage() {
     handleFormatSelect,
     handleConfirmExport,
     loadMore,
+    refreshDetailStats,
+    updateIndividuazioneInList,
   } = useIndividuazioneDetail(campagnaId)
+
+  const handleRowClick = useCallback((individuazione: Individuazione) => {
+    setSelectedReviewId(individuazione.id)
+    setReviewDrawerOpen(true)
+  }, [])
+
+  const handleReviewStatusUpdated = useCallback((updated: Individuazione) => {
+    updateIndividuazioneInList(updated)
+    void refreshDetailStats()
+  }, [refreshDetailStats, updateIndividuazioneInList])
 
   function openEditDialog() {
     if (!campagna) return
@@ -231,6 +250,17 @@ export default function IndividuazioneDetailPage() {
         onSortChange={handleSortChange}
         onGroupByChange={handleGroupByChange}
         onLoadMore={loadMore}
+        onRowClick={handleRowClick}
+      />
+
+      <IndividuazioneReviewDrawer
+        open={reviewDrawerOpen}
+        individuazioni={individuazioni}
+        selectedId={selectedReviewId}
+        canReview={canReviewIndividuazioni}
+        onOpenChange={setReviewDrawerOpen}
+        onNavigate={setSelectedReviewId}
+        onStatusUpdated={handleReviewStatusUpdated}
       />
 
       <FloatingScrollUpButton />

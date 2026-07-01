@@ -109,6 +109,39 @@ export interface Individuazione {
   ruoli_tipologie?: { nome: string }
 }
 
+export interface IndividuazioneReviewDetail {
+  individuazione: Individuazione
+  opera?: {
+    id: string
+    titolo: string
+    titolo_originale?: string | null
+    tipo?: string | null
+    anno_produzione?: number | null
+    regista?: string[] | null
+    stato_validazione?: string | null
+  } | null
+  episodio?: {
+    id: string
+    numero_stagione: number
+    numero_episodio: number
+    titolo_episodio?: string | null
+    data_prima_messa_in_onda?: string | null
+  } | null
+  programmazione?: {
+    id: string
+    titolo?: string | null
+    titolo_originale?: string | null
+    anno?: number | null
+    regia?: string | null
+    numero_stagione?: number | null
+    numero_episodio?: number | null
+    titolo_episodio?: string | null
+    data_trasmissione?: string | null
+    ora_inizio?: string | null
+    ora_fine?: string | null
+  } | null
+}
+
 // ============================================
 // CAMPAGNE INDIVIDUAZIONE
 // ============================================
@@ -356,6 +389,111 @@ function applyIndividuazioniSort<T extends OrderableQuery<T>>(
         .order('data_trasmissione', { ascending, nullsFirst: false })
         .order('ora_inizio', { ascending, nullsFirst: false })
   }
+}
+
+export const getIndividuazioneReviewDetail = async (
+  individuazioneId: string
+): Promise<{ data: IndividuazioneReviewDetail | null; error: unknown }> => {
+  try {
+    const { data, error } = await supabase
+      .from('individuazioni')
+      .select(`
+        *,
+        artisti(nome, cognome, nome_arte),
+        opere(id, titolo, titolo_originale, tipo, anno_produzione, regista, stato_validazione),
+        ruoli_tipologie(nome),
+        episodi(id, numero_stagione, numero_episodio, titolo_episodio, data_prima_messa_in_onda),
+        programmazioni(id, titolo, titolo_originale, anno, regia, numero_stagione, numero_episodio, titolo_episodio, data_trasmissione, ora_inizio, ora_fine)
+      `)
+      .eq('id', individuazioneId)
+      .single()
+
+    if (error || !data) {
+      return { data: null, error: error || new Error('Individuazione non trovata') }
+    }
+
+    const row = data as Individuazione & {
+      episodi?: IndividuazioneReviewDetail['episodio'] | IndividuazioneReviewDetail['episodio'][] | null
+      programmazioni?: IndividuazioneReviewDetail['programmazione'] | IndividuazioneReviewDetail['programmazione'][] | null
+      opere?: IndividuazioneReviewDetail['opera'] | IndividuazioneReviewDetail['opera'][] | null
+    }
+
+    return {
+      data: {
+        individuazione: normalizeIndividuazioneRow(row),
+        opera: normalizeSingleRelation(row.opere),
+        episodio: normalizeSingleRelation(row.episodi),
+        programmazione: normalizeSingleRelation(row.programmazioni),
+      },
+      error: null,
+    }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+export const updateIndividuazioneStatus = async (
+  individuazioneId: string,
+  stato: IndividuazioneStatus,
+  noteValidazione?: string | null
+): Promise<{ data: Individuazione | null; error: unknown }> => {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) {
+      return { data: null, error: new Error('Utente non autenticato') }
+    }
+
+    const payload: {
+      stato: IndividuazioneStatus
+      validato_da: string
+      validato_il: string
+      note_validazione?: string | null
+    } = {
+      stato,
+      validato_da: userId,
+      validato_il: new Date().toISOString(),
+    }
+
+    if (noteValidazione !== undefined) {
+      payload.note_validazione = noteValidazione?.trim() || null
+    }
+
+    const { data, error } = await supabase
+      .from('individuazioni')
+      .update(payload)
+      .eq('id', individuazioneId)
+      .select(`
+        *,
+        artisti(nome, cognome, nome_arte),
+        opere(titolo, titolo_originale),
+        ruoli_tipologie(nome)
+      `)
+      .single()
+
+    if (error || !data) {
+      return { data: null, error: error || new Error('Aggiornamento non riuscito') }
+    }
+
+    return { data: normalizeIndividuazioneRow(data as Individuazione), error: null }
+  } catch (error) {
+    return { data: null, error }
+  }
+}
+
+function normalizeIndividuazioneRow(row: Individuazione): Individuazione {
+  const { episodi: _episodi, programmazioni: _programmazioni, ...individuazione } = row as Individuazione & {
+    episodi?: unknown
+    programmazioni?: unknown
+  }
+  return individuazione
+}
+
+function normalizeSingleRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) return value[0] ?? null
+  return value ?? null
 }
 
 export {

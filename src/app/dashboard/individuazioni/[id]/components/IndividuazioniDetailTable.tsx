@@ -43,6 +43,7 @@ interface IndividuazioniDetailTableProps {
   onSortChange?: (value: string) => void
   onGroupByChange?: (value: IndividuazioneGroupBy) => void
   onLoadMore: () => void
+  onRowClick?: (individuazione: Individuazione) => void
 }
 
 export default function IndividuazioniDetailTable({
@@ -58,6 +59,7 @@ export default function IndividuazioniDetailTable({
   onSortChange,
   onGroupByChange,
   onLoadMore,
+  onRowClick,
 }: IndividuazioniDetailTableProps) {
   const loadMoreRef = useInfiniteScroll<HTMLDivElement>({
     enabled: hasMore,
@@ -173,7 +175,7 @@ export default function IndividuazioniDetailTable({
                       </TableRow>
                     )}
                     {group.rows.map(ind => (
-                      <IndividuazioneRow key={ind.id} individuazione={ind} />
+                      <IndividuazioneRow key={ind.id} individuazione={ind} onRowClick={onRowClick} />
                     ))}
                   </Fragment>
                 ))
@@ -207,13 +209,31 @@ export default function IndividuazioniDetailTable({
   )
 }
 
-function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuazione }) {
+function IndividuazioneRow({
+  individuazione: ind,
+  onRowClick,
+}: {
+  individuazione: Individuazione
+  onRowClick?: (individuazione: Individuazione) => void
+}) {
   const artistaDisplay = getArtistaDisplay(ind)
   const operaDisplay = ind.opere?.titolo || '-'
   const reviewReasons = getReviewReasons(ind)
 
   return (
-    <TableRow className="hover:bg-muted/50">
+    <TableRow
+      className={`hover:bg-muted/50 ${onRowClick ? 'cursor-pointer' : ''}`}
+      onClick={() => onRowClick?.(ind)}
+      onKeyDown={event => {
+        if (!onRowClick) return
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onRowClick(ind)
+        }
+      }}
+      tabIndex={onRowClick ? 0 : undefined}
+      aria-label={onRowClick ? `Apri revisione per ${ind.titolo || 'individuazione'}` : undefined}
+    >
       <TableCell className="py-4 px-6">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -249,6 +269,7 @@ function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuaz
               href={`/dashboard/artisti/${ind.artista_id}`}
               className="font-medium hover:text-primary hover:underline"
               aria-label={`Apri scheda artista ${artistaDisplay}`}
+              onClick={event => event.stopPropagation()}
             >
               {artistaDisplay}
             </Link>
@@ -266,6 +287,7 @@ function IndividuazioneRow({ individuazione: ind }: { individuazione: Individuaz
               className="truncate max-w-[150px] hover:text-primary hover:underline"
               title={operaDisplay}
               aria-label={`Apri scheda opera ${operaDisplay}`}
+              onClick={event => event.stopPropagation()}
             >
               {operaDisplay}
             </Link>

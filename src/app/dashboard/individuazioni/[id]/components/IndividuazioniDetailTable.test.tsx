@@ -3,6 +3,39 @@ import IndividuazioniDetailTable from './IndividuazioniDetailTable'
 import type { Individuazione } from '@/features/individuazioni/services/individuazioni.service'
 
 describe('IndividuazioniDetailTable', () => {
+  it('opens review drawer when a row is clicked', () => {
+    const onRowClick = jest.fn()
+
+    render(
+      <IndividuazioniDetailTable
+        individuazioni={[{
+          id: 'individuazione-1',
+          artista_id: 'artista-1',
+          opera_id: 'opera-1',
+          titolo: 'Film della sera',
+          data_trasmissione: '2026-06-23',
+          ora_inizio: '21:10:00',
+          ora_fine: '22:40:00',
+          punteggio_matching: 80.39,
+          stato: 'validato',
+          artisti: { nome: 'Mario', cognome: 'Rossi', nome_arte: 'Mario R' },
+          opere: { titolo: 'Opera matchata' },
+          ruoli_tipologie: { nome: 'Attore' },
+        } as unknown as Individuazione]}
+        loadingData={false}
+        loadingMore={false}
+        searchTerm=""
+        totalCount={1}
+        hasMore={false}
+        onLoadMore={jest.fn()}
+        onRowClick={onRowClick}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('row', { name: /Apri revisione per Film della sera/i }))
+    expect(onRowClick).toHaveBeenCalledWith(expect.objectContaining({ id: 'individuazione-1' }))
+  })
+
   it('renders individuazione rows with key match fields', () => {
     const onSortChange = jest.fn()
 
