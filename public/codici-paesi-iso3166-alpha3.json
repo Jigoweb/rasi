@@ -25,6 +25,7 @@
     { "codice": "ROU", "nome": "Romania" },
     { "codice": "BGR", "nome": "Bulgaria" },
     { "codice": "HRV", "nome": "Croazia" },
+    { "codice": "ALB", "nome": "Albania" },
     { "codice": "SVK", "nome": "Slovacchia" },
     { "codice": "SVN", "nome": "Slovenia" },
     { "codice": "EST", "nome": "Estonia" },
