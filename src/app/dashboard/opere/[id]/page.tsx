@@ -722,6 +722,10 @@ export default function OperaDetailPage() {
         updates.anno_produzione = imdbDataToImport.year
         fieldsUpdated.push(IMPORT_FIELD_LABELS.anno_produzione)
       }
+      if (selectedFields['anno_produzione_fine'] && imdbDataToImport.endYear) {
+        updates.anno_produzione_fine = imdbDataToImport.endYear
+        fieldsUpdated.push('Anno fine produzione')
+      }
       if (selectedFields['imdb_tconst']) {
         updates.imdb_tconst = imdbDataToImport.id
         updates.codici_esterni = { ...(opera.codici_esterni as any || {}), imdb: imdbDataToImport.id }
@@ -956,7 +960,9 @@ export default function OperaDetailPage() {
           <div>
             <h1 className="text-xl lg:text-3xl font-bold">{opera.titolo}</h1>
             {opera.titolo_originale && (
-              <p className="text-lg text-muted-foreground">{opera.titolo_originale}</p>
+              <p className="text-sm lg:text-base text-muted-foreground">
+                Titolo originale: <span className="italic">{opera.titolo_originale}</span>
+              </p>
             )}
           </div>
         </div>
@@ -973,12 +979,29 @@ export default function OperaDetailPage() {
         <CardContent className="p-4 lg:p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
             <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground"><FileText className="mr-2 h-4 w-4" />Titolo originale</div>
+              <div className="font-medium">
+                {opera.titolo_originale ? (
+                  <span className="italic">{opera.titolo_originale}</span>
+                ) : (
+                  <span className="text-muted-foreground italic font-normal">Non indicato</span>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground"><Hash className="mr-2 h-4 w-4" />Codice ISAN</div>
               <div className="font-medium font-mono break-all">{opera.codice_isan ?? <span className="text-muted-foreground italic font-normal">Non assegnato</span>}</div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground"><Calendar className="mr-2 h-4 w-4" />Anno Produzione</div>
-              <div className="font-medium">{opera.anno_produzione ?? '-'}</div>
+              <div className="font-medium">
+                {opera.anno_produzione != null
+                  ? opera.anno_produzione_fine != null &&
+                    opera.anno_produzione_fine !== opera.anno_produzione
+                    ? `${opera.anno_produzione}–${opera.anno_produzione_fine}`
+                    : opera.anno_produzione
+                  : '-'}
+              </div>
             </div>
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground"><FileText className="mr-2 h-4 w-4" />IMDb tconst</div>
@@ -1181,7 +1204,12 @@ export default function OperaDetailPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <CardTitle className="flex items-center"><PlayCircle className="mr-2 h-5 w-5" />Episodi</CardTitle>
+              <div>
+                <CardTitle className="flex items-center"><PlayCircle className="mr-2 h-5 w-5" />Episodi</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Titolo originale opera: {opera.titolo_originale ? <span className="italic">{opera.titolo_originale}</span> : 'Non indicato'}
+                </p>
+              </div>
               <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
                 <Plus className="h-4 w-4 mr-2" />
                 Aggiungi episodio

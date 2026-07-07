@@ -206,6 +206,12 @@ describe('null_if_dashes', () => {
   })
 })
 
+describe('year_range_parse', () => {
+  it('extracts range bounds via parseYearValue', () => {
+    expect(applyTransform('year_range_parse', '2021-2024')).toBe(2021)
+  })
+})
+
 describe('year_range_first', () => {
   it('extracts first year from range', () => {
     expect(applyTransform('year_range_first', '1976-1980')).toBe(1976)

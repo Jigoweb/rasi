@@ -42,6 +42,14 @@ export const TEMPLATE_FIELDS: ReadonlyArray<string> = [
 
 export const TEMPLATE_FIELDS_SET: ReadonlySet<string> = new Set(TEMPLATE_FIELDS)
 
+const TEMPLATE_FIELD_LABELS: Partial<Record<string, string>> = {
+  anno: 'Anno rilascio',
+}
+
+export function templateFieldLabel(field: string): string {
+  return TEMPLATE_FIELD_LABELS[field] ?? field
+}
+
 /**
  * Valida un valore orario in formato HH:MM o HH:MM:SS.
  * Restituisce HH:MM:SS normalizzato, o la stringa originale se non parsabile.

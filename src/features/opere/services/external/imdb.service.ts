@@ -57,12 +57,20 @@ export async function getTitleCredits(id: string) {
   return { ok, result: data?.result }
 }
 
-export function mapImdbToOpera(imdb: { title: string; originalTitle: string | null; year: number | null; type: string | null; id: string }) {
+export function mapImdbToOpera(imdb: {
+  title: string
+  originalTitle: string | null
+  year: number | null
+  endYear?: number | null
+  type: string | null
+  id: string
+}) {
   return {
     titolo: imdb.title,
     titolo_originale: imdb.originalTitle || null,
     tipo: imdb.type || 'film',
     anno_produzione: imdb.year ?? null,
+    anno_produzione_fine: imdb.endYear ?? null,
     imdb_tconst: imdb.id,
     codici_esterni: { imdb: imdb.id },
   }

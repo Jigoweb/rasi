@@ -1,4 +1,5 @@
 import { TRANSFORMS, type TransformName } from './transforms'
+import type { YearFieldsPolicy } from './year-policy'
 
 export type FileType = 'csv' | 'tsv' | 'xlsx' | 'xls' | 'txt_fixed' | 'auto'
 export type ParserDelimiter = ',' | ';' | '\t' | '|' | 'auto'
@@ -36,6 +37,8 @@ export interface ParserConfigV2 {
   fields: Record<string, string>
   /** sourceColumn → transform name */
   transforms: Record<string, TransformName>
+  /** Semantic year slots (rilascio / produzione) per emittente. */
+  year_fields?: YearFieldsPolicy
   /** Source column whose value drives opera matching (overrides default of mapped `titolo`). */
   match_title_column?: string
   /** Fixed-width column spec for txt_fixed files. Mutually exclusive with delimiter. */
@@ -191,5 +194,6 @@ export function migrateLegacyMapping(legacy: any): ParserConfigV2 | null {
     ultimo_upload: legacy.ultimo_upload ?? null,
     fields: typeof legacy.mapping === 'object' && legacy.mapping ? legacy.mapping : {},
     transforms: {},
+    year_fields: legacy.year_fields ?? undefined,
   }
 }

@@ -35,7 +35,7 @@ export const getOpereForExport = async (
 
       let query = supabase
         .from('opere')
-        .select('id, codice_opera, titolo, titolo_originale, alias_titoli, tipo, has_episodes, anno_produzione, regista, codice_isan, imdb_tconst, stato_validazione, dettagli_serie, created_at, updated_at')
+        .select('id, codice_opera, titolo, titolo_originale, alias_titoli, tipo, has_episodes, anno_produzione, anno_produzione_fine, regista, codice_isan, imdb_tconst, stato_validazione, dettagli_serie, created_at, updated_at')
         .order('id', { ascending: true })
         .limit(batchSize)
 

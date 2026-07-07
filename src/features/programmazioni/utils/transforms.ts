@@ -1,3 +1,5 @@
+import { parseYearValue } from './year-parse'
+
 /**
  * Transform registry for broadcaster import pipelines.
  *
@@ -28,6 +30,7 @@ export type TransformName =
   | 'nbsp_to_space'
   | 'null_if_dashes'
   | 'year_range_first'
+  | 'year_range_parse'
   | 'eu_date_to_iso'
   | 'iso_date'
   | 'eu_date_short'
@@ -333,14 +336,13 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
   },
 
   year_range_first: (value) => {
-    if (value === null || value === undefined) return null
-    if (typeof value === 'number') return Number.isFinite(value) ? value : null
-    const s = String(value).trim()
-    if (!s || s.toLowerCase() === 'nan') return null
-    const m = s.match(/(\d{4})/)
-    if (!m) return null
-    const y = Number(m[1])
-    return Number.isFinite(y) ? y : null
+    const parsed = parseYearValue(value)
+    return parsed ? parsed.anno : null
+  },
+
+  year_range_parse: (value) => {
+    const parsed = parseYearValue(value)
+    return parsed ? parsed.anno : null
   },
 }
 
@@ -369,6 +371,7 @@ export const TRANSFORM_LABELS: Record<TransformName, string> = {
   nbsp_to_space: 'Spazio unicode → spazio normale',
   null_if_dashes: 'Vuoto se trattini',
   year_range_first: 'Range anni → primo anno',
+  year_range_parse: 'Range anni → inizio + fine (2021-2024)',
 }
 
 const DATE_TRANSFORMS: TransformName[] = [
@@ -407,7 +410,7 @@ export function transformsForField(field: string): TransformName[] {
     return ['netflix_episode_nbr', ...GENERIC_TRANSFORMS]
   }
   if (field === 'anno') {
-    return ['year_range_first', ...GENERIC_TRANSFORMS]
+    return ['year_range_parse', 'year_range_first', ...GENERIC_TRANSFORMS]
   }
   return GENERIC_TRANSFORMS
 }

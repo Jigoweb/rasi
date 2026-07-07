@@ -35,6 +35,17 @@ interface LockResult {
   locked_since?: string
 }
 
+async function getCampagnaProgrammazioneStato(campagnaId: string): Promise<string | null> {
+  const { data, error } = await supabaseService
+    .from('campagne_programmazione')
+    .select('stato')
+    .eq('id', campagnaId)
+    .maybeSingle()
+
+  if (error) throw new Error(`get campagna stato: ${error.message}`)
+  return typeof data?.stato === 'string' ? data.stato : null
+}
+
 /** Acquisisce/rinnova il lock server-side della campagna. */
 async function acquireLock(
   campagnaId: string,
@@ -253,8 +264,11 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     resume = false,
   } = opts
 
+  let rollbackStato = 'in_review'
+
   try {
     await patchJob(jobId, { stato: 'running', fase: 'init' })
+    rollbackStato = await getCampagnaProgrammazioneStato(campagneProgrammazioneId) ?? rollbackStato
 
     // 1. Lock
     const lock = await acquireLock(campagneProgrammazioneId, userId)
@@ -287,7 +301,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
 
       if (error) throw new Error(error.message)
       if (!ci?.id) {
-        await releaseLock(campagneProgrammazioneId, userId, 'in_review')
+        await releaseLock(campagneProgrammazioneId, userId, rollbackStato)
         await patchJob(jobId, {
           stato: 'error',
           fase: 'error',
@@ -316,7 +330,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
       if (initError) throw new Error(initError.message)
       const r = initResult as any
       if (!r || r.success === false) {
-        await releaseLock(campagneProgrammazioneId, userId, 'in_review')
+        await releaseLock(campagneProgrammazioneId, userId, rollbackStato)
         await patchJob(jobId, {
           stato: 'error',
           fase: 'error',
@@ -391,7 +405,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     await releaseLock(
       campagneProgrammazioneId,
       userId,
-      finalizeOk ? 'individuata' : 'in_review'
+      finalizeOk ? 'individuata' : rollbackStato
     )
 
     if (!finalizeOk) {
@@ -413,7 +427,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     // Salvaguardia: rilascia il lock e segna l'errore. Il lock comunque scade
     // da solo dopo il timeout in caso di crash totale del processo.
     try {
-      await releaseLock(campagneProgrammazioneId, userId, 'in_review')
+      await releaseLock(campagneProgrammazioneId, userId, rollbackStato)
     } catch {
       /* best effort */
     }

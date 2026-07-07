@@ -114,6 +114,13 @@ export interface ProgrammazionePayload {
   titolo_episodio_originale?: string
   numero_stagione?: number
   anno?: number
+  anno_fine?: number
+  anno_rilascio?: number
+  anno_rilascio_fine?: number
+  anno_produzione?: number
+  anno_produzione_fine?: number
+  anno_grezzo?: string
+  anno_semantica?: 'rilascio' | 'produzione'
   production?: string
   regia?: string
   data_inizio?: string
@@ -727,6 +734,11 @@ export interface ProgrammazioneRow {
   numero_stagione?: number | null
   numero_episodio?: number | null
   anno?: number | null
+  anno_fine?: number | null
+  anno_rilascio?: number | null
+  anno_rilascio_fine?: number | null
+  anno_produzione?: number | null
+  anno_produzione_fine?: number | null
   sales_month?: string | number | null
   views?: number | null
   retail_price?: number | null

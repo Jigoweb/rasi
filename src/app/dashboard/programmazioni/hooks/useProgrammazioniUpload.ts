@@ -287,10 +287,18 @@ export function useProgrammazioniUpload({
       const ctx = {
         campagnaProgrammazioneId: campagna.id,
         emittenteId: campagna.emittente_id,
+        emittenteName: (campagna as { emittente?: { nome?: string } }).emittente?.nome ?? null,
       }
       const buildAll = (rows: ImportRow[]): ProgrammazionePayload[] => {
         if (uploadDecision.kind === 'apply_existing') {
-          return applyMapping(rows, uploadDecision.mapping.mapping, ctx, uploadDecision.mapping.rules, uploadDecision.mapping.transforms)
+          return applyMapping(
+            rows,
+            uploadDecision.mapping.mapping,
+            ctx,
+            uploadDecision.mapping.rules,
+            uploadDecision.mapping.transforms,
+            uploadDecision.mapping.year_fields,
+          )
         }
         return buildLegacyPayload(rows, ctx)
       }

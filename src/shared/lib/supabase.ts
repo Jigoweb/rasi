@@ -699,6 +699,7 @@ export type Database = {
         Row: {
           alias_titoli: string[] | null
           anno_produzione: number | null
+          anno_produzione_fine: number | null
           codice_isan: string | null
           codice_opera: string | null
           codici_esterni: Json | null
@@ -937,6 +938,13 @@ export type Database = {
       programmazioni: {
         Row: {
           anno: number | null
+          anno_fine: number | null
+          anno_grezzo: string | null
+          anno_produzione: number | null
+          anno_produzione_fine: number | null
+          anno_rilascio: number | null
+          anno_rilascio_fine: number | null
+          anno_semantica: string | null
           campagna_programmazione_id: string | null
           canale: string | null
           created_at: string | null

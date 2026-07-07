@@ -10,6 +10,7 @@ import {
   type ProgrammazioniTableColumn,
   type ProgrammazioniTableColumnKey,
 } from '@/features/programmazioni/services/data-health-policy.service'
+import { formatProgrammazioneYears } from '@/features/programmazioni/utils/year-display'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -309,8 +310,17 @@ export default function CampagnaDettaglioPage() {
         return row.numero_episodio ?? '-'
       case 'fascia_oraria':
         return row.fascia_oraria || '-'
-      case 'anno':
-        return row.anno ?? '-'
+      case 'anno': {
+        const years = formatProgrammazioneYears(row)
+        return (
+          <div className="leading-tight">
+            <div>{years.rilascio ?? '-'}</div>
+            {years.produzione && (
+              <div className="text-xs text-muted-foreground">Produzione {years.produzione}</div>
+            )}
+          </div>
+        )
+      }
       case 'sales_month':
         return row.sales_month ?? '-'
       case 'views':

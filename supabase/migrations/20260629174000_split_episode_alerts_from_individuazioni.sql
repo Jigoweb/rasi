@@ -126,7 +126,7 @@ AS $function$
           AND (r.has_episode_columns OR r.has_series_title_signal)
           THEN 'programmazione_episode_data_invalid'
         WHEN r.opera_tipo = 'film'::public.tipo_opera
-          AND r.has_series_title_signal
+          AND (r.has_episode_columns OR r.has_series_title_signal)
           THEN 'programmazione_episode_data_invalid'
         ELSE NULL
       END AS episode_alert_type

@@ -7,6 +7,8 @@ export const IMPORT_QUALITY_REPORT_VERSION = 1
 
 export type ImportQualityWarningCode =
   | 'year_out_of_range'
+  | 'year_range_detected'
+  | 'year_produzione_after_rilascio'
   | 'duration_placeholder'
   | 'duration_out_of_scale'
   | 'mojibake_suspected'
@@ -63,6 +65,29 @@ export function assessProgrammazioneImportQuality(
       code: 'year_out_of_range',
       field: 'anno',
       message: `Anno fuori range plausibile (${MIN_YEAR}-${maxYear})`,
+    })
+  }
+
+  const annoFine = toFiniteNumber(row.anno_fine)
+  if (annoFine !== null && anno !== null && annoFine > anno) {
+    warnings.push({
+      code: 'year_range_detected',
+      field: 'anno',
+      message: `Intervallo anni rilevato (${anno}-${annoFine})`,
+    })
+  }
+
+  const annoRilascio = toFiniteNumber(row.anno_rilascio)
+  const annoProduzione = toFiniteNumber(row.anno_produzione)
+  if (
+    annoRilascio !== null &&
+    annoProduzione !== null &&
+    annoProduzione > annoRilascio + 1
+  ) {
+    warnings.push({
+      code: 'year_produzione_after_rilascio',
+      field: 'anno_produzione',
+      message: 'Anno produzione successivo al rilascio: verificare mapping emittente',
     })
   }
 

@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/shared/components/ui/input'
 import { Badge } from '@/shared/components/ui/badge'
 import { FileUp, Check, ArrowLeft, ArrowRight, AlertCircle, Loader2 } from 'lucide-react'
-import { TEMPLATE_FIELDS } from '@/features/programmazioni/utils/coercion'
+import { TEMPLATE_FIELDS, templateFieldLabel } from '@/features/programmazioni/utils/coercion'
 import { transformsForField, TRANSFORM_LABELS, suggestDateTransform, isDateTargetField, type TransformName } from '@/features/programmazioni/utils/transforms'
 import {
   detectColumns,
@@ -411,7 +411,7 @@ export default function MappingWizard({
                                     value={f}
                                     disabled={isUsedElsewhere}
                                   >
-                                    {f} {isUsedElsewhere ? '(già usato)' : ''}
+                                    {templateFieldLabel(f)} {isUsedElsewhere ? '(già usato)' : ''}
                                   </SelectItem>
                                 )
                               })}

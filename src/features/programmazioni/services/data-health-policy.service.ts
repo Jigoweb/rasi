@@ -127,9 +127,9 @@ export const DATA_HEALTH_FIELD_DEFINITIONS: Record<DataHealthFieldKey, DataHealt
   },
   anno: {
     key: 'anno',
-    label: 'Anno',
+    label: 'Anno rilascio',
     valueType: 'number',
-    description: 'Anno editoriale o di riferimento del contenuto.',
+    description: 'Messa in onda storica (intervallo se presente nel file sorgente).',
   },
   sales_month: {
     key: 'sales_month',
@@ -202,7 +202,7 @@ const TABLE_COLUMN_LABELS: Record<ProgrammazioniTableColumnKey, string> = {
   titolo_episodio_originale: 'Titolo episodio orig.',
   numero_stagione: 'Stagione',
   numero_episodio: 'Episodio',
-  anno: 'Anno',
+  anno: 'Anno rilascio',
   sales_month: 'Sales month',
   views: 'Views',
   retail_price: 'Retail price',

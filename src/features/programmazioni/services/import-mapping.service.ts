@@ -10,6 +10,9 @@ import {
 import { applyEpisodeNormalizationToPayload } from '../utils/episode-normalization'
 import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
 import { applyTransform, isKnownTransform, type TransformName } from '../utils/transforms'
+import { inferYearPolicyFromMapping } from '../utils/emittente-year-presets'
+import { mergeYearFieldsIntoPayload } from '../utils/year-policy'
+import type { YearFieldsPolicy } from '../utils/year-policy'
 import type { ProgrammazionePayload } from './programmazioni.service'
 
 // ============================================
@@ -37,6 +40,8 @@ export interface ImportMappingConfig {
   rules?: Record<string, FieldRule>
   /** Colonna sorgente → transform applicato prima di coerce. */
   transforms?: Record<string, TransformName>
+  /** Slot anno semantici (rilascio / produzione). */
+  year_fields?: YearFieldsPolicy
 }
 
 export type ImportMappingStatus = 'not_configured' | 'incomplete' | 'configured'
@@ -313,6 +318,7 @@ export async function decideUploadPath(
 export interface ApplyMappingContext {
   campagnaProgrammazioneId: string
   emittenteId: string
+  emittenteName?: string | null
 }
 
 /**
@@ -331,6 +337,7 @@ export function applyMapping(
   context: ApplyMappingContext,
   rules?: Record<string, FieldRule>,
   transforms?: Record<string, TransformName>,
+  yearFields?: YearFieldsPolicy,
 ): ProgrammazionePayload[] {
   // Mappa inversa: campo template → colonna sorgente (l'ultima vince in caso di duplicati)
   const reverseMap: Record<string, string> = {}
@@ -393,6 +400,10 @@ export function applyMapping(
     // Default tipo se non mappato
     if (!payload.tipo) payload.tipo = ''
 
+    const yearPolicy =
+      yearFields ?? inferYearPolicyFromMapping(mapping, context.emittenteName)
+    mergeYearFieldsIntoPayload(payload, row, yearPolicy)
+
     applyEpisodeNormalizationToPayload(payload)
     result.push(payload as ProgrammazionePayload)
   }
@@ -403,6 +414,7 @@ export function applyMapping(
 export interface ApplyMappingV2Config {
   fields: Record<string, string>
   transforms: Record<string, TransformName>
+  year_fields?: YearFieldsPolicy
 }
 
 /**
@@ -457,6 +469,11 @@ export function applyMappingWithTransforms(
     }
     if (!payload.titolo) continue
     if (!payload.tipo) payload.tipo = ''
+
+    const yearPolicy =
+      config.year_fields ?? inferYearPolicyFromMapping(config.fields, context.emittenteName)
+    mergeYearFieldsIntoPayload(payload, row, yearPolicy)
+
     applyEpisodeNormalizationToPayload(payload)
     result.push(payload as ProgrammazionePayload)
   }

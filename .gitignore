@@ -78,6 +78,7 @@ Thumbs.db
 # Generated caches
 __pycache__/
 tsconfig.tsbuildinfo
+graphify-out/
 
 # Local scratch / cleanup scripts
 trash_rm_scripts/

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
+import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
 
 export interface FieldRule {
   sources: string[]
@@ -15,6 +16,7 @@ export interface ImportMappingConfig {
   mapping: Record<string, string>
   rules?: Record<string, FieldRule>
   transforms?: Record<string, string>
+  year_fields?: YearFieldsPolicy
 }
 
 export type UploadMappingSnapshot =
@@ -24,6 +26,7 @@ export type UploadMappingSnapshot =
 export interface ProgrammazioneImportContext {
   campagnaProgrammazioneId: string
   emittenteId: string
+  emittenteName?: string | null
 }
 
 export interface ProgrammazioneImportPayload {
@@ -144,6 +147,14 @@ function buildProgrammazionePayload(
   }
 
   applyEpisodeNormalizationToPayload(payload)
+
+  const yearPolicy = resolveYearPolicy(
+    snapshot.kind === 'apply_existing' ? snapshot.mapping.mapping ?? {} : {},
+    context.emittenteName,
+    snapshot.kind === 'apply_existing' ? snapshot.mapping.year_fields : null,
+  )
+  mergeYearFieldsIntoPayload(payload, row, yearPolicy)
+
   return payload as ProgrammazioneImportPayload
 }
 

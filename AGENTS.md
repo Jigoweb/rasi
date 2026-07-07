@@ -21,6 +21,17 @@ git branch --show-current
 
 Do not revert, delete or overwrite user changes. Do not delete branches or files without explicit approval.
 
+## Graphify Knowledge Graph
+
+This project is configured for Graphify in Cursor via `.cursor/rules/graphify.mdc`.
+
+- If `graphify-out/graph.json` exists, consult the graph before broad code exploration, architecture questions, impact analysis or cross-feature debugging.
+- Prefer `graphify query "<question>"` for open-ended questions, `graphify explain "<symbol-or-concept>"` for local context and `graphify path "<A>" "<B>"` for dependency or relationship paths.
+- Use `graphify-out/GRAPH_REPORT.md` for high-level orientation: graph freshness, community hubs, god nodes and surprising connections.
+- After code changes that affect structure, run `graphify update .` to refresh the AST graph. This is local and does not require an API key.
+- If `graphify-out/graph.json` is missing, build it with `graphify update .` when graph context would help; otherwise continue with the normal first-read and search workflow.
+- Do not commit `graphify-out/`; it is a generated local artifact.
+
 ## Boundaries
 
 - `src/app`: routing, layouts, pages and API entrypoints. Keep route files thin.

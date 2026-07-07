@@ -171,6 +171,7 @@ CREATE TABLE opere (
 
     -- Produzione
     anno_produzione                  INTEGER CHECK (anno_produzione >= 1900 AND anno_produzione <= 2030),
+    anno_produzione_fine             INTEGER CHECK (anno_produzione_fine IS NULL OR (anno_produzione_fine >= 1900 AND anno_produzione_fine <= 2030)),
     regista                          VARCHAR[],
 
     -- Serie TV
@@ -375,6 +376,13 @@ CREATE TABLE programmazioni (
     titolo_episodio_originale        TEXT,
     numero_stagione                  INTEGER,
     anno                             INTEGER,
+    anno_fine                        INTEGER,
+    anno_rilascio                    INTEGER,
+    anno_rilascio_fine               INTEGER,
+    anno_produzione                  INTEGER,
+    anno_produzione_fine             INTEGER,
+    anno_grezzo                      TEXT,
+    anno_semantica                   TEXT,
     production                       TEXT,
     regia                            TEXT,
     data_inizio                      DATE,
