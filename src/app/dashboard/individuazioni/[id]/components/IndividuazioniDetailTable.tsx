@@ -1,11 +1,12 @@
 'use client'
 
-import { Fragment } from 'react'
+import { Fragment, useMemo } from 'react'
 import Link from 'next/link'
-import { ArrowUpDown, Calendar, Film, Layers3, Loader2, RotateCcw, User } from 'lucide-react'
+import { ArrowUpDown, Calendar, Film, Layers3, Loader2, RotateCcw, User, X } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll'
 import {
@@ -28,6 +29,7 @@ import type {
   IndividuazioneGroupBy,
   IndividuazioneSortBy,
   IndividuazioneSortDirection,
+  IndividuazioneStatus,
 } from '@/features/individuazioni/services/individuazioni.service'
 
 interface IndividuazioniDetailTableProps {
@@ -44,6 +46,10 @@ interface IndividuazioniDetailTableProps {
   onGroupByChange?: (value: IndividuazioneGroupBy) => void
   onLoadMore: () => void
   onRowClick?: (individuazione: Individuazione) => void
+  canReview?: boolean
+  selectedIds?: Set<string>
+  onSelectionChange?: (ids: Set<string>) => void
+  onBulkStatusRequest?: (stato: IndividuazioneStatus) => void
 }
 
 export default function IndividuazioniDetailTable({
@@ -60,6 +66,10 @@ export default function IndividuazioniDetailTable({
   onGroupByChange,
   onLoadMore,
   onRowClick,
+  canReview = false,
+  selectedIds,
+  onSelectionChange,
+  onBulkStatusRequest,
 }: IndividuazioniDetailTableProps) {
   const loadMoreRef = useInfiniteScroll<HTMLDivElement>({
     enabled: hasMore,
@@ -70,6 +80,38 @@ export default function IndividuazioniDetailTable({
   const matchSortDirection = sortBy === 'punteggio_matching' ? sortDirection : 'asc'
   const nextMatchSortDirection: IndividuazioneSortDirection = matchSortDirection === 'asc' ? 'desc' : 'asc'
   const hasCustomTableView = sortBy !== 'review_priority' || sortDirection !== 'asc' || groupBy !== 'none'
+  const selectionEnabled = canReview && !!selectedIds && !!onSelectionChange
+  const visibleIds = useMemo(() => individuazioni.map(item => item.id), [individuazioni])
+  const selectedVisibleCount = useMemo(
+    () => visibleIds.filter(id => selectedIds?.has(id)).length,
+    [selectedIds, visibleIds]
+  )
+  const allVisibleSelected = selectionEnabled && visibleIds.length > 0 && selectedVisibleCount === visibleIds.length
+
+  function toggleRowSelection(id: string, checked: boolean) {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (checked) next.add(id)
+    else next.delete(id)
+    onSelectionChange(next)
+  }
+
+  function toggleSelectAllVisible(checked: boolean) {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (checked) {
+      visibleIds.forEach(id => next.add(id))
+    } else {
+      visibleIds.forEach(id => next.delete(id))
+    }
+    onSelectionChange(next)
+  }
+
+  function clearSelection() {
+    onSelectionChange?.(new Set())
+  }
+
+  const tableColSpan = selectionEnabled ? 10 : 9
 
   return (
     <Card>
@@ -113,10 +155,40 @@ export default function IndividuazioniDetailTable({
             {groupBy !== 'none' && <Badge variant="outline">Gruppo: {getGroupLabel(groupBy)}</Badge>}
           </div>
         </div>
+
+        {selectionEnabled && selectedIds && selectedIds.size > 0 && (
+          <div className="border-b bg-muted/30 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium">
+              {selectedIds.size} selezionate
+              {selectedVisibleCount < selectedIds.size && (
+                <span className="text-muted-foreground font-normal"> ({selectedVisibleCount} visibili)</span>
+              )}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => onBulkStatusRequest?.('validato')}>Valida</Button>
+              <Button size="sm" variant="secondary" onClick={() => onBulkStatusRequest?.('dubbioso')}>In revisione</Button>
+              <Button size="sm" variant="destructive" onClick={() => onBulkStatusRequest?.('respinto')}>Respinto</Button>
+              <Button size="sm" variant="ghost" onClick={clearSelection}>
+                <X className="h-4 w-4 mr-1" />
+                Deseleziona
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
+                {selectionEnabled && (
+                  <TableHead className="w-10 px-4">
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onCheckedChange={checked => toggleSelectAllVisible(checked === true)}
+                      aria-label="Seleziona tutte le righe visibili"
+                    />
+                  </TableHead>
+                )}
                 <TableHead className="py-4 px-6">Data</TableHead>
                 <TableHead className="py-4">Orario</TableHead>
                 <TableHead className="py-4">Titolo Programmazione</TableHead>
@@ -145,13 +217,13 @@ export default function IndividuazioniDetailTable({
             <TableBody>
               {loadingData && individuazioni.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center">
+                  <TableCell colSpan={tableColSpan} className="h-32 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
               ) : individuazioni.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-32 text-center">
+                  <TableCell colSpan={tableColSpan} className="h-32 text-center">
                     <div className="mx-auto max-w-sm space-y-1">
                       <p className="font-medium text-foreground">
                         {searchTerm ? 'Nessuna individuazione trovata' : 'Nessuna individuazione da mostrare'}
@@ -169,13 +241,20 @@ export default function IndividuazioniDetailTable({
                   <Fragment key={group.key}>
                     {groupBy !== 'none' && (
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
-                        <TableCell colSpan={9} className="px-6 py-3 text-sm font-semibold text-muted-foreground">
+                        <TableCell colSpan={tableColSpan} className="px-6 py-3 text-sm font-semibold text-muted-foreground">
                           {group.label} <span className="font-normal">({formatNumber(group.rows.length)})</span>
                         </TableCell>
                       </TableRow>
                     )}
                     {group.rows.map(ind => (
-                      <IndividuazioneRow key={ind.id} individuazione={ind} onRowClick={onRowClick} />
+                      <IndividuazioneRow
+                        key={ind.id}
+                        individuazione={ind}
+                        onRowClick={onRowClick}
+                        selectionEnabled={selectionEnabled}
+                        selected={selectedIds?.has(ind.id) ?? false}
+                        onSelectionChange={checked => toggleRowSelection(ind.id, checked)}
+                      />
                     ))}
                   </Fragment>
                 ))
@@ -212,9 +291,15 @@ export default function IndividuazioniDetailTable({
 function IndividuazioneRow({
   individuazione: ind,
   onRowClick,
+  selectionEnabled = false,
+  selected = false,
+  onSelectionChange,
 }: {
   individuazione: Individuazione
   onRowClick?: (individuazione: Individuazione) => void
+  selectionEnabled?: boolean
+  selected?: boolean
+  onSelectionChange?: (checked: boolean) => void
 }) {
   const artistaDisplay = getArtistaDisplay(ind)
   const operaDisplay = ind.opere?.titolo || '-'
@@ -234,6 +319,15 @@ function IndividuazioneRow({
       tabIndex={onRowClick ? 0 : undefined}
       aria-label={onRowClick ? `Apri revisione per ${ind.titolo || 'individuazione'}` : undefined}
     >
+      {selectionEnabled && (
+        <TableCell className="px-4 py-4" onClick={event => event.stopPropagation()}>
+          <Checkbox
+            checked={selected}
+            onCheckedChange={checked => onSelectionChange?.(checked === true)}
+            aria-label={`Seleziona ${ind.titolo || 'individuazione'}`}
+          />
+        </TableCell>
+      )}
       <TableCell className="py-4 px-6">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />

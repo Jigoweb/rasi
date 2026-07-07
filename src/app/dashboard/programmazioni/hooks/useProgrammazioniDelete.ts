@@ -5,6 +5,7 @@ import {
   type CampagnaProgrammazione,
   type DeleteCampagnaProgrammazioneInfo,
 } from '@/features/programmazioni/services/programmazioni.service'
+import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
 interface UseProgrammazioniDeleteOptions {
   updateCampagne: Dispatch<SetStateAction<CampagnaProgrammazione[]>>
@@ -29,6 +30,7 @@ export function useProgrammazioniDelete({ updateCampagne }: UseProgrammazioniDel
       setDeleteInfo(data)
     } catch (error) {
       console.error('Error loading delete info:', error)
+      notifyError('Impossibile caricare i dettagli di eliminazione', error)
     } finally {
       setIsLoadingDeleteInfo(false)
     }
@@ -52,7 +54,7 @@ export function useProgrammazioniDelete({ updateCampagne }: UseProgrammazioniDel
       const { error, blocked, blockReason } = await deleteCampagnaProgrammazione(campagnaToDelete.id)
 
       if (blocked) {
-        alert(blockReason)
+        notifyError('Eliminazione bloccata', blockReason)
         updateCampagne(prev => prev.map(c => (
           c.id === campagnaToDelete.id ? { ...c, stato: 'error' } : c
         )))
@@ -63,9 +65,10 @@ export function useProgrammazioniDelete({ updateCampagne }: UseProgrammazioniDel
 
       updateCampagne(prev => prev.filter(c => c.id !== campagnaToDelete.id))
       closeDeleteDialog()
+      notifySuccess('Campagna eliminata')
     } catch (error) {
       console.error('Error deleting campagna:', error)
-      alert('Errore durante l\'eliminazione della campagna')
+      notifyError('Eliminazione campagna non riuscita', error)
       updateCampagne(prev => prev.map(c => (
         c.id === campagnaToDelete.id ? { ...c, stato: 'error' } : c
       )))

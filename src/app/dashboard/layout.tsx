@@ -5,6 +5,7 @@ import { IndividuazioneProcessProvider } from '@/shared/contexts/individuazione-
 import { ExportProcessProvider } from '@/shared/contexts/export-process-context'
 import { FloatingProgressIndicator, IndividuazioneProgressDialog, FloatingInterruptedIndicator } from '@/shared/components/individuazione-progress-indicator'
 import { FloatingExportIndicator, ExportProgressDialog } from '@/shared/components/export-progress-indicator'
+import { Toaster } from '@/shared/components/ui/sonner'
 import { Button } from '@/shared/components/ui/button'
 import { Separator } from '@/shared/components/ui/separator'
 import { Badge } from '@/shared/components/ui/badge'
@@ -276,6 +277,7 @@ export default function DashboardLayout({
       {/* Global Export Process Components */}
       <FloatingExportIndicator />
       <ExportProgressDialog />
+      <Toaster richColors position="top-right" />
     </div>
       </ExportProcessProvider>
     </IndividuazioneProcessProvider>

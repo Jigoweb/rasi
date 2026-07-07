@@ -45,6 +45,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Search, Plus, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp } from 'lucide-react'
+import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
 type ImportRow = Record<string, unknown>
 type ArtistOption = {
@@ -273,6 +274,7 @@ export default function ProgrammazioniPage() {
       setSelectedArtistIds(new Set(artists.map(artist => artist.id)))
     } catch (error) {
       console.error('Errore caricamento artisti:', error)
+      notifyError('Impossibile caricare gli artisti', error)
     } finally {
       setLoadingArtists(false)
     }
@@ -290,6 +292,7 @@ export default function ProgrammazioniPage() {
       setProcessingProgressMap(prev => ({ ...prev, [campagnaId]: data }))
     } catch (error) {
       console.error('Error fetching processing progress:', error)
+      notifyError('Impossibile caricare l\'avanzamento', error)
     } finally {
       setLoadingProgressMap(prev => ({ ...prev, [campagnaId]: false }))
     }
@@ -348,9 +351,7 @@ export default function ProgrammazioniPage() {
           c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'individuata' } : c
         ))
       } else {
-        setCampagne(prev => prev.map(c => 
-          c.id === campagnaForIndividuazioni.id ? { ...c, stato: 'in_review' } : c
-        ))
+        fetchCampagne()
     }
 
     setCampagnaForIndividuazioni(null)
@@ -413,9 +414,10 @@ export default function ProgrammazioniPage() {
       await fetchCampagne()
       setSelectedCampagna((data as unknown) as CampagnaProgrammazione)
       setNewProgrammazioneStep(2)
+      notifySuccess('Campagna creata', 'Puoi procedere con il caricamento dei dati.')
     } catch (error) {
       console.error('Error creating campagna:', error)
-      // In a real app we would show a toast here
+      notifyError('Creazione campagna non riuscita', error)
     } finally {
       setIsSubmitting(false)
     }
@@ -463,8 +465,10 @@ export default function ProgrammazioniPage() {
           : campagna
       )))
       setCampagnaToEdit(null)
+      notifySuccess('Dettagli campagna aggiornati')
     } catch (error) {
       console.error('Error updating campagna metadata:', error)
+      notifyError('Salvataggio dettagli non riuscito', error)
     } finally {
       setIsSavingMetadata(false)
     }
@@ -551,6 +555,7 @@ export default function ProgrammazioniPage() {
       if (snapshot.error && snapshot.campagne.length === 0) {
         const errorMessage = getErrorMessage(snapshot.error)
         console.error('Error fetching campagne:', errorMessage, snapshot.error)
+        notifyError('Impossibile caricare le programmazioni', snapshot.error)
         setCampagne([])
         return
       }
@@ -584,6 +589,7 @@ export default function ProgrammazioniPage() {
         ? JSON.stringify(error)
         : String(error)
       console.error('Error fetching campagne:', errorMessage, error)
+      notifyError('Impossibile caricare le programmazioni', error)
       setCampagne([])
     } finally {
       setLoading(false)

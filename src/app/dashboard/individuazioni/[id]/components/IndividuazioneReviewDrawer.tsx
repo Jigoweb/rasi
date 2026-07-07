@@ -19,14 +19,12 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
 } from '@/shared/components/ui/sheet'
 import { Textarea } from '@/shared/components/ui/textarea'
 import {
   getIndividuazioneReviewDetail,
-  updateIndividuazioneStatus,
   type Individuazione,
   type IndividuazioneReviewDetail,
   type IndividuazioneStatus,
@@ -39,18 +37,19 @@ import {
 import {
   getMatchScoreBand,
   getMatchScoreBandLabel,
-  getStatusDisplay,
   normalizeMatchScore,
 } from '@/features/individuazioni/utils/individuazioni-detail'
+import IndividuazioneStatusDropdown from './IndividuazioneStatusDropdown'
 
 interface IndividuazioneReviewDrawerProps {
   open: boolean
   individuazioni: Individuazione[]
   selectedId: string | null
   canReview: boolean
+  isSubmitting?: boolean
   onOpenChange: (open: boolean) => void
   onNavigate: (id: string) => void
-  onStatusUpdated: (individuazione: Individuazione) => void
+  onRequestStatusChange: (stato: IndividuazioneStatus, note: string) => void
 }
 
 export default function IndividuazioneReviewDrawer({
@@ -58,25 +57,26 @@ export default function IndividuazioneReviewDrawer({
   individuazioni,
   selectedId,
   canReview,
+  isSubmitting = false,
   onOpenChange,
   onNavigate,
-  onStatusUpdated,
+  onRequestStatusChange,
 }: IndividuazioneReviewDrawerProps) {
   const [detail, setDetail] = useState<IndividuazioneReviewDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [noteValidazione, setNoteValidazione] = useState('')
-  const [savingStatus, setSavingStatus] = useState<IndividuazioneStatus | null>(null)
 
   const selectedIndex = useMemo(
     () => individuazioni.findIndex(item => item.id === selectedId),
     [individuazioni, selectedId]
   )
-  const selectedIndividuazione = selectedIndex >= 0 ? individuazioni[selectedIndex] : null
   const previousId = selectedIndex > 0 ? individuazioni[selectedIndex - 1]?.id ?? null : null
   const nextId = selectedIndex >= 0 && selectedIndex < individuazioni.length - 1
     ? individuazioni[selectedIndex + 1]?.id ?? null
     : null
+  const selectedIndividuazione = selectedIndex >= 0 ? individuazioni[selectedIndex] : null
+  const individuazione = detail?.individuazione ?? selectedIndividuazione
 
   useEffect(() => {
     if (!open || !selectedId) {
@@ -91,6 +91,7 @@ export default function IndividuazioneReviewDrawer({
     async function loadDetail() {
       setLoadingDetail(true)
       setDetailError(null)
+      setDetail(null)
       try {
         const { data, error } = await getIndividuazioneReviewDetail(individuazioneId)
         if (cancelled) return
@@ -118,7 +119,45 @@ export default function IndividuazioneReviewDrawer({
     }
   }, [open, selectedId])
 
-  const individuazione = detail?.individuazione ?? selectedIndividuazione
+  useEffect(() => {
+    if (!open || !canReview || !individuazione || isSubmitting) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target
+      if (
+        target instanceof HTMLTextAreaElement
+        || target instanceof HTMLInputElement
+        || (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
+
+      if (event.key === 'ArrowLeft' && previousId) {
+        event.preventDefault()
+        onNavigate(previousId)
+        return
+      }
+
+      if (event.key === 'ArrowRight' && nextId) {
+        event.preventDefault()
+        onNavigate(nextId)
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      if (key === 'v') {
+        event.preventDefault()
+        onRequestStatusChange('validato', noteValidazione)
+      } else if (key === 'r') {
+        event.preventDefault()
+        onRequestStatusChange('respinto', noteValidazione)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [canReview, individuazione, isSubmitting, nextId, noteValidazione, onNavigate, onRequestStatusChange, open, previousId])
+
   const reviewContext = useMemo(() => {
     if (!individuazione) return null
     return buildMatchingReviewContext({
@@ -152,30 +191,6 @@ export default function IndividuazioneReviewDrawer({
     })
   }, [detail, individuazione])
 
-  async function handleStatusChange(stato: IndividuazioneStatus) {
-    if (!individuazione || !canReview) return
-
-    setSavingStatus(stato)
-    try {
-      const { data, error } = await updateIndividuazioneStatus(
-        individuazione.id,
-        stato,
-        noteValidazione
-      )
-      if (error || !data) {
-        setDetailError('Aggiornamento stato non riuscito.')
-        return
-      }
-      onStatusUpdated(data)
-      onOpenChange(false)
-    } catch {
-      setDetailError('Aggiornamento stato non riuscito.')
-    } finally {
-      setSavingStatus(null)
-    }
-  }
-
-  const statusDisplay = getStatusDisplay(individuazione?.stato)
   const matchPercent = individuazione ? Math.round(normalizeMatchScore(individuazione.punteggio_matching)) : 0
   const artistaDisplay = getArtistaDisplay(individuazione)
   const operaDisplay = detail?.opera?.titolo || individuazione?.opere?.titolo || '-'
@@ -185,7 +200,7 @@ export default function IndividuazioneReviewDrawer({
       <SheetContent side="right" className="w-full gap-0 overflow-y-auto p-0 sm:max-w-2xl">
         <SheetHeader className="border-b">
           <div className="flex items-start justify-between gap-3 pr-8">
-            <div className="space-y-1">
+            <div className="min-w-0 space-y-1">
               <SheetTitle className="text-left text-lg">
                 {individuazione?.titolo || 'Revisione individuazione'}
               </SheetTitle>
@@ -193,11 +208,20 @@ export default function IndividuazioneReviewDrawer({
                 Verifica rapida del match proposto e dei segnali rilevanti
               </SheetDescription>
             </div>
-            {selectedIndex >= 0 && (
-              <Badge variant="outline" className="shrink-0">
-                {selectedIndex + 1} / {individuazioni.length}
-              </Badge>
-            )}
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              {selectedIndex >= 0 && (
+                <Badge variant="outline">
+                  {selectedIndex + 1} / {individuazioni.length}
+                </Badge>
+              )}
+              {canReview && individuazione && (
+                <IndividuazioneStatusDropdown
+                  stato={individuazione.stato}
+                  saving={isSubmitting}
+                  onSelectStatus={stato => onRequestStatusChange(stato, noteValidazione)}
+                />
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-2 pt-2">
@@ -224,10 +248,9 @@ export default function IndividuazioneReviewDrawer({
               </Button>
             </div>
             {individuazione && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className={getStatusBadgeClass(statusDisplay.tone)}>{statusDisplay.label}</Badge>
-                <Badge variant="secondary">{matchPercent}% · {getMatchScoreBandLabelFromScore(individuazione.punteggio_matching)}</Badge>
-              </div>
+              <Badge variant="secondary">
+                {matchPercent}% · {getMatchScoreBandLabelFromScore(individuazione.punteggio_matching)}
+              </Badge>
             )}
           </div>
         </SheetHeader>
@@ -241,6 +264,24 @@ export default function IndividuazioneReviewDrawer({
             <p className="text-sm text-destructive">{detailError}</p>
           ) : individuazione && reviewContext ? (
             <>
+              {canReview && (
+                <section className="space-y-2 rounded-lg border bg-muted/20 p-3">
+                  <label htmlFor="note-validazione" className="text-sm font-medium">
+                    Note validazione
+                  </label>
+                  <Textarea
+                    id="note-validazione"
+                    value={noteValidazione}
+                    onChange={event => setNoteValidazione(event.target.value)}
+                    placeholder="Opzionale. Consigliata in caso di respinto."
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Cambia stato dal menu in alto a destra. Scorciatoie: <kbd className="rounded border px-1">V</kbd> valida, <kbd className="rounded border px-1">R</kbd> respinto.
+                  </p>
+                </section>
+              )}
+
               {reviewContext.scoreSummary && (
                 <div className="rounded-lg border bg-muted/20 px-4 py-3 text-sm">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -331,56 +372,6 @@ export default function IndividuazioneReviewDrawer({
             </>
           ) : null}
         </div>
-
-        {canReview && individuazione && (
-          <SheetFooter className="border-t bg-background">
-            <div className="w-full space-y-3">
-              <div className="space-y-2">
-                <label htmlFor="note-validazione" className="text-sm font-medium">
-                  Note validazione
-                </label>
-                <Textarea
-                  id="note-validazione"
-                  value={noteValidazione}
-                  onChange={event => setNoteValidazione(event.target.value)}
-                  placeholder="Opzionale. Consigliata in caso di respinto."
-                  rows={3}
-                />
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                <Button
-                  type="button"
-                  className="sm:flex-1"
-                  disabled={!!savingStatus}
-                  onClick={() => handleStatusChange('validato')}
-                >
-                  {savingStatus === 'validato' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Valida
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="sm:flex-1"
-                  disabled={!!savingStatus}
-                  onClick={() => handleStatusChange('dubbioso')}
-                >
-                  {savingStatus === 'dubbioso' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  In revisione
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="sm:flex-1"
-                  disabled={!!savingStatus}
-                  onClick={() => handleStatusChange('respinto')}
-                >
-                  {savingStatus === 'respinto' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Respinto
-                </Button>
-              </div>
-            </div>
-          </SheetFooter>
-        )}
       </SheetContent>
     </Sheet>
   )
@@ -481,21 +472,6 @@ function getArtistaDisplay(individuazione: Individuazione | null | undefined) {
   const nome = individuazione.artisti.nome_arte
     || `${individuazione.artisti.nome} ${individuazione.artisti.cognome}`.trim()
   return nome || '-'
-}
-
-function getStatusBadgeClass(tone: 'blue' | 'green' | 'red' | 'yellow' | 'muted') {
-  switch (tone) {
-    case 'green':
-      return 'bg-green-100 text-green-800 border-green-200'
-    case 'blue':
-      return 'bg-blue-100 text-blue-800 border-blue-200'
-    case 'red':
-      return 'bg-red-100 text-red-800 border-red-200'
-    case 'yellow':
-      return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-    default:
-      return ''
-  }
 }
 
 function getMatchScoreBandLabelFromScore(score: number) {

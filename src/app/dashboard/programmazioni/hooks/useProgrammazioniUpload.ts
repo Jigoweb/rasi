@@ -24,6 +24,7 @@ import {
   type UploadJobSnapshot,
   uploadProgrammazioniFileToStorage,
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
+import { getErrorMessage, notifyError } from '@/shared/lib/toast'
 import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 
 type ImportRow = Record<string, unknown>
@@ -197,7 +198,7 @@ export function useProgrammazioniUpload({
       }
     } catch (error) {
       console.error('Error uploading file:', error)
-      alert(error instanceof Error ? error.message : 'Errore durante la lettura del file.')
+      notifyError('Lettura file non riuscita', error)
     } finally {
       setIsPreparingUpload(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -336,6 +337,7 @@ export function useProgrammazioniUpload({
       const errorMessage = getErrorMessage(error)
       console.error('Error uploading database:', errorMessage, error)
       setUploadError(errorMessage)
+      notifyError('Caricamento dati non riuscito', error)
       await updateCampagnaStatus(campagna.id, 'error')
       updateCampagne(prev => prev.map(c => (
         c.id === campagna.id ? { ...c, stato: 'error', last_error: errorMessage } : c
@@ -376,16 +378,4 @@ export function useProgrammazioniUpload({
     updateMappingFromWarning,
     handleUploadDatabase,
   }
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (error && typeof error === 'object') {
-    const details = (error as { details?: unknown }).details
-    if (typeof details === 'string') return details
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string') return message
-    return JSON.stringify(error)
-  }
-  return String(error)
 }

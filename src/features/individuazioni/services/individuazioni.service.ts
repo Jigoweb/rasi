@@ -1,4 +1,5 @@
 import { supabase } from '@/shared/lib/supabase'
+import { normalizeIndividuazioneRow } from './individuazioni-review.shared'
 import {
   normalizeIndividuazioneDetailStats,
   normalizeIndividuazioneStatus,
@@ -481,14 +482,6 @@ export const updateIndividuazioneStatus = async (
   } catch (error) {
     return { data: null, error }
   }
-}
-
-function normalizeIndividuazioneRow(row: Individuazione): Individuazione {
-  const { episodi: _episodi, programmazioni: _programmazioni, ...individuazione } = row as Individuazione & {
-    episodi?: unknown
-    programmazioni?: unknown
-  }
-  return individuazione
 }
 
 function normalizeSingleRelation<T>(value: T | T[] | null | undefined): T | null {

@@ -25,6 +25,7 @@ import { useExportProcess } from '@/shared/contexts/export-process-context'
 import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -210,6 +211,7 @@ export default function OperePage() {
       setOpere(data || [])
     } catch (error) {
       console.error('Error fetching opere:', error)
+      notifyError('Impossibile caricare le opere', error)
     } finally {
       setLoading(false)
       setIsSearching(false)
@@ -412,6 +414,7 @@ export default function OperePage() {
     const { data: indData, error: indError } = await getIndividuazioniByOperaId(opera.id)
     if (indError) {
       console.error('Error checking individuazioni:', indError)
+      notifyError('Impossibile verificare le individuazioni collegate', indError)
       setDeleteCheckStatus('can_delete')
       return
     }
@@ -430,6 +433,7 @@ export default function OperePage() {
       const { error: indError } = await deleteIndividuazioniByOperaId(operaToDelete.id)
       if (indError) {
         console.error('Error deleting individuazioni:', indError)
+        notifyError('Eliminazione individuazioni collegate non riuscita', indError)
         setIsDeleting(false)
         return
       }
@@ -439,9 +443,12 @@ export default function OperePage() {
 
     if (error) {
       console.error('Error deleting opera:', error)
+      notifyError('Eliminazione opera non riuscita', error)
       setIsDeleting(false)
       return
     }
+
+    notifySuccess('Opera eliminata')
 
     // Refresh list and close dialog
     await fetchOpere()

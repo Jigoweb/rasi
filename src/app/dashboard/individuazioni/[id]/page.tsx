@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Download, Edit, Loader2, Search } from 'lucide-react'
@@ -18,12 +18,32 @@ import {
   type Individuazione,
   type IndividuazioneDetailStats,
   type IndividuazioneEpisodeAlertSummary,
+  type IndividuazioneStatus,
   type SearchField,
 } from '@/features/individuazioni/services/individuazioni.service'
+import {
+  updateIndividuazioniByIds,
+  updateIndividuazioniByScope,
+  type IndividuazioneScopeContext,
+} from '@/features/individuazioni/services/individuazioni-review.service'
+import { getNextIndividuazioneId, getReviewStatusSuccessMessage } from '@/features/individuazioni/utils/review-queue'
+import { toReviewScope, type ReviewScopeChoice } from '@/features/individuazioni/utils/review-scope'
 import ExportIndividuazioniDialog from './components/ExportIndividuazioniDialog'
 import IndividuazioneReviewDrawer from './components/IndividuazioneReviewDrawer'
+import IndividuazioneStatusConfirmDialog, {
+  type IndividuazioneStatusConfirmMode,
+} from './components/IndividuazioneStatusConfirmDialog'
 import IndividuazioniDetailTable from './components/IndividuazioniDetailTable'
 import { useIndividuazioneDetail } from './hooks/useIndividuazioneDetail'
+import { notifyError, notifyInfo, notifySuccess } from '@/shared/lib/toast'
+
+type PendingStatusAction = {
+  source: 'drawer' | 'bulk'
+  stato: IndividuazioneStatus
+  note: string
+  individuazioneId?: string
+  bulkIds?: string[]
+}
 
 export default function IndividuazioneDetailPage() {
   const params = useParams()
@@ -33,6 +53,10 @@ export default function IndividuazioneDetailPage() {
   const [isSavingMetadata, setIsSavingMetadata] = useState(false)
   const [reviewDrawerOpen, setReviewDrawerOpen] = useState(false)
   const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [statusConfirmOpen, setStatusConfirmOpen] = useState(false)
+  const [pendingStatusAction, setPendingStatusAction] = useState<PendingStatusAction | null>(null)
+  const [isSubmittingStatus, setIsSubmittingStatus] = useState(false)
   const { isAdmin, isOperatore } = useAuth()
   const canReviewIndividuazioni = isAdmin || isOperatore
   const {
@@ -70,18 +94,130 @@ export default function IndividuazioneDetailPage() {
     handleConfirmExport,
     loadMore,
     refreshDetailStats,
-    updateIndividuazioneInList,
+    updateIndividuazioniInList,
   } = useIndividuazioneDetail(campagnaId)
+
+  const confirmMode = useMemo((): IndividuazioneStatusConfirmMode | null => {
+    if (!pendingStatusAction) return null
+
+    if (pendingStatusAction.source === 'bulk' && pendingStatusAction.bulkIds) {
+      return { type: 'bulk', count: pendingStatusAction.bulkIds.length }
+    }
+
+    if (pendingStatusAction.source === 'drawer' && pendingStatusAction.individuazioneId) {
+      const individuazione = individuazioni.find(item => item.id === pendingStatusAction.individuazioneId)
+      if (!individuazione) return null
+      return {
+        type: 'scoped',
+        context: buildScopeContext(campagnaId, individuazione),
+      }
+    }
+
+    return null
+  }, [campagnaId, individuazioni, pendingStatusAction])
 
   const handleRowClick = useCallback((individuazione: Individuazione) => {
     setSelectedReviewId(individuazione.id)
     setReviewDrawerOpen(true)
   }, [])
 
-  const handleReviewStatusUpdated = useCallback((updated: Individuazione) => {
-    updateIndividuazioneInList(updated)
-    void refreshDetailStats()
-  }, [refreshDetailStats, updateIndividuazioneInList])
+  const handleRequestDrawerStatusChange = useCallback((stato: IndividuazioneStatus, note: string) => {
+    if (!selectedReviewId) return
+    setPendingStatusAction({
+      source: 'drawer',
+      stato,
+      note,
+      individuazioneId: selectedReviewId,
+    })
+    setStatusConfirmOpen(true)
+  }, [selectedReviewId])
+
+  const handleBulkStatusRequest = useCallback((stato: IndividuazioneStatus) => {
+    const bulkIds = Array.from(selectedIds)
+    if (bulkIds.length === 0) return
+    setPendingStatusAction({
+      source: 'bulk',
+      stato,
+      note: '',
+      bulkIds,
+    })
+    setStatusConfirmOpen(true)
+  }, [selectedIds])
+
+  const handleConfirmStatusUpdate = useCallback(async ({
+    scopeChoice,
+    note,
+  }: {
+    scopeChoice: ReviewScopeChoice | null
+    note: string
+  }) => {
+    if (!pendingStatusAction) return
+
+    setIsSubmittingStatus(true)
+    try {
+      let updatedRows: Individuazione[] = []
+
+      if (pendingStatusAction.source === 'bulk' && pendingStatusAction.bulkIds) {
+        const { data, error } = await updateIndividuazioniByIds(
+          pendingStatusAction.bulkIds,
+          pendingStatusAction.stato,
+          note
+        )
+        if (error || data.length === 0) {
+          notifyError('Aggiornamento bulk non riuscito', error)
+          return
+        }
+        updatedRows = data
+      } else if (pendingStatusAction.individuazioneId && scopeChoice) {
+        const individuazione = individuazioni.find(item => item.id === pendingStatusAction.individuazioneId)
+        if (!individuazione) {
+          notifyError('Individuazione non trovata')
+          return
+        }
+
+        const { data, error } = await updateIndividuazioniByScope(
+          buildScopeContext(campagnaId, individuazione),
+          toReviewScope(scopeChoice),
+          pendingStatusAction.stato,
+          note
+        )
+        if (error || data.length === 0) {
+          notifyError('Aggiornamento stato non riuscito', error)
+          return
+        }
+        updatedRows = data
+      }
+
+      updateIndividuazioniInList(updatedRows)
+      void refreshDetailStats()
+      notifySuccess(
+        getReviewStatusSuccessMessage(pendingStatusAction.stato),
+        updatedRows.length === 1
+          ? undefined
+          : `${updatedRows.length} individuazioni aggiornate`
+      )
+
+      if (pendingStatusAction.source === 'drawer' && pendingStatusAction.individuazioneId) {
+        const upcomingId = getNextIndividuazioneId(individuazioni, pendingStatusAction.individuazioneId)
+        if (upcomingId) {
+          setSelectedReviewId(upcomingId)
+        } else {
+          notifyInfo('Fine lista corrente', 'Carica altre righe o chiudi il pannello di revisione.')
+        }
+      }
+
+      if (pendingStatusAction.source === 'bulk') {
+        setSelectedIds(new Set())
+      }
+
+      setStatusConfirmOpen(false)
+      setPendingStatusAction(null)
+    } catch (error) {
+      notifyError('Aggiornamento stato non riuscito', error)
+    } finally {
+      setIsSubmittingStatus(false)
+    }
+  }, [campagnaId, individuazioni, pendingStatusAction, refreshDetailStats, updateIndividuazioniInList])
 
   function openEditDialog() {
     if (!campagna) return
@@ -112,8 +248,10 @@ export default function IndividuazioneDetailPage() {
         descrizione: editDraft.descrizione.trim() || null,
       })
       setIsEditDialogOpen(false)
+      notifySuccess('Dettagli individuazione aggiornati')
     } catch (error) {
       console.error('Errore aggiornamento individuazione:', error)
+      notifyError('Salvataggio dettagli non riuscito', error)
     } finally {
       setIsSavingMetadata(false)
     }
@@ -251,6 +389,10 @@ export default function IndividuazioneDetailPage() {
         onGroupByChange={handleGroupByChange}
         onLoadMore={loadMore}
         onRowClick={handleRowClick}
+        canReview={canReviewIndividuazioni}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        onBulkStatusRequest={handleBulkStatusRequest}
       />
 
       <IndividuazioneReviewDrawer
@@ -258,9 +400,23 @@ export default function IndividuazioneDetailPage() {
         individuazioni={individuazioni}
         selectedId={selectedReviewId}
         canReview={canReviewIndividuazioni}
+        isSubmitting={isSubmittingStatus}
         onOpenChange={setReviewDrawerOpen}
         onNavigate={setSelectedReviewId}
-        onStatusUpdated={handleReviewStatusUpdated}
+        onRequestStatusChange={handleRequestDrawerStatusChange}
+      />
+
+      <IndividuazioneStatusConfirmDialog
+        open={statusConfirmOpen}
+        mode={confirmMode}
+        targetStatus={pendingStatusAction?.stato ?? null}
+        initialNote={pendingStatusAction?.note ?? ''}
+        isSubmitting={isSubmittingStatus}
+        onOpenChange={open => {
+          setStatusConfirmOpen(open)
+          if (!open) setPendingStatusAction(null)
+        }}
+        onConfirm={handleConfirmStatusUpdate}
       />
 
       <FloatingScrollUpButton />
@@ -467,4 +623,24 @@ function getSearchPlaceholder(searchField: SearchField): string {
     case 'opera':
       return 'Cerca per titolo opera...'
   }
+}
+
+function buildScopeContext(campagnaId: string, individuazione: Individuazione): IndividuazioneScopeContext {
+  return {
+    campagnaId,
+    individuazioneId: individuazione.id,
+    operaId: individuazione.opera_id,
+    artistaId: individuazione.artista_id,
+    ruoloId: individuazione.ruolo_id,
+    operaTitolo: individuazione.opere?.titolo || 'Opera',
+    artistaDisplay: getArtistaDisplayFromIndividuazione(individuazione),
+    ruoloNome: individuazione.ruoli_tipologie?.nome || 'Ruolo',
+  }
+}
+
+function getArtistaDisplayFromIndividuazione(individuazione: Individuazione) {
+  if (!individuazione.artisti) return 'Artista'
+  return individuazione.artisti.nome_arte
+    || `${individuazione.artisti.nome} ${individuazione.artisti.cognome}`.trim()
+    || 'Artista'
 }

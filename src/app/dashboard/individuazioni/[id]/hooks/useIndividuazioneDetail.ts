@@ -274,6 +274,12 @@ export function useIndividuazioneDetail(campagnaId: string) {
     setIndividuazioni(prev => prev.map(item => item.id === updated.id ? updated : item))
   }, [])
 
+  const updateIndividuazioniInList = useCallback((updatedRows: Individuazione[]) => {
+    if (updatedRows.length === 0) return
+    const byId = new Map(updatedRows.map(row => [row.id, row]))
+    setIndividuazioni(prev => prev.map(item => byId.get(item.id) ?? item))
+  }, [])
+
   function resetIndividuazioni() {
     setIndividuazioni([])
     setTotalPages(0)
@@ -320,6 +326,7 @@ export function useIndividuazioneDetail(campagnaId: string) {
     handleConfirmExport,
     refreshDetailStats,
     updateIndividuazioneInList,
+    updateIndividuazioniInList,
   }
 }
 
