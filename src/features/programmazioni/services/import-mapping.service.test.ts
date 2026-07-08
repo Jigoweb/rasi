@@ -438,3 +438,33 @@ describe('reconcileImportMappingColumns', () => {
     })
   })
 })
+
+describe('applyMapping absent-data normalization', () => {
+  const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
+
+  it('drops fields whose cell is a global absent-marker', () => {
+    const rows = [{ TITOLO: 'Real Movie', REGIA: 'N/A', ANNO: '--' }]
+    const mapping = { TITOLO: 'titolo', REGIA: 'regia', ANNO: 'anno' }
+    const out = applyMapping(rows, mapping, ctx)
+    expect(out[0].titolo).toBe('Real Movie')
+    expect(out[0].regia).toBeUndefined()
+    expect(out[0].anno).toBeUndefined()
+  })
+
+  it('skips a row whose titolo is an absent-marker', () => {
+    const rows = [
+      { TITOLO: 'N.D.', TIPO: 'film' },
+      { TITOLO: 'Good One', TIPO: 'film' },
+    ]
+    const out = applyMapping(rows, { TITOLO: 'titolo', TIPO: 'tipo' }, ctx)
+    expect(out).toHaveLength(1)
+    expect(out[0].titolo).toBe('Good One')
+  })
+
+  it('coalesce rule falls through when first source is an absent-marker', () => {
+    const rows = [{ A: 'null', B: 'Fallback Title' }]
+    const rules: Record<string, FieldRule> = { titolo: { sources: ['A', 'B'] } }
+    const out = applyMapping(rows, {}, ctx, rules)
+    expect(out[0].titolo).toBe('Fallback Title')
+  })
+})
