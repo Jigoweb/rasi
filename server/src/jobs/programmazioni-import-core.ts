@@ -263,10 +263,6 @@ function coerce(field: string, value: unknown): unknown {
 
 function applyTransform(name: string | undefined, value: unknown): unknown {
   if (!name) return value
-  if (name.startsWith('null_if') && typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (['na', 'n/a', 'nd', 'n.d.', 'null', '--', '-'].includes(normalized)) return null
-  }
   if (name.includes('minutes') || name.includes('seconds') || name.includes('duration')) {
     return coerce('durata_minuti', value)
   }
