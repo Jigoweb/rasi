@@ -3,6 +3,7 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
+import { isAbsentMarker } from '../lib/absent-data.js'
 
 export interface FieldRule {
   sources: string[]
@@ -183,7 +184,8 @@ function applyConfiguredMapping(
       rawValue = getRowValue(row, sourceCol)
     }
 
-    const transformed = applyTransform(sourceCol ? config.transforms?.[sourceCol] : undefined, rawValue)
+    const cleaned = isAbsentMarker(rawValue) ? null : rawValue
+    const transformed = applyTransform(sourceCol ? config.transforms?.[sourceCol] : undefined, cleaned)
     const coerced = coerce(field, transformed)
     if (coerced !== undefined) payload[field] = coerced
   }
@@ -242,7 +244,8 @@ function resolveFieldValueWithSource(
 
 function isBlankValue(value: unknown): boolean {
   if (value === null || value === undefined) return true
-  return ['', 'n.d.', 'n.d', 'nd', 'na', 'n/a'].includes(String(value).trim().toLowerCase())
+  if (String(value).trim() === '') return true
+  return isAbsentMarker(value)
 }
 
 function coerce(field: string, value: unknown): unknown {
