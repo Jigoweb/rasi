@@ -3,7 +3,7 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
-import { isAbsentMarker } from '../lib/absent-data.js'
+import { isAbsentMarker, isBlankValue } from '../lib/absent-data.js'
 
 export interface FieldRule {
   sources: string[]
@@ -240,12 +240,6 @@ function resolveFieldValueWithSource(
   }
 
   return { value: undefined, source: null }
-}
-
-function isBlankValue(value: unknown): boolean {
-  if (value === null || value === undefined) return true
-  if (String(value).trim() === '') return true
-  return isAbsentMarker(value)
 }
 
 function coerce(field: string, value: unknown): unknown {

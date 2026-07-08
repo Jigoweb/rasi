@@ -1,4 +1,5 @@
 /** Shared year parsing for the upload worker (mirrors src/features/programmazioni/utils/year-parse.ts). */
+import { isBlankValue as isBlank } from './absent-data.js'
 
 export interface ParsedYearValue {
   anno: number
@@ -51,15 +52,8 @@ export interface YearFieldsPolicy {
   produzione?: YearSlotPolicy
 }
 
-const BLANK = new Set(['', 'n.d.', 'n.d', 'nd', 'na', 'n/a'])
-
 function normalizeKey(key: string): string {
   return key.trim().toLowerCase().replace(/[\s-]+/g, '_')
-}
-
-function isBlank(value: unknown): boolean {
-  if (value === null || value === undefined) return true
-  return BLANK.has(String(value).trim().toLowerCase())
 }
 
 function getRowValue(row: Record<string, unknown>, col: string): unknown {

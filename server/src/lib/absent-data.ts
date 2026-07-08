@@ -18,3 +18,14 @@ export function isAbsentMarker(value: unknown): boolean {
   if (typeof value !== 'string') return false
   return ABSENT_MARKERS.has(value.trim().toLowerCase())
 }
+
+/**
+ * True se il valore è "vuoto o assente": null/undefined, cella vuota/whitespace,
+ * oppure un marcatore di dato assente. Implementazione unica del blank-check usato
+ * dal coalesce delle regole e degli slot anno (evita set duplicati che divergono).
+ */
+export function isBlankValue(value: unknown): boolean {
+  if (value === null || value === undefined) return true
+  if (String(value).trim() === '') return true
+  return isAbsentMarker(value)
+}

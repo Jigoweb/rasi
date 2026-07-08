@@ -70,4 +70,23 @@ describe('programmazioni import core absent-data normalization', () => {
     assert.equal(payloads[0].titolo, 'Real')
     assert.equal(payloads[0].regia, undefined)
   })
+
+  it('coalesce rule falls through when first source is an absent-marker', () => {
+    const payloads = buildProgrammazioniPayloads(
+      [{ A: 'null', B: 'Fallback Title' }],
+      {
+        kind: 'apply_existing' as const,
+        mapping: {
+          version: 1 as const,
+          colonne_rilevate: ['A', 'B'],
+          ultimo_upload: null,
+          mapping: {},
+          rules: { titolo: { sources: ['A', 'B'] } },
+        },
+      },
+      ctx,
+    )
+    assert.equal(payloads.length, 1)
+    assert.equal(payloads[0].titolo, 'Fallback Title')
+  })
 })

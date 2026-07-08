@@ -10,7 +10,7 @@ import {
 import { applyEpisodeNormalizationToPayload } from '../utils/episode-normalization'
 import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
 import { applyTransform, isKnownTransform, type TransformName } from '../utils/transforms'
-import { isAbsentMarker } from '../utils/absent-data'
+import { isAbsentMarker, isBlankValue } from '../utils/absent-data'
 import { inferYearPolicyFromMapping } from '../utils/emittente-year-presets'
 import { mergeYearFieldsIntoPayload } from '../utils/year-policy'
 import type { YearFieldsPolicy } from '../utils/year-policy'
@@ -486,12 +486,8 @@ export function applyMappingWithTransforms(
 // FIELD RULES (coalesce / conditional)
 // ============================================
 
-/** True when a cell carries no usable value (empty/null or a global absent-marker). */
-export function isBlankValue(v: unknown): boolean {
-  if (v === null || v === undefined) return true
-  if (String(v).trim() === '') return true
-  return isAbsentMarker(v)
-}
+/** Re-export the shared blank-check (empty/null or a global absent-marker). */
+export { isBlankValue }
 
 /** Reads a column value tolerating capitalization/spacing variants (mirrors applyMapping). */
 export function getRowValue(row: Record<string, any>, col: string): any {
