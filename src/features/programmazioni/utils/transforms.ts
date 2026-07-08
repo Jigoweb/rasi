@@ -20,15 +20,11 @@ export type TransformName =
   | 'iso8601_duration_to_minutes'
   | 'decimal_minutes_to_int'
   | 'rti_apostrophe_minutes'
-  | 'null_if_NA'
-  | 'null_if_ND'
-  | 'null_if_NULL_str'
   | 'netflix_episode_nbr'
   | 'us_date_to_iso'
   | 'yyyymmdd_int_to_iso'
   | 'mojibake_repair'
   | 'nbsp_to_space'
-  | 'null_if_dashes'
   | 'year_range_first'
   | 'year_range_parse'
   | 'eu_date_to_iso'
@@ -174,33 +170,6 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     return Math.round(n)
   },
 
-  null_if_NA: (value) => {
-    if (value === null || value === undefined) return null
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      if (/^n\/?a$/i.test(trimmed)) return null
-    }
-    return value
-  },
-
-  null_if_ND: (value) => {
-    if (value === null || value === undefined) return null
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      if (/^n\.?d\.?$/i.test(trimmed)) return null
-    }
-    return value
-  },
-
-  null_if_NULL_str: (value) => {
-    if (value === null || value === undefined) return null
-    if (typeof value === 'string') {
-      const trimmed = value.trim()
-      if (/^null$/i.test(trimmed)) return null
-    }
-    return value
-  },
-
   netflix_episode_nbr: (value) => {
     if (value === null || value === undefined) return null
     if (typeof value === 'string') {
@@ -327,14 +296,6 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     return value.replace(/\xa0/g, ' ')
   },
 
-  null_if_dashes: (value) => {
-    if (value === null || value === undefined) return value
-    if (typeof value !== 'string') return value
-    const trimmed = value.trim()
-    if (trimmed === '--' || trimmed === '-') return null
-    return value
-  },
-
   year_range_first: (value) => {
     const parsed = parseYearValue(value)
     return parsed ? parsed.anno : null
@@ -356,9 +317,6 @@ export const TRANSFORM_LABELS: Record<TransformName, string> = {
   iso8601_duration_to_minutes: 'Durata ISO8601 (PT#H#M) → minuti',
   decimal_minutes_to_int: 'Durata minuti decimali → interi',
   rti_apostrophe_minutes: "Durata con apostrofo (12') → minuti",
-  null_if_NA: 'Vuoto se "N/A"',
-  null_if_ND: 'Vuoto se "N.D."',
-  null_if_NULL_str: 'Vuoto se "null"',
   netflix_episode_nbr: 'Numero episodio Netflix (-- → vuoto)',
   us_date_to_iso: 'Data US MM/DD/YYYY → ISO',
   yyyymmdd_int_to_iso: 'Data intero YYYYMMDD → ISO',
@@ -369,7 +327,6 @@ export const TRANSFORM_LABELS: Record<TransformName, string> = {
   excel_serial_to_iso: 'Data seriale Excel → ISO',
   mojibake_repair: 'Ripara mojibake (encoding)',
   nbsp_to_space: 'Spazio unicode → spazio normale',
-  null_if_dashes: 'Vuoto se trattini',
   year_range_first: 'Range anni → primo anno',
   year_range_parse: 'Range anni → inizio + fine (2021-2024)',
 }
@@ -386,7 +343,6 @@ const DURATION_TRANSFORMS: TransformName[] = [
 ]
 
 const GENERIC_TRANSFORMS: TransformName[] = [
-  'null_if_NA', 'null_if_ND', 'null_if_NULL_str', 'null_if_dashes',
   'mojibake_repair', 'nbsp_to_space',
 ]
 
