@@ -44,7 +44,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Textarea } from '@/shared/components/ui/textarea'
-import { Search, Plus, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp } from 'lucide-react'
+import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
+import { Search, Plus, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react'
 import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
 type ImportRow = Record<string, unknown>
@@ -199,7 +200,10 @@ export default function ProgrammazioniPage() {
   const [campagnaForIndividuazioni, setCampagnaForIndividuazioni] = useState<CampagnaProgrammazione | null>(null)
   const [individuazioneName, setIndividuazioneName] = useState('')
   const [individuazioneDescription, setIndividuazioneDescription] = useState('')
+  const [showIndividuazioneNote, setShowIndividuazioneNote] = useState(false)
   const lastSuggestedNameRef = useRef('')
+  // Guard per inizializzare la selezione artisti una sola volta per apertura dialog.
+  const selectionInitializedRef = useRef(false)
   
   // Artist filter for individuazioni
   const [showArtistFilter, setShowArtistFilter] = useState(false)
@@ -270,8 +274,8 @@ export default function ProgrammazioniPage() {
       if (error) throw error
       const artists = (data || []) as ArtistOption[]
       setAllArtists(artists)
-      // By default, select all artists
-      setSelectedArtistIds(new Set(artists.map(artist => artist.id)))
+      // La selezione di default viene inizializzata all'apertura del dialog
+      // (dipende dall'anno campagna, quindi non qui).
     } catch (error) {
       console.error('Errore caricamento artisti:', error)
       notifyError('Impossibile caricare gli artisti', error)
@@ -310,6 +314,7 @@ export default function ProgrammazioniPage() {
     setCampagnaForIndividuazioni(campagna)
     setIndividuazioneName(buildIndividuazioneName(campagna.nome))
     setIndividuazioneDescription('')
+    setShowIndividuazioneNote(false)
     setShowIndividuazioniConfirmDialog(true)
     setShowArtistFilter(false) // Reset filter panel
     setArtistSearchQuery('') // Reset search
@@ -331,10 +336,12 @@ export default function ProgrammazioniPage() {
     const mandatoOverrideIds = Array.from(mandatoOverrideArtistIds)
     const effectiveArtistIds = new Set([...selectedArtistIds, ...mandatoOverrideIds])
 
-    // Determine if we should filter by artists.
-    // Overrides must be included in the allowlist too when the run uses a subset.
-    const artistaIds = effectiveArtistIds.size === allArtists.length || effectiveArtistIds.size === 0
-      ? null 
+    // Se tutti gli eleggibili sono selezionati passiamo artistaIds null: il backend
+    // considera tutti gli artisti e applica da solo l'esclusione per mandato sull'anno.
+    // Gli override viaggiano sul parametro dedicato. Con un subset, l'allowlist deve
+    // includere anche gli override, altrimenti il matcher base li scarterebbe.
+    const artistaIds = allEligibleSelected || effectiveArtistIds.size === 0
+      ? null
       : Array.from(effectiveArtistIds)
 
     // Start the global process with optional artist filter
@@ -502,6 +509,12 @@ export default function ProgrammazioniPage() {
     () => allArtists.filter(artist => !mandateExcludedArtistIds.has(artist.id)),
     [allArtists, mandateExcludedArtistIds]
   )
+  const allEligibleSelected = useMemo(
+    () => eligibleArtists.length > 0 && eligibleArtists.every(artist => selectedArtistIds.has(artist.id)),
+    [eligibleArtists, selectedArtistIds]
+  )
+  // Stato di default: tutti gli eleggibili selezionati e nessun override mandato.
+  const isDefaultSelection = allEligibleSelected && mandatoOverrideArtistIds.size === 0
   const filteredEligibleArtists = useMemo(
     () => eligibleArtists.filter(artist => artistMatchesSearch(artist, artistSearchQuery)),
     [eligibleArtists, artistSearchQuery]
@@ -520,6 +533,21 @@ export default function ProgrammazioniPage() {
       fetchEmittenti()
     }
   }, [isNewModalOpen, emittenti.length])
+
+  // Inizializza la selezione di default a ogni apertura del dialog: tutti gli
+  // artisti eleggibili per l'anno campagna selezionati, nessun override mandato.
+  // L'eleggibilità dipende dall'anno, quindi si ricalcola per ogni apertura.
+  useEffect(() => {
+    if (!showIndividuazioniConfirmDialog) {
+      selectionInitializedRef.current = false
+      return
+    }
+    if (selectionInitializedRef.current) return
+    if (loadingArtists || allArtists.length === 0) return
+    setSelectedArtistIds(new Set(eligibleArtists.map(artist => artist.id)))
+    setMandatoOverrideArtistIds(new Set())
+    selectionInitializedRef.current = true
+  }, [showIndividuazioniConfirmDialog, loadingArtists, allArtists, eligibleArtists])
 
   useEffect(() => {
     if (currentTab === 'programmazioni') {
@@ -1132,6 +1160,25 @@ export default function ProgrammazioniPage() {
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5" />
               Crea Individuazioni
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Come funziona il matching"
+                    className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-72 text-sm">
+                  <p className="font-medium mb-2">Il sistema effettuerà il matching automatico tra:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-1 text-muted-foreground">
+                    <li>Programmazioni caricate</li>
+                    <li>Opere nel catalogo</li>
+                    <li>Partecipazioni degli artisti</li>
+                  </ul>
+                </PopoverContent>
+              </Popover>
             </DialogTitle>
               <DialogDescription>
                 Questa operazione creerà le individuazioni per tutte le programmazioni della campagna <span className="font-medium text-foreground">{campagnaForIndividuazioni?.nome}</span>.
@@ -1150,25 +1197,44 @@ export default function ProgrammazioniPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium" htmlFor="individuazione-description">Note individuazione</label>
-                  <Textarea
-                    id="individuazione-description"
-                    value={individuazioneDescription}
-                    onChange={(event) => setIndividuazioneDescription(event.target.value)}
-                    placeholder="Annotazioni su soglia, subset artisti, ipotesi o obiettivo del test..."
-                    rows={3}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Queste note saranno salvate solo sulla campagna di individuazione.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowIndividuazioneNote(v => !v)}
+                    className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground/80"
+                  >
+                    {showIndividuazioneNote ? (
+                      <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    Note individuazione (opzionale)
+                    {!showIndividuazioneNote && individuazioneDescription.trim() && (
+                      <Badge variant="secondary" className="ml-1">Compilate</Badge>
+                    )}
+                  </button>
+                  {showIndividuazioneNote && (
+                    <>
+                      <Textarea
+                        id="individuazione-description"
+                        value={individuazioneDescription}
+                        onChange={(event) => setIndividuazioneDescription(event.target.value)}
+                        placeholder="Annotazioni su soglia, subset artisti, ipotesi o obiettivo del test..."
+                        rows={3}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Queste note saranno salvate solo sulla campagna di individuazione.
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">Record da processare:</strong> {(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()} programmazioni
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  <strong className="text-foreground">Tempo stimato:</strong> {(() => {
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+                <span>
+                  <strong className="text-foreground">{(campagnaForIndividuazioni?.programmazioni_count || 0).toLocaleString()}</strong> programmazioni
+                </span>
+                <span aria-hidden>·</span>
+                <span>
+                  Tempo stimato <strong className="text-foreground">{(() => {
                     const count = campagnaForIndividuazioni?.programmazioni_count || 0
                     const chunkSize = 25
                     // Ottimizzato: ~1s per chunk (SQL veloce con indice trigram + overhead rete)
@@ -1185,29 +1251,14 @@ export default function ProgrammazioniPage() {
                       const minutes = Math.ceil((totalSeconds % 3600) / 60)
                       return `~${hours} or${hours === 1 ? 'a' : 'e'}${minutes > 0 ? ` e ${minutes} min` : ''}`
                     }
-                  })()}
-              </p>
-              {campagnaForIndividuazioni?.descrizione && (
-                <div className="pt-2 border-t mt-2">
-                  <p className="text-sm text-muted-foreground">
+                  })()}</strong>
+                </span>
+                {campagnaForIndividuazioni?.descrizione && (
+                  <span className="w-full text-xs">
                     <strong className="text-foreground">Note programmazione:</strong> {campagnaForIndividuazioni.descrizione}
-                </p>
-                </div>
-              )}
+                  </span>
+                )}
               </div>
-              <div className="text-sm text-muted-foreground">
-                <p className="font-medium text-foreground mb-2">Il sistema effettuerà il matching automatico tra:</p>
-                <ul className="list-disc list-inside space-y-1 ml-1">
-                  <li>Programmazioni caricate</li>
-                  <li>Opere nel catalogo</li>
-                  <li>Partecipazioni degli artisti</li>
-                </ul>
-              </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-xs text-blue-800">
-                💡 Puoi minimizzare il processo e continuare a navigare la piattaforma mentre viene eseguito in background.
-              </p>
-            </div>
 
             {/* Artist Filter Section */}
             <div className="border rounded-lg">
@@ -1219,9 +1270,9 @@ export default function ProgrammazioniPage() {
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">Filtra Artisti</span>
-                  {selectedArtistIds.size !== allArtists.length && selectedArtistIds.size > 0 && (
+                  {!isDefaultSelection && (
                     <Badge variant="secondary" className="ml-2">
-                      {selectedArtistIds.size} selezionati
+                      {effectiveSelectedArtistCount} selezionati
                     </Badge>
                   )}
                 </div>
@@ -1235,7 +1286,7 @@ export default function ProgrammazioniPage() {
               {showArtistFilter && (
                 <div className="border-t p-3 space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    Di default tutti gli artisti sono selezionati. Il backend esclude automaticamente gli artisti fuori periodo mandato per l&apos;anno {annoIndividuazione || 'della programmazione'}; puoi includerli comunque nella sezione dedicata.
+                    Gli artisti eleggibili per l&apos;anno {annoIndividuazione || 'della programmazione'} sono selezionati di default. Gli artisti fuori periodo mandato sono esclusi e non conteggiati: puoi includerli singolarmente dalla sezione dedicata.
                   </p>
 
                   {/* Search and bulk actions */}
@@ -1254,12 +1305,12 @@ export default function ProgrammazioniPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        setSelectedArtistIds(new Set(allArtists.map(a => a.id)))
+                        setSelectedArtistIds(new Set(eligibleArtists.map(a => a.id)))
                         setMandatoOverrideArtistIds(new Set())
                       }}
                       className="text-xs"
                     >
-                      Tutti
+                      Tutti eleggibili
                     </Button>
                     <Button
                       type="button"
@@ -1366,7 +1417,7 @@ export default function ProgrammazioniPage() {
 
                   {/* Summary */}
                   <p className="text-xs text-muted-foreground text-right">
-                    {selectedArtistIds.size} di {allArtists.length} artisti selezionati
+                    {selectedArtistIds.size} di {eligibleArtists.length} eleggibili selezionati
                     {mandateExcludedArtists.length > 0 && ` · ${mandateExcludedArtists.length} esclusi per mandato`}
                     {mandatoOverrideArtistIds.size > 0 && ` · ${mandatoOverrideArtistIds.size} inclusi comunque`}
                   </p>
@@ -1384,11 +1435,9 @@ export default function ProgrammazioniPage() {
               disabled={effectiveSelectedArtistCount === 0 || !individuazioneName.trim()}
                 >
               <Sparkles className="mr-2 h-4 w-4" />
-              {mandatoOverrideArtistIds.size > 0
-                ? `Avvia con ${mandatoOverrideArtistIds.size} override mandato`
-                : selectedArtistIds.size === allArtists.length
+              {isDefaultSelection
                 ? 'Avvia Processamento'
-                : `Avvia con ${selectedArtistIds.size} Artisti`}
+                : `Avvia con ${effectiveSelectedArtistCount} artisti`}
                 </Button>
           </DialogFooter>
         </DialogContent>
