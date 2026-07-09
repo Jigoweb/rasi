@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { Button } from "@/shared/components/ui/button";
 import { supabaseServer } from "@/shared/lib/supabase-server";
+import { extractArticleParagraphs } from "@/shared/lib/html-content";
 
-function stripHtml(html: string) {
-  return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+function excerpt(html: string) {
+  const paragraphs = extractArticleParagraphs(html);
+  const text = paragraphs.join(" ");
+  return text.length > 140 ? `${text.slice(0, 140)}...` : text;
 }
 
 export default async function NewsPage() {
@@ -28,30 +31,14 @@ export default async function NewsPage() {
 
       <section className="mx-auto max-w-7xl px-4 py-16 md:px-6 md:py-24">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {newsList && newsList.length > 0 ? newsList.map((item, i) => (
+          {newsList && newsList.length > 0 ? newsList.map((item) => (
             <div
               key={item.id}
               className="flex h-full flex-col rounded-md border border-rasi-line bg-white p-6 transition-colors hover:border-rasi-ember"
-              style={{ animationDelay: `${(i % 6) * 60}ms` }}
             >
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                    item.status === "closed"
-                      ? "bg-rasi-line text-rasi-slate"
-                      : "bg-rasi-ember/10 text-rasi-ember"
-                  }`}
-                >
-                  {item.status === "closed" ? "Concluso" : "Attivo"}
-                </span>
-                <span className="text-sm text-rasi-slate">
-                  {item.published_at ? new Date(item.published_at).toLocaleDateString("it-IT") : ""}
-                </span>
-              </div>
               <h3 className="text-lg font-semibold leading-snug text-rasi-ink">{item.title}</h3>
               <p className="mt-2 flex-1 text-sm leading-relaxed text-rasi-slate">
-                {stripHtml(item.content || "").slice(0, 140) || "Aggiornamento in fase di pubblicazione."}
-                {stripHtml(item.content || "").length > 140 ? "..." : ""}
+                {excerpt(item.content || "") || "Aggiornamento in fase di pubblicazione."}
               </p>
               <Link href={`/news/${item.slug}`} className="mt-6">
                 <Button
