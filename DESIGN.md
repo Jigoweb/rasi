@@ -75,13 +75,20 @@ Il sistema rifiuta esplicitamente: il mix scollegato di registro legalistico e m
 
 ## 2. Colors
 
-Palette Committed su base neutra calda (non crema/beige generica): carta grigio-caldo desaturata, non bianco puro, non crema da "warm-craft" cliché.
+Palette Committed su base neutra calda (non crema/beige generica): carta grigio-caldo desaturata, non bianco puro, non crema da "warm-craft" cliché. Ember resta l'accento che porta la voce del brand su CTA e stati; a questo si affiancano **note di colore** estratte dal logo RASI reale (cerchi concentrici blu, magenta, giallo, ciano) — non un secondo accento competitivo, ma un'eco controllata del marchio esistente, usata in punti piccoli e specifici (icone, piccoli dettagli decorativi vicino al logo), mai su CTA o superfici grandi.
 
 **The Committed Rule.** L'accento Ember porta 30-60% di ogni superficie chiave (hero, CTA primarie, stati attivi, badge di sezione) — non è decorazione, è la voce del brand.
 
 ### Primary
 - **Ember** (`#C1502A`): CTA primarie, stati attivi/selezionati, accenti hero. Terracotta-vermiglio, distinto dalla famiglia beige+brass/oxblood da evitare per default (vedi Do's and Don'ts).
 - **Ember Deep** (`#9C3D1E`): hover/active della CTA primaria.
+
+### Logo Accent Notes (estratti dal marchio reale, uso ristretto)
+Colori presi dai cerchi concentrici del logo RASI esistente, desaturati leggermente per restare coerenti con la palette calda del sito. Regola d'uso: **mai su CTA, mai su sfondi di sezione** — solo su dettagli piccoli e ripetuti (icone dei 4 vantaggi, un accento vicino al wordmark del logo, badge di categoria se serve distinguere sezioni). Un colore per elemento, non un gradiente arcobaleno.
+- **Indigo Logo** (`#2E3E7C`): nota fredda, eco del blu dominante nel logo.
+- **Magenta Logo** (`#B23A73`): nota calda-fredda, eco del cerchio magenta.
+- **Ciano Logo** (`#2E9BB0`): nota fredda, eco del cerchio ciano.
+- **Giallo Logo** (`#D9A62E`): nota calda desaturata, eco del cerchio giallo (mai puro/acceso, per non competere con Ember).
 
 ### Neutral
 - **Ink** (`#241F1B`): testo principale, quasi-nero caldo (non nero puro).
@@ -91,6 +98,8 @@ Palette Committed su base neutra calda (non crema/beige generica): carta grigio-
 
 ### Named Rules
 **The One Voice Rule.** Ember appare solo su elementi che richiedono un'azione o segnalano stato attivo (CTA, tab selezionata, badge "Attivo" su un bando) — mai come sfondo decorativo di sezioni intere non correlate ad azione.
+
+**The Logo Echo Rule.** Le note di colore del logo (Indigo/Magenta/Ciano/Giallo) appaiono solo su elementi piccoli e ripetuti (icone, badge), mai su CTA, hero, o sfondi ampi. Sono un richiamo al marchio esistente, non una seconda palette Committed.
 
 ## 3. Typography
 

@@ -14,21 +14,25 @@ const VANTAGGI = [
     icon: ShieldCheck,
     title: "Mandato gratuito e revocabile",
     body: "Nessun costo per aderire. Puoi revocare il mandato quando vuoi, senza vincoli.",
+    color: "text-rasi-ember",
   },
   {
     icon: Search,
     title: "Ti troviamo noi",
     body: "Incrociamo le opere trasmesse con il repertorio dei mandanti per trovare compensi che altrimenti andrebbero persi.",
+    color: "text-rasi-logo-indigo",
   },
   {
     icon: Megaphone,
     title: "Promozione gratuita",
     body: "Sosteniamo le tue opere sui social attraverso il servizio Artisti in azione.",
+    color: "text-rasi-logo-magenta",
   },
   {
     icon: Handshake,
     title: "Supporto burocratico",
     body: "Assistenza su welfare, fisco e pratiche amministrative legate alla tua attività.",
+    color: "text-rasi-logo-cyan",
   },
 ];
 
@@ -135,7 +139,7 @@ export default function Home() {
           <div className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-md bg-rasi-line sm:grid-cols-2">
             {VANTAGGI.map((vantaggio) => (
               <div key={vantaggio.title} className="bg-white p-8">
-                <vantaggio.icon className="h-6 w-6 text-rasi-ember" strokeWidth={1.75} />
+                <vantaggio.icon className={`h-6 w-6 ${vantaggio.color}`} strokeWidth={1.75} />
                 <h3 className="mt-4 text-lg font-semibold text-rasi-ink">{vantaggio.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-rasi-slate">{vantaggio.body}</p>
               </div>

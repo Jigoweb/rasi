@@ -18,7 +18,12 @@ export default function PublicLayout({
     <div className="min-h-screen flex flex-col bg-rasi-paper text-rasi-ink font-schibsted">
       <header className="sticky top-0 z-50 w-full border-b border-rasi-line bg-rasi-paper/95 backdrop-blur supports-[backdrop-filter]:bg-rasi-paper/80">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
-          <Link href="/" className="flex items-center">
+          <Link href="/" className="flex items-center gap-2">
+            <span className="flex items-center -space-x-1" aria-hidden="true">
+              <span className="h-2.5 w-2.5 rounded-full bg-rasi-logo-indigo" />
+              <span className="h-2.5 w-2.5 rounded-full bg-rasi-logo-magenta" />
+              <span className="h-2.5 w-2.5 rounded-full bg-rasi-logo-cyan" />
+            </span>
             <span className="font-bold text-lg tracking-tight text-rasi-ink">R.A.S.I.</span>
           </Link>
 

@@ -48,6 +48,10 @@
   --color-rasi-slate: #4a4540;
   --color-rasi-paper: #f6f4f1;
   --color-rasi-line: #e4dfd8;
+  --color-rasi-logo-indigo: #2e3e7c;
+  --color-rasi-logo-magenta: #b23a73;
+  --color-rasi-logo-cyan: #2e9bb0;
+  --color-rasi-logo-yellow: #d9a62e;
 }
 
 :root {
