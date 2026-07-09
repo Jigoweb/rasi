@@ -1165,12 +1165,12 @@ export default function ProgrammazioniPage() {
                   <button
                     type="button"
                     aria-label="Come funziona il matching"
-                    className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <HelpCircle className="h-4 w-4" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-72 text-sm">
+                <PopoverContent align="start" className="w-72 text-sm">
                   <p className="font-medium mb-2">Il sistema effettuerà il matching automatico tra:</p>
                   <ul className="list-disc list-inside space-y-1 ml-1 text-muted-foreground">
                     <li>Programmazioni caricate</li>
@@ -1262,12 +1262,12 @@ export default function ProgrammazioniPage() {
 
             {/* Artist Filter Section */}
             <div className="border rounded-lg">
-              <button
-                type="button"
-                onClick={() => setShowArtistFilter(!showArtistFilter)}
-                className="w-full flex items-center justify-between p-3 text-sm hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-2">
+              <div className="w-full flex items-center justify-between p-3 text-sm">
+                <button
+                  type="button"
+                  onClick={() => setShowArtistFilter(!showArtistFilter)}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                >
                   <Users className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium">Filtra Artisti</span>
                   {!isDefaultSelection && (
@@ -1275,20 +1275,39 @@ export default function ProgrammazioniPage() {
                       {effectiveSelectedArtistCount} selezionati
                     </Badge>
                   )}
+                </button>
+                <div className="flex items-center gap-1">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Come funziona il filtro artisti"
+                        className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                      >
+                        <HelpCircle className="h-4 w-4" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-72 text-xs text-muted-foreground">
+                      Gli artisti eleggibili per l&apos;anno {annoIndividuazione || 'della programmazione'} sono selezionati di default. Gli artisti fuori periodo mandato sono esclusi e non conteggiati: puoi includerli singolarmente dalla sezione dedicata.
+                    </PopoverContent>
+                  </Popover>
+                  <button
+                    type="button"
+                    onClick={() => setShowArtistFilter(!showArtistFilter)}
+                    aria-label={showArtistFilter ? 'Comprimi filtro artisti' : 'Espandi filtro artisti'}
+                    className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                  >
+                    {showArtistFilter ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
-                {showArtistFilter ? (
-                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                )}
-              </button>
+              </div>
               
               {showArtistFilter && (
                 <div className="border-t p-3 space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    Gli artisti eleggibili per l&apos;anno {annoIndividuazione || 'della programmazione'} sono selezionati di default. Gli artisti fuori periodo mandato sono esclusi e non conteggiati: puoi includerli singolarmente dalla sezione dedicata.
-                  </p>
-
                   {/* Search and bulk actions */}
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1">
