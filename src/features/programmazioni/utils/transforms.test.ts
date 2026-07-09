@@ -67,21 +67,6 @@ describe('rti_apostrophe_minutes', () => {
   })
 })
 
-describe('null_if_NA / null_if_ND / null_if_NULL_str', () => {
-  it("NA returns null", () => {
-    expect(applyTransform('null_if_NA', 'N/A')).toBeNull()
-    expect(applyTransform('null_if_NA', 'Real Value')).toBe('Real Value')
-  })
-  it("ND returns null", () => {
-    expect(applyTransform('null_if_ND', 'N.D.')).toBeNull()
-    expect(applyTransform('null_if_ND', 'N.D')).toBeNull()
-  })
-  it("NULL string returns null", () => {
-    expect(applyTransform('null_if_NULL_str', 'NULL')).toBeNull()
-    expect(applyTransform('null_if_NULL_str', 'real')).toBe('real')
-  })
-})
-
 describe('netflix_episode_nbr', () => {
   it("'--' → null", () => {
     expect(applyTransform('netflix_episode_nbr', '--')).toBeNull()
@@ -185,24 +170,6 @@ describe('nbsp_to_space', () => {
     expect(applyTransform('nbsp_to_space', undefined)).toBe(undefined)
     expect(applyTransform('nbsp_to_space', '')).toBe('')
     expect(applyTransform('nbsp_to_space', 123)).toBe(123)
-  })
-})
-
-describe('null_if_dashes', () => {
-  it('returns null for double-dash or single-dash placeholder', () => {
-    expect(applyTransform('null_if_dashes', '--')).toBe(null)
-    expect(applyTransform('null_if_dashes', '-')).toBe(null)
-    expect(applyTransform('null_if_dashes', ' -- ')).toBe(null)
-    expect(applyTransform('null_if_dashes', ' - ')).toBe(null)
-  })
-  it('preserves real values with dashes', () => {
-    expect(applyTransform('null_if_dashes', '12-34')).toBe('12-34')
-    expect(applyTransform('null_if_dashes', 'foo')).toBe('foo')
-    expect(applyTransform('null_if_dashes', '---')).toBe('---')  // triple dash is not the sentinel
-  })
-  it('handles null/empty', () => {
-    expect(applyTransform('null_if_dashes', null)).toBe(null)
-    expect(applyTransform('null_if_dashes', undefined)).toBe(undefined)
   })
 })
 
@@ -345,7 +312,7 @@ describe('transform metadata', () => {
 
   it('transformsForField: campo senza transform dedicati → solo generici', () => {
     const t = transformsForField('titolo')
-    expect(t).toContain('null_if_NULL_str')
+    expect(t).toContain('mojibake_repair')
     expect(t).not.toContain('us_date_to_iso')
   })
 })

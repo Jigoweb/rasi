@@ -10,6 +10,7 @@ import {
 import { applyEpisodeNormalizationToPayload } from '../utils/episode-normalization'
 import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
 import { applyTransform, isKnownTransform, type TransformName } from '../utils/transforms'
+import { isAbsentMarker, isBlankValue } from '../utils/absent-data'
 import { inferYearPolicyFromMapping } from '../utils/emittente-year-presets'
 import { mergeYearFieldsIntoPayload } from '../utils/year-policy'
 import type { YearFieldsPolicy } from '../utils/year-policy'
@@ -370,7 +371,8 @@ export function applyMapping(
       }
       const rawName = sourceCol ? transforms?.[sourceCol] : undefined
       const transformName = isKnownTransform(rawName) ? rawName : null
-      const transformed = applyTransform(transformName, rawValue)
+      const cleaned = isAbsentMarker(rawValue) ? null : rawValue
+      const transformed = applyTransform(transformName, cleaned)
       const coerced = coerce(field, transformed)
       if (coerced !== undefined) {
         payload[field] = coerced
@@ -484,14 +486,8 @@ export function applyMappingWithTransforms(
 // FIELD RULES (coalesce / conditional)
 // ============================================
 
-const BLANK_SENTINELS = new Set(['', 'n.d.', 'n.d', 'nd', 'na', 'n/a'])
-
-/** True when a cell carries no usable value (null/empty or an "N.D."-style sentinel). */
-export function isBlankValue(v: unknown): boolean {
-  if (v === null || v === undefined) return true
-  const s = String(v).trim().toLowerCase()
-  return BLANK_SENTINELS.has(s)
-}
+/** Re-export the shared blank-check (empty/null or a global absent-marker). */
+export { isBlankValue }
 
 /** Reads a column value tolerating capitalization/spacing variants (mirrors applyMapping). */
 export function getRowValue(row: Record<string, any>, col: string): any {

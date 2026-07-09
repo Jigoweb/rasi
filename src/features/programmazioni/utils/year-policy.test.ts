@@ -80,4 +80,13 @@ describe('applyYearFieldsToPayload', () => {
     expect(applied.anno_semantica).toBe('rilascio')
     expect(applied.anno_rilascio).toBe(2018)
   })
+
+  it('skips an absent-marker first source and uses the next (coalesce)', () => {
+    const applied = applyYearFieldsToPayload(
+      { ANNO_RILASCIO_ITALIA: '-', ANNO_RILASCIO: '2020' },
+      { rilascio: { sources: ['ANNO_RILASCIO_ITALIA', 'ANNO_RILASCIO'] } },
+    )
+    expect(applied.anno_rilascio).toBe(2020)
+    expect(applied.anno).toBe(2020)
+  })
 })

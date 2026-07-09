@@ -1,5 +1,6 @@
 import { type TransformName } from './transforms'
 import { parseYearValue } from './year-parse'
+import { isBlankValue } from './absent-data'
 
 export type { ParsedYearValue } from './year-parse'
 export { parseYearValue } from './year-parse'
@@ -31,15 +32,8 @@ export interface YearImportMetadata {
   produzione?: Omit<ResolvedYearSlot, 'semantics'>
 }
 
-const BLANK_SENTINELS = new Set(['', 'n.d.', 'n.d', 'nd', 'na', 'n/a'])
-
 function normalizeKey(key: string): string {
   return key.trim().toLowerCase().replace(/[\s-]+/g, '_')
-}
-
-function isBlankValue(value: unknown): boolean {
-  if (value === null || value === undefined) return true
-  return BLANK_SENTINELS.has(String(value).trim().toLowerCase())
 }
 
 function getRowValue(row: Record<string, unknown>, col: string): unknown {

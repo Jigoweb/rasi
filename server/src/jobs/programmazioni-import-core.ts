@@ -3,6 +3,7 @@ import Papa from 'papaparse'
 import * as XLSX from 'xlsx'
 import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
+import { isAbsentMarker, isBlankValue } from '../lib/absent-data.js'
 
 export interface FieldRule {
   sources: string[]
@@ -183,7 +184,8 @@ function applyConfiguredMapping(
       rawValue = getRowValue(row, sourceCol)
     }
 
-    const transformed = applyTransform(sourceCol ? config.transforms?.[sourceCol] : undefined, rawValue)
+    const cleaned = isAbsentMarker(rawValue) ? null : rawValue
+    const transformed = applyTransform(sourceCol ? config.transforms?.[sourceCol] : undefined, cleaned)
     const coerced = coerce(field, transformed)
     if (coerced !== undefined) payload[field] = coerced
   }
@@ -240,11 +242,6 @@ function resolveFieldValueWithSource(
   return { value: undefined, source: null }
 }
 
-function isBlankValue(value: unknown): boolean {
-  if (value === null || value === undefined) return true
-  return ['', 'n.d.', 'n.d', 'nd', 'na', 'n/a'].includes(String(value).trim().toLowerCase())
-}
-
 function coerce(field: string, value: unknown): unknown {
   if (value === null || value === undefined || value === '') return undefined
   if (INTEGER_FIELDS.has(field)) {
@@ -260,10 +257,6 @@ function coerce(field: string, value: unknown): unknown {
 
 function applyTransform(name: string | undefined, value: unknown): unknown {
   if (!name) return value
-  if (name.startsWith('null_if') && typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (['na', 'n/a', 'nd', 'n.d.', 'null', '--', '-'].includes(normalized)) return null
-  }
   if (name.includes('minutes') || name.includes('seconds') || name.includes('duration')) {
     return coerce('durata_minuti', value)
   }
