@@ -82,7 +82,7 @@ export default function Home() {
                   Scopri se puoi aderire
                 </Button>
               </Link>
-              <Link href="/documenti/modulistica">
+              <Link href="/modulistica">
                 <Button
                   variant="outline"
                   className="w-full rounded-full border-rasi-paper/30 bg-transparent px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-paper hover:text-rasi-ink sm:w-auto"

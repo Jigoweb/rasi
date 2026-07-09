@@ -84,7 +84,7 @@ export default function PerGliArtistiPage() {
               Se hai prestato la tua interpretazione in un&apos;opera trasmessa in Italia o all&apos;estero, probabilmente hai diritto a un compenso. Ecco come funziona.
             </p>
             <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-              <Link href="/documenti/modulistica">
+              <Link href="/modulistica">
                 <Button className="w-full rounded-full bg-rasi-ember px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-ember-deep sm:w-auto">
                   Scarica il mandato
                 </Button>
@@ -157,7 +157,7 @@ export default function PerGliArtistiPage() {
           </div>
 
           <Reveal delayMs={300} className="mt-12">
-            <Link href="/documenti/modulistica">
+            <Link href="/modulistica">
               <Button className="rounded-full bg-rasi-ember px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-ember-deep">
                 Scarica il mandato
               </Button>
