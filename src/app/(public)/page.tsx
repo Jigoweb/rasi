@@ -1,123 +1,178 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/shared/components/ui/button";
+import {
+  ShieldCheck,
+  Search,
+  Megaphone,
+  Handshake,
+  ArrowRight,
+} from "lucide-react";
+
+const VANTAGGI = [
+  {
+    icon: ShieldCheck,
+    title: "Mandato gratuito e revocabile",
+    body: "Nessun costo per aderire. Puoi revocare il mandato quando vuoi, senza vincoli.",
+  },
+  {
+    icon: Search,
+    title: "Ti troviamo noi",
+    body: "Incrociamo le opere trasmesse con il repertorio dei mandanti per trovare compensi che altrimenti andrebbero persi.",
+  },
+  {
+    icon: Megaphone,
+    title: "Promozione gratuita",
+    body: "Sosteniamo le tue opere sui social attraverso il servizio Artisti in azione.",
+  },
+  {
+    icon: Handshake,
+    title: "Supporto burocratico",
+    body: "Assistenza su welfare, fisco e pratiche amministrative legate alla tua attività.",
+  },
+];
+
+const PROFILI = [
+  {
+    title: "Interpreti ed esecutori",
+    body: "Attori, cantanti, musicisti, doppiatori: chi ha prestato la propria interpretazione in un'opera audiovisiva o musicale.",
+  },
+  {
+    title: "Eredi",
+    body: "Chi ha diritto a percepire compensi maturati da un artista scomparso.",
+  },
+  {
+    title: "Produttori fonografici",
+    body: "Per la gestione dei diritti sul lato produzione musicale.",
+  },
+];
+
+const NUMERI = [
+  { value: "2.500+", label: "Artisti mandanti" },
+  { value: "41.000+", label: "Opere in repertorio" },
+  { value: "490k €", label: "Diritti gestiti" },
+  { value: "1.300", label: "Azioni a tutela" },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen font-lora">
-      {/* Hero Section */}
-      <section className="relative w-full py-20 md:py-32 lg:py-48 overflow-hidden bg-anthropic-dark text-anthropic-light">
-        <div className="absolute inset-0 bg-[url('https://www.reteartistispettacolo.it/wp-content/uploads/rasi_logo.png')] opacity-5 mix-blend-overlay bg-cover bg-center" />
-        <div className="container mx-auto px-4 md:px-6 relative z-10">
-          <div className="flex flex-col items-center text-center space-y-8 max-w-4xl mx-auto">
-            <h1 className="font-poppins text-4xl md:text-6xl lg:text-7xl font-extrabold tracking-tighter leading-tight animate-in slide-in-from-bottom-8 fade-in duration-700">
-              Il mandato <span className="text-anthropic-orange">più vantaggioso</span> per i tuoi diritti connessi.
+    <div className="font-schibsted">
+      {/* Hero */}
+      <section className="relative overflow-hidden bg-rasi-ink">
+        <div className="mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 pt-16 pb-16 md:px-6 md:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <h1 className="text-4xl font-bold leading-[1.05] tracking-tight text-rasi-paper md:text-5xl lg:text-6xl">
+              Il tuo lavoro d&apos;artista genera diritti. Noi li tuteliamo.
             </h1>
-            <p className="text-lg md:text-2xl text-anthropic-mid-gray max-w-2xl font-light leading-relaxed animate-in slide-in-from-bottom-8 fade-in duration-1000 delay-150 fill-mode-both">
-              Siamo l'Organismo di Gestione Collettiva scelto da migliaia di artisti. 
-              Trasparenza, equità e una commissione ridotta solo sul percepito effettivo.
+            <p className="mt-6 max-w-lg text-lg leading-relaxed text-rasi-paper/70">
+              RASI amministra i diritti connessi degli artisti interpreti ed esecutori. Mandato gratuito, promozione delle tue opere inclusa.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 pt-8 animate-in slide-in-from-bottom-8 fade-in duration-1000 delay-300 fill-mode-both">
-              <Link href="/auth">
-                <Button size="lg" className="w-full sm:w-auto font-poppins rounded-full bg-anthropic-orange text-anthropic-light hover:bg-anthropic-orange/90 text-lg px-8 h-14">
-                  Iscriviti a R.A.S.I.
+            <div className="mt-8 flex flex-col gap-4 sm:flex-row">
+              <Link href="/artisti">
+                <Button className="w-full rounded-full bg-rasi-ember px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-ember-deep sm:w-auto">
+                  Scopri se puoi aderire
                 </Button>
               </Link>
-              <Link href="/chi-siamo">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto font-poppins rounded-full border-anthropic-mid-gray text-anthropic-light hover:bg-anthropic-light hover:text-anthropic-dark text-lg px-8 h-14">
-                  Scopri i vantaggi
+              <Link href="/documenti/modulistica">
+                <Button
+                  variant="outline"
+                  className="w-full rounded-full border-rasi-paper/30 bg-transparent px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-paper hover:text-rasi-ink sm:w-auto"
+                >
+                  Scarica il mandato
                 </Button>
               </Link>
             </div>
+          </div>
+
+          <div className="relative aspect-[4/3] overflow-hidden rounded-md animate-in fade-in duration-1000 delay-150 fill-mode-both">
+            <Image
+              src="https://picsum.photos/seed/rasi-artista-palco/1200/900"
+              alt="Artista interprete durante un'esibizione dal vivo"
+              fill
+              priority
+              className="object-cover"
+              sizes="(min-width: 1024px) 45vw, 90vw"
+            />
           </div>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="w-full py-16 md:py-24 bg-anthropic-light text-anthropic-dark border-b border-anthropic-light-gray">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-anthropic-light-gray">
-            <div className="flex flex-col space-y-2 py-6 md:py-0">
-              <span className="font-poppins text-5xl md:text-6xl font-bold text-anthropic-blue tracking-tight">2.5k+</span>
-              <span className="text-sm uppercase tracking-widest text-anthropic-mid-gray font-semibold">Artisti Mandanti</span>
-            </div>
-            <div className="flex flex-col space-y-2 py-6 md:py-0">
-              <span className="font-poppins text-5xl md:text-6xl font-bold text-anthropic-green tracking-tight">41k+</span>
-              <span className="text-sm uppercase tracking-widest text-anthropic-mid-gray font-semibold">Opere Interpretate</span>
-            </div>
-            <div className="flex flex-col space-y-2 py-6 md:py-0">
-              <span className="font-poppins text-5xl md:text-6xl font-bold text-anthropic-orange tracking-tight">€490k</span>
-              <span className="text-sm uppercase tracking-widest text-anthropic-mid-gray font-semibold">Diritti Gestiti</span>
-            </div>
-            <div className="flex flex-col space-y-2 py-6 md:py-0">
-              <span className="font-poppins text-5xl md:text-6xl font-bold text-anthropic-dark tracking-tight">1.3k</span>
-              <span className="text-sm uppercase tracking-widest text-anthropic-mid-gray font-semibold">Azioni a Tutela</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features / Why Us */}
-      <section className="w-full py-20 md:py-32 bg-[#f4f2eb]">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="max-w-3xl mb-16">
-            <h2 className="font-poppins text-3xl md:text-5xl font-bold text-anthropic-dark mb-6">
-              Perché firmare il mandato alla R.A.S.I.?
+      {/* A chi ci rivolgiamo */}
+      <section className="mx-auto max-w-7xl px-4 py-16 md:px-6 md:py-24">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
+          <div>
+            <h2 className="text-3xl font-bold leading-tight tracking-tight text-rasi-ink md:text-4xl">
+              A chi ci rivolgiamo
             </h2>
-            <p className="text-lg md:text-xl text-anthropic-dark/80 font-light">
-              Offriamo condizioni trasparenti e servizi dedicati per massimizzare la valorizzazione del tuo lavoro.
+            <p className="mt-4 max-w-sm text-rasi-slate">
+              Se ti riconosci in uno di questi profili, probabilmente hai diritto a un compenso che RASI può aiutarti a ottenere.
             </p>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            <div className="flex flex-col space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-anthropic-orange/10 flex items-center justify-center text-anthropic-orange font-bold text-xl">1</div>
-              <h3 className="font-poppins text-2xl font-semibold text-anthropic-dark">Mandato Gratuito</h3>
-              <p className="text-anthropic-dark/70 leading-relaxed">
-                Il mandato è totalmente gratuito e può essere revocato in qualsiasi momento. Percepiremo solo una commissione del 10% sui compensi incassati.
-              </p>
-            </div>
-            <div className="flex flex-col space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-anthropic-blue/10 flex items-center justify-center text-anthropic-blue font-bold text-xl">2</div>
-              <h3 className="font-poppins text-2xl font-semibold text-anthropic-dark">Award System</h3>
-              <p className="text-anthropic-dark/70 leading-relaxed">
-                Un database informatico regolarmente aggiornato delle opere e dei titolari. Ti aiutiamo a ricostruire l'elenco delle tue interpretazioni.
-              </p>
-            </div>
-            <div className="flex flex-col space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-anthropic-green/10 flex items-center justify-center text-anthropic-green font-bold text-xl">3</div>
-              <h3 className="font-poppins text-2xl font-semibold text-anthropic-dark">Promozione Social</h3>
-              <p className="text-anthropic-dark/70 leading-relaxed">
-                Un servizio esclusivo e gratuito per sostenere la promozione delle tue opere e spettacoli sui principali canali social media.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-      
-      {/* Testimonials */}
-      <section className="w-full py-20 md:py-32 bg-anthropic-dark text-anthropic-light overflow-hidden">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="flex flex-col md:flex-row justify-between items-end mb-16">
-            <h2 className="font-poppins text-3xl md:text-5xl font-bold max-w-2xl">
-              Hanno già scelto R.A.S.I.
-            </h2>
-          </div>
-          <div className="flex gap-6 overflow-x-auto pb-8 snap-x snap-mandatory hide-scrollbar">
-            {["Giuppy Izzo", "Riccardo Mandolini", "Tony Sperandeo", "Ilaria Della Bidia", "Ugo Conti", "Eva Henger", "Valeria Marini"].map((artist, i) => (
-              <div key={i} className="min-w-[280px] md:min-w-[350px] p-8 rounded-3xl bg-anthropic-light/5 border border-anthropic-light/10 snap-center">
-                <p className="text-anthropic-mid-gray mb-8 italic">"Un team sempre disponibile nell'offrire informazione e supporto agli artisti, interpreti ed esecutori."</p>
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-anthropic-orange/20 flex items-center justify-center font-poppins font-bold text-anthropic-orange">
-                    {artist.charAt(0)}
-                  </div>
-                  <div>
-                    <h4 className="font-poppins font-semibold">{artist}</h4>
-                    <span className="text-sm text-anthropic-mid-gray">Artista Mandante</span>
-                  </div>
-                </div>
+
+          <div className="divide-y divide-rasi-line border-t border-rasi-line">
+            {PROFILI.map((profilo) => (
+              <div
+                key={profilo.title}
+                className="flex flex-col gap-2 py-6 sm:flex-row sm:items-baseline sm:gap-8"
+              >
+                <h3 className="text-lg font-semibold text-rasi-ink sm:w-56 sm:shrink-0">
+                  {profilo.title}
+                </h3>
+                <p className="text-rasi-slate">{profilo.body}</p>
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Perché aderire */}
+      <section className="bg-white py-16 md:py-24">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <h2 className="max-w-xl text-3xl font-bold leading-tight tracking-tight text-rasi-ink md:text-4xl">
+            Perché aderire a RASI
+          </h2>
+
+          <div className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-md bg-rasi-line sm:grid-cols-2">
+            {VANTAGGI.map((vantaggio) => (
+              <div key={vantaggio.title} className="bg-white p-8">
+                <vantaggio.icon className="h-6 w-6 text-rasi-ember" strokeWidth={1.75} />
+                <h3 className="mt-4 text-lg font-semibold text-rasi-ink">{vantaggio.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-rasi-slate">{vantaggio.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Numeri */}
+      <section className="border-y border-rasi-line bg-rasi-paper py-16">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-4 md:grid-cols-4 md:px-6">
+          {NUMERI.map((numero) => (
+            <div key={numero.label} className="text-center">
+              <div className="text-3xl font-bold tracking-tight text-rasi-ink md:text-4xl">
+                {numero.value}
+              </div>
+              <div className="mt-1 text-sm text-rasi-slate">{numero.label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA finale */}
+      <section className="bg-rasi-ink py-16 md:py-24">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 px-4 md:flex-row md:items-center md:px-6">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-rasi-paper md:text-4xl">
+              Non sai se puoi aderire?
+            </h2>
+            <p className="mt-2 text-rasi-paper/70">Scrivici, ti rispondiamo noi.</p>
+          </div>
+          <Link href="/contatti">
+            <Button className="rounded-full bg-rasi-ember px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-ember-deep">
+              Contatta RASI
+              <ArrowRight className="ml-1 h-4 w-4" strokeWidth={2} />
+            </Button>
+          </Link>
         </div>
       </section>
     </div>

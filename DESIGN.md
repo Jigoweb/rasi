@@ -1,8 +1,58 @@
-<!-- SEED — re-run /impeccable document once c'è codice reale (pagine/componenti nuovi) da cui estrarre token e componenti effettivi. -->
-
 ---
 name: RASI — Sito Pubblico
 description: Sito istituzionale/marketing per Rete Artisti Spettacolo, collecting society diritti connessi
+colors:
+  ember-primary: "#C1502A"
+  ember-deep: "#9C3D1E"
+  ink: "#241F1B"
+  slate: "#4A4540"
+  paper: "#F6F4F1"
+  line: "#E4DFD8"
+typography:
+  display:
+    fontFamily: "Schibsted Grotesk, system-ui, sans-serif"
+    fontSize: "clamp(2.5rem, 5vw, 4rem)"
+    fontWeight: 700
+    lineHeight: 1.05
+    letterSpacing: "-0.02em"
+  headline:
+    fontFamily: "Schibsted Grotesk, system-ui, sans-serif"
+    fontSize: "clamp(1.75rem, 3vw, 2.5rem)"
+    fontWeight: 700
+    lineHeight: 1.15
+    letterSpacing: "-0.01em"
+  body:
+    fontFamily: "Schibsted Grotesk, system-ui, sans-serif"
+    fontSize: "1.0625rem"
+    fontWeight: 400
+    lineHeight: 1.6
+  label:
+    fontFamily: "Schibsted Grotesk, system-ui, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 600
+    letterSpacing: "0.01em"
+rounded:
+  sm: "6px"
+  md: "10px"
+  full: "999px"
+spacing:
+  sm: "16px"
+  md: "24px"
+  lg: "48px"
+  xl: "96px"
+components:
+  button-primary:
+    backgroundColor: "{colors.ember-primary}"
+    textColor: "{colors.paper}"
+    rounded: "{rounded.full}"
+    padding: "14px 32px"
+  button-primary-hover:
+    backgroundColor: "{colors.ember-deep}"
+  button-secondary:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.full}"
+    padding: "14px 32px"
 ---
 
 # Design System: RASI — Sito Pubblico
@@ -15,58 +65,92 @@ Non un ente burocratico, non una startup creator-economy: qualcuno che tratta i 
 
 Il sistema rifiuta esplicitamente: il mix scollegato di registro legalistico e marketing del sito attuale, i documenti ufficiali trattati come immagini scansionate, i portali membri WordPress-default esteticamente estranei al resto, e il muro di testo burocratico tipico dei siti istituzionali italiani.
 
+**Design read (fase 5):** landing istituzionale/nonprofit per utenti-artisti, trust-first ma calda, redesign-overhaul (nuovo linguaggio visivo, IA e contenuti già ridisegnati nelle fasi 1-4). Dial: `DESIGN_VARIANCE 6` (offset, non simmetria perfetta ma nemmeno caos asimmetrico — la fiducia richiede prevedibilità), `MOTION_INTENSITY 5` (reveal fluidi on-scroll, nessuna coreografia GSAP hijack), `VISUAL_DENSITY 4` (spaziatura da app quotidiana, non art-gallery airy — c'è contenuto reale da portare).
+
 **Key Characteristics:**
-- Un accento cromatico committed (30-60% della superficie) che porta calore senza diventare decorazione.
-- Tipografia a famiglia singola, ben calibrata su pesi/dimensioni — niente coppia display/body magazine-style.
-- Motion responsive: transizioni e feedback puliti, zero coreografie da hero-landing generica.
+- Un accento cromatico committed (Ember, terracotta-vermiglio caldo) che porta calore senza diventare decorazione.
+- Tipografia a famiglia singola (Schibsted Grotesk) — niente coppia display/body magazine-style, regge sia hero sia testo normativo denso.
+- Motion responsive: transizioni e feedback puliti (`whileInView` stagger leggero), zero coreografie da hero-landing generica.
 - Gerarchia visiva netta tra pagine di conversione (Per gli Artisti, Servizi) e pagine di compliance (Documenti) — stessa voce, intensità diversa.
 
 ## 2. Colors
 
-*[Da risolvere in fase 5 — nessun hex ancora scelto, solo strategia.]*
+Palette Committed su base neutra calda (non crema/beige generica): carta grigio-caldo desaturata, non bianco puro, non crema da "warm-craft" cliché.
 
-**The Committed Rule.** Un solo colore d'accento porta 30-60% di ogni superficie chiave (hero, CTA primarie, stati attivi) — non è decorazione, è la voce del brand. Famiglia hue (caldo tipo terracotta/ambra vs blu profondo/petrolio) da decidere in fase 5 con moodboard, coerente con "autorevole, caldo, diretto" da PRODUCT.md.
+**The Committed Rule.** L'accento Ember porta 30-60% di ogni superficie chiave (hero, CTA primarie, stati attivi, badge di sezione) — non è decorazione, è la voce del brand.
 
 ### Primary
-- **[da nominare]** (`[to be resolved during implementation]`): accento committed, CTA primarie, stati attivi/selezionati.
+- **Ember** (`#C1502A`): CTA primarie, stati attivi/selezionati, accenti hero. Terracotta-vermiglio, distinto dalla famiglia beige+brass/oxblood da evitare per default (vedi Do's and Don'ts).
+- **Ember Deep** (`#9C3D1E`): hover/active della CTA primaria.
 
 ### Neutral
-- **[da nominare]** (`[to be resolved during implementation]`): superfici, testo, bordi — layer neutro caldo o freddo da abbinare all'accento scelto.
+- **Ink** (`#241F1B`): testo principale, quasi-nero caldo (non nero puro).
+- **Slate** (`#4A4540`): testo secondario, didascalie, metadati.
+- **Paper** (`#F6F4F1`): sfondo superfici, grigio-caldo desaturato, non bianco puro né crema.
+- **Line** (`#E4DFD8`): bordi, divisori, hairline.
+
+### Named Rules
+**The One Voice Rule.** Ember appare solo su elementi che richiedono un'azione o segnalano stato attivo (CTA, tab selezionata, badge "Attivo" su un bando) — mai come sfondo decorativo di sezioni intere non correlate ad azione.
 
 ## 3. Typography
 
-**Display/Body Font:** Single sans — famiglia unica, nessun pairing display+body. `[font specifico da scegliere in fase 5, evitando reflex-reject: no Inter/DM Sans/Space Grotesk/Plus Jakarta/Instrument Sans di default]`
+**Display/Body Font:** Schibsted Grotesk (Google Fonts), famiglia unica per tutto il sito. Scelta perché regge sia titoli hero larghi sia testo normativo denso (Documenti/Norme) senza cambiare famiglia, ed è distintiva rispetto ai default AI più comuni (Inter, Space Grotesk, DM Sans, Outfit, Plus Jakarta Sans — tutti evitati).
 
-**Character:** Diretto e leggibile a ogni peso — deve reggere sia titoli hero sia testo normativo denso (Documenti/Norme) senza cambiare famiglia.
+**Character:** Grottesca con eredità editoriale (nata per un quotidiano norvegese) — dà autorevolezza senza freddezza tecnica, diretta a ogni peso.
 
 ### Hierarchy
-- **Display** (peso/size da definire): hero, titoli sezione landing.
-- **Headline** (peso/size da definire): titoli pagina, H2 hub.
-- **Body** (peso/size da definire, 65-75ch per prosa lunga tipo Chi Siamo/Norme): testo corrente.
-- **Label** (peso/size/letter-spacing da definire): nav, badge, CTA.
+- **Display** (700, `clamp(2.5rem, 5vw, 4rem)`, line-height 1.05): hero, titoli sezione landing.
+- **Headline** (700, `clamp(1.75rem, 3vw, 2.5rem)`, line-height 1.15): titoli pagina, H2 hub.
+- **Body** (400, 17px, line-height 1.6, max 65-75ch): testo corrente, prosa lunga (Chi Siamo, Norme).
+- **Label** (600, 14px, letter-spacing 0.01em): nav, badge, CTA.
 
 ### Named Rules
 **The One Family Rule.** Un solo family per tutto il sito, titoli inclusi — pesi e dimensioni creano gerarchia, non famiglie diverse.
 
 ## 4. Elevation
 
-*[Da definire in fase 5.]* Ipotesi di partenza coerente con motion "Responsive": superfici prevalentemente flat, elevazione (ombra leggera) solo come risposta a stato (hover, focus, card interattive), non come decorazione statica diffusa.
+Sistema prevalentemente flat. Nessuna ombra decorativa statica. L'unica elevazione ammessa è una risposta a stato (hover su card interattive, focus su input) — mai come default a riposo.
+
+### Shadow Vocabulary
+- **hover-lift** (`box-shadow: 0 8px 24px rgba(36, 31, 27, 0.08)`): card interattive (bando, news, servizio) al hover, abbinata a `-translate-y-[2px]`.
+
+### Named Rules
+**The Flat-By-Default Rule.** Superfici piatte a riposo. L'ombra appare solo come risposta a hover/focus, mai come decorazione statica di card o sezioni.
 
 ## 5. Components
 
-*[Nessun componente reale da documentare — il codice attuale in `src/app/(public)/page.tsx` usa token placeholder (`anthropic-*`) di uno starter template, non rappresentativo del brand RASI. Da sintetizzare in fase 5 una volta scelti i token reali.]*
+### Buttons
+- **Shape:** pill (`rounded-full`, radius 999px) — coerente con il tono diretto/invitante del brand.
+- **Primary:** sfondo Ember, testo Paper, padding `14px 32px`, peso Label (600).
+- **Hover / Focus:** sfondo Ember Deep, `-translate-y-[1px]` al hover per feedback tattile, ring visibile al focus da tastiera.
+- **Secondary / Outline:** bordo Ink 1px, testo Ink, sfondo trasparente, hover riempie con Ink/testo Paper.
 
-Componenti canonici attesi per fase 5: bottone primario/secondario, card (bando, news, servizio), nav header + footer utility bar, tabella/lista compliance (Norme, Documenti), form contatto.
+### Cards
+- **Corner Style:** radius 10px (`rounded-md`), coerente su bando/news/servizio.
+- **Background:** Paper su sfondo Ink-scuro di sezione, o bianco puro su sfondo Paper — mai stesso colore di sfondo e card.
+- **Shadow Strategy:** flat a riposo, `hover-lift` al hover se la card è cliccabile.
+- **Border:** 1px Line dove la card non ha già contrasto di sfondo sufficiente.
+- **Internal Padding:** 24px (scale `md`).
+
+### Navigation
+- **Style:** nav primaria max 4 voci dirette (Chi Siamo, Per gli Artisti, Servizi, Bandi e News) per restare su una riga a `lg` — Documenti e Accordi vivono in footer, coerente con la decisione fase 1 di non competere con le pagine di conversione.
+- **Typography:** Label (14px, 600).
+- **Stati:** default Ink, hover Ember, nessun sottolineato permanente — sottolineatura/indicatore solo su pagina attiva.
+- **Utility persistente:** AWARD System (spiegazione) + Area Riservata (CTA primaria Ember) restano sempre visibili, non nascosti in hamburger.
+- **Mobile:** collassa in menu a comparsa sotto `md`, CTA Area Riservata resta visibile nella barra.
 
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** usare l'accento colore solo su CTA primarie e stati attivi — mai come riempimento decorativo di sezioni intere non correlate ad azione.
-- **Do** mantenere la stessa famiglia tipografica anche nelle pagine Documenti/Norme dense — non introdurre un secondo registro visivo "legale".
+- **Do** usare Ember solo su CTA primarie e stati attivi — mai come riempimento decorativo di sezioni intere non correlate ad azione.
+- **Do** mantenere Schibsted Grotesk anche nelle pagine Documenti/Norme dense — non introdurre una seconda famiglia "legale".
 - **Do** trattare ogni documento ufficiale (roster, regolamenti) come testo accessibile, non immagine scansionata.
+- **Do** limitare la nav primaria a 4 voci per restare su una riga a `lg` (1024px).
 
 ### Don't:
 - **Don't** mescolare registro legalistico e marketing senza transizione visiva chiara tra sezioni — l'anti-reference esplicito è il sito RASI attuale.
-- **Don't** usare coreografie di entrata orchestrate in stile landing-page generica — motion è "Responsive", non "Choreographed".
+- **Don't** usare coreografie di entrata orchestrate in stile landing-page generica (GSAP scroll-hijack, pin-and-stack) — motion è "Responsive" (dial 5), non "Choreographed".
 - **Don't** introdurre una seconda famiglia tipografica per "differenziare" sezioni istituzionali da quelle di conversione.
 - **Don't** trattare bandi/news come pagine piatte isolate — restano un content-type strutturato (vedi mappatura contenuti fase 2).
+- **Don't** usare la palette beige/crema + brass/oxblood da "warm-craft" generico — Paper è grigio-caldo desaturato, non crema; Ember è terracotta-vermiglio, non ottone.
+- **Don't** usare l'em-dash (—) in copy visibile: titoli, bottoni, badge, caption. Usare punto, virgola o trattino breve.

@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
 
 export const dynamic = 'force-dynamic'
-import { Inter, Poppins, Lora } from "next/font/google";
+import { Schibsted_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/shared/contexts/auth-context";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const poppins = Poppins({ 
-  weight: ["400", "500", "600", "700"], 
-  subsets: ["latin"], 
-  variable: "--font-poppins" 
-});
-const lora = Lora({ 
-  subsets: ["latin"], 
-  variable: "--font-lora" 
+const schibstedGrotesk = Schibsted_Grotesk({
+  weight: ["400", "500", "600", "700", "800"],
+  subsets: ["latin"],
+  variable: "--font-schibsted",
 });
 
 export const metadata: Metadata = {
@@ -27,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="it" className={`${inter.variable} ${poppins.variable} ${lora.variable}`}>
+    <html lang="it" className={schibstedGrotesk.variable}>
       <body className="antialiased">
         <AuthProvider>
           {children}
