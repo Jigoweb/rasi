@@ -126,6 +126,12 @@ Sistema prevalentemente flat. Nessuna ombra decorativa statica. L'unica elevazio
 ### Named Rules
 **The Flat-By-Default Rule.** Superfici piatte a riposo. L'ombra appare solo come risposta a hover/focus, mai come decorazione statica di card o sezioni.
 
+### Dark mode
+**Fuori scope, deciso esplicitamente.** Il sito resta solo light, come le convenzioni di siti istituzionali/pubblici (GOV.UK, USWDS). Non aggiungere token o varianti `dark:` senza nuova decisione esplicita.
+
+### Motion
+Scroll-reveal leggero (fade + translate-y, `IntersectionObserver`, componente [`reveal.tsx`](../src/app/(public)/reveal.tsx)) su tutte le sezioni sotto la hero. Rispetta `prefers-reduced-motion` (skip diretto a stato visibile). Coerente col dial Motion=5: feedback e reveal puliti, nessuna coreografia GSAP.
+
 ## 5. Components
 
 ### Buttons
