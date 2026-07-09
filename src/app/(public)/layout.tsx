@@ -81,11 +81,15 @@ export default function PublicLayout({
           <div className="space-y-4">
             <h4 className="font-semibold text-sm uppercase tracking-wide text-rasi-ink">Documenti</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/chi-siamo/statuto" className="hover:text-rasi-ember">Statuto e regolamenti</Link></li>
+              <li><Link href="/chi-siamo/statuto" className="hover:text-rasi-ember">Statuto</Link></li>
+              <li><Link href="/chi-siamo/regolamento-adesione" className="hover:text-rasi-ember">Regolamento di adesione</Link></li>
               <li><Link href="/norme" className="hover:text-rasi-ember">Norme</Link></li>
               <li><Link href="/chi-siamo/relazione-di-trasparenza" className="hover:text-rasi-ember">Relazione di trasparenza</Link></li>
               <li><Link href="/modulistica" className="hover:text-rasi-ember">Modulistica</Link></li>
-              <li><Link href="/chi-siamo/privacy-policy" className="hover:text-rasi-ember">Privacy e cookie policy</Link></li>
+              <li><Link href="/chi-siamo/privacy-policy" className="hover:text-rasi-ember">Privacy policy</Link></li>
+              <li><Link href="/chi-siamo/personal-data-policy" className="hover:text-rasi-ember">Personal data policy</Link></li>
+              <li><Link href="/chi-siamo/linee-di-condotta" className="hover:text-rasi-ember">Linee di condotta</Link></li>
+              <li><Link href="/chi-siamo/procedure-di-trattamento-dei-reclami" className="hover:text-rasi-ember">Reclami e controversie</Link></li>
             </ul>
           </div>
           <div className="space-y-4">
