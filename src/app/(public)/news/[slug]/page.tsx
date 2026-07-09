@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/shared/lib/supabase-server";
-import { extractArticleParagraphs } from "@/shared/lib/html-content";
+import { extractArticleHtml } from "@/shared/lib/html-content";
 
 export default async function NewsDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -16,7 +16,7 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
     notFound();
   }
 
-  const paragraphs = extractArticleParagraphs(item.content || "");
+  const bodyHtml = extractArticleHtml(item.content || "");
 
   return (
     <article className="mx-auto max-w-3xl px-4 py-16 font-schibsted md:px-6">
@@ -30,13 +30,14 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
         </div>
       ) : null}
 
-      <div className="space-y-4 text-lg leading-relaxed text-rasi-slate">
-        {paragraphs.length > 0 ? (
-          paragraphs.map((paragraph, i) => <p key={i}>{paragraph}</p>)
-        ) : (
-          <p>Contenuto in fase di redazione.</p>
-        )}
-      </div>
+      {bodyHtml ? (
+        <div
+          className="space-y-4 text-lg leading-relaxed text-rasi-slate [&_a]:text-rasi-ember [&_a]:underline [&_a]:underline-offset-2 [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-rasi-ink [&_h2]:mt-8 [&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-rasi-ink [&_h3]:mt-6 [&_li]:ml-5 [&_ol]:list-decimal [&_strong]:text-rasi-ink [&_ul]:list-disc"
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+        />
+      ) : (
+        <p className="text-lg text-rasi-slate">Contenuto in fase di redazione.</p>
+      )}
     </article>
   );
 }

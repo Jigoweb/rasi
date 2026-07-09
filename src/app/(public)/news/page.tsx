@@ -1,13 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/shared/components/ui/button";
 import { supabaseServer } from "@/shared/lib/supabase-server";
-import { extractArticleParagraphs } from "@/shared/lib/html-content";
-
-function excerpt(html: string) {
-  const paragraphs = extractArticleParagraphs(html);
-  const text = paragraphs.join(" ");
-  return text.length > 140 ? `${text.slice(0, 140)}...` : text;
-}
+import { extractArticleExcerpt } from "@/shared/lib/html-content";
 
 export default async function NewsPage() {
   const { data: newsList } = await supabaseServer
@@ -38,7 +32,7 @@ export default async function NewsPage() {
             >
               <h3 className="text-lg font-semibold leading-snug text-rasi-ink">{item.title}</h3>
               <p className="mt-2 flex-1 text-sm leading-relaxed text-rasi-slate">
-                {excerpt(item.content || "") || "Aggiornamento in fase di pubblicazione."}
+                {extractArticleExcerpt(item.content || "") || "Aggiornamento in fase di pubblicazione."}
               </p>
               <Link href={`/news/${item.slug}`} className="mt-6">
                 <Button

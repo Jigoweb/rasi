@@ -1,33 +1,6 @@
-const HTML_ENTITY_MAP: Record<string, string> = {
-  "&nbsp;": " ",
-  "&amp;": "&",
-  "&quot;": '"',
-  "&#8217;": "'",
-  "&#8216;": "'",
-  "&#8220;": '"',
-  "&#8221;": '"',
-  "&#8211;": "-",
-  "&#8212;": "-",
-  "&rsquo;": "'",
-  "&lsquo;": "'",
-  "&ldquo;": '"',
-  "&rdquo;": '"',
-};
+import sanitizeHtml from "sanitize-html";
 
-function decodeEntities(text: string) {
-  return text.replace(/&[a-z#0-9]+;/gi, (match) => HTML_ENTITY_MAP[match] ?? match);
-}
-
-/**
- * The bandi_news.content field stores full scraped WordPress pages (head, nested
- * sticky header, sidebar widgets, footer), not just the article body. Rendering it
- * raw via dangerouslySetInnerHTML embeds an entire nested page inside ours. This
- * trims the obvious header/footer wrapper and returns plain-text paragraphs instead
- * of re-rendering the original markup.
- */
-export function extractArticleParagraphs(html: string): string[] {
-  if (!html) return [];
-
+function trimHeaderFooterWrapper(html: string): string {
   let body = html;
   const lastHeaderClose = body.toLowerCase().lastIndexOf("</header>");
   if (lastHeaderClose !== -1) {
@@ -37,15 +10,43 @@ export function extractArticleParagraphs(html: string): string[] {
   if (footerOpen !== -1) {
     body = body.slice(0, footerOpen);
   }
+  return body;
+}
 
-  const withBreaks = body
-    .replace(/<(p|div|li|br|h[1-6])[^>]*>/gi, "\n")
-    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n");
+/**
+ * The bandi_news.content field stores full scraped WordPress pages (head, nested
+ * sticky header, sidebar widgets, footer, inline Elementor markup), not just the
+ * article body. Rendering it raw via dangerouslySetInnerHTML embedded an entire
+ * nested page inside ours (WP header/nav colors bleeding through).
+ *
+ * This trims the known header/footer wrapper, then sanitizes what's left down to a
+ * small allowlist of formatting tags (bold, italic, links, lists, headings) so real
+ * article formatting survives while structural/styling markup (div, class, style,
+ * script, nav, aside, images with WP-relative paths) is stripped.
+ */
+export function extractArticleHtml(html: string): string {
+  if (!html) return "";
 
-  const plain = decodeEntities(withBreaks.replace(/<[^>]*>/g, " "));
+  const body = trimHeaderFooterWrapper(html);
 
-  return plain
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => line.length > 3);
+  return sanitizeHtml(body, {
+    allowedTags: ["p", "br", "strong", "b", "em", "i", "u", "a", "ul", "ol", "li", "h2", "h3", "h4", "blockquote"],
+    allowedAttributes: {
+      a: ["href"],
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    transformTags: {
+      a: sanitizeHtml.simpleTransform("a", { rel: "noopener noreferrer", target: "_blank" }),
+    },
+    exclusiveFilter: (frame) => frame.tag === "p" && !frame.text.trim(),
+  }).trim();
+}
+
+/** Plain-text excerpt for listing cards, derived from the same sanitized body. */
+export function extractArticleExcerpt(html: string, maxLength = 140): string {
+  const clean = extractArticleHtml(html);
+  const text = sanitizeHtml(clean, { allowedTags: [], allowedAttributes: {} })
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
