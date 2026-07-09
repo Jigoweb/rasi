@@ -6,24 +6,25 @@ Riferimenti: [IA](./2026-07-09-redesign-sito-pubblico-ia-design.md) · [mapping]
 
 ## AWARD System
 
-Pagina NUOVA — oggi il nome ricorre ovunque sul sito ma non è mai spiegato. Contenuto base da award.reteartistispettacolo.com/it/ (portale esterno, resta separato — vedi mapping fase 2).
+Pagina NUOVA — oggi il nome ricorre ovunque sul sito ma non è mai spiegato. Contenuto base da award.reteartistispettacolo.com/it/, **ma la decisione è cambiata rispetto alla prima bozza**: AWARD System non è più trattato come portale esterno separato. Verifica sul codice ([src/app/dashboard/profilo/page.tsx](../../../src/app/dashboard/profilo/page.tsx)) conferma che questa stessa app ha già un'area artista con tab Repertorio / Individuazioni / Ripartizioni — cioè le stesse funzioni di AWARD (archiviazione, individuazione titolari, ripartizione). AWARD **è** l'area riservata di questo sito, non un sistema terzo. La pagina pubblica diventa quindi un funnel verso il login/dashboard interno, non un link in uscita.
 
 ### Hero
 **H1:** AWARD System: il database che trova i tuoi diritti
-**Sottotitolo:** Artists-Works Art-Rights-Data. Il sistema con cui RASI archivia le opere, identifica gli aventi diritto, calcola la ripartizione e genera i pagamenti.
+**Sottotitolo:** Artists-Works Art-Rights-Data. Il sistema con cui RASI archivia le opere, identifica gli aventi diritto, calcola la ripartizione e genera i pagamenti — e che puoi consultare direttamente dalla tua area riservata.
 
 ### Sezione: Come funziona
 4 blocchi, uno per fase (stesso pattern icona+titolo+frase del resto del sito):
-1. **Archiviazione** — due database separati, musica e audiovisivo, con i metadati di ogni opera (titoli, interpreti, codici ISRC, dati di produzione).
+1. **Archiviazione** — due database, musica e audiovisivo, con i metadati di ogni opera (titoli, interpreti, codici ISRC, dati di produzione).
 2. **Individuazione titolari** — i palinsesti delle emittenti vengono incrociati con il database per riconoscere gli artisti mandanti RASI presenti in ogni opera trasmessa.
 3. **Ripartizione** — il compenso viene calcolato secondo il regolamento di ripartizione (vedi Documenti).
 4. **Pagamento** — RASI genera ed emette i mandati di pagamento agli aventi diritto.
 
-### Sezione: Accedere al portale
-**Corpo:** Il database è liberamente consultabile dai titolari di diritti e dagli utilizzatori. Per consultare la tua posizione o le opere archiviate serve un accesso dedicato, separato dall'area riservata di questo sito.
-**CTA:** Accedi ad AWARD System (link esterno a award.reteartistispettacolo.com)
+### Sezione: Consulta la tua posizione
+**Corpo:** Se sei un artista mandante, puoi consultare il tuo repertorio, le individuazioni e le ripartizioni direttamente dalla tua area riservata — stesso accesso di questo sito, nessun account separato da creare.
+**CTA primaria:** Accedi alla tua area riservata (→ `/auth`, poi `/dashboard/profilo` per utenti con ruolo artista)
+**CTA secondaria (per chi non è ancora mandante):** Non hai ancora un account? Scopri come aderire (→ Per gli Artisti)
 
-*Nota: confermato con cliente — AWARD System resta un sistema separato, login diverso da quello del sito RASI principale. Questa pagina è un ponte esplicativo, non un'integrazione.*
+*Nota: funnel unico — questa pagina è pubblica/esplicativa, il CTA porta al login esistente dell'app (`/auth`). Il middleware già instrada gli utenti con ruolo "artista" solo su `/dashboard/profilo` (walled garden) — comportamento coerente, nessuna modifica di routing necessaria per questa fase di contenuti. Reso obsoleto: il riferimento ad award.reteartistispettacolo.com come sistema esterno separato, presente nella bozza precedente e nel doc IA/mapping fase 1-2 — da correggere in quei documenti.*
 
 ---
 

@@ -95,7 +95,7 @@ Home
 │   ├── Bandi attivi (card, scadenze)
 │   └── Archivio bandi conclusi (filtrabile)
 ├── Accordi — partner nazionali + esteri
-├── AWARD System — pagina esplicativa nuova + link a portale esterno
+├── AWARD System — pagina esplicativa nuova, funnel verso login/dashboard interna (non più portale esterno separato — vedi nota sotto)
 ├── News — nuovo, blog/annunci RASI + SCAPR + settore
 ├── Documenti — legale/compliance, non-nav primaria ma raggiungibile
 │   ├── Statuto, Regolamenti (testo leggibile, non solo PDF dove possibile)
@@ -116,7 +116,9 @@ Home
 - News aggiunta in nav primaria — oggi irraggiungibile da menu.
 - Documenti legali raggruppati, spostati fuori dalla nav di primo livello per non competere con pagine di conversione, ma restano accessibili (footer + voce dedicata).
 - Area Riservata / Contatti spostati in utility bar persistente invece che tab di primo livello — riduce affollamento nav primaria.
-- AWARD System guadagna una voce propria (era solo CTA ricorrente non spiegata) con pagina ponte verso il portale esterno.
+- AWARD System guadagna una voce propria (era solo CTA ricorrente non spiegata) con pagina ponte verso l'accesso.
+
+**Aggiornamento (fase 4):** la decisione "portale esterno separato" sopra è superata. `src/app/dashboard/profilo/page.tsx` mostra che quest'app ha già un'area artista con tab Repertorio/Individuazioni/Ripartizioni — le stesse funzioni di AWARD System. AWARD **è** l'area riservata di questa app, non un sistema terzo su award.reteartistispettacolo.com. La pagina pubblica AWARD System diventa quindi un funnel verso `/auth` → `/dashboard/profilo`, non un link in uscita. Vedi [content round 2](./2026-07-09-redesign-sito-pubblico-content-round2.md) per il copy aggiornato.
 
 ## Fuori scope per questo documento
 

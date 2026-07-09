@@ -68,7 +68,7 @@ Per ogni sezione della nuova IA: quali pagine sorgente confluiscono, decisione e
 
 | Sorgente | Decisione | Note |
 |---|---|---|
-| (nessuna pagina esistente sul sito principale) | NUOVO | Pagina esplicativa da scrivere ex-novo usando come base i contenuti trovati su award.reteartistispettacolo.com/it/ (archiviazione, individuazione titolari, ripartizione, pagamento — acronimo "Artists-Works Art-Rights-Data"). CTA verso portale esterno per login/consultazione. |
+| (nessuna pagina esistente sul sito principale) | NUOVO | Pagina esplicativa da scrivere ex-novo usando come base i contenuti trovati su award.reteartistispettacolo.com/it/ (archiviazione, individuazione titolari, ripartizione, pagamento — acronimo "Artists-Works Art-Rights-Data"). **Decisione aggiornata in fase 4**: CTA non punta più a un portale esterno — `src/app/dashboard/profilo/page.tsx` ha già le stesse funzioni (Repertorio/Individuazioni/Ripartizioni) per utenti con ruolo artista. La pagina diventa un funnel verso `/auth` → `/dashboard/profilo`, cioè verso il login di questa stessa app. |
 
 ## News
 
@@ -98,7 +98,7 @@ Per ogni sezione della nuova IA: quali pagine sorgente confluiscono, decisione e
 
 | Sorgente | Decisione | Note |
 |---|---|---|
-| Login/Register/Members | AS-IS funzione, NUOVO look | Confermato: sistema separato da AWARD System (login/portale diversi, nessuna unificazione in questo progetto). |
+| Login/Register/Members | AS-IS funzione, NUOVO look | **Corretto in fase 4**: questo login (`/auth`) è lo stesso accesso di AWARD System, non un sistema separato — vedi sezione AWARD System sopra. |
 | Contatti | RISCRIVI | Form generico + dettagli contatto ok, ma richieste specifiche oggi via mailto con oggetto — valutare form dedicati per categoria richiesta (nota UX, decisione rimandata a fase 5). |
 | Selettore lingua | NUOVO | Routing 5 lingue (IT/EN/FR/DE/ES) da implementare — traduzione contenuti fuori scope fase 2/3, ma la struttura URL/routing va decisa in fase di setup tecnico (fase 3). |
 
@@ -106,8 +106,8 @@ Per ogni sezione della nuova IA: quali pagine sorgente confluiscono, decisione e
 
 ## Chiarimenti ricevuti
 
-1. **Login/AWARD System**: confermato, restano due sistemi separati — nessuna unificazione.
-2. **Elenco opere interpretate**: resta fuori scope per ora (nessun collegamento/integrazione con AWARD System deciso in questo progetto).
+1. **Login/AWARD System**: ~~confermato, restano due sistemi separati~~ — **corretto in fase 4**: sono lo stesso sistema. `/auth` → `/dashboard/profilo` è di fatto AWARD System per gli utenti con ruolo artista.
+2. **Elenco opere interpretate**: fuori scope come sezione pubblica dedicata, ma essendo AWARD System ora interno (non esterno), il repertorio è comunque consultabile via `/dashboard/profilo` (tab Repertorio) — nessuna azione aggiuntiva richiesta in questa fase, solo nota per coerenza.
 3. **Bando attivo ("Sotto lo stesso tetto")**: probabilmente scaduto — in fase 4 va trattato come bando concluso (archivio), non come bando attivo in evidenza, salvo conferma diversa più vicino al lancio.
 4. **Dati Organi sociali / Accordi**: migrazione as-is confermata, nessuna verifica aggiornamento richiesta in questa fase.
 
