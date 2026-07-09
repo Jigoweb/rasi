@@ -81,11 +81,11 @@ export default function PublicLayout({
           <div className="space-y-4">
             <h4 className="font-semibold text-sm uppercase tracking-wide text-rasi-ink">Documenti</h4>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/documenti/statuto" className="hover:text-rasi-ember">Statuto e regolamenti</Link></li>
-              <li><Link href="/documenti/norme" className="hover:text-rasi-ember">Norme</Link></li>
-              <li><Link href="/documenti/trasparenza" className="hover:text-rasi-ember">Relazione di trasparenza</Link></li>
-              <li><Link href="/documenti/modulistica" className="hover:text-rasi-ember">Modulistica</Link></li>
-              <li><Link href="/privacy-policy" className="hover:text-rasi-ember">Privacy e cookie policy</Link></li>
+              <li><Link href="/chi-siamo/statuto" className="hover:text-rasi-ember">Statuto e regolamenti</Link></li>
+              <li><Link href="/norme" className="hover:text-rasi-ember">Norme</Link></li>
+              <li><Link href="/chi-siamo/relazione-di-trasparenza" className="hover:text-rasi-ember">Relazione di trasparenza</Link></li>
+              <li><Link href="/modulistica" className="hover:text-rasi-ember">Modulistica</Link></li>
+              <li><Link href="/chi-siamo/privacy-policy" className="hover:text-rasi-ember">Privacy e cookie policy</Link></li>
             </ul>
           </div>
           <div className="space-y-4">

@@ -14,49 +14,61 @@ export default async function NewsPage() {
     .order("published_at", { ascending: false });
 
   return (
-    <div className="py-16 md:py-24 container mx-auto px-4 md:px-6">
-      <div className="flex flex-col items-center text-center mb-16">
-        <h1 className="font-poppins text-4xl md:text-6xl font-bold text-anthropic-dark mb-6">
-          News e Bandi
-        </h1>
-        <p className="font-lora text-xl text-anthropic-mid-gray max-w-2xl">
-          Rimani aggiornato sulle ultime iniziative, sui bandi per i finanziamenti e sugli accordi a tutela degli artisti.
-        </p>
-      </div>
+    <div className="font-schibsted">
+      <section className="bg-rasi-ink py-16 md:py-24">
+        <div className="mx-auto max-w-3xl px-4 text-center md:px-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <h1 className="text-4xl font-bold leading-[1.05] tracking-tight text-rasi-paper md:text-5xl">
+            Bandi e news RASI
+          </h1>
+          <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-rasi-paper/70">
+            Bandi, incontri e aggiornamenti dal mondo della gestione collettiva dei diritti connessi.
+          </p>
+        </div>
+      </section>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {newsList && newsList.length > 0 ? newsList.map((item) => (
-          <div key={item.id} className="flex flex-col h-full bg-anthropic-light-gray/20 rounded-3xl p-8 border border-anthropic-light-gray/50 hover:border-anthropic-orange transition-colors group">
-            <div className="flex items-center justify-between mb-6">
-              <span className={`text-xs font-poppins font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
-                item.status === 'closed' ? 'bg-anthropic-mid-gray/20 text-anthropic-dark' :
-                'bg-anthropic-green/20 text-anthropic-green'
-              }`}>
-                {item.status === 'closed' ? 'Concluso' : 'Attivo'}
-              </span>
-              <span className="font-poppins text-sm text-anthropic-mid-gray">
-                {item.published_at ? new Date(item.published_at).toLocaleDateString("it-IT") : ""}
-              </span>
+      <section className="mx-auto max-w-7xl px-4 py-16 md:px-6 md:py-24">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {newsList && newsList.length > 0 ? newsList.map((item, i) => (
+            <div
+              key={item.id}
+              className="flex h-full flex-col rounded-md border border-rasi-line bg-white p-6 transition-colors hover:border-rasi-ember"
+              style={{ animationDelay: `${(i % 6) * 60}ms` }}
+            >
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                    item.status === "closed"
+                      ? "bg-rasi-line text-rasi-slate"
+                      : "bg-rasi-ember/10 text-rasi-ember"
+                  }`}
+                >
+                  {item.status === "closed" ? "Concluso" : "Attivo"}
+                </span>
+                <span className="text-sm text-rasi-slate">
+                  {item.published_at ? new Date(item.published_at).toLocaleDateString("it-IT") : ""}
+                </span>
+              </div>
+              <h3 className="text-lg font-semibold leading-snug text-rasi-ink">{item.title}</h3>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-rasi-slate">
+                {stripHtml(item.content || "").slice(0, 140) || "Aggiornamento in fase di pubblicazione."}
+                {stripHtml(item.content || "").length > 140 ? "..." : ""}
+              </p>
+              <Link href={`/news/${item.slug}`} className="mt-6">
+                <Button
+                  variant="outline"
+                  className="w-full rounded-full border-rasi-ink text-sm font-semibold text-rasi-ink hover:bg-rasi-ink hover:text-rasi-paper"
+                >
+                  Leggi di più
+                </Button>
+              </Link>
             </div>
-            <h3 className="font-poppins text-2xl font-semibold text-anthropic-dark mb-4 group-hover:text-anthropic-orange transition-colors">
-              {item.title}
-            </h3>
-            <p className="font-lora text-anthropic-dark/70 mb-8 flex-grow leading-relaxed">
-              {stripHtml(item.content || "").slice(0, 160) || "Aggiornamento in fase di pubblicazione."}
-              {stripHtml(item.content || "").length > 160 ? "…" : ""}
-            </p>
-            <Link href={`/news/${item.slug}`} className="mt-auto">
-              <Button variant="outline" className="w-full font-poppins rounded-full border-anthropic-dark text-anthropic-dark hover:bg-anthropic-dark hover:text-anthropic-light">
-                Leggi di più
-              </Button>
-            </Link>
-          </div>
-        )) : (
-          <div className="col-span-full text-center text-anthropic-mid-gray font-lora py-16">
-            Nessuna news disponibile.
-          </div>
-        )}
-      </div>
+          )) : (
+            <div className="col-span-full py-16 text-center text-rasi-slate">
+              Nessuna news disponibile.
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
