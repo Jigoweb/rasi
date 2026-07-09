@@ -55,7 +55,7 @@ Per ogni sezione della nuova IA: quali pagine sorgente confluiscono, decisione e
 |---|---|---|
 | Promozione (hub) | RISCRIVI | Intro breve alla sezione, oggi soprattutto link-out. |
 | Regolamento promozione/patrocinio | TAGLIA da nav → sposta in Documenti/Regolamenti | Testo regolamentare. |
-| Bando "Sotto lo stesso tetto" (attivo) | AS-IS contenuto, NUOVO template | Verificare se ancora attivo alla data di lancio (scadenza era 16/06/2026); struttura dati (categorie, massimali, scadenze) va estratta in campi strutturati per il nuovo template bandi, non testo libero. |
+| Bando "Sotto lo stesso tetto" | AS-IS contenuto, NUOVO template | Scadenza 16/06/2026 già passata: tratta come bando concluso nell'archivio, non come bando attivo in evidenza (salvo conferma diversa più vicino al lancio). Struttura dati (categorie, massimali, scadenze) va estratta in campi strutturati per il nuovo template bandi, non testo libero. |
 | 8 bandi conclusi | AS-IS contenuto, NUOVO template | Confluiscono nell'archivio filtrabile come record "conclusi", stesso template dati del bando attivo. |
 
 ## Accordi
@@ -98,18 +98,18 @@ Per ogni sezione della nuova IA: quali pagine sorgente confluiscono, decisione e
 
 | Sorgente | Decisione | Note |
 |---|---|---|
-| Login/Register/Members | AS-IS funzione, NUOVO look | Portale gated collegato ad AWARD System — chiarire con cliente se è lo stesso sistema di login di award.reteartistispettacolo.com o un'area diversa (dato non emerso dal crawl, da verificare prima di fase 5). |
+| Login/Register/Members | AS-IS funzione, NUOVO look | Confermato: sistema separato da AWARD System (login/portale diversi, nessuna unificazione in questo progetto). |
 | Contatti | RISCRIVI | Form generico + dettagli contatto ok, ma richieste specifiche oggi via mailto con oggetto — valutare form dedicati per categoria richiesta (nota UX, decisione rimandata a fase 5). |
 | Selettore lingua | NUOVO | Routing 5 lingue (IT/EN/FR/DE/ES) da implementare — traduzione contenuti fuori scope fase 2/3, ma la struttura URL/routing va decisa in fase di setup tecnico (fase 3). |
 
 ---
 
-## Aperti da chiarire prima di fase 4 (conferma contenuti)
+## Chiarimenti ricevuti
 
-1. **Login/AWARD System**: stesso account o due sistemi separati? Impatta UX "Area Riservata".
-2. **Elenco opere interpretate**: restano pagine statiche sul sito o si integrano/rimandano ad AWARD System (che è già un DB "in progress")?
-3. **Bando attivo**: verificare stato reale alla data di lancio del nuovo sito (scadenza 16/06/2026 già passata rispetto a oggi 2026-07-09).
-4. **Dati Organi sociali / Accordi**: confermare con cliente che roster e lista partner siano ancora aggiornati prima di migrare as-is.
+1. **Login/AWARD System**: confermato, restano due sistemi separati — nessuna unificazione.
+2. **Elenco opere interpretate**: resta fuori scope per ora (nessun collegamento/integrazione con AWARD System deciso in questo progetto).
+3. **Bando attivo ("Sotto lo stesso tetto")**: probabilmente scaduto — in fase 4 va trattato come bando concluso (archivio), non come bando attivo in evidenza, salvo conferma diversa più vicino al lancio.
+4. **Dati Organi sociali / Accordi**: migrazione as-is confermata, nessuna verifica aggiornamento richiesta in questa fase.
 
 ## Prossimo passo
 
