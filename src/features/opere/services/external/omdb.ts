@@ -126,6 +126,38 @@ export interface SearchResult {
   directors: string | null
 }
 
+/** True when the query is an IMDb id (tconst, e.g. "tt0471509"). Such queries
+ *  must go to OMDb's by-id lookup (?i=), not the title search (?s=). */
+export function isTconst(query?: string | null): boolean {
+  return /^tt\d{6,}$/i.test((query || '').trim())
+}
+
+/** OMDb detail object -> a single search result (used for by-id lookups). The
+ *  detail already carries Director, so directors is filled here. */
+export function buildSearchResultFromDetail(data: any): SearchResult | null {
+  const id = data?.imdbID || null
+  const title = data?.Title || ''
+  if (!id || !title) return null
+  const directors = splitList(data?.Director)
+  return {
+    title,
+    year: parseYear(data?.Year),
+    type: mapTypeFromOmdb(data?.Type),
+    id,
+    directors: directors.length ? directors.join(', ') : null,
+  }
+}
+
+export const OMDB_PAGE_SIZE = 10 // OMDb returns 10 results per ?s= page
+
+/** How many ?s= pages to fetch to reach `maxResults`, bounded by what OMDb
+ *  actually has (`totalResults`). Always at least 1. */
+export function pagesToFetch(totalResults: number | string | undefined | null, maxResults: number, pageSize = OMDB_PAGE_SIZE): number {
+  const total = typeof totalResults === 'string' ? parseInt(totalResults, 10) : (totalResults || 0)
+  if (!Number.isFinite(total) || total <= 0) return 1
+  return Math.min(Math.ceil(maxResults / pageSize), Math.ceil(total / pageSize))
+}
+
 /** OMDb `Search` array -> imdbapi.dev-style search results (directors filled
  *  in separately by the route when includeDirectors is set). */
 export function buildSearchResults(searchArray: any[]): SearchResult[] {
