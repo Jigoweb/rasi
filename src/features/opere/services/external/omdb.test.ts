@@ -8,6 +8,9 @@ import {
   parseReleased,
   splitList,
   buildSearchResults,
+  pagesToFetch,
+  isTconst,
+  buildSearchResultFromDetail,
   buildTitleDetail,
   buildCredits,
   buildEpisodesForSeason,
@@ -89,6 +92,48 @@ describe('buildSearchResults', () => {
 
   it('tolerates non-array input', () => {
     expect(buildSearchResults(undefined as any)).toEqual([])
+  })
+})
+
+describe('pagesToFetch', () => {
+  it('caps at maxResults/pageSize but never exceeds what OMDb has', () => {
+    expect(pagesToFetch('156', 30)).toBe(3) // want 30 -> 3 pages, plenty available
+    expect(pagesToFetch('7', 30)).toBe(1) // only 7 results -> 1 page
+    expect(pagesToFetch('25', 30)).toBe(3) // 25 -> ceil(25/10)=3
+    expect(pagesToFetch('1000', 50)).toBe(5) // want 50 -> 5 pages
+    expect(pagesToFetch('0', 30)).toBe(1)
+    expect(pagesToFetch(undefined, 30)).toBe(1)
+    expect(pagesToFetch('N/A', 30)).toBe(1)
+  })
+})
+
+describe('isTconst', () => {
+  it('recognizes IMDb ids and rejects titles', () => {
+    expect(isTconst('tt0471509')).toBe(true)
+    expect(isTconst('  TT2024469 ')).toBe(true)
+    expect(isTconst('tt123')).toBe(false) // too short
+    expect(isTconst('NON STOP')).toBe(false)
+    expect(isTconst('nm0000123')).toBe(false) // person id, not a title
+    expect(isTconst('')).toBe(false)
+    expect(isTconst(undefined)).toBe(false)
+  })
+})
+
+describe('buildSearchResultFromDetail', () => {
+  it('turns an OMDb by-id detail into a single search result (from the reported case)', () => {
+    const out = buildSearchResultFromDetail({
+      Title: 'Non stop',
+      Year: '1977–1979',
+      Type: 'series',
+      Director: 'N/A',
+      imdbID: 'tt0471509',
+    })
+    expect(out).toEqual({ title: 'Non stop', year: 1977, type: 'tvSeries', id: 'tt0471509', directors: null })
+  })
+
+  it('fills directors when present and returns null for junk', () => {
+    expect(buildSearchResultFromDetail({ Title: 'X', Year: '2015', Type: 'movie', Director: 'Matthew Vaughn', imdbID: 'tt2802144' })?.directors).toBe('Matthew Vaughn')
+    expect(buildSearchResultFromDetail({ Response: 'False', Error: 'Incorrect IMDb ID.' })).toBeNull()
   })
 })
 
