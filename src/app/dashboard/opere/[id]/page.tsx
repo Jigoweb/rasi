@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Badge } from '@/shared/components/ui/badge'
+import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
@@ -19,7 +20,7 @@ import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEp
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
 import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2, Clock, Building2 } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/shared/components/ui/dropdown-menu'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { DialogFooter } from '@/shared/components/ui/dialog'
 import { Checkbox } from '@/shared/components/ui/checkbox'
@@ -53,6 +54,7 @@ export default function OperaDetailPage() {
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [pendingImdbTconst, setPendingImdbTconst] = useState<string | null>(null) // IMDb ID selezionato ma non ancora salvato
+  const [isUpdatingTipo, setIsUpdatingTipo] = useState(false)
   
   // IMDb Import Dialog State
   const [showImportDialog, setShowImportDialog] = useState(false)
@@ -797,6 +799,23 @@ export default function OperaDetailPage() {
     }
   }
 
+  const TIPO_LABELS: Record<string, string> = { film: 'Film', serie_tv: 'Serie TV', animazione: 'Animazione' }
+
+  const handleTipoChange = async (newTipo: 'film' | 'serie_tv' | 'animazione') => {
+    if (!opera || newTipo === opera.tipo || isUpdatingTipo) return
+    const prevTipo = opera.tipo
+    setIsUpdatingTipo(true)
+    setOpera({ ...opera, tipo: newTipo }) // optimistic
+    const { error: err } = await import('@/features/opere/services/opere.service').then(m => m.updateOpera(opera.id, { tipo: newTipo }))
+    setIsUpdatingTipo(false)
+    if (err) {
+      setOpera({ ...opera, tipo: prevTipo }) // revert
+      toast.error('Errore durante l\'aggiornamento del tipo opera')
+    } else {
+      toast.success(`Tipo opera aggiornato a "${TIPO_LABELS[newTipo]}"`)
+    }
+  }
+
   const getStatoValidazioneBadge = (stato: string | null) => {
     if (!stato) {
       return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Non specificato</Badge>
@@ -967,7 +986,30 @@ export default function OperaDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {getTipoBadge(opera.tipo)}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                disabled={isUpdatingTipo}
+                aria-label="Cambia tipo opera"
+                className="inline-flex items-center gap-1 rounded-md transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+              >
+                {getTipoBadge(opera.tipo)}
+                {isUpdatingTipo
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Tipo opera</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuRadioGroup value={opera.tipo} onValueChange={(v) => handleTipoChange(v as 'film' | 'serie_tv' | 'animazione')}>
+                <DropdownMenuRadioItem value="film"><Film className="mr-2 h-4 w-4" />Film</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="serie_tv"><Tv className="mr-2 h-4 w-4" />Serie TV</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="animazione"><PenTool className="mr-2 h-4 w-4" />Animazione</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {getStatoValidazioneBadge(opera.stato_validazione)}
         </div>
       </div>
