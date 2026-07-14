@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-
-const API_URL = process.env.IMDB_API_URL || 'https://api.imdbapi.dev'
+import { omdbGet, isOmdbOk, buildSearchResults, mapTypeToOmdb, splitList, OmdbConfigError } from '@/features/opere/services/external/omdb'
 
 export async function GET(req: Request) {
   try {
@@ -14,82 +13,47 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'query_required' }, { status: 400 })
     }
 
-    const params = new URLSearchParams()
-    params.set('query', query)
-    if (year) params.set('year', year)
-    if (type) params.set('type', type)
+    const params: Record<string, string> = { s: query }
+    const omdbType = mapTypeToOmdb(type)
+    if (omdbType) params.type = omdbType
+    if (year) params.y = year
 
-    const url = `${API_URL}/search/titles?${params.toString()}`
-    const res = await fetch(url)
+    const data = await omdbGet(params)
 
-    if (!res.ok) {
-      return NextResponse.json({ error: 'upstream_error' }, { status: 502 })
+    // OMDb signals "no matches" with Response:"False" (e.g. "Movie not found!").
+    // That is an empty result set, not an error.
+    if (!isOmdbOk(data)) {
+      return NextResponse.json({ results: [] }, { status: 200 })
     }
 
-    const data = await res.json()
-    
-    // Handle different response formats from IMDb API
-    let results: any[] = []
-    if (Array.isArray(data?.titles)) {
-      results = data.titles
-    } else if (Array.isArray(data?.results)) {
-      results = data.results
-    } else if (data?.data && Array.isArray(data.data)) {
-      results = data.data
-    } else if (Array.isArray(data)) {
-      results = data
-    }
-    
-    let normalized = results.map((r: any) => ({
-      title: r?.primaryTitle || r?.title || r?.name || '',
-      year: r?.startYear ?? r?.year ?? r?.releaseYear ?? null,
-      type: r?.type || r?.titleType || null,
-      id: r?.id || r?.tconst || r?.imdbId || null,
-      directors: null as string | null,
-    })).filter((r: any) => r.title && r.id) // Filter out invalid results
+    let normalized = buildSearchResults(data?.Search)
 
-    // Fetch directors for each result (limit to first 10 to avoid too many requests)
+    // Directors require a per-title detail lookup (OMDb search omits them).
+    // Limit to the first 10 to bound the request fan-out, as the old route did.
     if (includeDirectors && normalized.length > 0) {
-      const detailsPromises = normalized.slice(0, 10).map(async (item: any) => {
-        if (!item.id) return item
-        try {
-          const detailRes = await fetch(`${API_URL}/titles/${item.id}`)
-          if (detailRes.ok) {
-            const detailData = await detailRes.json()
-            // Try multiple possible fields for directors
-            const directors = detailData?.directors || detailData?.director || detailData?.crew?.directors
-            
-            if (directors) {
-              if (Array.isArray(directors)) {
-                item.directors = directors
-                  .slice(0, 2)
-                  .map((d: any) => {
-                    if (typeof d === 'string') return d
-                    return d?.displayName || d?.name || d?.primaryName || d?.fullName || ''
-                  })
-                  .filter(Boolean)
-                  .join(', ')
-              } else if (typeof directors === 'object' && directors !== null) {
-                // Single director object
-                item.directors = directors?.displayName || directors?.name || directors?.primaryName || directors?.fullName || null
-              } else if (typeof directors === 'string') {
-                item.directors = directors
-              }
+      const withDirectors = await Promise.all(
+        normalized.slice(0, 10).map(async (item) => {
+          if (!item.id) return item
+          try {
+            const detail = await omdbGet({ i: item.id, plot: 'short' })
+            if (isOmdbOk(detail)) {
+              const directors = splitList(detail?.Director)
+              if (directors.length) item.directors = directors.slice(0, 2).join(', ')
             }
+          } catch {
+            // Ignore individual detail failures; keep the base result.
           }
-        } catch {
-          // Ignore errors for individual title fetches
-        }
-        return item
-      })
-      
-      const resultsWithDetails = await Promise.all(detailsPromises)
-      // Merge back with any results beyond the first 10
-      normalized = [...resultsWithDetails, ...normalized.slice(10)]
+          return item
+        }),
+      )
+      normalized = [...withDirectors, ...normalized.slice(10)]
     }
 
     return NextResponse.json({ results: normalized }, { status: 200 })
   } catch (e) {
+    if (e instanceof OmdbConfigError) {
+      return NextResponse.json({ error: 'config', message: e.message }, { status: 500 })
+    }
     console.error('IMDb search API error:', e)
     return NextResponse.json({ error: 'unexpected', message: e instanceof Error ? e.message : 'Unknown error' }, { status: 500 })
   }
