@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { omdbGet, isOmdbOk, buildSearchResults, buildSearchResultFromDetail, isTconst, pagesToFetch, mapTypeToOmdb, splitList, OmdbConfigError } from '@/features/opere/services/external/omdb'
 
 const MAX_RESULTS = 30 // OMDb pages by 10; fetch up to 3 pages
-const MAX_DIRECTOR_LOOKUPS = 10 // bound the per-result detail fan-out
+const MAX_DIRECTOR_LOOKUPS = MAX_RESULTS // directors for all results (~1 detail call each)
 
 export async function GET(req: Request) {
   try {
