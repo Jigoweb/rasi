@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useAuth, AVAILABLE_ROLES, UserRole } from '@/shared/contexts/auth-context'
+import { rolesAssignableBy } from '@/shared/lib/auth-permissions'
 import { supabase } from '@/shared/lib/supabase-client'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -71,8 +72,24 @@ interface UserData {
 }
 
 export default function UtentiPage() {
-  const { user, canManageUsers, canEditRoles, loading: authLoading } = useAuth()
+  const { user, userRole, isAdmin, canManageUsers, canEditRoles, loading: authLoading } = useAuth()
   const router = useRouter()
+
+  const assignableRoles = useMemo(
+    () => new Set(rolesAssignableBy(userRole)),
+    [userRole]
+  )
+  const roleOptions = useMemo(
+    () => AVAILABLE_ROLES.filter((role) => assignableRoles.has(role.value)),
+    [assignableRoles]
+  )
+
+  function canEditUserRole(target: UserData): boolean {
+    if (!canEditRoles) return false
+    if (isAdmin) return true
+    // Operatore: non può modificare utenti admin
+    return target.ruolo !== 'admin' && assignableRoles.size > 0
+  }
   
   const [users, setUsers] = useState<UserData[]>([])
   const [loading, setLoading] = useState(true)
@@ -342,7 +359,7 @@ export default function UtentiPage() {
   }
 
   function openRoleDialog(userData: UserData) {
-    if (!canEditRoles) return
+    if (!canEditUserRole(userData)) return
     setSelectedUser(userData)
     setNewRole(userData.ruolo)
     setUpdateSuccess(false)
@@ -718,7 +735,7 @@ export default function UtentiPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {canEditRoles && (
+                            {canEditUserRole(userData) && (
                               <DropdownMenuItem onClick={() => openRoleDialog(userData)}>
                                 <Shield className="h-4 w-4 mr-2" />
                                 Modifica Ruolo
@@ -746,7 +763,7 @@ export default function UtentiPage() {
                                 Reinvia Invito
                               </DropdownMenuItem>
                             )}
-                            {canEditRoles && (
+                            {isAdmin && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
@@ -820,7 +837,7 @@ export default function UtentiPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {AVAILABLE_ROLES.map((role) => (
+                    {roleOptions.map((role) => (
                       <SelectItem key={role.value} value={role.value}>
                         <div className="flex items-center gap-2">
                           {getRoleIcon(role.value)}
