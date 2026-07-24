@@ -85,7 +85,11 @@ Campi ammessi:
 | `contatti` | JSON `{ email?, telefono? }` |
 | `indirizzo` | JSON `{ via?, civico?, cap?, citta?, provincia? }` |
 
-Mai inclusi: `stato`, `data_inizio_mandato`, `data_fine_mandato`, `territorio`, `codice_ipn`, `is_rasi`, `imdb_nconst`, `diritti_attivi`, `stato_validazione`, `ragione_sociale`, `forma_giuridica`, `partita_iva` (societari restano RO in questo slice), ecc.
+Mai inclusi (anche se presenti nel form per errore): `stato`,
+`data_inizio_mandato`, `data_fine_mandato`, `territorio`, `codice_ipn`,
+`is_rasi`, `imdb_nconst`, `diritti_attivi`, `stato_validazione`,
+`ragione_sociale`, `forma_giuridica`, `partita_iva` (i dati societari in
+questo slice sono solo lettura), e ogni altra colonna non in whitelist.
 
 ### 4. Componenti
 
