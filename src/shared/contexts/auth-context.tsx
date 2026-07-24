@@ -4,9 +4,13 @@ import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '@/shared/lib/supabase-client'
 import { useRouter } from 'next/navigation'
+import {
+  type UserRole,
+  resolveUserRole,
+  getRolePermissions,
+} from '@/shared/lib/auth-permissions'
 
-// Definizione dei ruoli applicativi
-export type UserRole = 'admin' | 'operatore' | 'collecting' | 'artista'
+export type { UserRole }
 
 // I ruoli disponibili nell'applicazione con le relative etichette
 export const AVAILABLE_ROLES: { value: UserRole; label: string; description: string; color: string }[] = [
@@ -25,20 +29,18 @@ interface AuthContextType {
   isOperatore: boolean
   isArtista: boolean
   canManageUsers: boolean // admin o operatore possono vedere utenti
-  canEditRoles: boolean   // solo admin può modificare ruoli
+  canEditRoles: boolean   // admin e operatore possono modificare ruoli (con limiti API/UI)
   signOut: () => Promise<void>
 }
+
+const defaultPermissions = getRolePermissions('collecting')
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  userRole: 'admin', // MOCK ROLE FOR DEV
+  userRole: 'collecting',
   artistaId: null,
-  isAdmin: true, // MOCK ADMIN FOR DEV
-  isOperatore: false,
-  isArtista: false,
-  canManageUsers: true, // MOCK ADMIN FOR DEV
-  canEditRoles: true, // MOCK ADMIN FOR DEV
+  ...defaultPermissions,
   signOut: async () => {}
 })
 
@@ -47,13 +49,7 @@ const AuthContext = createContext<AuthContextType>({
  * Il ruolo è memorizzato in raw_user_meta_data.ruolo
  */
 function getUserRole(user: User | null): UserRole {
-  if (!user) return 'admin' // MOCK ADMIN FOR DEV
-  const ruolo = user.user_metadata?.ruolo
-  const validRoles: UserRole[] = ['admin', 'operatore', 'collecting', 'artista']
-  if (validRoles.includes(ruolo)) {
-    return ruolo
-  }
-  return 'admin' // Default role changed to admin for dev
+  return resolveUserRole(user?.user_metadata?.ruolo)
 }
 
 /**
@@ -69,25 +65,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
-  // Calcola ruolo e permessi dall'utente
   const userRole = useMemo(() => getUserRole(user), [user])
   const artistaId = useMemo(() => getUserArtistaId(user), [user])
-  const isAdmin = true // MOCK FOR DEV
-  const isOperatore = userRole === 'operatore'
-  const isArtista = userRole === 'artista'
-  const canManageUsers = true // MOCK FOR DEV
-  const canEditRoles = true // MOCK FOR DEV
+  const permissions = useMemo(() => getRolePermissions(userRole), [userRole])
+  const { isAdmin, isOperatore, isArtista, canManageUsers, canEditRoles } = permissions
 
   useEffect(() => {
-    // Check active sessions and sets the user
     const initializeAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         setUser(session?.user || null)
-        // DEV MOCK: Rimosso redirect a /auth
-        // if (!session?.user && window.location.pathname.startsWith('/dashboard')) {
-        //   router.push('/auth')
-        // }
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {
@@ -97,13 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initializeAuth()
 
-    // Listen for changes on auth state (signed in, signed out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null)
-      // DEV MOCK: Rimosso redirect a /auth
-      // if (!session?.user && window.location.pathname.startsWith('/dashboard')) {
-      //   router.push('/auth')
-      // }
     })
 
     return () => subscription.unsubscribe()
