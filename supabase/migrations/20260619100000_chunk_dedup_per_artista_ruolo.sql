@@ -1,67 +1,25 @@
--- =====================================================
--- FUNZIONE BATCH: process_programmazioni_chunk
--- Esportata da Supabase (2026-05-08) + modificata
--- per propagare tolleranza anno parametrica
--- =====================================================
+-- Dedup individuazioni PER-ARTISTA-RUOLO: una individuazione per (programmazione, artista, ruolo).
+--
+-- Regola di business confermata dal cliente: un artista con DUE ruoli diversi sullo stesso
+-- passaggio va conteggiato UNA VOLTA PER RUOLO (non è un doppione, è voluto). La migration
+-- precedente 20260608120600 aveva ristretto la chiave a (programmazione, artista), collassando
+-- i ruoli distinti e cancellando il secondo credito legittimo. Diagnostica (Q2): le 587 coppie
+-- "doppie" sono tutte `ruoli_nomi_diversi` e ZERO `stesso_nome_ruolo_x2` → sono crediti legittimi
+-- da tenere, non doppioni da rimuovere.
+--
+-- Fix: la chiave di dedup torna a (programmazione_id, artista_id, ruolo_id). Stesso ruolo sullo
+-- stesso passaggio → mai due righe (idempotente sui re-run del matching). Ruoli diversi → righe
+-- distinte (corretto). NB: `episodio_id` NON entra nella chiave: un passaggio è una sola messa in
+-- onda, quindi un solo episodio; tenerlo fuori evita doppioni se lo stesso artista+ruolo venisse
+-- agganciato a due episodi sullo stesso `programmazione_id`.
+--
+-- NOTA — il raddoppio "tipo 2 Fast 2 Furious" (stesso artista, UN solo ruolo, contato due volte)
+-- NON si risolve qui: quei casi hanno `programmazione_id` DIVERSI, cioè sono passaggi duplicati a
+-- monte (import del palinsesto senza vincolo di unicità). Quella è una correzione separata
+-- (idempotenza all'import + pulizia delle programmazioni duplicate).
+--
+-- Sostituisce l'overload completo a 6 argomenti (supersede 20260608120600).
 
--- Drop overload vecchie + nuova firma se esistente
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[]);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[], int, int);
-
--- =====================================================
--- OVERLOAD 1: Legacy (3 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC DEFAULT 0.7
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        NULL::UUID[],
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 2: Con filtro artisti (4 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC,
-    p_artista_ids UUID[]
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        p_artista_ids,
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 3: Firma completa con tolleranza anno
--- Propaga p_tolleranza_anno_soft/hard al matching
--- =====================================================
 CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
     p_campagne_individuazione_id UUID,
     p_programmazione_ids UUID[],
@@ -115,16 +73,16 @@ BEGIN
                 v_match_trovati := v_match_trovati + 1;
                 v_prog_ha_match := TRUE;
 
-                -- Verifica se individuazione già esiste per questo (programmazione, artista).
-                -- Grana PER-ARTISTA (non per ruolo/episodio): un solo "utilizzo" per artista per
-                -- riga di palinsesto. Evita i doppioni che raddoppiavano le views quando lo stesso
-                -- artista ha più ruoli/partecipazioni sulla stessa opera. Due artisti distinti → due
-                -- righe (la chiave è per artista_id). Vince il primo match emesso (opera a punteggio
-                -- più alto, l'ordine del matcher è best_score DESC).
+                -- Verifica se individuazione già esiste per questo (programmazione, artista, ruolo).
+                -- Grana PER-ARTISTA-RUOLO: un solo "utilizzo" per artista PER RUOLO per riga di
+                -- palinsesto. Due ruoli distinti dello stesso artista → due righe (voluto, conferma
+                -- cliente). Stesso ruolo → una sola riga, quindi i re-run del matching (processo
+                -- client-side bloccato e ripreso) restano idempotenti e non creano doppioni.
                 SELECT COUNT(*) INTO v_count
                 FROM individuazioni
                 WHERE programmazione_id = v_programmazione.id
-                  AND artista_id = v_match.artista_id;
+                  AND artista_id = v_match.artista_id
+                  AND ruolo_id = v_match.ruolo_id;
 
                 IF v_count = 0 THEN
                     -- Crea individuazione con snapshot completo
@@ -209,8 +167,7 @@ BEGIN
 
                     -- Match a livello serie senza episodio puntuale → coda di revisione.
                     -- L'enum stato_individuazione usa 'dubbioso' come bucket "da revisionare";
-                    -- metodo resta 'automatico' (il match È stato generato automaticamente:
-                    -- metodo_matching non ha 'suggerito'). UPDATE con literal → cast enum ok.
+                    -- metodo resta 'automatico' (metodo_matching non ha 'suggerito').
                     IF COALESCE((v_match.dettagli_matching->>'episodio_mancante')::boolean, FALSE) THEN
                         UPDATE individuazioni
                         SET stato = 'dubbioso'

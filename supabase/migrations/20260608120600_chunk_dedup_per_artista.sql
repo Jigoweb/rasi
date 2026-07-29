@@ -1,67 +1,18 @@
--- =====================================================
--- FUNZIONE BATCH: process_programmazioni_chunk
--- Esportata da Supabase (2026-05-08) + modificata
--- per propagare tolleranza anno parametrica
--- =====================================================
+-- Dedup individuazioni PER-ARTISTA: una sola individuazione per (programmazione, artista).
+--
+-- Feedback cliente: individuazioni doppie che raddoppiano le views. Diagnosi: 585/587 doppioni
+-- sono lo STESSO artista sulla STESSA programmazione/opera/episodio ma con `ruolo_id` diverso
+-- (l'artista ha più ruoli/partecipazioni sull'opera). La dedup precedente includeva
+-- ruolo_id/episodio_id nella chiave, quindi teneva entrambe le righe; ognuna porta `views`
+-- della programmazione → views raddoppiate per artista.
+--
+-- Fix: la chiave di dedup diventa (programmazione_id, artista_id). Un solo "utilizzo" per
+-- artista per riga di palinsesto. Due artisti distinti → due righe (corretto). Vince il primo
+-- match emesso (il matcher emette per opera in ordine best_score DESC).
+--
+-- Sostituisce solo l'overload completo a 6 argomenti (supersede 20260608120500).
+-- Pulizia dei doppioni già esistenti: vedi script separato (DELETE keep-best per prog+artista).
 
--- Drop overload vecchie + nuova firma se esistente
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[]);
-DROP FUNCTION IF EXISTS public.process_programmazioni_chunk(uuid, uuid[], numeric, uuid[], int, int);
-
--- =====================================================
--- OVERLOAD 1: Legacy (3 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC DEFAULT 0.7
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        NULL::UUID[],
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 2: Con filtro artisti (4 parametri) — delega all'overload completo
--- =====================================================
-CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
-    p_campagne_individuazione_id UUID,
-    p_programmazione_ids UUID[],
-    p_soglia_titolo NUMERIC,
-    p_artista_ids UUID[]
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $function$
-BEGIN
-    RETURN public.process_programmazioni_chunk(
-        p_campagne_individuazione_id,
-        p_programmazione_ids,
-        p_soglia_titolo,
-        p_artista_ids,
-        3,
-        5
-    );
-END;
-$function$;
-
--- =====================================================
--- OVERLOAD 3: Firma completa con tolleranza anno
--- Propaga p_tolleranza_anno_soft/hard al matching
--- =====================================================
 CREATE OR REPLACE FUNCTION public.process_programmazioni_chunk(
     p_campagne_individuazione_id UUID,
     p_programmazione_ids UUID[],
@@ -209,8 +160,7 @@ BEGIN
 
                     -- Match a livello serie senza episodio puntuale → coda di revisione.
                     -- L'enum stato_individuazione usa 'dubbioso' come bucket "da revisionare";
-                    -- metodo resta 'automatico' (il match È stato generato automaticamente:
-                    -- metodo_matching non ha 'suggerito'). UPDATE con literal → cast enum ok.
+                    -- metodo resta 'automatico' (metodo_matching non ha 'suggerito').
                     IF COALESCE((v_match.dettagli_matching->>'episodio_mancante')::boolean, FALSE) THEN
                         UPDATE individuazioni
                         SET stato = 'dubbioso'
