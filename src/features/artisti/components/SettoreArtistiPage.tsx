@@ -7,7 +7,7 @@ import {
   AccordionTrigger,
 } from "@/shared/components/ui/accordion";
 import { Reveal } from "@/app/(public)/reveal";
-import { ArrowRight, FileText } from "lucide-react";
+import { ArrowRight, ExternalLink, FileText } from "lucide-react";
 import type { SettoreArtistiContent } from "../content/settore-artisti-content";
 
 type SettoreArtistiPageProps = {
@@ -15,6 +15,8 @@ type SettoreArtistiPageProps = {
 };
 
 export function SettoreArtistiPage({ content }: SettoreArtistiPageProps) {
+  const { tariffe, elencoOpere } = content;
+
   return (
     <div className="font-schibsted">
       <section className="bg-rasi-ink py-16 md:py-24">
@@ -87,6 +89,131 @@ export function SettoreArtistiPage({ content }: SettoreArtistiPageProps) {
             </Accordion>
           </Reveal>
         </div>
+      </section>
+
+      <section className="mx-auto max-w-4xl px-4 py-16 md:px-6 md:py-24">
+        <Reveal>
+          <h2 className="text-3xl font-bold leading-tight tracking-tight text-rasi-ink md:text-4xl">
+            Tariffe per utilizzatori
+          </h2>
+          <p className="mt-3 text-sm font-semibold text-rasi-ember">{tariffe.validityNote}</p>
+          <p className="mt-4 max-w-2xl leading-relaxed text-rasi-slate">{tariffe.licenseBody}</p>
+        </Reveal>
+
+        <Reveal delayMs={80} className="mt-10">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-rasi-slate">
+            Ambito di applicazione
+          </h3>
+          <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {tariffe.categories.map((category) => (
+              <li
+                key={category}
+                className="border-t border-rasi-line py-3 text-sm text-rasi-ink"
+              >
+                {category}
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+
+        <div className="mt-12 space-y-12">
+          {tariffe.tables.map((table, i) => (
+            <Reveal key={table.title} delayMs={100 + i * 60}>
+              <h3 className="text-xl font-semibold text-rasi-ink">{table.title}</h3>
+              {table.note ? (
+                <p className="mt-2 text-sm leading-relaxed text-rasi-slate">{table.note}</p>
+              ) : null}
+              <div className="mt-4 overflow-x-auto border-t border-rasi-line">
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-rasi-line">
+                      {table.headers.map((header) => (
+                        <th
+                          key={header}
+                          className="py-3 pr-4 font-semibold text-rasi-ink first:pl-0"
+                        >
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {table.rows.map((row) => (
+                      <tr key={row.join("-")} className="border-b border-rasi-line/70">
+                        {row.map((cell, cellIndex) => (
+                          <td
+                            key={`${row[0]}-${cellIndex}`}
+                            className={`py-3 pr-4 ${cellIndex === 0 ? "text-rasi-ink" : "tabular-nums text-rasi-slate"}`}
+                          >
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+
+        <Reveal delayMs={200} className="mt-12">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-rasi-slate">
+            Riduzioni previste
+          </h3>
+          <ul className="mt-4 space-y-2">
+            {tariffe.reductions.map((item) => (
+              <li key={item} className="text-sm leading-relaxed text-rasi-slate">
+                {item}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-8">
+            <Link href="/contatti">
+              <Button className="rounded-full bg-rasi-ember px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-ember-deep">
+                Richiedi una licenza
+                <ArrowRight className="ml-1 h-4 w-4" strokeWidth={2} />
+              </Button>
+            </Link>
+          </div>
+        </Reveal>
+      </section>
+
+      <section className="bg-rasi-paper py-16 md:py-24">
+        <Reveal className="mx-auto flex max-w-4xl flex-col gap-6 px-4 md:flex-row md:items-end md:justify-between md:px-6">
+          <div className="max-w-2xl">
+            <h2 className="text-3xl font-bold leading-tight tracking-tight text-rasi-ink md:text-4xl">
+              {elencoOpere.title}
+            </h2>
+            <p className="mt-4 leading-relaxed text-rasi-slate">{elencoOpere.body}</p>
+          </div>
+          {elencoOpere.external ? (
+            <a
+              href={elencoOpere.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex"
+            >
+              <Button
+                variant="outline"
+                className="rounded-full border-rasi-ink px-8 py-6 text-base font-semibold text-rasi-ink hover:bg-rasi-ink hover:text-rasi-paper"
+              >
+                {elencoOpere.ctaLabel}
+                <ExternalLink className="ml-1 h-4 w-4" strokeWidth={2} />
+              </Button>
+            </a>
+          ) : (
+            <Link href={elencoOpere.href}>
+              <Button
+                variant="outline"
+                className="rounded-full border-rasi-ink px-8 py-6 text-base font-semibold text-rasi-ink hover:bg-rasi-ink hover:text-rasi-paper"
+              >
+                {elencoOpere.ctaLabel}
+                <ArrowRight className="ml-1 h-4 w-4" strokeWidth={2} />
+              </Button>
+            </Link>
+          )}
+        </Reveal>
       </section>
 
       <section className="mx-auto max-w-4xl px-4 py-16 md:px-6 md:py-24">

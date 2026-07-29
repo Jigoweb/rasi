@@ -206,7 +206,7 @@ export default function PerGliArtistiPage() {
                 <Film className="h-8 w-8 text-rasi-logo-indigo" strokeWidth={1.75} />
                 <h3 className="mt-4 text-xl font-semibold text-rasi-ink">Video</h3>
                 <p className="mt-2 leading-relaxed text-rasi-slate">
-                  Contratti standard, tariffe di settore ed eleggibilità specifica per chi lavora in opere cinematografiche e televisive.
+                  Compensi, FAQ, tariffe per utilizzatori ed elenco opere per chi lavora in cinema e TV.
                 </p>
               </div>
               <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-rasi-ink group-hover:text-rasi-ember">
@@ -225,7 +225,7 @@ export default function PerGliArtistiPage() {
                 <Music2 className="h-8 w-8 text-rasi-logo-magenta" strokeWidth={1.75} />
                 <h3 className="mt-4 text-xl font-semibold text-rasi-ink">Musica</h3>
                 <p className="mt-2 leading-relaxed text-rasi-slate">
-                  Tariffe, contratti e criteri di eleggibilità per cantanti, musicisti e direttori d&apos;orchestra.
+                  Compensi, FAQ, tariffe per utilizzatori ed elenco opere per cantanti, musicisti e direttori.
                 </p>
               </div>
               <span className="mt-6 inline-flex items-center gap-1 text-sm font-semibold text-rasi-ink group-hover:text-rasi-ember">
