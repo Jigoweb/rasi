@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import {
+  validateRoleChange,
+  mergeUserMetadataWithRole,
+} from './role-update'
 
 // Lazy initialization of admin client
 let supabaseAdmin: SupabaseClient | null = null
@@ -244,17 +248,17 @@ export async function POST(req: NextRequest) {
 /**
  * PATCH /api/users
  * Aggiorna ruolo o email di un utente.
- * - Cambio ruolo: solo admin
+ * - Cambio ruolo: admin (qualsiasi); operatore fino a operatore (mai admin)
  * - Cambio email: admin e operatori
  * Body: { userId: string, ruolo?: string, email?: string }
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const { isAdmin, userId: adminUserId, error } = await verifyAdminUser(req)
+    const { isAdmin, userId: actorUserId, error } = await verifyAdminUser(req)
 
     // Blocca utenti senza permessi (non admin/operatore)
-    if (error) {
-      return NextResponse.json({ success: false, error }, { status: 403 })
+    if (error || !actorUserId) {
+      return NextResponse.json({ success: false, error: error || 'Accesso negato' }, { status: 403 })
     }
 
     const body = await req.json()
@@ -274,33 +278,38 @@ export async function PATCH(req: NextRequest) {
       )
     }
 
-    // Il cambio ruolo è riservato agli admin
-    if (ruolo && !isAdmin) {
-      return NextResponse.json({
-        success: false,
-        error: 'Solo gli amministratori possono modificare i ruoli degli utenti'
-      }, { status: 403 })
-    }
-
-    if (ruolo) {
-      const validRoles = ['admin', 'operatore', 'collecting', 'artista']
-      if (!validRoles.includes(ruolo)) {
-        return NextResponse.json(
-          { success: false, error: `Ruolo non valido. Ruoli disponibili: ${validRoles.join(', ')}` },
-          { status: 400 }
-        )
-      }
-      if (userId === adminUserId && ruolo !== 'admin') {
-        return NextResponse.json(
-          { success: false, error: 'Non puoi rimuovere il tuo stesso ruolo di amministratore' },
-          { status: 400 }
-        )
-      }
-    }
-
     const adminClient = getSupabaseAdmin()
     const updates: Record<string, unknown> = {}
-    if (ruolo) updates.user_metadata = { ruolo }
+
+    if (ruolo) {
+      const { data: { user: targetUser }, error: getUserError } =
+        await adminClient.auth.admin.getUserById(userId)
+
+      if (getUserError || !targetUser) {
+        return NextResponse.json({ success: false, error: 'Utente non trovato' }, { status: 404 })
+      }
+
+      const validation = validateRoleChange({
+        actorIsAdmin: isAdmin,
+        actorUserId,
+        targetUserId: userId,
+        targetCurrentRole: targetUser.user_metadata?.ruolo,
+        newRole: ruolo,
+      })
+
+      if (!validation.ok) {
+        return NextResponse.json(
+          { success: false, error: validation.error },
+          { status: validation.status }
+        )
+      }
+
+      updates.user_metadata = mergeUserMetadataWithRole(
+        targetUser.user_metadata as Record<string, unknown> | undefined,
+        validation.ruolo
+      )
+    }
+
     if (email) updates.email = email
 
     const { data: updatedUser, error: updateError } = await adminClient.auth.admin.updateUserById(
