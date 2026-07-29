@@ -21,6 +21,7 @@ import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { ArtistaFormMultistep } from '@/app/dashboard/artisti/components/artista-form-multistep'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { ArtistaInviteHeader } from '@/app/dashboard/artisti/[id]/components/artista-invite-header'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -428,17 +429,23 @@ export default function ArtistaProfiloPage() {
             <p className="text-lg text-muted-foreground">({artista.nome_arte})</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/dashboard/artisti">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Torna agli artisti
-            </Link>
-          </Button>
-          <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
-            <Pencil className="mr-2 h-4 w-4" />
-            Modifica
-          </Button>
+        <div className="flex flex-col sm:items-end gap-2">
+          <ArtistaInviteHeader
+            artistaId={artista.id}
+            contactEmail={(artista.contatti as { email?: string } | null)?.email}
+          />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/dashboard/artisti">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Torna agli artisti
+              </Link>
+            </Button>
+            <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
+              <Pencil className="mr-2 h-4 w-4" />
+              Modifica
+            </Button>
+          </div>
         </div>
       </div>
 

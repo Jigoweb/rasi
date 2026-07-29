@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { findUserByArtistaId } from './find-by-artista'
 
 // Lazy initialization of admin client
 let supabaseAdmin: SupabaseClient | null = null
@@ -62,7 +63,8 @@ async function verifyAdminUser(req: NextRequest): Promise<{ isAdmin: boolean; us
 
 /**
  * GET /api/users
- * Lista tutti gli utenti (admin e operatori)
+ * - Senza query: lista tutti gli utenti (admin e operatori)
+ * - Con ?artista_id=: lookup account collegato a un artista
  */
 export async function GET(req: NextRequest) {
   try {
@@ -72,6 +74,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error }, { status: 403 })
     }
 
+    const artistaId = req.nextUrl.searchParams.get('artista_id')
+
     // Use admin API to list all users
     const adminClient = getSupabaseAdmin()
     const { data: { users }, error: listError } = await adminClient.auth.admin.listUsers()
@@ -79,6 +83,20 @@ export async function GET(req: NextRequest) {
     if (listError) {
       console.error('Errore listUsers:', listError)
       return NextResponse.json({ success: false, error: listError.message }, { status: 500 })
+    }
+
+    if (artistaId) {
+      const linked = findUserByArtistaId(users, artistaId)
+      if (!linked) {
+        return NextResponse.json({
+          success: true,
+          data: { linked: false },
+        })
+      }
+      return NextResponse.json({
+        success: true,
+        data: { linked: true, user: linked },
+      })
     }
 
     // Map users to a cleaner format
