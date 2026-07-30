@@ -1,4 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, buildLegacyPayload, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, summarizeImportMapping, reconcileImportMappingColumns, type FieldRule, type ImportMappingConfig } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, buildLegacyPayload, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, summarizeImportMapping, reconcileImportMappingColumns, columnNamesFromParsedRows, mappedRemovedColumns, diffColumns, type FieldRule, type ImportMappingConfig } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -436,6 +436,74 @@ describe('reconcileImportMappingColumns', () => {
       transforms: {},
       removedColumns: [],
     })
+  })
+})
+
+describe('columnNamesFromParsedRows', () => {
+  it('recupera colonne assenti nella prima riga ma presenti dopo (celle vuote SheetJS)', () => {
+    // Simula sheet_to_json SENZA defval: chiavi omesse se cella vuota
+    const rows = [
+      {
+        'Nome Rete': 'Sky UNO',
+        'Serie Programma Sistema': "World's Scariest S.3",
+        Anno: '2013',
+      },
+      {
+        'Nome Rete': 'Sky UNO',
+        'Serie Programma Originale': 'ORIGINAL TITLE',
+        'Serie Programma Sistema': 'Titolo IT',
+        Regista: 'Jane Doe',
+        Anno: '2014',
+      },
+    ]
+    expect(columnNamesFromParsedRows(rows)).toEqual([
+      'Nome Rete',
+      'Serie Programma Sistema',
+      'Anno',
+      'Serie Programma Originale',
+      'Regista',
+    ])
+  })
+
+  it('con defval la prima riga espone già tutte le colonne header', () => {
+    const rows = [
+      {
+        'Serie Programma Originale': null,
+        'Serie Programma Sistema': 'Show',
+        Regista: null,
+        'Numero Episodio': null,
+      },
+    ]
+    expect(columnNamesFromParsedRows(rows)).toEqual([
+      'Serie Programma Originale',
+      'Serie Programma Sistema',
+      'Regista',
+      'Numero Episodio',
+    ])
+  })
+
+  it('non segnala come removed colonne sparse se rilevate via unione', () => {
+    const saved = [
+      'Serie Programma Originale',
+      'Serie Programma Sistema',
+      'Regista',
+      'Numero Episodio',
+      'Numero/Anno Stagione',
+    ]
+    const actual = columnNamesFromParsedRows([
+      { 'Serie Programma Sistema': 'A' },
+      { 'Serie Programma Originale': 'B', Regista: 'C' },
+    ])
+    const diff = diffColumns(actual, saved)
+    const mappedRemoved = mappedRemovedColumns(diff.removed, {
+      'Serie Programma Originale': 'titolo_originale',
+      'Serie Programma Sistema': 'titolo',
+      Regista: 'regia',
+      'Numero Episodio': 'numero_episodio',
+      'Numero/Anno Stagione': 'numero_stagione',
+    })
+    // Solo le colonne davvero assenti dal file (2021+) restano in mappedRemoved
+    expect(mappedRemoved).toEqual(['Numero Episodio', 'Numero/Anno Stagione'])
   })
 })
 

@@ -200,6 +200,36 @@ export async function deleteMapping(emittenteId: string): Promise<{ error: any }
 // FILE: lettura colonne e preview
 // ============================================
 
+/** Opzioni SheetJS: `defval` evita che celle vuote facciano sparire le chiavi header. */
+const EXCEL_JSON_OPTS = { raw: false, defval: null as null }
+
+/**
+ * Deduce i nomi colonna dalle righe parsate.
+ * Unione sulle prime `sampleSize` righe: se la prima riga dati ha celle vuote
+ * (e il parser omette le chiavi), le colonne compaiono comunque dalle righe successive.
+ */
+export function columnNamesFromParsedRows(
+  rows: Record<string, unknown>[],
+  sampleSize = 50,
+): string[] {
+  if (rows.length === 0) return []
+  const seen = new Set<string>()
+  const ordered: string[] = []
+  for (const row of rows.slice(0, Math.min(rows.length, sampleSize))) {
+    for (const key of Object.keys(row)) {
+      const name = String(key).trim()
+      if (!name || seen.has(name) || /^__EMPTY\d*$/i.test(name)) continue
+      seen.add(name)
+      ordered.push(name)
+    }
+  }
+  return ordered
+}
+
+function sheetToJsonRows(ws: XLSX.WorkSheet): Record<string, any>[] {
+  return XLSX.utils.sheet_to_json<Record<string, any>>(ws, EXCEL_JSON_OPTS)
+}
+
 /**
  * Estrae nomi colonna e prime 5 righe da file XLSX o CSV.
  */
@@ -212,21 +242,21 @@ export async function detectColumns(file: File): Promise<DetectColumnsResult> {
     const result = Papa.parse<Record<string, any>>(text, {
       header: true,
       skipEmptyLines: true,
-      preview: 6, // header + 5 righe
+      preview: 50,
     })
     rows = result.data
   } else if (lower.match(/\.xlsx?$/)) {
     const buf = await file.arrayBuffer()
     const wb = XLSX.read(buf)
     const ws = wb.Sheets[wb.SheetNames[0]]
-    rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { raw: false })
+    rows = sheetToJsonRows(ws)
   } else {
     throw new Error('Formato file non supportato. Usa CSV o Excel.')
   }
 
   if (rows.length === 0) return { columns: [], preview: [] }
 
-  const columns = Object.keys(rows[0]).map(c => String(c).trim())
+  const columns = columnNamesFromParsedRows(rows)
   const preview = rows.slice(0, 5)
   return { columns, preview }
 }
@@ -253,7 +283,7 @@ export async function readAllRows(file: File): Promise<Record<string, any>[]> {
     const buf = await file.arrayBuffer()
     const wb = XLSX.read(buf)
     const ws = wb.Sheets[wb.SheetNames[0]]
-    return XLSX.utils.sheet_to_json<Record<string, any>>(ws, { raw: false })
+    return sheetToJsonRows(ws)
   }
 
   throw new Error('Formato file non supportato.')

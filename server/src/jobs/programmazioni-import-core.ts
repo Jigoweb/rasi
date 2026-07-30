@@ -100,7 +100,11 @@ export function parseProgrammazioniFile(buffer: Buffer, fileName: string): Recor
   if (lower.match(/\.xlsx?$/)) {
     const workbook = XLSX.read(buffer)
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-    return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { raw: false })
+    // defval: evita che celle vuote sulla prima riga facciano sparire colonne header
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+      raw: false,
+      defval: null,
+    })
   }
 
   throw new Error('Formato file non supportato. Usa CSV o Excel.')
