@@ -56,6 +56,8 @@ export type ProgrammazioniTableColumnKey =
   | 'processato'
   | DataHealthFieldKey
   | 'fascia_oraria'
+  | 'titolo_originale'
+  | 'regia'
 
 export interface ProgrammazioniTableColumn {
   key: ProgrammazioniTableColumnKey
@@ -193,6 +195,7 @@ export const DATA_HEALTH_PRESET_LABELS: Record<DataHealthPreset, string> = {
 const TABLE_COLUMN_LABELS: Record<ProgrammazioniTableColumnKey, string> = {
   processato: 'Stato',
   titolo: 'Titolo',
+  titolo_originale: 'Titolo originale',
   tipo: 'Tipo',
   data_trasmissione: 'Data',
   ora_inizio: 'Ora',
@@ -203,6 +206,7 @@ const TABLE_COLUMN_LABELS: Record<ProgrammazioniTableColumnKey, string> = {
   numero_stagione: 'Stagione',
   numero_episodio: 'Episodio',
   anno: 'Anno rilascio',
+  regia: 'Regia',
   sales_month: 'Sales month',
   views: 'Views',
   retail_price: 'Retail price',
@@ -217,6 +221,7 @@ const ALL_TABLE_COLUMNS: ProgrammazioniTableColumnKey[] = [
   'ora_inizio',
   'canale',
   'titolo',
+  'titolo_originale',
   'tipo',
   'durata_minuti',
   'titolo_episodio',
@@ -225,6 +230,7 @@ const ALL_TABLE_COLUMNS: ProgrammazioniTableColumnKey[] = [
   'numero_episodio',
   'fascia_oraria',
   'anno',
+  'regia',
   'sales_month',
   'views',
   'retail_price',

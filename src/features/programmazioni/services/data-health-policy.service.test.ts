@@ -125,5 +125,7 @@ describe('data health policy', () => {
     expect(columns).toContain('total_net_ad_revenue')
     expect(columns).toContain('titolo_episodio_originale')
     expect(columns).toContain('numero_episodio')
+    expect(columns).toContain('titolo_originale')
+    expect(columns).toContain('regia')
   })
 })

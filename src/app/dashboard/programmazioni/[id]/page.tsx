@@ -296,6 +296,8 @@ export default function CampagnaDettaglioPage() {
             {row.descrizione && <div className="text-xs text-gray-500 truncate max-w-[300px]">{row.descrizione}</div>}
           </div>
         )
+      case 'titolo_originale':
+        return row.titolo_originale || '-'
       case 'tipo':
         return row.tipo_trasmissione || row.tipo || '-'
       case 'durata_minuti':
@@ -321,6 +323,8 @@ export default function CampagnaDettaglioPage() {
           </div>
         )
       }
+      case 'regia':
+        return row.regia || '-'
       case 'sales_month':
         return row.sales_month ?? '-'
       case 'views':

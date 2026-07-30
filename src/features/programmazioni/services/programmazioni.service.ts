@@ -723,6 +723,7 @@ export interface ProgrammazioneRow {
   ora_fine?: string | null
   durata_minuti?: number | null
   titolo: string
+  titolo_originale?: string | null
   descrizione?: string | null
   fascia_oraria?: string | null
   tipo_trasmissione?: string | null
@@ -739,6 +740,7 @@ export interface ProgrammazioneRow {
   anno_rilascio_fine?: number | null
   anno_produzione?: number | null
   anno_produzione_fine?: number | null
+  regia?: string | null
   sales_month?: string | number | null
   views?: number | null
   retail_price?: number | null
