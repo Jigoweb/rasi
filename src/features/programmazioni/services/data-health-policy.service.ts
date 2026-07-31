@@ -238,6 +238,21 @@ const ALL_TABLE_COLUMNS: ProgrammazioniTableColumnKey[] = [
   'total_net_ad_revenue',
 ]
 
+/**
+ * Campi usati dallo scoring di individuazione (titolo, originale, anno, regia, episodio).
+ * Sempre visibili nella vista "profilo", indipendentemente dal preset health.
+ */
+const MATCHING_TABLE_COLUMNS: readonly ProgrammazioniTableColumnKey[] = [
+  'titolo',
+  'titolo_originale',
+  'anno',
+  'regia',
+  'titolo_episodio',
+  'titolo_episodio_originale',
+  'numero_stagione',
+  'numero_episodio',
+] as const
+
 const DEFAULT_FIELD_STATUS: Record<DataHealthFieldKey, DataHealthFieldStatus> = {
   titolo: 'required',
   tipo: 'recommended',
@@ -399,7 +414,7 @@ export function getProgrammazioniTableColumns(
 
 function compactTableColumnKeys(policy: ProgrammazioniTablePolicy): ProgrammazioniTableColumnKey[] {
   const fields = 'presetLabel' in policy ? policy.fields : resolveDataHealthPolicy(policy).fields
-  const visible = new Set<ProgrammazioniTableColumnKey>(['processato', 'titolo'])
+  const visible = new Set<ProgrammazioniTableColumnKey>(['processato', ...MATCHING_TABLE_COLUMNS])
   for (const field of fields) {
     if (field.status === 'required' || field.status === 'recommended') visible.add(field.key)
   }

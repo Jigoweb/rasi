@@ -90,15 +90,28 @@ describe('data health policy', () => {
       'ora_inizio',
       'canale',
       'titolo',
+      'titolo_originale',
       'tipo',
       'durata_minuti',
+      'titolo_episodio',
+      'titolo_episodio_originale',
+      'numero_stagione',
+      'numero_episodio',
+      'anno',
+      'regia',
     ])
 
     expect(getProgrammazioniTableColumns({ preset: 'tvod' }).map(column => column.key)).toEqual([
       'processato',
       'titolo',
+      'titolo_originale',
       'tipo',
+      'titolo_episodio',
+      'titolo_episodio_originale',
+      'numero_stagione',
+      'numero_episodio',
       'anno',
+      'regia',
       'sales_month',
       'views',
       'retail_price',
@@ -108,14 +121,32 @@ describe('data health policy', () => {
     expect(getProgrammazioniTableColumns({ preset: 'svod' }).map(column => column.key)).toEqual([
       'processato',
       'titolo',
+      'titolo_originale',
       'tipo',
       'durata_minuti',
+      'titolo_episodio',
       'titolo_episodio_originale',
+      'numero_stagione',
       'numero_episodio',
       'anno',
+      'regia',
       'views',
       'total_net_ad_revenue',
     ])
+  })
+
+  it('always includes matching signal columns in the profile view', () => {
+    const columns = getProgrammazioniTableColumns({ preset: 'lineare' }).map(column => column.key)
+    expect(columns).toEqual(expect.arrayContaining([
+      'titolo',
+      'titolo_originale',
+      'anno',
+      'regia',
+      'titolo_episodio',
+      'titolo_episodio_originale',
+      'numero_stagione',
+      'numero_episodio',
+    ]))
   })
 
   it('can expose all supported table columns for troubleshooting', () => {
