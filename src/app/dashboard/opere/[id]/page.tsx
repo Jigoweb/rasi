@@ -1243,8 +1243,8 @@ export default function OperaDetailPage() {
       )}
 
       {operaHaEpisodi(opera) && (
-        <Card>
-          <CardHeader>
+        <Card className="py-0 gap-0">
+          <CardHeader className="py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center"><PlayCircle className="mr-2 h-5 w-5" />Episodi</CardTitle>
@@ -1413,8 +1413,8 @@ export default function OperaDetailPage() {
       )}
 
       {/* Partecipazioni Section */}
-      <Card>
-        <CardHeader>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-4">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center">
               <Users className="mr-2 h-5 w-5" />

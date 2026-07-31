@@ -133,7 +133,7 @@ export default function EmittentiTab({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="py-0 gap-0">
         <CardContent className="p-0">
           <div className="hidden lg:block relative overflow-x-auto">
             <Table>

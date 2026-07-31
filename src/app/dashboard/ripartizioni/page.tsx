@@ -193,7 +193,7 @@ export default function RipartizioniPage() {
       </Card>
 
       {/* Table */}
-      <Card>
+      <Card className="py-0 gap-0">
         <CardContent className="p-0">
           <div className="hidden lg:block">
           <Table>

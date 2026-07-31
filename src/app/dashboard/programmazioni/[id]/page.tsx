@@ -554,7 +554,7 @@ export default function CampagnaDettaglioPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="py-0 gap-0">
         <CardContent className="p-0">
           <div className="flex flex-col gap-2 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>

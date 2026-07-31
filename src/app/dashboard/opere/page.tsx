@@ -707,7 +707,7 @@ export default function OperePage() {
       </Card>
 
       {/* Works Table */}
-      <Card>
+      <Card className="py-0 gap-0">
         <CardContent className="p-0">
           {/* Desktop */}
           <div className="hidden lg:block relative overflow-x-auto">

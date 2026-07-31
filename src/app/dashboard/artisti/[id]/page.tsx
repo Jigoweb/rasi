@@ -551,8 +551,8 @@ export default function ArtistaProfiloPage() {
       </Card>
 
       {/* Opere e Partecipazioni */}
-      <Card>
-        <CardHeader>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-4">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center">
               <Film className="mr-2 h-5 w-5" />
