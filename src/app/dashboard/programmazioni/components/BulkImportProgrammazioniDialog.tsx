@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
-import { AlertTriangle, CheckCircle, FileSpreadsheet, Loader2, RotateCcw, XCircle } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { AlertTriangle, CheckCircle, FileSpreadsheet, Loader2, Minimize2, RotateCcw, XCircle } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -22,6 +22,7 @@ import {
   type BulkImportRow,
   type BulkRowStatus,
 } from '../hooks/useProgrammazioniBulkImport'
+import { BulkImportFloatingIndicator } from './BulkImportFloatingIndicator'
 
 const ACCEPTED_EXTENSIONS = ['.csv', '.xlsx', '.xls']
 const SOFT_FILE_LIMIT = 150
@@ -143,13 +144,40 @@ export default function BulkImportProgrammazioniDialog({
   const [showWarningConfirm, setShowWarningConfirm] = useState(false)
   const [isActionPending, setIsActionPending] = useState(false)
   const [retryingRowId, setRetryingRowId] = useState<string | null>(null)
+  const [isMinimized, setIsMinimized] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const notifiedDoneRef = useRef(false)
   const isRunning = step === 'running'
+  const dialogOpen = open && !isMinimized
+  const showFloatingIndicator = isMinimized && (step === 'running' || step === 'done')
+
+  // Riapertura da bottone pagina o toast: se il parent riapre, esci dalla minimizzazione.
+  useEffect(() => {
+    if (open) setIsMinimized(false)
+  }, [open])
+
+  // Aggiorna la lista campagne anche se l'utente ha minimizzato fino al termine.
+  useEffect(() => {
+    if (step === 'done' && !notifiedDoneRef.current) {
+      notifiedDoneRef.current = true
+      onImportComplete?.()
+    }
+    if (step === 'setup') notifiedDoneRef.current = false
+  }, [step, onImportComplete])
 
   const availableEmittenti = useMemo(
     () => emittenti.filter(e => e.mappingStatus == null || e.mappingStatus === 'configured'),
     [emittenti],
   )
+
+  const clearLocalForm = useCallback(() => {
+    setEmittenteValue('')
+    setAnnoValue('')
+    setDropError(null)
+    setIsActionPending(false)
+    setRetryingRowId(null)
+    setShowWarningConfirm(false)
+  }, [])
 
   const handleEmittenteChange = useCallback((value: string) => {
     setEmittenteValue(value)
@@ -219,16 +247,28 @@ export default function BulkImportProgrammazioniDialog({
     event.target.value = ''
   }
 
-  const handleCancel = useCallback(() => {
-    if (isRunning || isActionPending) return
-    reset()
-    setEmittenteValue('')
-    setAnnoValue('')
-    setDropError(null)
-    setIsActionPending(false)
-    setRetryingRowId(null)
+  const handleMinimize = useCallback(() => {
+    setIsMinimized(true)
+    setShowWarningConfirm(false)
     onOpenChange(false)
-  }, [reset, onOpenChange, isRunning, isActionPending])
+  }, [onOpenChange])
+
+  const handleMaximize = useCallback(() => {
+    setIsMinimized(false)
+    onOpenChange(true)
+  }, [onOpenChange])
+
+  const handleCancel = useCallback(() => {
+    if (isRunning) {
+      handleMinimize()
+      return
+    }
+    if (isActionPending) return
+    reset()
+    clearLocalForm()
+    setIsMinimized(false)
+    onOpenChange(false)
+  }, [reset, onOpenChange, isRunning, isActionPending, handleMinimize, clearLocalForm])
 
   const canContinueToReview = Boolean(emittenteValue) && annoValue.trim() !== '' && rows.length > 0
 
@@ -279,14 +319,14 @@ export default function BulkImportProgrammazioniDialog({
 
   const handleDone = useCallback(() => {
     reset()
-    setEmittenteValue('')
-    setAnnoValue('')
-    setDropError(null)
-    setIsActionPending(false)
-    setRetryingRowId(null)
-    onImportComplete?.()
+    clearLocalForm()
+    setIsMinimized(false)
+    if (!notifiedDoneRef.current) {
+      notifiedDoneRef.current = true
+      onImportComplete?.()
+    }
     onOpenChange(false)
-  }, [reset, onImportComplete, onOpenChange])
+  }, [reset, onImportComplete, onOpenChange, clearLocalForm])
 
   const runningProcessed = summary.completed + summary.failed
   const runningPercentage = summary.total > 0 ? Math.round((runningProcessed / summary.total) * 100) : 0
@@ -294,19 +334,29 @@ export default function BulkImportProgrammazioniDialog({
   return (
     <>
       <Dialog
-        open={open}
+        open={dialogOpen}
         onOpenChange={(next) => {
           if (!next) handleCancel()
         }}
       >
         <DialogContent
-          className="max-w-2xl max-h-[85vh] overflow-y-auto"
+          className="w-[min(96vw,72rem)] sm:max-w-5xl max-h-[90vh] overflow-y-auto"
           showCloseButton={!isRunning}
           onEscapeKeyDown={(event) => {
-            if (isRunning || isActionPending) event.preventDefault()
+            if (isRunning) {
+              event.preventDefault()
+              handleMinimize()
+              return
+            }
+            if (isActionPending) event.preventDefault()
           }}
           onPointerDownOutside={(event) => {
-            if (isRunning || isActionPending) event.preventDefault()
+            if (isRunning) {
+              event.preventDefault()
+              handleMinimize()
+              return
+            }
+            if (isActionPending) event.preventDefault()
           }}
           onInteractOutside={(event) => {
             if (isRunning || isActionPending) event.preventDefault()
@@ -417,33 +467,33 @@ export default function BulkImportProgrammazioniDialog({
 
           {step === 'review' && (
             <div className="space-y-4 py-2">
-              <div className="max-h-80 overflow-y-auto rounded-md border">
-                <Table>
+              <div className="max-h-[min(50vh,28rem)] overflow-y-auto overflow-x-hidden rounded-md border [&_[data-slot=table-container]]:overflow-x-hidden">
+                <Table className="table-fixed w-full">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>File</TableHead>
-                      <TableHead>Nome campagna</TableHead>
-                      <TableHead>Colonne</TableHead>
-                      <TableHead>Dettaglio</TableHead>
+                      <TableHead className="w-[22%]">File</TableHead>
+                      <TableHead className="w-[34%]">Nome campagna</TableHead>
+                      <TableHead className="w-[14%]">Colonne</TableHead>
+                      <TableHead className="w-[30%]">Dettaglio</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.map(row => (
                       <TableRow key={row.id}>
-                        <TableCell className="max-w-[140px] truncate" title={row.file.name}>
+                        <TableCell className="align-top text-sm break-words whitespace-normal" title={row.file.name}>
                           {row.file.name}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top">
                           <Input
                             className="h-8"
                             value={row.nome}
                             onChange={(event) => updateNome(row.id, event.target.value)}
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top">
                           <ColumnStatusBadge columnClass={row.columnClass} />
                         </TableCell>
-                        <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground" title={row.detail ?? undefined}>
+                        <TableCell className="align-top text-xs text-muted-foreground break-words whitespace-normal">
                           {row.detail}
                         </TableCell>
                       </TableRow>
@@ -479,29 +529,29 @@ export default function BulkImportProgrammazioniDialog({
                 </div>
               </div>
 
-              <div className="max-h-80 overflow-y-auto rounded-md border">
-                <Table>
+              <div className="max-h-[min(50vh,28rem)] overflow-y-auto overflow-x-hidden rounded-md border [&_[data-slot=table-container]]:overflow-x-hidden">
+                <Table className="table-fixed w-full">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>File</TableHead>
-                      <TableHead>Stato</TableHead>
-                      <TableHead>Dettaglio</TableHead>
-                      <TableHead />
+                      <TableHead className="w-[34%]">File</TableHead>
+                      <TableHead className="w-[18%]">Stato</TableHead>
+                      <TableHead className="w-[32%]">Dettaglio</TableHead>
+                      <TableHead className="w-[16%]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rows.map(row => (
                       <TableRow key={row.id}>
-                        <TableCell className="max-w-[140px] truncate" title={row.file.name}>
+                        <TableCell className="align-top text-sm break-words whitespace-normal" title={row.file.name}>
                           {row.file.name}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top">
                           <RunStatusBadge status={row.runStatus} />
                         </TableCell>
-                        <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground" title={row.error ?? undefined}>
+                        <TableCell className="align-top text-xs text-muted-foreground break-words whitespace-normal">
                           {row.error}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="align-top">
                           {row.runStatus === 'failed' && (
                             <Button
                               size="sm"
@@ -519,6 +569,13 @@ export default function BulkImportProgrammazioniDialog({
                   </TableBody>
                 </Table>
               </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={handleMinimize}>
+                  <Minimize2 className="mr-2 h-4 w-4" />
+                  Continua in background
+                </Button>
+              </DialogFooter>
             </div>
           )}
 
@@ -560,6 +617,15 @@ export default function BulkImportProgrammazioniDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {showFloatingIndicator && (
+        <BulkImportFloatingIndicator
+          step={step}
+          summary={summary}
+          onMaximize={handleMaximize}
+          onDismiss={handleDone}
+        />
+      )}
     </>
   )
 }

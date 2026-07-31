@@ -198,8 +198,35 @@ describe('BulkImportProgrammazioniDialog', () => {
 
     expect(screen.queryByRole('button', { name: /^Close$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Annulla/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Continua in background/i })).toBeInTheDocument()
     expect(reset).not.toHaveBeenCalled()
     expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('minimizes to floating toast and can reopen', () => {
+    const onOpenChange = jest.fn()
+    mockUseBulkImport.mockReturnValue(baseHookState({
+      step: 'running',
+      rows: [makeRow({ id: 'r1', runStatus: 'uploading' })],
+      summary: { total: 3, ok: 3, warningSafe: 0, error: 0, completed: 1, failed: 0 },
+    }))
+
+    const { rerender } = render(
+      <BulkImportProgrammazioniDialog open onOpenChange={onOpenChange} emittenti={emittenti} />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Continua in background/i }))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+
+    rerender(
+      <BulkImportProgrammazioniDialog open={false} onOpenChange={onOpenChange} emittenti={emittenti} />
+    )
+
+    expect(screen.getByText(/Import bulk in corso/i)).toBeInTheDocument()
+    expect(screen.getByText(/1 di 3 file/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText(/Import bulk in corso/i))
+    expect(onOpenChange).toHaveBeenCalledWith(true)
   })
 
   it('shows the summary counts in the done step', () => {
