@@ -141,12 +141,19 @@ export function normalizeEpisodeSignals(row: Record<string, unknown>): EpisodeNo
   return buildResult(season, episode, episodeTitle, confidence, strategies, warnings, sourceFields, original)
 }
 
+/** Apply canonical season/episode when high, or medium with a concrete episode number (e.g. Ep.02). */
+export function shouldApplyEpisodeNormalization(result: EpisodeNormalizationResult): boolean {
+  return (
+    result.confidence === 'high' ||
+    (result.confidence === 'medium' && result.episode !== null)
+  )
+}
+
 export function applyEpisodeNormalizationToPayload<T extends Record<string, unknown>>(payload: T): T & Record<string, unknown> {
   const result = normalizeEpisodeSignals(payload)
   const mutablePayload = payload as Record<string, unknown>
-  const shouldApply = result.confidence === 'high'
 
-  if (shouldApply) {
+  if (shouldApplyEpisodeNormalization(result)) {
     if (result.season !== null) mutablePayload.numero_stagione = result.season
     if (result.episode !== null) mutablePayload.numero_episodio = result.episode
     if (result.episodeTitle && !mutablePayload.titolo_episodio) mutablePayload.titolo_episodio = result.episodeTitle

@@ -131,4 +131,31 @@ describe('worker episode normalization', () => {
       'episode_title_embedded_detected',
     ])
   })
+
+  it('applies medium-confidence absolute episode numbers (Ep.N) to canonical fields', () => {
+    const payload = applyEpisodeNormalizationToPayload({
+      titolo: 'Mozart In The Jungle',
+      titolo_originale: 'MOZART IN THE JUNGLE',
+      titolo_episodio: 'Mozart In The Jungle Ep.02 - Il Quinto Oboe',
+      titolo_episodio_originale: 'MOZART IN THE JUNGLE',
+    })
+
+    assert.equal(payload.numero_episodio, 2)
+    assert.equal(payload.numero_stagione, undefined)
+    const normalization = (payload.metadati_trasmissione as Record<string, unknown>).episode_normalization as Record<string, unknown>
+    assert.equal(normalization.confidence, 'medium')
+    assert.equal(normalization.episode, 2)
+  })
+
+  it('does not apply medium confidence when only an episode title is present', () => {
+    const payload = applyEpisodeNormalizationToPayload({
+      titolo_episodio: 'Il Quinto Oboe',
+    })
+
+    assert.equal(payload.numero_episodio, undefined)
+    assert.equal(payload.numero_stagione, undefined)
+    const normalization = (payload.metadati_trasmissione as Record<string, unknown>).episode_normalization as Record<string, unknown>
+    assert.equal(normalization.confidence, 'medium')
+    assert.equal(normalization.episode, null)
+  })
 })

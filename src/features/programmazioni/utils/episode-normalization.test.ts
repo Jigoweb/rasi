@@ -160,4 +160,41 @@ describe('applyEpisodeNormalizationToPayload', () => {
       }),
     })
   })
+
+  it('applies medium-confidence absolute episode numbers (Ep.N) to canonical fields', () => {
+    const payload = applyEpisodeNormalizationToPayload({
+      titolo: 'Mozart In The Jungle',
+      titolo_originale: 'MOZART IN THE JUNGLE',
+      titolo_episodio: 'Mozart In The Jungle Ep.02 - Il Quinto Oboe',
+      titolo_episodio_originale: 'MOZART IN THE JUNGLE',
+    })
+
+    expect(payload).toMatchObject({
+      numero_episodio: 2,
+      metadati_trasmissione: {
+        episode_normalization: expect.objectContaining({
+          season: null,
+          episode: 2,
+          confidence: 'medium',
+        }),
+      },
+    })
+    expect(payload.numero_stagione).toBeUndefined()
+  })
+
+  it('does not apply medium confidence when only an episode title is present', () => {
+    const payload = applyEpisodeNormalizationToPayload({
+      titolo_episodio: 'Il Quinto Oboe',
+    })
+
+    expect(payload.numero_episodio).toBeUndefined()
+    expect(payload.numero_stagione).toBeUndefined()
+    expect(payload.metadati_trasmissione).toMatchObject({
+      episode_normalization: expect.objectContaining({
+        episode: null,
+        episodeTitle: 'Il Quinto Oboe',
+        confidence: 'medium',
+      }),
+    })
+  })
 })
