@@ -30,10 +30,12 @@ import {
 } from '@/features/programmazioni/services/programmazioni-bulk-actions.service'
 import { createCoalescedOperationalSnapshotLoader } from '@/features/programmazioni/services/programmazioni-operational-snapshot.service'
 import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
+import { summarizeImportMapping, type ImportMappingConfig } from '@/features/programmazioni/services/import-mapping.service'
 import EmittentiTab from './components/EmittentiTab'
 import MappingWizard from './components/MappingWizard'
 import ProgrammazioniTable from './components/ProgrammazioniTable'
 import UploadProgrammazioniDialog from './components/UploadProgrammazioniDialog'
+import BulkImportProgrammazioniDialog from './components/BulkImportProgrammazioniDialog'
 import { useProgrammazioniDelete } from './hooks/useProgrammazioniDelete'
 import { useProgrammazioniEmittenti } from './hooks/useProgrammazioniEmittenti'
 import { useProgrammazioniUpload } from './hooks/useProgrammazioniUpload'
@@ -134,6 +136,9 @@ export default function ProgrammazioniPage() {
   const [campagnaToEdit, setCampagnaToEdit] = useState<CampagnaProgrammazione | null>(null)
   const [editMetadataDraft, setEditMetadataDraft] = useState({ nome: '', descrizione: '' })
   const [isSavingMetadata, setIsSavingMetadata] = useState(false)
+
+  // Bulk Import Modal State
+  const [isBulkOpen, setIsBulkOpen] = useState(false)
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -592,6 +597,17 @@ export default function ProgrammazioniPage() {
   // Get unique emittenti from campagne for filter dropdown
   const uniqueEmittenti = useMemo(() => getUniqueEmittenti(campagne), [campagne])
 
+  // Emittenti con stato mapping per l'import bulk: il mapping è già incluso nel
+  // fetch di `emittenti` (select *), quindi basta riassumerlo senza query aggiuntive.
+  const bulkImportEmittenti = useMemo(
+    () => emittenti.map(e => ({
+      id: e.id,
+      nome: e.nome,
+      mappingStatus: summarizeImportMapping(e.mapping_import as ImportMappingConfig | null).status,
+    })),
+    [emittenti],
+  )
+
   const annoIndividuazione = showBulkIndividuazioniDialog
     ? getSharedAnno(campagneForBulkIndividuazioni)
     : (campagnaForIndividuazioni?.anno ?? null)
@@ -627,10 +643,10 @@ export default function ProgrammazioniPage() {
   )
 
   useEffect(() => {
-    if (isNewModalOpen && emittenti.length === 0) {
+    if ((isNewModalOpen || isBulkOpen) && emittenti.length === 0) {
       fetchEmittenti()
     }
-  }, [isNewModalOpen, emittenti.length])
+  }, [isNewModalOpen, isBulkOpen, emittenti.length])
 
   // Inizializza la selezione di default a ogni apertura del dialog: tutti gli
   // artisti eleggibili per l'anno campagna selezionati, nessun override mandato.
@@ -916,6 +932,9 @@ export default function ProgrammazioniPage() {
               <Download className="h-4 w-4 mr-2" />
               Esporta CSV
             </Button>
+            <Button variant="outline" onClick={() => setIsBulkOpen(true)}>
+              Import bulk
+            </Button>
             <Button onClick={() => setIsNewModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Nuova Programmazione
@@ -1107,6 +1126,13 @@ export default function ProgrammazioniPage() {
         isUploadReady={isUploadReady}
         onUploadDatabase={handleUploadDatabase}
         onClose={handleCloseModal}
+      />
+
+      <BulkImportProgrammazioniDialog
+        open={isBulkOpen}
+        onOpenChange={setIsBulkOpen}
+        emittenti={bulkImportEmittenti}
+        onImportComplete={requestCampagneRefresh}
       />
 
       <Dialog open={Boolean(campagnaToEdit)} onOpenChange={(open) => { if (!open) setCampagnaToEdit(null) }}>
