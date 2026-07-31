@@ -114,7 +114,7 @@ export default function IndividuazioniDetailTable({
   const tableColSpan = selectionEnabled ? 10 : 9
 
   return (
-    <Card>
+    <Card className="py-0 gap-0">
       <CardContent className="p-0">
         <div className="border-b p-4 space-y-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">

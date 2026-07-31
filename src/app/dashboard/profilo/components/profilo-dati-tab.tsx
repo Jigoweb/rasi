@@ -202,12 +202,12 @@ export function ProfiloDatiTab({ artista, onArtistaUpdated }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="gap-4 py-4">
           <CardHeader>
             <CardTitle className="text-base">Anagrafica</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 px-4 text-sm">
             {editing ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Nome *" value={form.nome} onChange={(v) => patchForm('nome', v)} />
@@ -260,11 +260,11 @@ export function ProfiloDatiTab({ artista, onArtistaUpdated }: Props) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="gap-4 py-4">
           <CardHeader>
             <CardTitle className="text-base">Contatti</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 px-4 text-sm">
             {editing ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Field label="Email" value={form.email} onChange={(v) => patchForm('email', v)} />
@@ -290,11 +290,11 @@ export function ProfiloDatiTab({ artista, onArtistaUpdated }: Props) {
         </Card>
 
         {hasSocietari && (
-          <Card>
+          <Card className="gap-4 py-4">
             <CardHeader>
               <CardTitle className="text-base">Dati societari</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="space-y-3 px-4 text-sm">
               <InfoRow label="Ragione sociale" value={artista.ragione_sociale} />
               <InfoRow label="Forma giuridica" value={artista.forma_giuridica} />
               <InfoRow label="Partita IVA" value={artista.partita_iva} />
@@ -302,11 +302,11 @@ export function ProfiloDatiTab({ artista, onArtistaUpdated }: Props) {
           </Card>
         )}
 
-        <Card>
+        <Card className="gap-4 py-4">
           <CardHeader>
             <CardTitle className="text-base">Mandato</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 px-4 text-sm">
             <InfoRow label="Stato" value={artista.stato} />
             <InfoRow label="Data inizio mandato" value={artista.data_inizio_mandato} />
             <InfoRow label="Data fine mandato" value={artista.data_fine_mandato} />
@@ -316,11 +316,11 @@ export function ProfiloDatiTab({ artista, onArtistaUpdated }: Props) {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="gap-4 py-4">
           <CardHeader>
             <CardTitle className="text-base">Identificativi esterni</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+          <CardContent className="space-y-3 px-4 text-sm">
             <InfoRow label="IMDB" value={artista.imdb_nconst} />
             <InfoRow label="Codice Paese" value={artista.codice_paese} />
             {artista.diritti_attivi && artista.diritti_attivi.length > 0 && (

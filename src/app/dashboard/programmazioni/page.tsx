@@ -924,8 +924,8 @@ export default function ProgrammazioniPage() {
             <p className="text-gray-600">Gestione delle programmazioni televisive</p>
           </div>
         </div>
-        <Card>
-          <CardContent className="p-6">
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">
             <div className="animate-pulse space-y-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-12 bg-gray-200 rounded"></div>
@@ -983,8 +983,8 @@ export default function ProgrammazioniPage() {
             </Button>
           </div>
           {/* Filters */}
-          <Card>
-            <CardContent>
+          <Card className="gap-4 py-4">
+            <CardContent className="px-4">
               <div className="flex flex-col gap-4">
                 {/* Prima riga: Ricerca */}
                   <div className="relative">

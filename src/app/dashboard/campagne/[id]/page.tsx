@@ -40,8 +40,8 @@ export default function CampagnaDettaglioPage() {
             <p className="text-gray-600">Caricamento dati</p>
           </div>
         </div>
-        <Card>
-          <CardContent className="p-6">
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">
             <div className="animate-pulse space-y-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-12 bg-gray-200 rounded"></div>
@@ -68,8 +68,8 @@ export default function CampagnaDettaglioPage() {
       </div>
 
       {campagna ? (
-        <Card>
-          <CardContent className="p-6 space-y-6">
+        <Card className="gap-4 py-4">
+          <CardContent className="space-y-4 px-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-sm font-medium text-gray-500">Nome Campagna</div>
@@ -99,8 +99,8 @@ export default function CampagnaDettaglioPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="p-6">Campagna non trovata</CardContent>
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">Campagna non trovata</CardContent>
         </Card>
       )}
     </div>

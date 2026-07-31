@@ -259,8 +259,8 @@ export default function IndividuazioniPage() {
         />
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="flex flex-col gap-4">
             <div>
               <SearchInput
@@ -444,8 +444,8 @@ function StatsCard({
   label: string
 }) {
   return (
-    <Card>
-      <CardContent className="pt-6">
+    <Card className="gap-4 py-4">
+      <CardContent className="px-4">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${iconClassName}`}>
             {icon}

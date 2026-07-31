@@ -410,8 +410,8 @@ export default function ArtistiPage() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent>
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <SearchInput onSearch={setSearchQuery} initialValue={searchQuery} placeholder="Cerca per nome, cognome o codice artista..." />
@@ -510,14 +510,14 @@ export default function ArtistiPage() {
       </Card>
 
       {/* Artists Table */}
-      <Card>
+      <Card className="gap-4 py-4">
         <CardHeader>
           <CardTitle>Artisti Registrati</CardTitle>
           <CardDescription>
             Gestisci gli artisti registrati nel sistema
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4">
           {/* Desktop Table */}
           <div className="hidden lg:block">
             {loading ? (

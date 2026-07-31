@@ -340,8 +340,8 @@ export default function IndividuazioneDetailPage() {
         summary={episodeAlertSummary}
       />
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="flex flex-col md:flex-row gap-4">
             <Select value={searchField} onValueChange={value => handleSearchFieldChange(value as SearchField)}>
               <SelectTrigger className="w-[200px]">
@@ -499,9 +499,9 @@ function IndividuazioneSummary({
   const opereDistinte = stats?.catalog.opereDistinte ?? fallbackStats?.opere_distinte ?? 0
 
   return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="grid gap-5 md:grid-cols-3">
+    <Card className="gap-4 py-4">
+      <CardContent className="px-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <SummaryBlock
             label="Individuazioni generate"
             value={formatNumber(totalIndividuazioni)}

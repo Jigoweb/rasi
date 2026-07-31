@@ -1014,12 +1014,12 @@ export default function OperaDetailPage() {
         </div>
       </div>
 
-      <Card>
+      <Card className="gap-4 py-4">
         <CardHeader>
           <CardTitle className="flex items-center"><BadgeInfo className="mr-2 h-5 w-5" />Informazioni Opera</CardTitle>
         </CardHeader>
-        <CardContent className="p-4 lg:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+        <CardContent className="px-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground"><FileText className="mr-2 h-4 w-4" />Titolo originale</div>
               <div className="font-medium">
@@ -1131,7 +1131,7 @@ export default function OperaDetailPage() {
 
       {/* Credits IMDb Section */}
       {imdbCredits.length > 0 && (
-        <Card>
+        <Card className="gap-4 py-4">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle className="flex items-center"><User className="mr-2 h-5 w-5" />Credits IMDb</CardTitle>
@@ -1243,8 +1243,8 @@ export default function OperaDetailPage() {
       )}
 
       {operaHaEpisodi(opera) && (
-        <Card>
-          <CardHeader>
+        <Card className="py-0 gap-0">
+          <CardHeader className="py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <CardTitle className="flex items-center"><PlayCircle className="mr-2 h-5 w-5" />Episodi</CardTitle>
@@ -1350,8 +1350,8 @@ export default function OperaDetailPage() {
                 </div>
               ) : (
                 episodi.map((e: any) => (
-                  <Card key={e.id}>
-                    <CardContent className="p-4 space-y-2">
+                  <Card key={e.id} className="gap-4 py-4">
+                    <CardContent className="space-y-2 px-4">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="font-medium">S{e.numero_stagione} E{e.numero_episodio}</div>
@@ -1413,8 +1413,8 @@ export default function OperaDetailPage() {
       )}
 
       {/* Partecipazioni Section */}
-      <Card>
-        <CardHeader>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-4">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center">
               <Users className="mr-2 h-5 w-5" />

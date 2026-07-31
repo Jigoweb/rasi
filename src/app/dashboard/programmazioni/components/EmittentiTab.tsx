@@ -105,8 +105,8 @@ export default function EmittentiTab({
         </Button>
       </div>
 
-      <Card>
-        <CardContent>
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
@@ -133,7 +133,7 @@ export default function EmittentiTab({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="py-0 gap-0">
         <CardContent className="p-0">
           <div className="hidden lg:block relative overflow-x-auto">
             <Table>

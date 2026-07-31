@@ -156,7 +156,7 @@ export default function ProgrammazioniTable({
   const tableColSpan = selectionEnabled ? 7 : 6
 
   return (
-    <Card>
+    <Card className="py-0 gap-0">
       <CardContent className="p-0">
         {selectionEnabled && selectedIds && selectedIds.size > 0 && bulkActions && (
           <div className="border-b bg-muted/30 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
