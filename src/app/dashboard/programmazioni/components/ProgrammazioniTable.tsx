@@ -149,7 +149,7 @@ export default function ProgrammazioniTable({
     onSelectionChange?.(new Set())
   }
 
-  const tableColSpan = selectionEnabled ? 8 : 7
+  const tableColSpan = selectionEnabled ? 7 : 6
 
   return (
     <Card>
@@ -210,7 +210,6 @@ export default function ProgrammazioniTable({
                 )}
                 <TableHead className="py-4">Nome</TableHead>
                 <TableHead className="py-4">Emittente</TableHead>
-                <TableHead className="py-4 w-24 text-center">Anno</TableHead>
                 <TableHead className="py-4 w-44">Stato</TableHead>
                 <TableHead className="py-4 w-36">Creato il</TableHead>
                 <TableHead className="py-4 w-72">Operazioni</TableHead>
@@ -269,9 +268,6 @@ export default function ProgrammazioniTable({
                           <Tv className="h-4 w-4 text-muted-foreground" />
                           <span className="text-muted-foreground">{campagna.emittenti?.nome || '—'}</span>
                         </div>
-                      </TableCell>
-                      <TableCell className="py-4 text-center">
-                        <span className="font-mono text-muted-foreground">{campagna.anno}</span>
                       </TableCell>
                       <TableCell className="py-4">
                         <StatusCell
@@ -364,7 +360,6 @@ export default function ProgrammazioniTable({
                       <div className="mt-1 text-sm text-gray-600 flex items-center gap-2">
                         <Tv className="h-4 w-4 text-gray-400" />
                         <span>{campagna.emittenti?.nome || '—'}</span>
-                        <span className="font-mono">{campagna.anno}</span>
                       </div>
                       <div className="mt-1 text-sm text-gray-600 flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-gray-400" />

@@ -64,7 +64,8 @@ describe('ProgrammazioniTable', () => {
 
     expect(screen.getAllByText('Campagna Test').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Rai 1').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('2026').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('columnheader', { name: 'Anno' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('23/06/2026').length).toBeGreaterThan(0)
   })
 
   it('keeps primary workflow clicks from triggering row navigation', () => {
