@@ -172,7 +172,7 @@ node scripts/normalize-sky-excel-headers.mjs \
 3. In piattaforma: una emittente **SKY**, mapping della sezione 1, transform data/durata.
 4. Upload di prova: 1 file Title Case 2022 + 1 ex-SNAKE + 1 Primafila.
 5. Controllare date (`data_trasmissione`) e `durata_minuti` su qualche riga campione.
-6. Procedere con l’import a batch.
+6. Procedere con l’import a batch (UI: Programmazioni → **Import bulk**).
 
 ---
 
