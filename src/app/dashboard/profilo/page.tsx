@@ -210,18 +210,20 @@ export default function ProfiloArtistaPage() {
     )
   } else if (activeTab === 'repertorio') {
     tabBody = (
-      <Card>
-        <CardHeader>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-4">
           <CardTitle className="text-base">
             Opere e partecipazioni ({partecipazioni.length})
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {partecipazioni.length === 0 ? (
-            <EmptyState
-              icon={Film}
-              message="Nessuna partecipazione registrata nel tuo repertorio."
-            />
+            <div className="px-6 pb-6">
+              <EmptyState
+                icon={Film}
+                message="Nessuna partecipazione registrata nel tuo repertorio."
+              />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -267,8 +269,8 @@ export default function ProfiloArtistaPage() {
     )
   } else if (activeTab === 'individuazioni') {
     tabBody = (
-      <Card>
-        <CardHeader>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <CardTitle className="text-base">
               Trasmissioni individuate ({individuazioni.length})
@@ -298,12 +300,14 @@ export default function ProfiloArtistaPage() {
             )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {individuazioni.length === 0 ? (
-            <EmptyState
-              icon={Radio}
-              message="Nessuna trasmissione individuata per il tuo repertorio."
-            />
+            <div className="px-6 pb-6">
+              <EmptyState
+                icon={Radio}
+                message="Nessuna trasmissione individuata per il tuo repertorio."
+              />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -349,16 +353,18 @@ export default function ProfiloArtistaPage() {
     )
   } else if (activeTab === 'ripartizioni') {
     tabBody = (
-      <Card>
-        <CardHeader>
+      <Card className="py-0 gap-0">
+        <CardHeader className="py-4">
           <CardTitle className="text-base">Compensi ({ripartizioni.length})</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {ripartizioni.length === 0 ? (
-            <EmptyState
-              icon={Banknote}
-              message="Nessun compenso registrato al momento."
-            />
+            <div className="px-6 pb-6">
+              <EmptyState
+                icon={Banknote}
+                message="Nessun compenso registrato al momento."
+              />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>

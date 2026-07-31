@@ -167,8 +167,8 @@ ORDER BY anno DESC, mese DESC;`
       </div>
 
       {/* Info Card */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="p-4">
+      <Card className="gap-4 border-blue-200 bg-blue-50 py-4">
+        <CardContent className="px-4">
           <div className="flex items-start gap-3">
             <div className="bg-blue-100 p-2 rounded-lg">
               <Database className="h-5 w-5 text-blue-600" />
@@ -187,8 +187,8 @@ ORDER BY anno DESC, mese DESC;`
       {/* Queries Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {predefinedQueries.map((query) => (
-          <Card key={query.id} className="hover:shadow-md transition-shadow">
-            <CardHeader className="pb-3">
+          <Card key={query.id} className="gap-4 py-4 hover:shadow-md transition-shadow">
+            <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <div className="bg-gray-100 p-2 rounded-lg">
@@ -206,7 +206,7 @@ ORDER BY anno DESC, mese DESC;`
                 {query.description}
               </CardDescription>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="px-4">
               <div className="bg-gray-50 p-3 rounded-lg mb-4">
                 <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
                   {query.sql.substring(0, 120)}...
@@ -237,14 +237,14 @@ ORDER BY anno DESC, mese DESC;`
 
       {/* Results Section */}
       {activeQuery && (
-        <Card>
+        <Card className="gap-4 py-4">
           <CardHeader>
             <CardTitle>Risultati Query</CardTitle>
             <CardDescription>
               Risultati per: {predefinedQueries.find(q => q.id === activeQuery)?.title}
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4">
             <div className="bg-gray-50 p-6 rounded-lg text-center">
               <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="font-medium text-gray-900 mb-2">Funzionalità in Sviluppo</h3>
@@ -258,9 +258,9 @@ ORDER BY anno DESC, mese DESC;`
       )}
 
       {/* Usage Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardContent className="p-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Query Disponibili</p>
@@ -271,8 +271,8 @@ ORDER BY anno DESC, mese DESC;`
           </CardContent>
         </Card>
         
-        <Card>
-          <CardContent className="p-4">
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Categorie</p>
@@ -285,8 +285,8 @@ ORDER BY anno DESC, mese DESC;`
           </CardContent>
         </Card>
         
-        <Card>
-          <CardContent className="p-4">
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Ultima Esecuzione</p>

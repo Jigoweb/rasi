@@ -41,7 +41,7 @@ export default function RipartizioneDettaglioPage() {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl font-bold tracking-tight">Dettaglio Ripartizione</h1>
-        <Card><CardContent className="p-6">
+        <Card className="gap-4 py-4"><CardContent className="px-4">
           <div className="animate-pulse space-y-4">
             {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-gray-200 rounded" />)}
           </div>
@@ -72,10 +72,10 @@ export default function RipartizioneDettaglioPage() {
       </div>
 
       {campagna ? (
-        <Card>
+        <Card className="gap-4 py-4">
           <CardHeader><CardTitle>{campagna.nome}</CardTitle></CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <CardContent className="space-y-4 px-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div className="text-sm font-medium text-gray-500">Stato</div>
                 <div className="mt-1"><Badge variant="outline">{campagna.stato || '—'}</Badge></div>
@@ -127,7 +127,7 @@ export default function RipartizioneDettaglioPage() {
           </CardContent>
         </Card>
       ) : (
-        <Card><CardContent className="p-6 text-gray-500">Campagna non trovata.</CardContent></Card>
+        <Card className="gap-4 py-4"><CardContent className="px-4 text-gray-500">Campagna non trovata.</CardContent></Card>
       )}
     </div>
   )

@@ -244,8 +244,8 @@ export default function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-6">
+            <Card key={i} className="animate-pulse gap-4 py-4">
+              <CardContent className="px-4">
                 <div className="h-16 bg-gray-200 rounded"></div>
               </CardContent>
             </Card>
@@ -274,8 +274,8 @@ export default function DashboardPage() {
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
         {statCards.map((stat, index) => (
-          <Card key={index} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
+          <Card key={index} className="gap-4 py-4 hover:shadow-md transition-shadow">
+            <CardContent className="px-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">{stat.title}</p>
@@ -295,12 +295,12 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
 
         {/* Attività Recenti — feed reale */}
-        <Card>
-          <CardHeader className="pb-4">
+        <Card className="gap-4 py-4">
+          <CardHeader>
             <CardTitle className="text-lg">Attività Recenti</CardTitle>
             <CardDescription className="text-sm">Ultime operazioni nel sistema</CardDescription>
           </CardHeader>
-          <CardContent className="p-4 lg:p-6">
+          <CardContent className="px-4">
             {attivitaRecenti.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Nessuna attività recente</p>
             ) : (
@@ -327,12 +327,12 @@ export default function DashboardPage() {
         </Card>
 
         {/* Statistiche Sistema — metriche DB reali */}
-        <Card>
-          <CardHeader className="pb-4">
+        <Card className="gap-4 py-4">
+          <CardHeader>
             <CardTitle className="text-lg">Statistiche Sistema</CardTitle>
             <CardDescription className="text-sm">Metriche database in tempo reale</CardDescription>
           </CardHeader>
-          <CardContent className="p-4 lg:p-6">
+          <CardContent className="px-4">
             <div className="space-y-3 lg:space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Individuazioni totali</span>
@@ -382,8 +382,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Export Banca Dati */}
-      <Card>
-        <CardHeader className="pb-4">
+      <Card className="gap-4 py-4">
+        <CardHeader>
           <div className="flex items-start justify-between">
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
@@ -397,7 +397,7 @@ export default function DashboardPage() {
             <Badge variant="secondary">XLSX</Badge>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4">
           <Button
             onClick={handleExportFull}
             disabled={isExporting || loading}
@@ -413,8 +413,8 @@ export default function DashboardPage() {
       </Card>
 
       {/* Data Health */}
-      <Card>
-        <CardHeader className="pb-4">
+      <Card className="gap-4 py-4">
+        <CardHeader>
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-lg">Data Health</CardTitle>
             {healthLoading && (
@@ -426,7 +426,7 @@ export default function DashboardPage() {
           </div>
           <CardDescription className="text-sm">Completamento complessivo e campi mancanti</CardDescription>
         </CardHeader>
-        <CardContent className="p-4 lg:p-6 space-y-6">
+        <CardContent className="space-y-4 px-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 border rounded-lg bg-white">
               <p className="text-sm font-medium text-gray-600">Artisti incompleti</p>

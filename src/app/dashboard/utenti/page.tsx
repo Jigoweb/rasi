@@ -515,14 +515,14 @@ export default function UtentiPage() {
       {/* Stats Cards - Grid con tutte le card dei ruoli */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {/* Card Totale */}
-        <Card>
+        <Card className="gap-4 py-4">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-gray-500 flex items-center gap-2">
               <Users className="h-4 w-4" />
               Totale Utenti
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4">
             <div className="text-2xl font-bold">{users.length}</div>
           </CardContent>
         </Card>
@@ -531,7 +531,7 @@ export default function UtentiPage() {
         {roleStats.map((role) => (
           <Card 
             key={role.value}
-            className={`cursor-pointer transition-all hover:shadow-md ${
+            className={`gap-4 py-4 cursor-pointer transition-all hover:shadow-md ${
               filterRole === role.value ? 'ring-2 ring-offset-2 ring-blue-500' : ''
             }`}
             onClick={() => setFilterRole(filterRole === role.value ? 'all' : role.value)}
@@ -542,7 +542,7 @@ export default function UtentiPage() {
                 {role.label}
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4">
               <div className={`text-2xl font-bold ${
                 role.color === 'blue' ? 'text-blue-600' :
                 role.color === 'purple' ? 'text-purple-600' :
@@ -559,8 +559,8 @@ export default function UtentiPage() {
 
       {/* Error Alert */}
       {error && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="pt-6">
+        <Card className="gap-4 py-4 border-red-200 bg-red-50">
+          <CardContent className="px-4">
             <div className="flex items-center gap-2 text-red-700">
               <AlertCircle className="h-5 w-5" />
               <span>{error}</span>
@@ -570,8 +570,8 @@ export default function UtentiPage() {
       )}
 
       {/* Filters Section */}
-      <Card>
-        <CardHeader className="pb-4">
+      <Card className="gap-4 py-4">
+        <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-lg flex items-center gap-2">
               <Search className="h-5 w-5" />
@@ -585,7 +585,7 @@ export default function UtentiPage() {
             )}
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4">
           <div className="flex flex-col md:flex-row gap-4">
             {/* Search by email */}
             <div className="flex-1">
@@ -637,7 +637,7 @@ export default function UtentiPage() {
       </Card>
 
       {/* Users Table */}
-      <Card>
+      <Card className="gap-4 py-4">
         <CardHeader>
           <CardTitle>Elenco Utenti</CardTitle>
           <CardDescription>
@@ -647,7 +647,7 @@ export default function UtentiPage() {
             }
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
