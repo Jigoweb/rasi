@@ -139,7 +139,7 @@ describe('useProgrammazioniBulkImport - preview classification', () => {
     })
 
     expect(result.current.rows[0].columnClass).toBe('ok')
-    expect(result.current.rows[0].nome).toBe('SkyArte')
+    expect(result.current.rows[0].nome).toBe('SkyArte 2020')
     expect(result.current.canStart).toBe(true)
     expect(result.current.hasSafeWarnings).toBe(false)
   })

@@ -142,13 +142,14 @@ async function previewOneRow(
 
 export function useProgrammazioniBulkImport() {
   const [emittenteId, setEmittenteId] = useState<string | null>(null)
-  const [anno, setAnno] = useState<number | null>(null)
+  const [anno, setAnnoState] = useState<number | null>(null)
   const [step, setStep] = useState<BulkImportStep>('setup')
   const [confirmedSafeWarnings, setConfirmedSafeWarnings] = useState(false)
   const [rows, setRowsState] = useState<BulkImportRow[]>([])
 
   const rowsRef = useRef<BulkImportRow[]>([])
   const mappingSnapshotsRef = useRef<Map<string, UploadMappingSnapshot>>(new Map())
+  const annoRef = useRef<number | null>(null)
 
   const setRows = useCallback((updater: (prev: BulkImportRow[]) => BulkImportRow[]) => {
     setRowsState(prev => {
@@ -162,8 +163,24 @@ export function useProgrammazioniBulkImport() {
     setRows(prev => prev.map(row => (row.id === id ? { ...row, ...patch } : row)))
   }, [setRows])
 
+  const setAnno = useCallback((next: number | null) => {
+    const prevAnno = annoRef.current
+    annoRef.current = next
+    setAnnoState(next)
+
+    // Aggiorna i prefill non editati quando cambia l'anno nello step setup.
+    if (next === null || step !== 'setup') return
+    setRows(prev => prev.map(row => {
+      const previousSuggested = prevAnno != null
+        ? suggestCampagnaNomeFromFilename(row.file.name, prevAnno)
+        : null
+      if (previousSuggested && row.nome !== previousSuggested) return row
+      return { ...row, nome: suggestCampagnaNomeFromFilename(row.file.name, next) }
+    }))
+  }, [setRows, step])
+
   const addFiles = useCallback((files: File[]) => {
-    const yearForName = anno ?? new Date().getFullYear()
+    const yearForName = annoRef.current ?? anno ?? new Date().getFullYear()
     setRows(prev => [...prev, ...files.map(file => makeInitialRow(file, yearForName))])
   }, [anno, setRows])
 
@@ -328,7 +345,8 @@ export function useProgrammazioniBulkImport() {
 
   const reset = useCallback(() => {
     setEmittenteId(null)
-    setAnno(null)
+    annoRef.current = null
+    setAnnoState(null)
     setStep('setup')
     setConfirmed(false)
     mappingSnapshotsRef.current.clear()
