@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
 import { isAbsentMarker, isBlankValue } from '../lib/absent-data.js'
+import { excelFractionToHHMMSS, normalizeExcelTimeFractionCells } from '../lib/excel-time.js'
 
 export interface FieldRule {
   sources: string[]
@@ -100,6 +101,8 @@ export function parseProgrammazioniFile(buffer: Buffer, fileName: string): Recor
   if (lower.match(/\.xlsx?$/)) {
     const workbook = XLSX.read(buffer)
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]
+    // Evita "1/0/00" da SheetJS su celle orario senza number-format (frazioni Excel).
+    normalizeExcelTimeFractionCells(worksheet)
     // defval: evita che celle vuote sulla prima riga facciano sparire colonne header
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
       raw: false,
@@ -248,6 +251,9 @@ function resolveFieldValueWithSource(
 
 function coerce(field: string, value: unknown): unknown {
   if (value === null || value === undefined || value === '') return undefined
+  if (field === 'ora_inizio' || field === 'ora_fine') {
+    return coerceTime(value)
+  }
   if (INTEGER_FIELDS.has(field)) {
     const numberValue = Number(String(value).replace(',', '.'))
     return Number.isFinite(numberValue) ? Math.round(numberValue) : undefined
@@ -259,15 +265,124 @@ function coerce(field: string, value: unknown): unknown {
   return String(value).trim()
 }
 
+function coerceTime(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return excelFractionToHHMMSS(value) ?? undefined
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const h = value.getUTCHours()
+    const m = value.getUTCMinutes()
+    const s = value.getUTCSeconds()
+    return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':')
+  }
+  const str = String(value).trim()
+  const match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (!match) return undefined
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2], 10)
+  const seconds = match[3] ? parseInt(match[3], 10) : 0
+  if (minutes > 59 || seconds > 59) return undefined
+  if (hours >= 24) hours = hours % 24
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+function hhmmssToMinutes(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  const match = trimmed.match(/^(\d{1,2}):(\d{2}):(\d{2})$/)
+  if (!match) return null
+  const h = Number(match[1])
+  const m = Number(match[2])
+  const s = Number(match[3])
+  if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isFinite(s)) return null
+  return Math.round(h * 60 + m + s / 60)
+}
+
+function usDateShortToIso(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
+  if (!match) return null
+  const mm = match[1].padStart(2, '0')
+  const dd = match[2].padStart(2, '0')
+  const yy = parseInt(match[3], 10)
+  const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
+  return `${yyyy}-${mm}-${dd}`
+}
+
+function euDateShortToIso(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
+  if (!match) return null
+  const dd = match[1].padStart(2, '0')
+  const mm = match[2].padStart(2, '0')
+  const yy = parseInt(match[3], 10)
+  const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
+  return `${yyyy}-${mm}-${dd}`
+}
+
 function applyTransform(name: string | undefined, value: unknown): unknown {
   if (!name) return value
-  if (name.includes('minutes') || name.includes('seconds') || name.includes('duration')) {
-    return coerce('durata_minuti', value)
+  switch (name) {
+    case 'hhmmss_to_minutes':
+      return hhmmssToMinutes(value)
+    case 'fractional_day_to_minutes': {
+      const n = Number(value)
+      return Number.isFinite(n) ? Math.round(n * 24 * 60) : null
+    }
+    case 'excel_fraction_to_time': {
+      const n = Number(value)
+      return Number.isFinite(n) ? excelFractionToHHMMSS(n) : null
+    }
+    case 'us_date_short':
+      return usDateShortToIso(value)
+    case 'eu_date_short':
+      return euDateShortToIso(value)
+    case 'us_date_to_iso': {
+      if (typeof value !== 'string') return null
+      const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+      if (!match) return null
+      return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`
+    }
+    case 'eu_date_to_iso': {
+      if (typeof value !== 'string') return null
+      const match = value.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+      if (!match) return null
+      return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`
+    }
+    case 'iso_date': {
+      if (typeof value !== 'string') return null
+      const match = value.trim().match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/)
+      if (!match) return null
+      return `${match[1]}-${match[2]}-${match[3]}`
+    }
+    case 'excel_serial_to_iso': {
+      const n = Number(value)
+      if (!Number.isFinite(n)) return null
+      const days = Math.trunc(n)
+      if (days < 1) return null
+      const ms = Date.UTC(1899, 11, 30) + days * 86400000
+      const d = new Date(ms)
+      if (Number.isNaN(d.getTime())) return null
+      const yyyy = d.getUTCFullYear()
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
+      const dd = String(d.getUTCDate()).padStart(2, '0')
+      return `${yyyy}-${mm}-${dd}`
+    }
+    default:
+      // Fallback legacy: nomi che contengono minutes/seconds → durata
+      if (name.includes('minutes') || name.includes('seconds') || name.includes('duration')) {
+        return coerce('durata_minuti', value)
+      }
+      return value
   }
-  if (name.includes('date') || name.includes('iso')) {
-    return value
-  }
-  return value
 }
 
 function normalizeTitle(value: string): string {

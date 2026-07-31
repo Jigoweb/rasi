@@ -3,6 +3,8 @@
  * Estratto da page.tsx per condividere la logica con import-mapping.service.
  */
 
+import { excelFractionToHHMMSS } from './excel-time'
+
 /**
  * Normalizza una chiave colonna (lowercase + trim).
  */
@@ -51,17 +53,33 @@ export function templateFieldLabel(field: string): string {
 }
 
 /**
- * Valida un valore orario in formato HH:MM o HH:MM:SS.
- * Restituisce HH:MM:SS normalizzato, o la stringa originale se non parsabile.
+ * Valida un valore orario (HH:MM, HH:MM:SS, frazione Excel, Date).
+ * Restituisce HH:MM:SS normalizzato, o undefined se non parsabile.
+ * Non inoltra stringhe invalide (es. SheetJS "1/0/00") al DB.
  */
 export function validateTime(timeStr: any): string | undefined {
-  if (!timeStr) return undefined
+  if (timeStr === undefined || timeStr === null || timeStr === '') return undefined
+
+  if (typeof timeStr === 'number' && Number.isFinite(timeStr)) {
+    return excelFractionToHHMMSS(timeStr) ?? undefined
+  }
+
+  if (timeStr instanceof Date && !Number.isNaN(timeStr.getTime())) {
+    const h = timeStr.getUTCHours()
+    const m = timeStr.getUTCMinutes()
+    const s = timeStr.getUTCSeconds()
+    return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':')
+  }
+
   const str = String(timeStr).trim()
+  if (!str) return undefined
+
   const match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
-  if (!match) return str
-  let hours = parseInt(match[1])
-  const minutes = parseInt(match[2])
-  const seconds = match[3] ? parseInt(match[3]) : 0
+  if (!match) return undefined
+  let hours = parseInt(match[1], 10)
+  const minutes = parseInt(match[2], 10)
+  const seconds = match[3] ? parseInt(match[3], 10) : 0
+  if (minutes > 59 || seconds > 59) return undefined
   if (hours >= 24) hours = hours % 24
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }

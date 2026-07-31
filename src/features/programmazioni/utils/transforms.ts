@@ -1,4 +1,5 @@
 import { parseYearValue } from './year-parse'
+import { excelFractionToHHMMSS } from './excel-time'
 
 /**
  * Transform registry for broadcaster import pipelines.
@@ -32,6 +33,7 @@ export type TransformName =
   | 'eu_date_short'
   | 'us_date_short'
   | 'excel_serial_to_iso'
+  | 'excel_fraction_to_time'
 
 export type TransformFn = (value: unknown) => unknown
 
@@ -256,6 +258,12 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     return `${yyyy}-${mm}-${dd}`
   },
 
+  excel_fraction_to_time: (value) => {
+    const n = parseNumber(value)
+    if (n === null) return null
+    return excelFractionToHHMMSS(n)
+  },
+
   us_date_to_iso: (value) => {
     if (value === null || value === undefined) return null
     if (typeof value !== 'string') return null
@@ -325,6 +333,7 @@ export const TRANSFORM_LABELS: Record<TransformName, string> = {
   eu_date_short: 'Data EU DD/MM/YY (anno 2 cifre) → ISO',
   us_date_short: 'Data US MM/DD/YY (anno 2 cifre) → ISO',
   excel_serial_to_iso: 'Data seriale Excel → ISO',
+  excel_fraction_to_time: 'Orario frazione Excel → HH:MM:SS',
   mojibake_repair: 'Ripara mojibake (encoding)',
   nbsp_to_space: 'Spazio unicode → spazio normale',
   year_range_first: 'Range anni → primo anno',
@@ -342,12 +351,19 @@ const DURATION_TRANSFORMS: TransformName[] = [
   'decimal_minutes_to_int', 'rti_apostrophe_minutes',
 ]
 
+const TIME_TRANSFORMS: TransformName[] = [
+  'excel_fraction_to_time',
+]
+
 const GENERIC_TRANSFORMS: TransformName[] = [
   'mojibake_repair', 'nbsp_to_space',
 ]
 
 /** Campi template di tipo data (destinazioni che accettano transform data). */
 export const DATE_TARGET_FIELDS = new Set(['data_trasmissione', 'data_inizio', 'data_fine'])
+
+/** Campi template di tipo orario. */
+export const TIME_TARGET_FIELDS = new Set(['ora_inizio', 'ora_fine'])
 
 /** True se il campo template è una data. */
 export function isDateTargetField(field: string): boolean {
@@ -358,6 +374,9 @@ export function isDateTargetField(field: string): boolean {
 export function transformsForField(field: string): TransformName[] {
   if (isDateTargetField(field)) {
     return [...DATE_TRANSFORMS, ...GENERIC_TRANSFORMS]
+  }
+  if (TIME_TARGET_FIELDS.has(field)) {
+    return [...TIME_TRANSFORMS, ...GENERIC_TRANSFORMS]
   }
   if (field === 'durata_minuti') {
     return [...DURATION_TRANSFORMS, ...GENERIC_TRANSFORMS]

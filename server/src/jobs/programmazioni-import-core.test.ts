@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
-import { buildProgrammazioniPayloads } from './programmazioni-import-core.js'
+import {
+  buildProgrammazioniPayloads,
+  parseProgrammazioniFile,
+} from './programmazioni-import-core.js'
 
 describe('programmazioni import core episode normalization', () => {
   it('normalizes Netflix packed episode signals in worker payloads', () => {
@@ -88,5 +92,56 @@ describe('programmazioni import core absent-data normalization', () => {
     )
     assert.equal(payloads.length, 1)
     assert.equal(payloads[0].titolo, 'Fallback Title')
+  })
+})
+
+describe('programmazioni import excel time fractions', () => {
+  it('non produce ora_inizio 1/0/00 dal file Cielo 2015', () => {
+    const path = '/Users/matteo/Downloads/SKY/2015/Cielo 2015 File grezzo.xlsx'
+    let buffer: Buffer
+    try {
+      buffer = readFileSync(path)
+    } catch {
+      // Skip se il file campione non è disponibile nell'ambiente CI
+      return
+    }
+
+    const rows = parseProgrammazioniFile(buffer, 'Cielo 2015 File grezzo.xlsx')
+    assert.ok(rows.length > 0)
+    const first = rows[0]
+    assert.equal(first['Ora Inizio'], '00:06:29')
+    assert.notEqual(first['Ora Inizio'], '1/0/00')
+    assert.match(String(first['Durata']), /^\d{2}:\d{2}:\d{2}$/)
+
+    const payloads = buildProgrammazioniPayloads(
+      rows.slice(0, 3),
+      {
+        kind: 'apply_existing',
+        mapping: {
+          version: 1,
+          colonne_rilevate: Object.keys(first),
+          ultimo_upload: null,
+          mapping: {
+            'Serie Programma Sistema': 'titolo',
+            'Data Inizio': 'data_trasmissione',
+            'Ora Inizio': 'ora_inizio',
+            Durata: 'durata_minuti',
+            Tipologia: 'tipo',
+            Anno: 'anno',
+          },
+          transforms: {
+            'Data Inizio': 'us_date_short',
+            Durata: 'hhmmss_to_minutes',
+          },
+        },
+      },
+      { campagnaProgrammazioneId: 'campagna-cielo', emittenteId: 'emittente-sky' },
+    )
+
+    assert.equal(payloads.length, 3)
+    assert.equal(payloads[0].ora_inizio, '00:06:29')
+    assert.equal(payloads[0].data_trasmissione, '2015-06-01')
+    assert.equal(typeof payloads[0].durata_minuti, 'number')
+    assert.ok((payloads[0].durata_minuti as number) > 0)
   })
 })

@@ -1,5 +1,6 @@
 import { supabase } from '@/shared/lib/supabase'
 import * as XLSX from 'xlsx'
+import { normalizeExcelTimeFractionCells } from '../utils/excel-time'
 import Papa from 'papaparse'
 import {
   coerce,
@@ -227,6 +228,8 @@ export function columnNamesFromParsedRows(
 }
 
 function sheetToJsonRows(ws: XLSX.WorkSheet): Record<string, any>[] {
+  // Evita "1/0/00" da SheetJS su celle orario senza number-format (frazioni Excel).
+  normalizeExcelTimeFractionCells(ws)
   return XLSX.utils.sheet_to_json<Record<string, any>>(ws, EXCEL_JSON_OPTS)
 }
 

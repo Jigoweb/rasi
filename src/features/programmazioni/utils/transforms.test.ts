@@ -310,9 +310,25 @@ describe('transform metadata', () => {
     expect(t).not.toContain('us_date_to_iso')
   })
 
+  it('transformsForField: ora → excel_fraction_to_time', () => {
+    expect(transformsForField('ora_inizio')).toContain('excel_fraction_to_time')
+    expect(transformsForField('ora_fine')).toContain('excel_fraction_to_time')
+  })
+
   it('transformsForField: campo senza transform dedicati → solo generici', () => {
     const t = transformsForField('titolo')
     expect(t).toContain('mojibake_repair')
     expect(t).not.toContain('us_date_to_iso')
+  })
+})
+
+describe('excel_fraction_to_time', () => {
+  it('converts Excel day fraction to HH:MM:SS', () => {
+    expect(applyTransform('excel_fraction_to_time', 0.25)).toBe('06:00:00')
+    expect(applyTransform('excel_fraction_to_time', 0.004502314814814815)).toBe('00:06:29')
+  })
+
+  it('returns null for non-numeric', () => {
+    expect(applyTransform('excel_fraction_to_time', 'foo')).toBeNull()
   })
 })
