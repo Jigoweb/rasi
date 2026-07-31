@@ -58,13 +58,14 @@ describe('useProgrammazioniDelete', () => {
     const updateCampagne: Dispatch<SetStateAction<CampagnaProgrammazione[]>> = jest.fn((next) => {
       campagne = typeof next === 'function' ? next(campagne) : next
     }) as Dispatch<SetStateAction<CampagnaProgrammazione[]>>
+    const onDeleted = jest.fn()
     ;(getDeleteCampagnaProgrammazioneInfo as jest.Mock).mockResolvedValue({ data: null, error: null })
     ;(deleteCampagnaProgrammazione as jest.Mock).mockResolvedValue({
       error: null,
       blocked: false,
       blockReason: null,
     })
-    const { result } = renderHook(() => useProgrammazioniDelete({ updateCampagne }))
+    const { result } = renderHook(() => useProgrammazioniDelete({ updateCampagne, onDeleted }))
 
     await act(async () => {
       await result.current.openDeleteDialog(campagna())
@@ -75,6 +76,46 @@ describe('useProgrammazioniDelete', () => {
 
     expect(deleteCampagnaProgrammazione).toHaveBeenCalledWith('campagna-1')
     expect(campagne).toEqual([])
+    expect(onDeleted).toHaveBeenCalledWith(['campagna-1'])
     expect(result.current.isDeleteDialogOpen).toBe(false)
+  })
+
+  it('loads bulk delete info and deletes only non-blocked campaigns', async () => {
+    let campagne = [campagna({ id: 'ok' }), campagna({ id: 'blocked', nome: 'Bloccata' })]
+    const updateCampagne: Dispatch<SetStateAction<CampagnaProgrammazione[]>> = jest.fn((next) => {
+      campagne = typeof next === 'function' ? next(campagne) : next
+    }) as Dispatch<SetStateAction<CampagnaProgrammazione[]>>
+    const onDeleted = jest.fn()
+
+    ;(getDeleteCampagnaProgrammazioneInfo as jest.Mock).mockImplementation(async (id: string) => ({
+      data: id === 'blocked'
+        ? { scenario: 'has_individuazione', programmazioni_count: 1, campagna_individuazione_nome: 'Run 1' }
+        : { scenario: 'has_data', programmazioni_count: 10 },
+      error: null,
+    }))
+    ;(deleteCampagnaProgrammazione as jest.Mock).mockResolvedValue({
+      error: null,
+      blocked: false,
+      blockReason: null,
+    })
+
+    const { result } = renderHook(() => useProgrammazioniDelete({ updateCampagne, onDeleted }))
+
+    await act(async () => {
+      await result.current.openBulkDeleteDialog(campagne)
+    })
+
+    expect(result.current.isBulkDeleteDialogOpen).toBe(true)
+    expect(result.current.bulkDeleteItems).toHaveLength(2)
+
+    await act(async () => {
+      await result.current.confirmBulkDelete()
+    })
+
+    expect(deleteCampagnaProgrammazione).toHaveBeenCalledTimes(1)
+    expect(deleteCampagnaProgrammazione).toHaveBeenCalledWith('ok')
+    expect(campagne.map(c => c.id)).toEqual(['blocked'])
+    expect(onDeleted).toHaveBeenCalledWith(['ok'])
+    expect(result.current.isBulkDeleteDialogOpen).toBe(false)
   })
 })
