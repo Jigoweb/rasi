@@ -177,16 +177,25 @@ export function IndividuazioneProcessProvider({ children }: { children: ReactNod
     }
 
     setFocusedCampagnaId(campagna.id)
-    setProcessByCampagnaId(prev => ({
-      ...prev,
-      [campagna.id]: {
+    setProcessByCampagnaId(prev => {
+      const next: Record<string, IndividuazioneProcessState> = {}
+      for (const [id, process] of Object.entries(prev)) {
+        // I processi già aperti vanno in background così i lanci multipli
+        // non accumulano dialog a tutto schermo e usano lo stack floating.
+        next[id] = process.status === 'idle' || process.isMinimized
+          ? process
+          : { ...process, isMinimized: true }
+      }
+      next[campagna.id] = {
         status: 'processing',
         campagna,
         progress: null,
         result: null,
-        isMinimized: false,
-      },
-    }))
+        // Se ci sono già altri processi attivi, parte direttamente minimizzato.
+        isMinimized: Object.values(prev).some(process => process.status === 'processing'),
+      }
+      return next
+    })
     // Il job non è più "interrotto": è ripartito.
     setInterrupted(prev => prev.filter(c => c.id !== campagna.id))
 
