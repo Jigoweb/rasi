@@ -193,9 +193,20 @@ export function useProgrammazioniBulkImport() {
     const row = rowsRef.current.find(r => r.id === id)
     if (!row || !emittenteId || anno === null) return
 
-    try {
-      let campagnaId = row.campagnaId
+    let campagnaId = row.campagnaId
 
+    // Marks the row failed and, if a campagna was already created for it, flips its
+    // DB status to 'error' so it doesn't stay stuck as 'uploading' (mirrors
+    // useProgrammazioniUpload.ts's error path). No-op for pre-create failures since
+    // there's no campagna yet to update.
+    const failRow = async (message: string) => {
+      updateRow(id, { runStatus: 'failed', error: message })
+      if (campagnaId) {
+        await updateCampagnaStatus(campagnaId, 'error')
+      }
+    }
+
+    try {
       if (!campagnaId) {
         updateRow(id, { runStatus: 'creating', error: null })
         const { data, error } = await createCampagnaProgrammazione({
@@ -205,20 +216,20 @@ export function useProgrammazioniBulkImport() {
         })
         const campagna = data as unknown as CampagnaProgrammazione | null
         if (error || !campagna?.id) {
-          const message = error?.message || 'Errore creazione campagna'
-          updateRow(id, { runStatus: 'failed', error: message })
+          await failRow(error?.message || 'Errore creazione campagna')
           return
         }
         campagnaId = campagna.id
         updateRow(id, { campagnaId })
       }
 
-      updateRow(id, { runStatus: 'uploading' })
+      // Clears any previous error even on a retry where the campagna already exists.
+      updateRow(id, { runStatus: 'uploading', error: null })
       await updateCampagnaStatus(campagnaId, 'uploading')
 
       const { storagePath, error: storageError } = await uploadProgrammazioniFileToStorage(row.file, campagnaId)
       if (storageError) {
-        updateRow(id, { runStatus: 'failed', error: storageError.message })
+        await failRow(storageError.message)
         return
       }
 
@@ -232,7 +243,7 @@ export function useProgrammazioniBulkImport() {
         mappingSnapshot,
       })
       if (!startResult.success || !startResult.jobId) {
-        updateRow(id, { runStatus: 'failed', error: startResult.error || 'Errore avvio upload' })
+        await failRow(startResult.error || 'Errore avvio upload')
         return
       }
       updateRow(id, { jobId: startResult.jobId })
@@ -245,7 +256,7 @@ export function useProgrammazioniBulkImport() {
       })
 
       if (!pollResult.success) {
-        updateRow(id, { runStatus: 'failed', error: pollResult.error || 'Upload terminato con errore' })
+        await failRow(pollResult.error || 'Upload terminato con errore')
         return
       }
 
@@ -253,7 +264,7 @@ export function useProgrammazioniBulkImport() {
       updateRow(id, { runStatus: 'completed', error: null })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Errore import'
-      updateRow(id, { runStatus: 'failed', error: message })
+      await failRow(message)
     }
   }, [emittenteId, anno, updateRow])
 
@@ -264,23 +275,52 @@ export function useProgrammazioniBulkImport() {
     return !rows.some(row => row.columnClass === 'pending_preview' || row.columnClass === 'error')
   }, [rows, emittenteId, anno])
 
-  const confirmSafeWarnings = useCallback(() => {
-    setConfirmedSafeWarnings(true)
+  // Mirrors `confirmedSafeWarnings` state synchronously so `confirmSafeWarningsAndStart`
+  // can confirm-then-run in a single call without waiting for a React re-render
+  // (setState is async/batched, so reading the `confirmedSafeWarnings` state variable
+  // right after calling its setter would see the stale pre-confirmation value).
+  const confirmedSafeWarningsRef = useRef(false)
+
+  const setConfirmed = useCallback((value: boolean) => {
+    confirmedSafeWarningsRef.current = value
+    setConfirmedSafeWarnings(value)
   }, [])
 
-  const startImport = useCallback(async () => {
-    if (!canStart) return
-    if (hasSafeWarnings && !confirmedSafeWarnings) return
+  const confirmSafeWarnings = useCallback(() => {
+    setConfirmed(true)
+  }, [setConfirmed])
 
-    const eligible = rowsRef.current.filter(row => (
-      row.columnClass === 'ok' || (row.columnClass === 'warning_safe' && confirmedSafeWarnings)
+  // Reads rows/eligibility fresh from `rowsRef` (not the memoized `canStart`/`hasSafeWarnings`)
+  // so it can't no-op due to stale state either.
+  const runImport = useCallback(async (confirmed: boolean) => {
+    const currentRows = rowsRef.current
+    if (currentRows.length === 0 || !emittenteId || anno === null) return
+    if (currentRows.some(row => row.columnClass === 'pending_preview' || row.columnClass === 'error')) return
+
+    const hasWarnings = currentRows.some(row => row.columnClass === 'warning_safe')
+    if (hasWarnings && !confirmed) return
+
+    const eligible = currentRows.filter(row => (
+      row.columnClass === 'ok' || (row.columnClass === 'warning_safe' && confirmed)
     ))
     if (eligible.length === 0) return
 
     setStep('running')
     await runBulkImportQueue(eligible, row => processRow(row.id), { concurrency: 3 })
     setStep('done')
-  }, [canStart, hasSafeWarnings, confirmedSafeWarnings, processRow])
+  }, [emittenteId, anno, processRow])
+
+  const startImport = useCallback(async () => {
+    await runImport(confirmedSafeWarningsRef.current)
+  }, [runImport])
+
+  // For Task 5: confirms the safe-warnings banner and starts the import in the same
+  // user action, avoiding a second click that would otherwise be needed to work
+  // around the stale-closure issue above.
+  const confirmSafeWarningsAndStart = useCallback(async () => {
+    setConfirmed(true)
+    await runImport(true)
+  }, [runImport, setConfirmed])
 
   const retryRow = useCallback(async (id: string) => {
     await processRow(id)
@@ -290,10 +330,10 @@ export function useProgrammazioniBulkImport() {
     setEmittenteId(null)
     setAnno(null)
     setStep('setup')
-    setConfirmedSafeWarnings(false)
+    setConfirmed(false)
     mappingSnapshotsRef.current.clear()
     setRows(() => [])
-  }, [setRows])
+  }, [setRows, setConfirmed])
 
   const summary = useMemo<BulkImportSummary>(() => {
     let ok = 0
@@ -320,7 +360,9 @@ export function useProgrammazioniBulkImport() {
     previewAll,
     canStart,
     hasSafeWarnings,
+    confirmedSafeWarnings,
     confirmSafeWarnings,
+    confirmSafeWarningsAndStart,
     startImport,
     retryRow,
     rows,
