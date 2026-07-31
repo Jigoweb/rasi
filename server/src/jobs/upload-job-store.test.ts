@@ -208,5 +208,7 @@ describe('upload job store', () => {
         ['stato', 'uploading'],
       ]
     )
+    const updateCall = campaignQuery.calls.find((call) => call.method === 'update')
+    assert.equal((updateCall?.args[0] as { stato: string }).stato, 'error')
   })
 })

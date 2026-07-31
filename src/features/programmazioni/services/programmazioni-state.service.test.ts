@@ -27,7 +27,7 @@ describe('getProgrammazioneRowState', () => {
     expect(
       getProgrammazioneRowState({
         datasetStatus: 'in_review',
-        uploadJob: { stato: 'running', righe_processate: 10, righe_totali: 100 },
+        uploadJob: { stato: 'running', righe_processate: 10, righe_totali: 100, updated_at: minutesAgo(1) },
         hasLocalRuntimeProcess: false,
         hasData: true,
         now,
@@ -37,6 +37,44 @@ describe('getProgrammazioneRowState', () => {
       canUpload: false,
       canCreateIndividuazione: false,
       blockingReason: 'Upload programmazione in corso',
+    })
+  })
+
+  it('treats uploading dataset without active job as recoverable upload error', () => {
+    expect(
+      getProgrammazioneRowState({
+        datasetStatus: 'uploading',
+        uploadJob: null,
+        hasLocalRuntimeProcess: false,
+        hasData: true,
+        now,
+      })
+    ).toMatchObject({
+      badge: 'upload_error',
+      canUpload: true,
+      canCreateIndividuazione: false,
+    })
+  })
+
+  it('treats stale running upload jobs as recoverable upload error', () => {
+    expect(
+      getProgrammazioneRowState({
+        datasetStatus: 'uploading',
+        uploadJob: {
+          stato: 'running',
+          righe_processate: 19000,
+          righe_totali: 53267,
+          updated_at: minutesAgo(45),
+          error: null,
+        },
+        hasLocalRuntimeProcess: false,
+        hasData: true,
+        now,
+      })
+    ).toMatchObject({
+      badge: 'upload_error',
+      canUpload: true,
+      canCreateIndividuazione: false,
     })
   })
 

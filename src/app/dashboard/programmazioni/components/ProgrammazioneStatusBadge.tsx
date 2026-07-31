@@ -14,6 +14,11 @@ export default function ProgrammazioneStatusBadge({ badge }: ProgrammazioneStatu
     case 'deleting':
       return <Badge variant="outline"><Loader2 className="w-3 h-3 mr-1 animate-spin" /> {PROGRAMMAZIONE_STATUS_LABELS.deleting}</Badge>
     case 'upload_error':
+      return (
+        <Badge variant="destructive">
+          <AlertCircle className="w-3 h-3 mr-1" /> Caricamento interrotto
+        </Badge>
+      )
     case 'error':
       return <Badge variant="destructive">Errore</Badge>
     case 'in_review':

@@ -30,14 +30,22 @@ app.use('/api/upload-jobs', uploadJobsRouter)
 app.listen(config.port, () => {
   console.log(`[rasi-worker] in ascolto sulla porta ${config.port}`)
 
-  void Promise.all([
-    markStaleActiveJobsAsError(),
-    markStaleActiveUploadJobsAsError(),
-  ])
-    .then(([campaignJobs, uploadJobs]) => {
-      console.log(`[rasi-worker] recovery job stale completata: ${campaignJobs} individuazioni, ${uploadJobs} upload marcati in errore`)
-    })
-    .catch((error) => {
-      console.error('[rasi-worker] recovery job stale fallita', error)
-    })
+  const runStaleRecovery = () => {
+    void Promise.all([
+      markStaleActiveJobsAsError(),
+      markStaleActiveUploadJobsAsError(),
+    ])
+      .then(([campaignJobs, uploadJobs]) => {
+        if (campaignJobs > 0 || uploadJobs > 0) {
+          console.log(`[rasi-worker] recovery job stale: ${campaignJobs} individuazioni, ${uploadJobs} upload marcati in errore`)
+        }
+      })
+      .catch((error) => {
+        console.error('[rasi-worker] recovery job stale fallita', error)
+      })
+  }
+
+  runStaleRecovery()
+  // Periodico: i job upload possono bloccarsi senza riavvio del processo.
+  setInterval(runStaleRecovery, 5 * 60 * 1000)
 })

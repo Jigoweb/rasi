@@ -1,5 +1,8 @@
 import { isProcessingStale, type ProcessingJobState, type ProcessingProgress } from './programmazioni.service'
 
+/** Allineato al cutoff worker (30 min) per job upload senza progresso. */
+export const UPLOAD_STALE_THRESHOLD_MS = 30 * 60 * 1000
+
 export type ProgrammazioneRowBadge =
   | 'bozza'
   | 'in_review'
@@ -48,6 +51,18 @@ export type ProcessingOperationalState =
   | 'error_recent'
   | 'error_old'
 
+export function isUploadJobStale(
+  job: { stato?: string | null; updated_at?: string | null } | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (!job?.stato) return false
+  if (job.stato !== 'queued' && job.stato !== 'running') return false
+  if (!job.updated_at) return true
+  const updatedTime = new Date(job.updated_at).getTime()
+  if (Number.isNaN(updatedTime)) return true
+  return now - updatedTime > UPLOAD_STALE_THRESHOLD_MS
+}
+
 export function classifyProcessingOperationalState(
   input: Pick<
     ProgrammazioneOperationalState,
@@ -83,8 +98,14 @@ export function classifyProcessingOperationalState(
 export function getProgrammazioneRowState(input: ProgrammazioneOperationalState): ProgrammazioneRowState {
   const datasetStatus = input.datasetStatus
   const uploadJobStatus = input.uploadJob?.stato
-  const hasActiveUpload = uploadJobStatus === 'queued' || uploadJobStatus === 'running'
-  const hasUploadError = uploadJobStatus === 'error'
+  const uploadStale = isUploadJobStale(input.uploadJob, input.now)
+  const hasActiveUpload =
+    (uploadJobStatus === 'queued' || uploadJobStatus === 'running') && !uploadStale
+  const hasUploadError =
+    uploadJobStatus === 'error' ||
+    uploadJobStatus === 'cancelled' ||
+    uploadStale ||
+    (datasetStatus === 'uploading' && !hasActiveUpload)
   const hasIndividuazioneInCorso =
     input.individuazioneStatus === 'in_corso' || datasetStatus === 'in_corso'
   const processingState = classifyProcessingOperationalState({
@@ -105,17 +126,23 @@ export function getProgrammazioneRowState(input: ProgrammazioneOperationalState)
     return blocked('deleting', 'Eliminazione programmazione in corso')
   }
 
-  if (hasActiveUpload || datasetStatus === 'uploading') {
+  if (hasActiveUpload) {
     return blocked('uploading', 'Upload programmazione in corso')
   }
 
-  if (hasUploadError) {
+  if (hasUploadError || datasetStatus === 'error') {
     return {
-      badge: 'upload_error',
+      badge: datasetStatus === 'error' && !uploadJobStatus ? 'error' : 'upload_error',
       canUpload: true,
       canCreateIndividuazione: false,
       canResumeIndividuazione: false,
-      blockingReason: input.uploadJob?.error || 'Upload programmazione terminato con errore',
+      blockingReason:
+        input.uploadJob?.error ||
+        (uploadStale
+          ? 'Caricamento interrotto (nessun progresso). Puoi riprovare o eliminare la programmazione.'
+          : datasetStatus === 'uploading'
+            ? 'Caricamento interrotto. Puoi riprovare o eliminare la programmazione.'
+            : 'Errore sui dati della programmazione'),
     }
   }
 
@@ -139,16 +166,6 @@ export function getProgrammazioneRowState(input: ProgrammazioneOperationalState)
       canUpload: false,
       canCreateIndividuazione: false,
       canResumeIndividuazione: false,
-    }
-  }
-
-  if (datasetStatus === 'error') {
-    return {
-      badge: 'error',
-      canUpload: true,
-      canCreateIndividuazione: false,
-      canResumeIndividuazione: false,
-      blockingReason: 'Errore sui dati della programmazione',
     }
   }
 

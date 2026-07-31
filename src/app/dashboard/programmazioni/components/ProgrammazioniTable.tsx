@@ -49,6 +49,7 @@ import {
 } from '@/shared/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { clickableRowClassName, handleClickableRowKeyDown } from '@/shared/lib/clickable-row'
+import type { UploadJobSnapshot } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
 import ProgrammazioneStatusBadge from './ProgrammazioneStatusBadge'
 
 type ProgressCount = {
@@ -61,6 +62,7 @@ type CampagnaWithRuntimeError = CampagnaProgrammazione & { last_error?: string }
 export interface ProgrammazioniTableProps {
   campagne: CampagnaProgrammazione[]
   uploadProgress: Record<string, ProgressCount>
+  uploadJobMap?: Record<string, UploadJobSnapshot | null>
   deleteProgress: Record<string, ProgressCount>
   processingProgressMap: Record<string, ProcessingProgress | null>
   processingJobMap: Record<string, ProcessingActivityJob | null>
@@ -82,6 +84,7 @@ export interface ProgrammazioniTableProps {
 export default function ProgrammazioniTable({
   campagne,
   uploadProgress,
+  uploadJobMap,
   deleteProgress,
   processingProgressMap,
   processingJobMap,
@@ -110,10 +113,11 @@ export default function ProgrammazioniTable({
 
   const bulkContext = useMemo(() => ({
     uploadProgress,
+    uploadJobMap,
     processingProgressMap,
     processingJobMap,
     isCampagnaProcessing,
-  }), [uploadProgress, processingProgressMap, processingJobMap, isCampagnaProcessing])
+  }), [uploadProgress, uploadJobMap, processingProgressMap, processingJobMap, isCampagnaProcessing])
 
   const bulkActions = useMemo(() => {
     if (!selectionEnabled || !selectedIds) {
@@ -405,6 +409,7 @@ export default function ProgrammazioniTable({
 
 function getWorkflowStep(rowState: ProgrammazioneRowState): { label: string } {
   if (rowState.badge === 'uploading') return { label: 'Step attuale: caricamento dati' }
+  if (rowState.badge === 'upload_error') return { label: 'Prossimo step: riprova caricamento o elimina' }
   if (rowState.badge === 'deleting') return { label: 'Step attuale: eliminazione in corso' }
   if (rowState.badge === 'individuazione_running') return { label: 'Step attuale: monitoraggio individuazioni' }
   if (rowState.badge === 'individuazione_stale') return { label: 'Step attuale: riprendi individuazioni' }
@@ -529,7 +534,9 @@ function PrimaryWorkflowAction({
         className="gap-1.5 cursor-pointer disabled:cursor-not-allowed"
       >
         <FileUp className="h-3.5 w-3.5" />
-        {compact ? 'Carica' : 'Carica Dati'}
+        {rowState.badge === 'upload_error' || rowState.badge === 'error'
+          ? (compact ? 'Riprova' : 'Riprova caricamento')
+          : (compact ? 'Carica' : 'Carica Dati')}
       </Button>
     )
   }

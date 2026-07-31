@@ -7,6 +7,7 @@ import type {
   ProcessingActivityJob,
   ProcessingProgress,
 } from '@/features/programmazioni/services/programmazioni.service'
+import type { UploadJobSnapshot } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
 
 export type BulkProgressCount = {
   done: number
@@ -15,9 +16,12 @@ export type BulkProgressCount = {
 
 export interface BulkRowContext {
   uploadProgress: Record<string, BulkProgressCount>
+  /** Latest upload job per campagna (from operational snapshot). */
+  uploadJobMap?: Record<string, UploadJobSnapshot | null>
   processingProgressMap: Record<string, ProcessingProgress | null>
   processingJobMap: Record<string, ProcessingActivityJob | null>
   isCampagnaProcessing: (campagnaId: string) => boolean
+  now?: number
 }
 
 export function getCampagnaRowStateForBulk(
@@ -25,20 +29,33 @@ export function getCampagnaRowStateForBulk(
   context: BulkRowContext,
 ): ProgrammazioneRowState {
   const hasData = (campagna.programmazioni_count || 0) > 0
+  const progress = context.uploadProgress[campagna.id]
+  const job = context.uploadJobMap?.[campagna.id] ?? null
 
   return getProgrammazioneRowState({
     datasetStatus: campagna.stato,
-    uploadJob: context.uploadProgress[campagna.id]
+    uploadJob: progress
       ? {
           stato: 'running',
-          righe_processate: context.uploadProgress[campagna.id].done,
-          righe_totali: context.uploadProgress[campagna.id].total,
+          righe_processate: progress.done,
+          righe_totali: progress.total,
+          updated_at: new Date().toISOString(),
+          error: null,
         }
-      : null,
+      : job
+        ? {
+            stato: job.stato,
+            righe_processate: job.righe_processate,
+            righe_totali: job.righe_totali,
+            updated_at: job.updated_at ?? null,
+            error: job.error,
+          }
+        : null,
     progress: context.processingProgressMap[campagna.id],
     campaignJob: context.processingJobMap[campagna.id],
     hasLocalRuntimeProcess: context.isCampagnaProcessing(campagna.id),
     hasData,
+    now: context.now,
   })
 }
 

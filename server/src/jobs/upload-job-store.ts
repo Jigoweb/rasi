@@ -146,7 +146,7 @@ export async function markStaleActiveUploadJobAsError(
   await supabaseService
     .from('campagne_programmazione')
     .update({
-      stato: 'in_review',
+      stato: 'error',
       processing_by: null,
       processing_started_at: null,
       updated_at: now.toISOString(),

@@ -13,12 +13,15 @@ import {
   getLatestProcessingJobsForCampagne,
   getProcessingProgress,
   updateCampagnaProgrammazioneMetadata,
+  updateCampagnaStatus,
   type ProcessingActivityJob,
   type ProcessingProgress,
 } from '@/features/programmazioni/services/programmazioni.service'
 import {
   getLatestUploadJobsForCampagne,
+  type UploadJobSnapshot,
 } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
+import { isUploadJobStale } from '@/features/programmazioni/services/programmazioni-state.service'
 import {
   filterCampagneProgrammazione,
   getUniqueAnni,
@@ -193,6 +196,7 @@ export default function ProgrammazioniPage() {
   const [deleteProgress] = useState<Record<string, { done: number; total: number }>>({})
   const [processingProgressMap, setProcessingProgressMap] = useState<Record<string, ProcessingProgress | null>>({})
   const [processingJobMap, setProcessingJobMap] = useState<Record<string, ProcessingActivityJob | null>>({})
+  const [uploadJobMap, setUploadJobMap] = useState<Record<string, UploadJobSnapshot | null>>({})
   const [loadingProgressMap, setLoadingProgressMap] = useState<Record<string, boolean>>({})
   const refreshCampagneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const operationalSnapshotLoaderRef = useRef(createCoalescedOperationalSnapshotLoader({
@@ -717,6 +721,11 @@ export default function ProgrammazioniPage() {
       }
 
       const campagneList = snapshot.campagne
+      const nextUploadJobMap: Record<string, UploadJobSnapshot | null> = {}
+      for (const job of snapshot.uploadJobs) {
+        nextUploadJobMap[job.campagna_programmazione_id] = job
+      }
+      setUploadJobMap(nextUploadJobMap)
       setCampagne(campagneList)
       setProcessingJobMap(snapshot.processingJobMap)
       setProcessingProgressMap(prev => ({
@@ -729,9 +738,41 @@ export default function ProgrammazioniPage() {
         const fallbackTotal = campagna?.programmazioni_count ?? 0
 
         if (job.stato === 'queued' || job.stato === 'running') {
-          attachUploadJobPolling(job, fallbackTotal)
+          if (isUploadJobStale(job)) {
+            // Job zombie: non avviare polling infinito; riconcilia stato campagna.
+            applyUploadJobSnapshot({
+              ...job,
+              stato: 'error',
+              error: job.error || 'Caricamento interrotto (nessun progresso). Puoi riprovare.',
+            }, fallbackTotal)
+            if (campagna?.stato === 'uploading') {
+              void updateCampagnaStatus(campagna.id, 'error')
+              setCampagne(prev => prev.map(c => (
+                c.id === campagna.id ? { ...c, stato: 'error' } : c
+              )))
+            }
+          } else {
+            attachUploadJobPolling(job, fallbackTotal)
+          }
         } else {
           applyUploadJobSnapshot(job, fallbackTotal)
+          if (campagna?.stato === 'uploading' && (job.stato === 'error' || job.stato === 'cancelled' || job.stato === 'completed')) {
+            const nextStatus = job.stato === 'completed' ? 'in_review' : 'error'
+            void updateCampagnaStatus(campagna.id, nextStatus)
+            setCampagne(prev => prev.map(c => (
+              c.id === campagna.id ? { ...c, stato: nextStatus } : c
+            )))
+          }
+        }
+      }
+
+      // Campagne uploading senza job: sblocca per retry/delete.
+      for (const campagna of campagneList) {
+        if (campagna.stato === 'uploading' && !nextUploadJobMap[campagna.id]) {
+          void updateCampagnaStatus(campagna.id, 'error')
+          setCampagne(prev => prev.map(c => (
+            c.id === campagna.id ? { ...c, stato: 'error' } : c
+          )))
         }
       }
     } catch (error) {
@@ -1053,6 +1094,7 @@ export default function ProgrammazioniPage() {
           <ProgrammazioniTable
             campagne={filteredCampagne}
             uploadProgress={uploadProgress}
+            uploadJobMap={uploadJobMap}
             deleteProgress={deleteProgress}
             processingProgressMap={processingProgressMap}
             processingJobMap={processingJobMap}

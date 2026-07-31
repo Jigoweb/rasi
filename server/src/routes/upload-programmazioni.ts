@@ -7,6 +7,7 @@ import {
   createUploadJob,
   findActiveUploadJob,
   getUploadJobForUser,
+  markStaleActiveUploadJobAsError,
   userOwnsCampagnaEmittente,
 } from '../jobs/upload-job-store.js'
 import type { UploadMappingSnapshot } from '../jobs/programmazioni-import-core.js'
@@ -128,12 +129,20 @@ uploadProgrammazioniRouter.post('/start', requireAuth, async (req, res) => {
 
     const activeUpload = await findActiveUploadJob(campagne_programmazione_id)
     if (activeUpload) {
-      return res.status(409).json({
-        success: false,
-        error: 'Esiste già un upload attivo per questa campagna',
-        error_code: 'UPLOAD_ALREADY_RUNNING',
-        job_id: activeUpload.created_by === req.userId ? activeUpload.id : undefined,
-      })
+      const staleCutoffMs = 30 * 60 * 1000
+      const updatedAt = activeUpload.updated_at ? new Date(activeUpload.updated_at).getTime() : 0
+      const isStale = !updatedAt || Date.now() - updatedAt > staleCutoffMs
+      if (isStale) {
+        const cutoffIso = new Date(Date.now() - staleCutoffMs).toISOString()
+        await markStaleActiveUploadJobAsError(activeUpload, cutoffIso)
+      } else {
+        return res.status(409).json({
+          success: false,
+          error: 'Esiste già un upload attivo per questa campagna',
+          error_code: 'UPLOAD_ALREADY_RUNNING',
+          job_id: activeUpload.created_by === req.userId ? activeUpload.id : undefined,
+        })
+      }
     }
 
     const activeIndividuazione = await findActiveJob(campagne_programmazione_id)
