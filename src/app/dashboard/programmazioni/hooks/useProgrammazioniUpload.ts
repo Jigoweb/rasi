@@ -149,9 +149,8 @@ export function useProgrammazioniUpload({
     })
   }
 
-  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !selectedCampagna) return
+  const handleFileSelected = async (file: File) => {
+    if (!selectedCampagna) return
 
     setIsPreparingUpload(true)
     setSelectedFile(file)
@@ -203,6 +202,12 @@ export function useProgrammazioniUpload({
       setIsPreparingUpload(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    await handleFileSelected(file)
   }
 
   const handleWizardSave = async (config: ImportMappingConfig) => {
@@ -381,6 +386,7 @@ export function useProgrammazioniUpload({
     applyUploadJobSnapshot,
     attachUploadJobPolling,
     handleFileUpload,
+    handleFileSelected,
     handleWizardSave,
     proceedDespiteFormatChange,
     updateMappingFromWarning,

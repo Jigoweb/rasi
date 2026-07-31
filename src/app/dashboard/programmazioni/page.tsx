@@ -277,6 +277,7 @@ export default function ProgrammazioniPage() {
     applyUploadJobSnapshot,
     attachUploadJobPolling,
     handleFileUpload,
+    handleFileSelected,
     handleWizardSave,
     proceedDespiteFormatChange: handleProceedDespiteFormatChange,
     updateMappingFromWarning: handleUpdateMappingFromWarning,
@@ -1116,6 +1117,7 @@ export default function ProgrammazioniPage() {
         selectedFile={selectedFile}
         fileInputRef={fileInputRef}
         onFileUpload={handleFileUpload}
+        onFileSelected={handleFileSelected}
         isPreparingUpload={isPreparingUpload}
         isUploading={isUploading}
         parsedRowCount={parsedRowCount}

@@ -1,8 +1,18 @@
-import type { ChangeEvent, ReactNode, RefObject } from 'react'
+'use client'
+
+import { useState, type ChangeEvent, type DragEvent, type ReactNode, type RefObject } from 'react'
 import { CheckCircle, FileSpreadsheet, Loader2, XCircle } from 'lucide-react'
 import type { CampagnaProgrammazione } from '@/features/programmazioni/services/programmazioni.service'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { cn } from '@/shared/lib/utils'
+
+const ACCEPTED_EXTENSIONS = ['.csv', '.xlsx', '.xls']
+
+function isAcceptedUploadFile(file: File): boolean {
+  const lower = file.name.toLowerCase()
+  return ACCEPTED_EXTENSIONS.some(ext => lower.endsWith(ext))
+}
 
 interface UploadProgrammazioniDialogProps {
   open: boolean
@@ -14,6 +24,7 @@ interface UploadProgrammazioniDialogProps {
   selectedFile: File | null
   fileInputRef: RefObject<HTMLInputElement | null>
   onFileUpload: (event: ChangeEvent<HTMLInputElement>) => void
+  onFileSelected: (file: File) => void
   isPreparingUpload: boolean
   isUploading: boolean
   parsedRowCount: number
@@ -36,6 +47,7 @@ export default function UploadProgrammazioniDialog({
   selectedFile,
   fileInputRef,
   onFileUpload,
+  onFileSelected,
   isPreparingUpload,
   isUploading,
   parsedRowCount,
@@ -47,10 +59,56 @@ export default function UploadProgrammazioniDialog({
   onUploadDatabase,
   onClose,
 }: UploadProgrammazioniDialogProps) {
+  const [isDragging, setIsDragging] = useState(false)
+  const [dropError, setDropError] = useState<string | null>(null)
+
   const selectedProgress = selectedCampagna ? uploadProgress[selectedCampagna.id] : undefined
   const progressPercentage = selectedProgress
     ? Math.round((selectedProgress.done / selectedProgress.total) * 100)
     : 0
+
+  const dropDisabled = isUploading || isPreparingUpload
+
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (dropDisabled) return
+    setIsDragging(true)
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (dropDisabled) return
+    event.dataTransfer.dropEffect = 'copy'
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    // Ignora leave verso figli interni
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+    setIsDragging(false)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDragging(false)
+    if (dropDisabled) return
+
+    const file = event.dataTransfer.files?.[0]
+    if (!file) return
+
+    if (!isAcceptedUploadFile(file)) {
+      setDropError('Formato non supportato. Usa CSV o Excel (.xlsx, .xls).')
+      return
+    }
+
+    setDropError(null)
+    onFileSelected(file)
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,20 +148,36 @@ export default function UploadProgrammazioniDialog({
             )}
 
             <div
-              className="border-2 border-dashed border-gray-200 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:bg-gray-50 transition-colors cursor-pointer overflow-hidden"
-              onClick={() => { if (!isUploading) fileInputRef.current?.click() }}
+              className={cn(
+                'border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center text-center transition-colors overflow-hidden',
+                dropDisabled ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:bg-gray-50',
+                isDragging
+                  ? 'border-primary bg-primary/5'
+                  : 'border-gray-200',
+              )}
+              onClick={() => { if (!dropDisabled) fileInputRef.current?.click() }}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              aria-label="Area di caricamento file: clicca o trascina un file"
             >
               <input
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
                 accept=".csv,.xlsx,.xls"
-                onChange={onFileUpload}
+                onChange={(event) => {
+                  setDropError(null)
+                  onFileUpload(event)
+                }}
               />
               {!selectedFile ? (
                 <>
-                  <FileSpreadsheet className="h-10 w-10 text-gray-400 mb-4" />
-                  <p className="text-sm font-medium">Clicca per selezionare il file</p>
+                  <FileSpreadsheet className={cn('h-10 w-10 mb-4', isDragging ? 'text-primary' : 'text-gray-400')} />
+                  <p className="text-sm font-medium">
+                    {isDragging ? 'Rilascia il file qui' : 'Trascina il file qui oppure clicca per selezionarlo'}
+                  </p>
                   <p className="text-xs text-gray-500 mt-1">Formati supportati: CSV, Excel (.xlsx, .xls)</p>
                   <p className="text-xs text-gray-400 mt-1">Colonne obbligatorie: titolo, emittente</p>
                   <Button variant="outline" className="mt-4" disabled={isPreparingUpload}>
@@ -137,6 +211,9 @@ export default function UploadProgrammazioniDialog({
                       Cambia
                     </Button>
                   </div>
+                  {isDragging && (
+                    <p className="text-sm text-primary font-medium">Rilascia per sostituire il file</p>
+                  )}
                   {isPreparingUpload ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -154,8 +231,8 @@ export default function UploadProgrammazioniDialog({
               )}
             </div>
 
-            {headerError && (
-              <div className="mt-3 text-sm text-red-600">{headerError}</div>
+            {(dropError || headerError) && (
+              <div className="mt-3 text-sm text-red-600">{dropError || headerError}</div>
             )}
 
             {isUploading && selectedCampagna && selectedProgress && (
