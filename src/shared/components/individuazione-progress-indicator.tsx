@@ -1,10 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
+import {
+  FLOATING_PROGRESS_AUTO_DISMISS_MS,
+  FLOATING_PROGRESS_MAX_VISIBLE,
+  selectFloatingProcesses,
+} from '@/shared/components/individuazione-progress-stack'
 import {
   Loader2,
   Sparkles,
@@ -14,7 +19,9 @@ import {
   Minimize2,
   X,
   AlertCircle,
-  RotateCw
+  RotateCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 // ============================================
@@ -23,19 +30,104 @@ import {
 
 export function FloatingProgressIndicator() {
   const { processByCampagnaId, maximize, reset } = useIndividuazioneProcess()
-  const visibleProcesses = Object.values(processByCampagnaId).filter(
-    process => process.status !== 'idle' && process.isMinimized
+  const [stackExpanded, setStackExpanded] = useState(false)
+  const autoDismissTimersRef = useRef<Map<string, number>>(new Map())
+
+  const minimizedProcesses = useMemo(
+    () => Object.values(processByCampagnaId).filter(
+      process => process.status !== 'idle' && process.isMinimized
+    ),
+    [processByCampagnaId]
   )
 
-  if (visibleProcesses.length === 0) {
+  // Auto-chiudi i toast "completata" dopo pochi secondi, senza reset di timer
+  // già schedulati per altri processi.
+  useEffect(() => {
+    const timers = autoDismissTimersRef.current
+    const activeCompletedIds = new Set<string>()
+
+    for (const process of minimizedProcesses) {
+      const campagnaId = process.campagna?.id
+      if (!campagnaId || process.status !== 'completed') continue
+      activeCompletedIds.add(campagnaId)
+      if (timers.has(campagnaId)) continue
+
+      const timerId = window.setTimeout(() => {
+        timers.delete(campagnaId)
+        reset(campagnaId)
+      }, FLOATING_PROGRESS_AUTO_DISMISS_MS)
+      timers.set(campagnaId, timerId)
+    }
+
+    for (const [campagnaId, timerId] of timers) {
+      if (activeCompletedIds.has(campagnaId)) continue
+      window.clearTimeout(timerId)
+      timers.delete(campagnaId)
+    }
+  }, [minimizedProcesses, reset])
+
+  useEffect(() => () => {
+    for (const timerId of autoDismissTimersRef.current.values()) {
+      window.clearTimeout(timerId)
+    }
+    autoDismissTimersRef.current.clear()
+  }, [])
+
+  const { visible, hiddenCount } = useMemo(
+    () => selectFloatingProcesses(
+      minimizedProcesses,
+      FLOATING_PROGRESS_MAX_VISIBLE,
+      stackExpanded,
+    ),
+    [minimizedProcesses, stackExpanded]
+  )
+
+  useEffect(() => {
+    if (minimizedProcesses.length <= FLOATING_PROGRESS_MAX_VISIBLE && stackExpanded) {
+      setStackExpanded(false)
+    }
+  }, [minimizedProcesses.length, stackExpanded])
+
+  if (minimizedProcesses.length === 0) {
     return null
   }
 
   return (
-    <div 
-      className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 animate-in slide-in-from-bottom-4 fade-in duration-300 pointer-events-auto"
+    <div
+      className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-h-[min(70vh,28rem)] overflow-y-auto animate-in slide-in-from-bottom-4 fade-in duration-300 pointer-events-auto"
+      aria-live="polite"
     >
-      {visibleProcesses.map((process) => {
+      {hiddenCount > 0 && !stackExpanded && (
+        <button
+          type="button"
+          onClick={() => setStackExpanded(true)}
+          className="flex items-center justify-between gap-3 bg-background border rounded-lg shadow-lg px-4 py-2.5 hover:bg-muted/50 transition-colors text-left"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-medium">+{hiddenCount} altri processi</p>
+            <p className="text-xs text-muted-foreground">Espandi lo stack</p>
+          </div>
+          <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" />
+        </button>
+      )}
+
+      {stackExpanded && minimizedProcesses.length > FLOATING_PROGRESS_MAX_VISIBLE && (
+        <button
+          type="button"
+          onClick={() => setStackExpanded(false)}
+          className="flex items-center justify-between gap-3 bg-background border rounded-lg shadow-lg px-4 py-2.5 hover:bg-muted/50 transition-colors text-left"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Riduci stack</p>
+            <p className="text-xs text-muted-foreground">
+              Mostra solo {FLOATING_PROGRESS_MAX_VISIBLE} card
+            </p>
+          </div>
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+        </button>
+      )}
+
+      {visible.map((process) => {
         const campagnaId = process.campagna?.id
         const progress = process.progress
         const percentage = progress && progress.programmazioni_totali > 0
@@ -95,6 +187,7 @@ export function FloatingProgressIndicator() {
                   reset(campagnaId)
                 }}
                 className="ml-2 p-1 hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                aria-label="Chiudi notifica"
               >
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>

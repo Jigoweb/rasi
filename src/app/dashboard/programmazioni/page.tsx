@@ -24,6 +24,10 @@ import {
   getUniqueAnni,
   getUniqueEmittenti,
 } from '@/features/programmazioni/services/programmazioni-filters.service'
+import {
+  buildIndividuazioneName,
+  getSharedAnno,
+} from '@/features/programmazioni/services/programmazioni-bulk-actions.service'
 import { createCoalescedOperationalSnapshotLoader } from '@/features/programmazioni/services/programmazioni-operational-snapshot.service'
 import { getIndividuazioneRuntimeMode } from '@/features/campagne-individuazione/services/campagne-individuazione.service'
 import EmittentiTab from './components/EmittentiTab'
@@ -151,6 +155,7 @@ export default function ProgrammazioniPage() {
   const [emittenteFilter, setEmittenteFilter] = useState<string>('all')
   const [annoFilter, setAnnoFilter] = useState<string>('all')
   const [selectedCampagna, setSelectedCampagna] = useState<CampagnaProgrammazione | null>(null)
+  const [selectedCampagnaIds, setSelectedCampagnaIds] = useState<Set<string>>(new Set())
 
   const {
     emittenti,
@@ -198,6 +203,8 @@ export default function ProgrammazioniPage() {
   const [showProcessBlockedDialog, setShowProcessBlockedDialog] = useState(false)
   const [showIndividuazioniConfirmDialog, setShowIndividuazioniConfirmDialog] = useState(false)
   const [campagnaForIndividuazioni, setCampagnaForIndividuazioni] = useState<CampagnaProgrammazione | null>(null)
+  const [showBulkIndividuazioniDialog, setShowBulkIndividuazioniDialog] = useState(false)
+  const [campagneForBulkIndividuazioni, setCampagneForBulkIndividuazioni] = useState<CampagnaProgrammazione[]>([])
   const [individuazioneName, setIndividuazioneName] = useState('')
   const [individuazioneDescription, setIndividuazioneDescription] = useState('')
   const [showIndividuazioneNote, setShowIndividuazioneNote] = useState(false)
@@ -213,6 +220,15 @@ export default function ProgrammazioniPage() {
   const [mandatoOverrideArtistIds, setMandatoOverrideArtistIds] = useState<Set<string>>(new Set())
   const [artistSearchQuery, setArtistSearchQuery] = useState('')
 
+  const removeSelectedCampagnaIds = useCallback((ids: string[]) => {
+    setSelectedCampagnaIds(prev => {
+      if (ids.length === 0) return prev
+      const next = new Set(prev)
+      ids.forEach(id => next.delete(id))
+      return next
+    })
+  }, [])
+
   const {
     isDeleteDialogOpen,
     campagnaToDelete,
@@ -222,7 +238,17 @@ export default function ProgrammazioniPage() {
     openDeleteDialog,
     closeDeleteDialog,
     confirmDelete,
-  } = useProgrammazioniDelete({ updateCampagne: setCampagne })
+    isBulkDeleteDialogOpen,
+    bulkDeleteItems,
+    isLoadingBulkDeleteInfo,
+    isBulkDeleting,
+    openBulkDeleteDialog,
+    closeBulkDeleteDialog,
+    confirmBulkDelete,
+  } = useProgrammazioniDelete({
+    updateCampagne: setCampagne,
+    onDeleted: removeSelectedCampagnaIds,
+  })
 
   const {
     fileInputRef,
@@ -364,6 +390,76 @@ export default function ProgrammazioniPage() {
     setCampagnaForIndividuazioni(null)
   }
 
+  const handleBulkStartIndividuazioni = (selected: CampagnaProgrammazione[]) => {
+    if (selected.length === 0) {
+      notifyError(
+        'Nessuna programmazione pronta',
+        'Seleziona campagne con dati caricati e non già in elaborazione.'
+      )
+      return
+    }
+
+    if (selected.length === 1) {
+      handleStartIndividuazioni(selected[0])
+      return
+    }
+
+    setCampagneForBulkIndividuazioni(selected)
+    setIndividuazioneDescription('')
+    setShowIndividuazioneNote(false)
+    setShowBulkIndividuazioniDialog(true)
+    setShowArtistFilter(false)
+    setArtistSearchQuery('')
+    setMandatoOverrideArtistIds(new Set())
+    if (getSharedAnno(selected) != null) {
+      loadArtists()
+    }
+  }
+
+  const handleConfirmBulkStartIndividuazioni = () => {
+    if (campagneForBulkIndividuazioni.length === 0) return
+
+    const targets = campagneForBulkIndividuazioni
+    const sharedAnno = getSharedAnno(targets)
+    setShowBulkIndividuazioniDialog(false)
+    setCampagneForBulkIndividuazioni([])
+    setSelectedCampagnaIds(new Set())
+
+    const mandatoOverrideIds = sharedAnno != null ? Array.from(mandatoOverrideArtistIds) : []
+    const effectiveArtistIds = new Set([...selectedArtistIds, ...mandatoOverrideIds])
+    const artistaIds = sharedAnno == null || allEligibleSelected || effectiveArtistIds.size === 0
+      ? null
+      : Array.from(effectiveArtistIds)
+    const note = individuazioneDescription.trim() || undefined
+    const targetIds = new Set(targets.map(campagna => campagna.id))
+
+    setCampagne(prev => prev.map(c => (
+      targetIds.has(c.id) ? { ...c, stato: 'in_corso' } : c
+    )))
+
+    notifySuccess(
+      `${targets.length} individuazioni avviate`,
+      'Puoi seguire l\'avanzamento dall\'indicatore processi.'
+    )
+
+    for (const campagna of targets) {
+      void startProcess(campagna, {
+        artistaIds,
+        mandatoOverrideArtistIds: mandatoOverrideIds.length > 0 ? mandatoOverrideIds : null,
+        nomeCampagna: buildIndividuazioneName(campagna.nome),
+        descrizione: note,
+      }).then((result) => {
+        if (result.success) {
+          setCampagne(prev => prev.map(c => (
+            c.id === campagna.id ? { ...c, stato: 'individuata' } : c
+          )))
+        } else {
+          requestCampagneRefresh()
+        }
+      })
+    }
+  }
+
   // Riprende un processo di individuazione interrotto (stato in_corso + stale).
   // Riusa la campagna_individuazione esistente e salta le programmazioni già
   // processate (resume), senza ricominciare da capo.
@@ -496,7 +592,9 @@ export default function ProgrammazioniPage() {
   // Get unique emittenti from campagne for filter dropdown
   const uniqueEmittenti = useMemo(() => getUniqueEmittenti(campagne), [campagne])
 
-  const annoIndividuazione = campagnaForIndividuazioni?.anno ?? null
+  const annoIndividuazione = showBulkIndividuazioniDialog
+    ? getSharedAnno(campagneForBulkIndividuazioni)
+    : (campagnaForIndividuazioni?.anno ?? null)
   const mandateExcludedArtists = useMemo(() => {
     if (!annoIndividuazione) return []
     return allArtists.filter(artist => !artistMandateCoversYear(artist, annoIndividuazione))
@@ -538,7 +636,9 @@ export default function ProgrammazioniPage() {
   // artisti eleggibili per l'anno campagna selezionati, nessun override mandato.
   // L'eleggibilità dipende dall'anno, quindi si ricalcola per ogni apertura.
   useEffect(() => {
-    if (!showIndividuazioniConfirmDialog) {
+    const artistDialogOpen = showIndividuazioniConfirmDialog
+      || (showBulkIndividuazioniDialog && annoIndividuazione != null)
+    if (!artistDialogOpen) {
       selectionInitializedRef.current = false
       return
     }
@@ -547,7 +647,14 @@ export default function ProgrammazioniPage() {
     setSelectedArtistIds(new Set(eligibleArtists.map(artist => artist.id)))
     setMandatoOverrideArtistIds(new Set())
     selectionInitializedRef.current = true
-  }, [showIndividuazioniConfirmDialog, loadingArtists, allArtists, eligibleArtists])
+  }, [
+    showIndividuazioniConfirmDialog,
+    showBulkIndividuazioniDialog,
+    annoIndividuazione,
+    loadingArtists,
+    allArtists,
+    eligibleArtists,
+  ])
 
   useEffect(() => {
     if (currentTab === 'programmazioni') {
@@ -943,6 +1050,10 @@ export default function ProgrammazioniPage() {
             onResumeIndividuazioni={handleResumeIndividuazioni}
             onEdit={openEditMetadataDialog}
             onDelete={openDeleteDialog}
+            selectedIds={selectedCampagnaIds}
+            onSelectionChange={setSelectedCampagnaIds}
+            onBulkCreateIndividuazioni={handleBulkStartIndividuazioni}
+            onBulkDelete={openBulkDeleteDialog}
           />
         </>
       )}
@@ -1149,6 +1260,286 @@ export default function ProgrammazioniPage() {
                 Vai a Individuazioni
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={isBulkDeleteDialogOpen} onOpenChange={(open) => { if (!open) closeBulkDeleteDialog() }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Elimina programmazioni
+            </DialogTitle>
+            <DialogDescription>
+              Stai per eliminare {bulkDeleteItems.length} campagne di programmazione selezionate.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingBulkDeleteInfo ? (
+            <div className="py-8 flex flex-col items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Verifica in corso...</p>
+            </div>
+          ) : (
+            <div className="py-2 space-y-3">
+              {bulkDeleteItems.map((item) => {
+                const blocked = item.info?.scenario === 'has_individuazione'
+                return (
+                  <div
+                    key={item.campagna.id}
+                    className={`rounded-lg border p-3 ${blocked ? 'border-red-200 bg-red-50' : 'bg-muted/40'}`}
+                  >
+                    <p className="text-sm font-medium">{item.campagna.nome}</p>
+                    {item.error && (
+                      <p className="mt-1 text-xs text-red-600">{item.error}</p>
+                    )}
+                    {!item.error && item.info?.scenario === 'empty' && (
+                      <p className="mt-1 text-xs text-muted-foreground">Campagna vuota — eliminabile</p>
+                    )}
+                    {!item.error && item.info?.scenario === 'has_data' && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        {item.info.programmazioni_count.toLocaleString()} programmazioni verranno eliminate
+                      </p>
+                    )}
+                    {blocked && (
+                      <p className="mt-1 text-xs text-red-700">
+                        Bloccata: ha individuazioni collegate
+                        {item.info?.campagna_individuazione_nome
+                          ? ` (${item.info.campagna_individuazione_nome})`
+                          : ''}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={closeBulkDeleteDialog} disabled={isBulkDeleting}>
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmBulkDelete}
+              disabled={
+                isLoadingBulkDeleteInfo
+                || isBulkDeleting
+                || bulkDeleteItems.every(item => !item.info || item.info.scenario === 'has_individuazione')
+              }
+            >
+              {isBulkDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Eliminazione...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Elimina selezionate
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Individuazioni Confirmation Dialog */}
+      <Dialog
+        open={showBulkIndividuazioniDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowBulkIndividuazioniDialog(false)
+            setCampagneForBulkIndividuazioni([])
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Crea individuazioni in bulk
+            </DialogTitle>
+            <DialogDescription>
+              Verranno avviate {campagneForBulkIndividuazioni.length} campagne di individuazione in parallelo.
+              I nomi saranno generati automaticamente da ciascuna programmazione.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 space-y-4">
+            <div className="rounded-md border bg-muted/40 divide-y max-h-48 overflow-y-auto">
+              {campagneForBulkIndividuazioni.map((campagna) => (
+                <div key={campagna.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <div>
+                    <p className="font-medium">{campagna.nome}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {buildIndividuazioneName(campagna.nome)}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {(campagna.programmazioni_count || 0).toLocaleString()} prog.
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowIndividuazioneNote(v => !v)}
+                className="flex items-center gap-1.5 text-sm font-medium hover:text-foreground/80"
+              >
+                {showIndividuazioneNote ? (
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                )}
+                Note condivise (opzionale)
+                {!showIndividuazioneNote && individuazioneDescription.trim() && (
+                  <Badge variant="secondary" className="ml-1">Compilate</Badge>
+                )}
+              </button>
+              {showIndividuazioneNote && (
+                <>
+                  <Textarea
+                    id="bulk-individuazione-description"
+                    value={individuazioneDescription}
+                    onChange={(event) => setIndividuazioneDescription(event.target.value)}
+                    placeholder="Annotazioni applicate a tutte le individuazioni avviate..."
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Le note saranno salvate su ciascuna campagna di individuazione.
+                  </p>
+                </>
+              )}
+            </div>
+
+            {annoIndividuazione != null ? (
+              <div className="border rounded-lg">
+                <div className="w-full flex items-center justify-between p-3 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setShowArtistFilter(!showArtistFilter)}
+                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  >
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">Filtra Artisti (anno {annoIndividuazione})</span>
+                    {!isDefaultSelection && (
+                      <Badge variant="secondary" className="ml-2">
+                        {effectiveSelectedArtistCount} selezionati
+                      </Badge>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowArtistFilter(!showArtistFilter)}
+                    aria-label={showArtistFilter ? 'Comprimi filtro artisti' : 'Espandi filtro artisti'}
+                    className="text-muted-foreground hover:text-foreground transition-colors p-0.5"
+                  >
+                    {showArtistFilter ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {showArtistFilter && (
+                  <div className="border-t p-3 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          placeholder="Cerca artista..."
+                          value={artistSearchQuery}
+                          onChange={(e) => setArtistSearchQuery(e.target.value)}
+                          className="pl-8 h-8 text-sm"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedArtistIds(new Set(eligibleArtists.map(a => a.id)))
+                          setMandatoOverrideArtistIds(new Set())
+                        }}
+                        className="text-xs"
+                      >
+                        Tutti eleggibili
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedArtistIds(new Set())
+                          setMandatoOverrideArtistIds(new Set())
+                        }}
+                        className="text-xs"
+                      >
+                        Nessuno
+                      </Button>
+                    </div>
+                    {loadingArtists ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Caricamento artisti...
+                      </div>
+                    ) : (
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {filteredEligibleArtists.map((artist) => (
+                          <label
+                            key={artist.id}
+                            className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60 cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={selectedArtistIds.has(artist.id)}
+                              onCheckedChange={(checked) => {
+                                const next = new Set(selectedArtistIds)
+                                if (checked === true) next.add(artist.id)
+                                else next.delete(artist.id)
+                                setSelectedArtistIds(next)
+                              }}
+                            />
+                            <span>
+                              {artist.cognome} {artist.nome}
+                              {artist.nome_arte ? ` (${artist.nome_arte})` : ''}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {selectedArtistIds.size} di {eligibleArtists.length} eleggibili selezionati
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground rounded-md border bg-muted/40 px-3 py-2">
+                Le programmazioni selezionate hanno anni diversi: verrà usata l&apos;eleggibilità artisti
+                predefinita per ciascun anno, senza filtro condiviso.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowBulkIndividuazioniDialog(false)
+                setCampagneForBulkIndividuazioni([])
+              }}
+            >
+              Annulla
+            </Button>
+            <Button onClick={handleConfirmBulkStartIndividuazioni} className="gap-1.5">
+              <Sparkles className="h-4 w-4" />
+              Avvia {campagneForBulkIndividuazioni.length} individuazioni
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1529,8 +1920,4 @@ export default function ProgrammazioniPage() {
       </Dialog>
     </div>
   )
-}
-
-function buildIndividuazioneName(programmazioneName: string): string {
-  return `Individuazione - ${programmazioneName}`
 }

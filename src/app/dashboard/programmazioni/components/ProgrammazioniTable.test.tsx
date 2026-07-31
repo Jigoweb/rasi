@@ -22,6 +22,14 @@ const campagna: CampagnaProgrammazione = {
   programmazioni_count: 12,
 }
 
+const campagnaBozza: CampagnaProgrammazione = {
+  ...campagna,
+  id: 'campagna-2',
+  nome: 'Campagna Bozza',
+  stato: 'bozza',
+  programmazioni_count: 0,
+}
+
 function renderTable(overrides: Partial<ComponentProps<typeof ProgrammazioniTable>> = {}) {
   const props: ComponentProps<typeof ProgrammazioniTable> = {
     campagne: [campagna],
@@ -78,5 +86,44 @@ describe('ProgrammazioniTable', () => {
     fireEvent.keyDown(row!, { key: 'Enter' })
 
     expect(pushMock).toHaveBeenCalledWith('/dashboard/programmazioni/campagna-1')
+  })
+
+  it('supports select-all and bulk create/delete actions', () => {
+    const onSelectionChange = jest.fn()
+    const onBulkCreateIndividuazioni = jest.fn()
+    const onBulkDelete = jest.fn()
+    const selectedIds = new Set(['campagna-1', 'campagna-2'])
+
+    renderTable({
+      campagne: [campagna, campagnaBozza],
+      selectedIds,
+      onSelectionChange,
+      onBulkCreateIndividuazioni,
+      onBulkDelete,
+    })
+
+    expect(screen.getByText('2 selezionate')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Crea individuazioni \(1\)/i }))
+    expect(onBulkCreateIndividuazioni).toHaveBeenCalledWith([campagna])
+
+    fireEvent.click(screen.getByRole('button', { name: /Elimina \(2\)/i }))
+    expect(onBulkDelete).toHaveBeenCalledWith([campagna, campagnaBozza])
+
+    fireEvent.click(screen.getByLabelText('Seleziona tutte le programmazioni visibili'))
+    expect(onSelectionChange).toHaveBeenCalled()
+  })
+
+  it('does not navigate when toggling a row checkbox', () => {
+    const onSelectionChange = jest.fn()
+    renderTable({
+      selectedIds: new Set(),
+      onSelectionChange,
+    })
+
+    fireEvent.click(screen.getAllByLabelText('Seleziona Campagna Test')[0])
+
+    expect(onSelectionChange).toHaveBeenCalled()
+    expect(pushMock).not.toHaveBeenCalled()
   })
 })

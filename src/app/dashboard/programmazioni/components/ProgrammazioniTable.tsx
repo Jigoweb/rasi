@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertCircle,
@@ -16,18 +17,22 @@ import {
   Trash2,
   Tv,
   Database as DatabaseIcon,
+  X,
 } from 'lucide-react'
 import {
-  getProgrammazioneRowState,
-} from '@/features/programmazioni/services/programmazioni-state.service'
+  classifyBulkSelection,
+  getCampagnaRowStateForBulk,
+} from '@/features/programmazioni/services/programmazioni-bulk-actions.service'
 import type {
   CampagnaProgrammazione,
   ProcessingActivityJob,
   ProcessingProgress,
 } from '@/features/programmazioni/services/programmazioni.service'
+import type { ProgrammazioneRowState } from '@/features/programmazioni/services/programmazioni-state.service'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,6 +73,10 @@ export interface ProgrammazioniTableProps {
   onResumeIndividuazioni: (campagna: CampagnaProgrammazione) => void
   onEdit: (campagna: CampagnaProgrammazione) => void
   onDelete: (campagna: CampagnaProgrammazione) => void
+  selectedIds?: Set<string>
+  onSelectionChange?: (ids: Set<string>) => void
+  onBulkCreateIndividuazioni?: (campagne: CampagnaProgrammazione[]) => void
+  onBulkDelete?: (campagne: CampagnaProgrammazione[]) => void
 }
 
 export default function ProgrammazioniTable({
@@ -85,20 +94,120 @@ export default function ProgrammazioniTable({
   onResumeIndividuazioni,
   onEdit,
   onDelete,
+  selectedIds,
+  onSelectionChange,
+  onBulkCreateIndividuazioni,
+  onBulkDelete,
 }: ProgrammazioniTableProps) {
   const router = useRouter()
+  const selectionEnabled = !!selectedIds && !!onSelectionChange
+  const visibleIds = useMemo(() => campagne.map(campagna => campagna.id), [campagne])
+  const selectedVisibleCount = useMemo(
+    () => visibleIds.filter(id => selectedIds?.has(id)).length,
+    [selectedIds, visibleIds]
+  )
+  const allVisibleSelected = selectionEnabled && visibleIds.length > 0 && selectedVisibleCount === visibleIds.length
+
+  const bulkContext = useMemo(() => ({
+    uploadProgress,
+    processingProgressMap,
+    processingJobMap,
+    isCampagnaProcessing,
+  }), [uploadProgress, processingProgressMap, processingJobMap, isCampagnaProcessing])
+
+  const bulkActions = useMemo(() => {
+    if (!selectionEnabled || !selectedIds) {
+      return null
+    }
+    return classifyBulkSelection(campagne, selectedIds, bulkContext, canStartProcess)
+  }, [selectionEnabled, selectedIds, campagne, bulkContext, canStartProcess])
 
   function navigateToCampagna(campagnaId: string): void {
     router.push(`/dashboard/programmazioni/${campagnaId}`)
   }
 
+  function toggleRowSelection(id: string, checked: boolean) {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (checked) next.add(id)
+    else next.delete(id)
+    onSelectionChange(next)
+  }
+
+  function toggleSelectAllVisible(checked: boolean) {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (checked) {
+      visibleIds.forEach(id => next.add(id))
+    } else {
+      visibleIds.forEach(id => next.delete(id))
+    }
+    onSelectionChange(next)
+  }
+
+  function clearSelection() {
+    onSelectionChange?.(new Set())
+  }
+
+  const tableColSpan = selectionEnabled ? 8 : 7
+
   return (
     <Card>
       <CardContent className="p-0">
+        {selectionEnabled && selectedIds && selectedIds.size > 0 && bulkActions && (
+          <div className="border-b bg-muted/30 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium">
+              {selectedIds.size} selezionat{selectedIds.size === 1 ? 'a' : 'e'}
+              {selectedVisibleCount < selectedIds.size && (
+                <span className="text-muted-foreground font-normal">
+                  {' '}({selectedVisibleCount} visibili)
+                </span>
+              )}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={bulkActions.creatable.length === 0}
+                onClick={() => onBulkCreateIndividuazioni?.(bulkActions.creatable)}
+                className="gap-1.5"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Crea individuazioni
+                {bulkActions.creatable.length > 0 ? ` (${bulkActions.creatable.length})` : ''}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={bulkActions.deletable.length === 0}
+                onClick={() => onBulkDelete?.(bulkActions.deletable)}
+                className="gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Elimina
+                {bulkActions.deletable.length > 0 ? ` (${bulkActions.deletable.length})` : ''}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={clearSelection}>
+                <X className="h-4 w-4 mr-1" />
+                Deseleziona
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="hidden lg:block relative overflow-x-auto">
           <Table>
             <TableHeader className="sticky top-0 bg-background z-10">
               <TableRow>
+                {selectionEnabled && (
+                  <TableHead className="py-4 w-10 px-4">
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onCheckedChange={checked => toggleSelectAllVisible(checked === true)}
+                      aria-label="Seleziona tutte le programmazioni visibili"
+                      disabled={visibleIds.length === 0}
+                    />
+                  </TableHead>
+                )}
                 <TableHead className="py-4">Nome</TableHead>
                 <TableHead className="py-4">Emittente</TableHead>
                 <TableHead className="py-4 w-24 text-center">Anno</TableHead>
@@ -111,33 +220,38 @@ export default function ProgrammazioniTable({
             <TableBody>
               {campagne.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-gray-500">
+                  <TableCell colSpan={tableColSpan} className="text-center py-12 text-gray-500">
                     Nessuna campagna trovata con i criteri di ricerca attuali
                   </TableCell>
                 </TableRow>
               ) : (
                 campagne.map((campagna) => {
-                  const rowState = getRowState({
-                    campagna,
-                    uploadProgress,
-                    processingProgressMap,
-                    processingJobMap,
-                    isCampagnaProcessing,
-                  })
+                  const rowState = getCampagnaRowStateForBulk(campagna, bulkContext)
                   const isGlobalProcessingThisCampagna = isCampagnaProcessing(campagna.id)
                   const isCompleted = rowState.badge === 'individuata'
                   const workflowStep = getWorkflowStep(rowState)
+                  const isSelected = selectedIds?.has(campagna.id) ?? false
 
                   return (
                     <TableRow
                       key={campagna.id}
                       className={clickableRowClassName}
+                      data-state={isSelected ? 'selected' : undefined}
                       role="link"
                       tabIndex={0}
                       aria-label={`Apri dettaglio programmazione ${campagna.nome}`}
                       onClick={() => navigateToCampagna(campagna.id)}
                       onKeyDown={(event) => handleClickableRowKeyDown(event, () => navigateToCampagna(campagna.id))}
                     >
+                      {selectionEnabled && (
+                        <TableCell className="py-4 px-4" onClick={(event) => event.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={checked => toggleRowSelection(campagna.id, checked === true)}
+                            aria-label={`Seleziona ${campagna.nome}`}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="py-4">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-foreground">{campagna.nome}</span>
@@ -211,27 +325,32 @@ export default function ProgrammazioniTable({
             <div className="text-center py-8 text-gray-500">Nessuna campagna trovata</div>
           ) : (
             campagne.map((campagna) => {
-              const rowState = getRowState({
-                campagna,
-                uploadProgress,
-                processingProgressMap,
-                processingJobMap,
-                isCampagnaProcessing,
-              })
+              const rowState = getCampagnaRowStateForBulk(campagna, bulkContext)
               const isCompleted = rowState.badge === 'individuata'
               const workflowStep = getWorkflowStep(rowState)
+              const isSelected = selectedIds?.has(campagna.id) ?? false
 
               return (
                 <Card
                   key={campagna.id}
                   className={`p-4 ${clickableRowClassName}`}
+                  data-state={isSelected ? 'selected' : undefined}
                   role="link"
                   tabIndex={0}
                   aria-label={`Apri dettaglio programmazione ${campagna.nome}`}
                   onClick={() => navigateToCampagna(campagna.id)}
                   onKeyDown={(event) => handleClickableRowKeyDown(event, () => navigateToCampagna(campagna.id))}
                 >
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-3">
+                    {selectionEnabled && (
+                      <div className="pt-1" onClick={(event) => event.stopPropagation()}>
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={checked => toggleRowSelection(campagna.id, checked === true)}
+                          aria-label={`Seleziona ${campagna.nome}`}
+                        />
+                      </div>
+                    )}
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <h3 className="font-medium text-lg">{campagna.nome}</h3>
@@ -288,41 +407,6 @@ export default function ProgrammazioniTable({
     </Card>
   )
 }
-
-interface RowStateInput {
-  campagna: CampagnaProgrammazione
-  uploadProgress: Record<string, ProgressCount>
-  processingProgressMap: Record<string, ProcessingProgress | null>
-  processingJobMap: Record<string, ProcessingActivityJob | null>
-  isCampagnaProcessing: (campagnaId: string) => boolean
-}
-
-function getRowState({
-  campagna,
-  uploadProgress,
-  processingProgressMap,
-  processingJobMap,
-  isCampagnaProcessing,
-}: RowStateInput) {
-  const hasData = (campagna.programmazioni_count || 0) > 0
-
-  return getProgrammazioneRowState({
-    datasetStatus: campagna.stato,
-    uploadJob: uploadProgress[campagna.id]
-      ? {
-        stato: 'running',
-        righe_processate: uploadProgress[campagna.id].done,
-        righe_totali: uploadProgress[campagna.id].total,
-      }
-      : null,
-    progress: processingProgressMap[campagna.id],
-    campaignJob: processingJobMap[campagna.id],
-    hasLocalRuntimeProcess: isCampagnaProcessing(campagna.id),
-    hasData,
-  })
-}
-
-type ProgrammazioneRowState = ReturnType<typeof getRowState>
 
 function getWorkflowStep(rowState: ProgrammazioneRowState): { label: string } {
   if (rowState.badge === 'uploading') return { label: 'Step attuale: caricamento dati' }
@@ -464,7 +548,7 @@ function PrimaryWorkflowAction({
 
 interface StatusCellProps {
   campagna: CampagnaProgrammazione
-  rowBadge: ReturnType<typeof getProgrammazioneRowState>['badge']
+  rowBadge: ProgrammazioneRowState['badge']
   uploadProgress: Record<string, ProgressCount>
   deleteProgress: Record<string, ProgressCount>
 }
