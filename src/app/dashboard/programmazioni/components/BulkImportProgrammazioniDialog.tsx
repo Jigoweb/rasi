@@ -51,6 +51,7 @@ const STEP_TITLES: Record<string, string> = {
   review: 'Verifica file da importare',
   running: 'Import in corso',
   done: 'Import completato',
+  done_with_failures: 'Import terminato con errori',
 }
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
@@ -58,6 +59,7 @@ const STEP_DESCRIPTIONS: Record<string, string> = {
   review: 'Controlla il nome campagna e lo stato delle colonne per ogni file, poi avvia l\'import.',
   running: 'Le campagne vengono create e i file caricati in sequenza.',
   done: 'Riepilogo dell\'import.',
+  done_with_failures: 'Alcuni file non sono stati caricati. Puoi riprovare subito senza riscaricare i file.',
 }
 
 function ColumnStatusBadge({ columnClass }: { columnClass: BulkImportRow['columnClass'] }) {
@@ -132,6 +134,7 @@ export default function BulkImportProgrammazioniDialog({
     confirmSafeWarningsAndStart,
     startImport,
     retryRow,
+    retryFailedRows,
     rows,
     summary,
     reset,
@@ -144,12 +147,19 @@ export default function BulkImportProgrammazioniDialog({
   const [showWarningConfirm, setShowWarningConfirm] = useState(false)
   const [isActionPending, setIsActionPending] = useState(false)
   const [retryingRowId, setRetryingRowId] = useState<string | null>(null)
+  const [isRetryingFailed, setIsRetryingFailed] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const notifiedDoneRef = useRef(false)
   const isRunning = step === 'running'
+  const hasRecoverableFailures = step === 'done' && summary.failed > 0
   const dialogOpen = open && !isMinimized
   const showFloatingIndicator = isMinimized && (step === 'running' || step === 'done')
+  const headerStepKey = hasRecoverableFailures ? 'done_with_failures' : step
+  const failedRows = useMemo(
+    () => rows.filter(row => row.runStatus === 'failed'),
+    [rows],
+  )
 
   // Riapertura da bottone pagina o toast: se il parent riapre, esci dalla minimizzazione.
   useEffect(() => {
@@ -176,6 +186,7 @@ export default function BulkImportProgrammazioniDialog({
     setDropError(null)
     setIsActionPending(false)
     setRetryingRowId(null)
+    setIsRetryingFailed(false)
     setShowWarningConfirm(false)
   }, [])
 
@@ -259,16 +270,26 @@ export default function BulkImportProgrammazioniDialog({
   }, [onOpenChange])
 
   const handleCancel = useCallback(() => {
-    if (isRunning) {
+    // Con fallimenti recuperabili (file ancora in memoria) non resettare: minimizza.
+    if (isRunning || hasRecoverableFailures) {
       handleMinimize()
       return
     }
-    if (isActionPending) return
+    if (isActionPending || isRetryingFailed) return
     reset()
     clearLocalForm()
     setIsMinimized(false)
     onOpenChange(false)
-  }, [reset, onOpenChange, isRunning, isActionPending, handleMinimize, clearLocalForm])
+  }, [
+    reset,
+    onOpenChange,
+    isRunning,
+    hasRecoverableFailures,
+    isActionPending,
+    isRetryingFailed,
+    handleMinimize,
+    clearLocalForm,
+  ])
 
   const canContinueToReview = Boolean(emittenteValue) && annoValue.trim() !== '' && rows.length > 0
 
@@ -308,14 +329,26 @@ export default function BulkImportProgrammazioniDialog({
   }, [confirmSafeWarningsAndStart, isActionPending])
 
   const handleRetryRow = useCallback(async (id: string) => {
-    if (retryingRowId) return
+    if (retryingRowId || isRetryingFailed) return
     setRetryingRowId(id)
     try {
       await retryRow(id)
+      onImportComplete?.()
     } finally {
       setRetryingRowId(null)
     }
-  }, [retryRow, retryingRowId])
+  }, [retryRow, retryingRowId, isRetryingFailed, onImportComplete])
+
+  const handleRetryFailed = useCallback(async () => {
+    if (isRetryingFailed || retryingRowId) return
+    setIsRetryingFailed(true)
+    try {
+      await retryFailedRows()
+      onImportComplete?.()
+    } finally {
+      setIsRetryingFailed(false)
+    }
+  }, [retryFailedRows, isRetryingFailed, retryingRowId, onImportComplete])
 
   const handleDone = useCallback(() => {
     reset()
@@ -330,6 +363,7 @@ export default function BulkImportProgrammazioniDialog({
 
   const runningProcessed = summary.completed + summary.failed
   const runningPercentage = summary.total > 0 ? Math.round((runningProcessed / summary.total) * 100) : 0
+  const retryBusy = retryingRowId !== null || isRetryingFailed
 
   return (
     <>
@@ -341,30 +375,32 @@ export default function BulkImportProgrammazioniDialog({
       >
         <DialogContent
           className="w-[min(96vw,72rem)] sm:max-w-5xl max-h-[90vh] overflow-y-auto"
-          showCloseButton={!isRunning}
+          showCloseButton={!isRunning && !hasRecoverableFailures}
           onEscapeKeyDown={(event) => {
-            if (isRunning) {
+            if (isRunning || hasRecoverableFailures) {
               event.preventDefault()
               handleMinimize()
               return
             }
-            if (isActionPending) event.preventDefault()
+            if (isActionPending || isRetryingFailed) event.preventDefault()
           }}
           onPointerDownOutside={(event) => {
-            if (isRunning) {
+            if (isRunning || hasRecoverableFailures) {
               event.preventDefault()
               handleMinimize()
               return
             }
-            if (isActionPending) event.preventDefault()
+            if (isActionPending || isRetryingFailed) event.preventDefault()
           }}
           onInteractOutside={(event) => {
-            if (isRunning || isActionPending) event.preventDefault()
+            if (isRunning || hasRecoverableFailures || isActionPending || isRetryingFailed) {
+              event.preventDefault()
+            }
           }}
         >
           <DialogHeader>
-            <DialogTitle>{STEP_TITLES[step]}</DialogTitle>
-            <DialogDescription>{STEP_DESCRIPTIONS[step]}</DialogDescription>
+            <DialogTitle>{STEP_TITLES[headerStepKey]}</DialogTitle>
+            <DialogDescription>{STEP_DESCRIPTIONS[headerStepKey]}</DialogDescription>
           </DialogHeader>
 
           {step === 'setup' && (
@@ -556,7 +592,7 @@ export default function BulkImportProgrammazioniDialog({
                             <Button
                               size="sm"
                               variant="outline"
-                              disabled={retryingRowId !== null}
+                              disabled={retryBusy}
                               onClick={() => void handleRetryRow(row.id)}
                             >
                               <RotateCcw className="mr-1 h-3 w-3" />
@@ -579,7 +615,7 @@ export default function BulkImportProgrammazioniDialog({
             </div>
           )}
 
-          {step === 'done' && (
+          {step === 'done' && !hasRecoverableFailures && (
             <div className="space-y-4 py-6 text-center">
               <div className="flex flex-col items-center gap-2">
                 <div className="rounded-full bg-green-100 p-3">
@@ -587,13 +623,89 @@ export default function BulkImportProgrammazioniDialog({
                 </div>
                 <h3 className="text-lg font-semibold">Import completato</h3>
                 <p className="text-sm text-gray-500">
-                  {summary.completed} completate su {summary.total} · {summary.failed} fallite
+                  {summary.completed} completate su {summary.total}
                 </p>
               </div>
 
               <DialogFooter>
                 <Button variant="outline" onClick={handleDone}>Resta sulla lista</Button>
                 <Button onClick={handleDone}>Chiudi</Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {step === 'done' && hasRecoverableFailures && (
+            <div className="space-y-4 py-4">
+              <div className="flex flex-col items-center gap-2 text-center">
+                <div className="rounded-full bg-red-100 p-3">
+                  <XCircle className="h-8 w-8 text-destructive" />
+                </div>
+                <h3 className="text-lg font-semibold">Import terminato con errori</h3>
+                <p className="text-sm text-muted-foreground">
+                  {summary.completed} completate su {summary.total} · {summary.failed} fallite
+                </p>
+              </div>
+
+              <div className="max-h-[min(50vh,28rem)] overflow-y-auto overflow-x-hidden rounded-md border [&_[data-slot=table-container]]:overflow-x-hidden">
+                <Table className="table-fixed w-full">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[34%]">File</TableHead>
+                      <TableHead className="w-[18%]">Stato</TableHead>
+                      <TableHead className="w-[32%]">Dettaglio</TableHead>
+                      <TableHead className="w-[16%]" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {failedRows.map(row => (
+                      <TableRow key={row.id}>
+                        <TableCell className="align-top text-sm break-words whitespace-normal" title={row.file.name}>
+                          {row.file.name}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <RunStatusBadge status={row.runStatus} />
+                        </TableCell>
+                        <TableCell className="align-top text-xs text-muted-foreground break-words whitespace-normal">
+                          {row.error}
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={retryBusy}
+                            onClick={() => void handleRetryRow(row.id)}
+                          >
+                            <RotateCcw className="mr-1 h-3 w-3" />
+                            {retryingRowId === row.id ? 'Riprovo…' : 'Riprova'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center">
+                Se chiudi senza riprovare, le campagne restano in errore: potrai usare
+                &quot;Riprova caricamento&quot; dalla lista selezionando di nuovo il file.
+              </p>
+
+              <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+                <Button variant="outline" disabled={retryBusy} onClick={handleMinimize}>
+                  <Minimize2 className="mr-2 h-4 w-4" />
+                  Continua in background
+                </Button>
+                <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                  <Button variant="outline" disabled={retryBusy} onClick={handleDone}>
+                    Chiudi e lascia in errore
+                  </Button>
+                  <Button disabled={retryBusy} onClick={() => void handleRetryFailed()}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    {isRetryingFailed
+                      ? 'Riprovo…'
+                      : `Riprova i ${summary.failed} falliti`}
+                  </Button>
+                </div>
               </DialogFooter>
             </div>
           )}

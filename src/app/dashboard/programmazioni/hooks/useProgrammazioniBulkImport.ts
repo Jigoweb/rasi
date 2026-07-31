@@ -343,6 +343,16 @@ export function useProgrammazioniBulkImport() {
     await processRow(id)
   }, [processRow])
 
+  /** Riprocessa tutte le righe ancora in `failed` (es. da step risultati). */
+  const retryFailedRows = useCallback(async () => {
+    const failed = rowsRef.current.filter(row => row.runStatus === 'failed')
+    if (failed.length === 0) return
+
+    setStep('running')
+    await runBulkImportQueue(failed, row => processRow(row.id), { concurrency: 3 })
+    setStep('done')
+  }, [processRow])
+
   const reset = useCallback(() => {
     setEmittenteId(null)
     annoRef.current = null
@@ -383,6 +393,7 @@ export function useProgrammazioniBulkImport() {
     confirmSafeWarningsAndStart,
     startImport,
     retryRow,
+    retryFailedRows,
     rows,
     summary,
     reset,

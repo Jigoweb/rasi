@@ -49,6 +49,7 @@ function baseHookState(overrides: Partial<ReturnType<typeof useProgrammazioniBul
     confirmSafeWarningsAndStart: jest.fn(),
     startImport: jest.fn(),
     retryRow: jest.fn(),
+    retryFailedRows: jest.fn(),
     rows: [] as BulkImportRow[],
     summary: { total: 0, ok: 0, warningSafe: 0, error: 0, completed: 0, failed: 0 },
     reset: jest.fn(),
@@ -229,21 +230,105 @@ describe('BulkImportProgrammazioniDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(true)
   })
 
-  it('shows the summary counts in the done step', () => {
+  it('shows success summary in the done step without failures', () => {
     mockUseBulkImport.mockReturnValue(baseHookState({
       step: 'done',
       rows: [
         makeRow({ id: 'r1', runStatus: 'completed' }),
-        makeRow({ id: 'r2', runStatus: 'failed' }),
+        makeRow({ id: 'r2', runStatus: 'completed' }),
       ],
-      summary: { total: 2, ok: 2, warningSafe: 0, error: 0, completed: 1, failed: 1 },
+      summary: { total: 2, ok: 2, warningSafe: 0, error: 0, completed: 2, failed: 0 },
     }))
 
     render(
       <BulkImportProgrammazioniDialog open onOpenChange={jest.fn()} emittenti={emittenti} />
     )
 
-    expect(screen.getByText(/1 completate su 2/i)).toBeInTheDocument()
+    expect(screen.getByText(/2 completate su 2/i)).toBeInTheDocument()
     expect(screen.getAllByText(/Import completato/i).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /Riprova i/i })).not.toBeInTheDocument()
+  })
+
+  it('shows recovery UI with Riprova i N falliti when done has failures', async () => {
+    const retryFailedRows = jest.fn().mockResolvedValue(undefined)
+    mockUseBulkImport.mockReturnValue(baseHookState({
+      step: 'done',
+      rows: [
+        makeRow({ id: 'r1', file: makeFile('ok.csv'), runStatus: 'completed' }),
+        makeRow({
+          id: 'r2',
+          file: makeFile('fail.csv'),
+          runStatus: 'failed',
+          error: 'statement timeout',
+        }),
+      ],
+      summary: { total: 2, ok: 2, warningSafe: 0, error: 0, completed: 1, failed: 1 },
+      retryFailedRows,
+    }))
+
+    render(
+      <BulkImportProgrammazioniDialog open onOpenChange={jest.fn()} emittenti={emittenti} />
+    )
+
+    expect(screen.getAllByText(/Import terminato con errori/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/1 completate su 2/i)).toBeInTheDocument()
+    expect(screen.getByText('fail.csv')).toBeInTheDocument()
+    expect(screen.queryByText('ok.csv')).not.toBeInTheDocument()
+    expect(screen.getByText(/statement timeout/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Riprova i 1 falliti/i }))
+    expect(retryFailedRows).toHaveBeenCalledTimes(1)
+    await screen.findByRole('button', { name: /Riprova i 1 falliti/i })
+  })
+
+  it('allows per-row Riprova from the done recovery step', async () => {
+    const retryRow = jest.fn().mockResolvedValue(undefined)
+    mockUseBulkImport.mockReturnValue(baseHookState({
+      step: 'done',
+      rows: [
+        makeRow({
+          id: 'r2',
+          file: makeFile('fail.csv'),
+          runStatus: 'failed',
+          error: 'statement timeout',
+        }),
+      ],
+      summary: { total: 1, ok: 1, warningSafe: 0, error: 0, completed: 0, failed: 1 },
+      retryRow,
+    }))
+
+    render(
+      <BulkImportProgrammazioniDialog open onOpenChange={jest.fn()} emittenti={emittenti} />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /^Riprova$/i }))
+    expect(retryRow).toHaveBeenCalledWith('r2')
+    await screen.findByRole('button', { name: /^Riprova$/i })
+  })
+
+  it('minimized toast with failures invites to manage and can reopen', () => {
+    const onOpenChange = jest.fn()
+    mockUseBulkImport.mockReturnValue(baseHookState({
+      step: 'done',
+      rows: [makeRow({ id: 'r1', runStatus: 'failed', error: 'boom' })],
+      summary: { total: 1, ok: 1, warningSafe: 0, error: 0, completed: 0, failed: 1 },
+    }))
+
+    const { rerender } = render(
+      <BulkImportProgrammazioniDialog open onOpenChange={onOpenChange} emittenti={emittenti} />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Continua in background/i }))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+
+    rerender(
+      <BulkImportProgrammazioniDialog open={false} onOpenChange={onOpenChange} emittenti={emittenti} />
+    )
+
+    expect(screen.getByText(/Import bulk terminato con errori/i)).toBeInTheDocument()
+    expect(screen.getByText(/Clicca per gestire/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText(/Import bulk terminato con errori/i))
+    expect(onOpenChange).toHaveBeenCalledWith(true)
   })
 })

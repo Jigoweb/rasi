@@ -180,6 +180,49 @@ describe('useProgrammazioniBulkImport - execution error handling & confirm+start
     expect(mockUpdateCampagnaStatus).toHaveBeenCalledWith('campagna-1', 'error')
   })
 
+  it('retryFailedRows riprocessa solo le righe failed e torna a done', async () => {
+    mockUploadToStorage
+      .mockResolvedValueOnce({ storagePath: '', error: new Error('timeout') })
+      .mockResolvedValueOnce({ storagePath: 'path/ok', error: null })
+    mockStartUploadJob.mockResolvedValue({ success: true, jobId: 'job-retry' })
+    mockPollUploadJob.mockImplementation(async (_jobId: string, onProgress: (job: { righe_totali: number; righe_processate: number }) => void) => {
+      onProgress({ righe_totali: 5, righe_processate: 5 })
+      return { success: true, job: { righe_totali: 5, righe_processate: 5 } }
+    })
+
+    const { result } = renderHook(() => useProgrammazioniBulkImport())
+
+    act(() => {
+      result.current.setEmittenteId('emittente-1')
+      result.current.setAnno(2020)
+    })
+    act(() => {
+      result.current.addFiles([makeFile('SkyArte.csv')])
+    })
+    await act(async () => {
+      await result.current.previewAll()
+    })
+    await act(async () => {
+      await result.current.startImport()
+    })
+
+    expect(result.current.step).toBe('done')
+    expect(result.current.summary.failed).toBe(1)
+    expect(result.current.rows[0].campagnaId).toBe('campagna-1')
+
+    await act(async () => {
+      await result.current.retryFailedRows()
+    })
+
+    expect(result.current.step).toBe('done')
+    expect(result.current.summary.failed).toBe(0)
+    expect(result.current.summary.completed).toBe(1)
+    expect(result.current.rows[0].runStatus).toBe('completed')
+    // Riusa la campagna già creata (niente seconda create)
+    expect(mockCreateCampagna).toHaveBeenCalledTimes(1)
+    expect(mockUpdateCampagnaStatus).toHaveBeenCalledWith('campagna-1', 'in_review')
+  })
+
   it('confirmSafeWarningsAndStart conferma ed esegue in una sola chiamata, senza stale closure', async () => {
     const warningDecision: UploadDecision = {
       kind: 'warn_format_changed',

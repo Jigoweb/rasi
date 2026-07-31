@@ -55,6 +55,7 @@ export function BulkImportFloatingIndicator({
           <p className="text-xs text-muted-foreground truncate">
             {processed} di {summary.total} file
             {summary.failed > 0 ? ` · ${summary.failed} falliti` : ''}
+            {!isRunning && hasFailures ? ' · Clicca per gestire' : ''}
           </p>
         </div>
 
