@@ -98,84 +98,114 @@ export function SettoreArtistiPage({ content }: SettoreArtistiPageProps) {
           </h2>
           <p className="mt-3 text-sm font-semibold text-rasi-ember">{tariffe.validityNote}</p>
           <p className="mt-4 max-w-2xl leading-relaxed text-rasi-slate">{tariffe.licenseBody}</p>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-rasi-slate">{tariffe.paymentNote}</p>
         </Reveal>
 
         <Reveal delayMs={80} className="mt-10">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-rasi-slate">
-            Ambito di applicazione
-          </h3>
-          <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {tariffe.categories.map((category) => (
-              <li
-                key={category}
-                className="border-t border-rasi-line py-3 text-sm text-rasi-ink"
-              >
-                {category}
-              </li>
+          <Accordion type="multiple" className="w-full">
+            {tariffe.sections.map((section) => (
+              <AccordionItem key={section.id} value={section.id}>
+                <AccordionTrigger className="text-left text-base font-semibold text-rasi-ink">
+                  {section.title}
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-4 pb-2">
+                    {section.paragraphs?.map((paragraph) => (
+                      <p key={paragraph.slice(0, 48)} className="text-sm leading-relaxed text-rasi-slate">
+                        {paragraph}
+                      </p>
+                    ))}
+
+                    {section.flatRates?.map((rate) => (
+                      <p
+                        key={rate.slice(0, 48)}
+                        className="border-t border-rasi-line pt-3 text-sm font-medium leading-relaxed text-rasi-ink"
+                      >
+                        {rate}
+                      </p>
+                    ))}
+
+                    {section.tables?.map((table) => (
+                      <div key={`${section.id}-${table.title ?? table.headers.join("-")}`} className="space-y-2">
+                        {table.title ? (
+                          <h4 className="text-sm font-semibold text-rasi-ink">{table.title}</h4>
+                        ) : null}
+                        {table.note ? (
+                          <p className="text-sm leading-relaxed text-rasi-slate">{table.note}</p>
+                        ) : null}
+                        <div className="overflow-x-auto border-t border-rasi-line">
+                          <table className="w-full min-w-[28rem] text-left text-sm">
+                            <thead>
+                              <tr className="border-b border-rasi-line">
+                                {table.headers.map((header) => (
+                                  <th
+                                    key={header}
+                                    className="py-3 pr-4 font-semibold text-rasi-ink first:pl-0"
+                                  >
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {table.rows.map((row) => (
+                                <tr key={row.join("|")} className="border-b border-rasi-line/70">
+                                  {row.map((cell, cellIndex) => (
+                                    <td
+                                      key={`${row[0]}-${cellIndex}`}
+                                      className={`py-3 pr-4 ${cellIndex === 0 ? "text-rasi-ink" : "tabular-nums text-rasi-slate"}`}
+                                    >
+                                      {cell || "—"}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+
+                    {section.reductions && section.reductions.length > 0 ? (
+                      <div>
+                        <h4 className="text-sm font-semibold uppercase tracking-wide text-rasi-slate">
+                          Riduzioni previste
+                        </h4>
+                        <ul className="mt-2 space-y-1">
+                          {section.reductions.map((item) => (
+                            <li key={item} className="text-sm leading-relaxed text-rasi-slate">
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {section.pdfUrl ? (
+                      <a
+                        href={section.pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-sm font-semibold text-rasi-ember hover:text-rasi-ember-deep"
+                      >
+                        {section.pdfLabel ?? "Scarica PDF"}
+                        <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} />
+                      </a>
+                    ) : null}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
             ))}
-          </ul>
+          </Accordion>
         </Reveal>
 
-        <div className="mt-12 space-y-12">
-          {tariffe.tables.map((table, i) => (
-            <Reveal key={table.title} delayMs={100 + i * 60}>
-              <h3 className="text-xl font-semibold text-rasi-ink">{table.title}</h3>
-              {table.note ? (
-                <p className="mt-2 text-sm leading-relaxed text-rasi-slate">{table.note}</p>
-              ) : null}
-              <div className="mt-4 overflow-x-auto border-t border-rasi-line">
-                <table className="w-full min-w-[28rem] text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-rasi-line">
-                      {table.headers.map((header) => (
-                        <th
-                          key={header}
-                          className="py-3 pr-4 font-semibold text-rasi-ink first:pl-0"
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table.rows.map((row) => (
-                      <tr key={row.join("-")} className="border-b border-rasi-line/70">
-                        {row.map((cell, cellIndex) => (
-                          <td
-                            key={`${row[0]}-${cellIndex}`}
-                            className={`py-3 pr-4 ${cellIndex === 0 ? "text-rasi-ink" : "tabular-nums text-rasi-slate"}`}
-                          >
-                            {cell}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-
-        <Reveal delayMs={200} className="mt-12">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-rasi-slate">
-            Riduzioni previste
-          </h3>
-          <ul className="mt-4 space-y-2">
-            {tariffe.reductions.map((item) => (
-              <li key={item} className="text-sm leading-relaxed text-rasi-slate">
-                {item}
-              </li>
-            ))}
-          </ul>
-          <div className="mt-8">
-            <Link href="/contatti">
-              <Button className="rounded-full bg-rasi-ember px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-ember-deep">
-                Richiedi una licenza
-                <ArrowRight className="ml-1 h-4 w-4" strokeWidth={2} />
-              </Button>
-            </Link>
-          </div>
+        <Reveal delayMs={160} className="mt-10">
+          <Link href="/contatti">
+            <Button className="rounded-full bg-rasi-ember px-8 py-6 text-base font-semibold text-rasi-paper hover:bg-rasi-ember-deep">
+              Richiedi una licenza
+              <ArrowRight className="ml-1 h-4 w-4" strokeWidth={2} />
+            </Button>
+          </Link>
         </Reveal>
       </section>
 
