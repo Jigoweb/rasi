@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { getCampagnaProgrammazioneById, listProgrammazioniByCampagnaKeyset, getProgrammazioniHealth, updateCampagnaProgrammazioneMetadata, CampagnaProgrammazione, ProgrammazioneRow, ProgrammazioniCursor, ProgrammazioniHealth } from '@/features/programmazioni/services/programmazioni.service'
 import {
   getProgrammazioniTableColumns,
@@ -25,7 +25,9 @@ import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Cl
 
 export default function CampagnaDettaglioPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const campagnaId = Array.isArray(params?.id) ? params?.id[0] : (params?.id as string)
+  const initialQuery = searchParams.get('q') || ''
 
   const [campagna, setCampagna] = useState<CampagnaProgrammazione | null>(null)
   const [rows, setRows] = useState<ProgrammazioneRow[]>([])
@@ -35,8 +37,8 @@ export default function CampagnaDettaglioPage() {
   const [health, setHealth] = useState<ProgrammazioniHealth | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
   const [loadingHealth, setLoadingHealth] = useState(false)
-  const [q, setQ] = useState('')
-  const [debouncedQ, setDebouncedQ] = useState('')
+  const [q, setQ] = useState(initialQuery)
+  const [debouncedQ, setDebouncedQ] = useState(initialQuery)
   const [processato, setProcessato] = useState<string>('all')
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
