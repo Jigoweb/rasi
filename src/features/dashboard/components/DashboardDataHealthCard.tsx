@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import {
   CATALOG_HEALTH_IMPACT_LABEL,
@@ -108,7 +110,7 @@ export function DashboardDataHealthCard({
   })()
 
   return (
-    <Card>
+    <Card id="data-health">
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="text-lg">Data Health</CardTitle>
@@ -198,6 +200,15 @@ export function DashboardDataHealthCard({
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/opere?incomplete=1">Opere incomplete</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/artisti?incomplete=1">Artisti incompleti</Link>
+          </Button>
         </div>
       </CardContent>
     </Card>

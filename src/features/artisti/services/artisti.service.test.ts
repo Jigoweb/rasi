@@ -1,5 +1,5 @@
 import { supabase } from '@/shared/lib/supabase-client'
-import { getArtisti, getArtistaById, getPartecipazioniByArtistaId, createArtista, updateArtista } from './artisti.service'
+import { getArtisti, getArtistaById, getPartecipazioniByArtistaId, createArtista, updateArtista, ARTISTI_INCOMPLETE_OR } from './artisti.service'
 import type { TablesInsert, TablesUpdate } from '@/shared/lib/supabase'
 
 const mockSingle: jest.Mock = jest.fn()
@@ -8,6 +8,7 @@ const mockSelect: jest.Mock = jest.fn()
 const mockEq: jest.Mock = jest.fn()
 const mockInsert: jest.Mock = jest.fn()
 const mockUpdate: jest.Mock = jest.fn()
+const mockOr: jest.Mock = jest.fn()
 
 // Mock Supabase client
 jest.mock('@/shared/lib/supabase-client', () => ({
@@ -27,14 +28,16 @@ describe('Artisti Service', () => {
     mockOrder.mockClear()
     mockEq.mockClear()
     mockSelect.mockClear()
+    mockOr.mockClear()
     ;(supabase.from as jest.Mock).mockClear()
   })
 
   beforeEach(() => {
-    mockEq.mockReturnValue({ single: mockSingle, order: mockOrder, select: mockSelect })
-    mockSelect.mockReturnValue({ order: mockOrder, eq: mockEq, single: mockSingle })
+    mockEq.mockReturnValue({ single: mockSingle, order: mockOrder, select: mockSelect, or: mockOr })
+    mockSelect.mockReturnValue({ order: mockOrder, eq: mockEq, single: mockSingle, or: mockOr })
     mockInsert.mockReturnValue({ select: mockSelect })
     mockUpdate.mockReturnValue({ eq: mockEq, select: mockSelect })
+    mockOr.mockReturnValue({ order: mockOrder, eq: mockEq, or: mockOr })
   })
 
   describe('getArtisti', () => {
@@ -48,6 +51,15 @@ describe('Artisti Service', () => {
       expect(mockSelect).toHaveBeenCalledWith('*')
       expect(mockOrder).toHaveBeenCalledWith('cognome', { ascending: true })
       expect(data).toEqual(mockData)
+    })
+
+    it('applies incomplete OR matching Data Health when incomplete=true', async () => {
+      mockOrder.mockReturnValue({ or: mockOr, eq: mockEq })
+      mockOr.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ incomplete: true })
+
+      expect(mockOr).toHaveBeenCalledWith(ARTISTI_INCOMPLETE_OR)
     })
   })
 

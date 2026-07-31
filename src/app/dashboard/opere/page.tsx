@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
-import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId } from '@/features/opere/services/opere.service'
+import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
@@ -113,6 +113,9 @@ export default function OperePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [filters, setFilters] = useState<FieldFilter[]>([])
+  const [incompleteMode, setIncompleteMode] = useState(
+    () => searchParams?.get('incomplete') === '1'
+  )
   const [selectedOpera, setSelectedOpera] = useState<Opera | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -134,7 +137,13 @@ export default function OperePage() {
 
   useEffect(() => {
     fetchOpere()
-  }, [searchQuery, typeFilter, filters])
+  }, [searchQuery, typeFilter, filters, incompleteMode])
+
+  useEffect(() => {
+    if (searchParams?.get('incomplete') === '1') {
+      setIncompleteMode(true)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     const editId = searchParams?.get('edit')
@@ -188,10 +197,23 @@ export default function OperePage() {
     return q
   }
 
+  const clearIncompleteMode = () => {
+    setIncompleteMode(false)
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    params.delete('incomplete')
+    const qs = params.toString()
+    router.replace(qs ? `/dashboard/opere?${qs}` : '/dashboard/opere')
+  }
+
   const fetchOpere = async () => {
     try {
       setIsSearching(true)
-      const isInitialLoad = opere.length === 0 && !searchQuery && typeFilter === 'all' && filters.length === 0
+      const isInitialLoad =
+        opere.length === 0 &&
+        !searchQuery &&
+        typeFilter === 'all' &&
+        filters.length === 0 &&
+        !incompleteMode
       if (isInitialLoad) setLoading(true)
 
       let query = supabase
@@ -205,6 +227,9 @@ export default function OperePage() {
       }
 
       query = applyFiltersToQuery(query)
+      if (incompleteMode) {
+        query = query.or(OPERE_INCOMPLETE_OR)
+      }
       const { data, error } = await query
 
       if (error) throw error
@@ -229,7 +254,7 @@ export default function OperePage() {
     setFilters(prev => prev.filter(f => f.field !== field))
   }
 
-  const hasActiveFilters = searchQuery || typeFilter !== 'all' || filters.length > 0
+  const hasActiveFilters = searchQuery || typeFilter !== 'all' || filters.length > 0 || incompleteMode
 
   const getTypeBadge = (tipo: string) => {
     switch (tipo) {
@@ -651,7 +676,12 @@ export default function OperePage() {
             <FilterPopover onAdd={addFilter} />
             <Button 
               variant="outline" 
-              onClick={() => { setSearchQuery(''); setTypeFilter('all'); setFilters([]) }}
+              onClick={() => {
+                setSearchQuery('')
+                setTypeFilter('all')
+                setFilters([])
+                if (incompleteMode) clearIncompleteMode()
+              }}
               disabled={!hasActiveFilters}
             >
               Reset
@@ -660,6 +690,17 @@ export default function OperePage() {
           {/* Filter Chips */}
           {hasActiveFilters && (
             <div className="mt-3 flex flex-wrap gap-2">
+              {incompleteMode && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearIncompleteMode}
+                  className="h-8 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                >
+                  Incomplete (Data Health)
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              )}
               {searchQuery && (
                 <Button variant="outline" size="sm" onClick={() => setSearchQuery('')} className="h-8">
                   Ricerca: {searchQuery}

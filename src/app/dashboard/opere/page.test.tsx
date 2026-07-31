@@ -1,9 +1,13 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import OperePage from './page'
+import { OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
+
+const mockReplace = jest.fn()
+let mockSearchParams = new URLSearchParams()
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: jest.fn(), replace: mockReplace, back: jest.fn() }),
+  useSearchParams: () => mockSearchParams,
 }))
 
 jest.mock('@/shared/contexts/export-process-context', () => ({
@@ -14,15 +18,27 @@ jest.mock('@/shared/contexts/export-process-context', () => ({
   ExportProcessProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
 
+jest.mock('@/shared/lib/toast', () => ({
+  notifyError: jest.fn(),
+  notifySuccess: jest.fn(),
+}))
+
+const createQueryBuilder = () => {
+  const builder: Record<string, jest.Mock> = {}
+  const methods = ['select', 'order', 'limit', 'or', 'eq', 'not', 'neq', 'is']
+  for (const m of methods) {
+    builder[m] = jest.fn(() => builder)
+  }
+  ;(builder as any).then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+    Promise.resolve({ data: [], error: null }).then(resolve, reject)
+  return builder
+}
+
+let queryBuilder = createQueryBuilder()
+
 jest.mock('@/shared/lib/supabase-client', () => ({
   supabase: {
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        order: jest.fn(() => ({
-          limit: jest.fn(async () => ({ data: [], error: null })),
-        })),
-      })),
-    })),
+    from: jest.fn(() => queryBuilder),
   },
 }))
 
@@ -50,6 +66,14 @@ window.HTMLElement.prototype.releasePointerCapture = jest.fn()
 window.HTMLElement.prototype.hasPointerCapture = jest.fn()
 
 describe('OperePage Select validation', () => {
+  beforeEach(() => {
+    mockSearchParams = new URLSearchParams()
+    mockReplace.mockClear()
+    queryBuilder = createQueryBuilder()
+    const { supabase } = require('@/shared/lib/supabase-client')
+    ;(supabase.from as jest.Mock).mockImplementation(() => queryBuilder)
+  })
+
   afterEach(() => {
     jest.clearAllMocks()
   })
@@ -67,5 +91,21 @@ describe('OperePage Select validation', () => {
     expect(errorCalls.some((m) => m.includes('A <Select.Item /> must have a value prop that is not an empty string'))).toBe(false)
 
     errorSpy.mockRestore()
+  })
+
+  it('enables incomplete Data Health filter from ?incomplete=1', async () => {
+    mockSearchParams = new URLSearchParams('incomplete=1')
+
+    render(<OperePage />)
+
+    const chip = await screen.findByText('Incomplete (Data Health)')
+    expect(queryBuilder.or).toHaveBeenCalledWith(OPERE_INCOMPLETE_OR)
+
+    fireEvent.click(chip)
+    expect(mockReplace).toHaveBeenCalledWith('/dashboard/opere')
+
+    await waitFor(() => {
+      expect(screen.queryByText('Incomplete (Data Health)')).not.toBeInTheDocument()
+    })
   })
 })

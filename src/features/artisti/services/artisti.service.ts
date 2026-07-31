@@ -5,6 +5,10 @@ export type ArtistaFieldFilter =
   | { field: 'stato'; value: 'attivo' | 'sospeso' | 'cessato' }
   | { field: 'tipologia'; value: 'AIE' | 'PRODUTTORE' }
 
+/** Same OR used by dashboard Data Health incomplete artisti count */
+export const ARTISTI_INCOMPLETE_OR =
+  'codice_ipn.is.null,codice_ipn.eq.,nome.is.null,nome.eq.,cognome.is.null,cognome.eq.,stato.is.null,imdb_nconst.is.null,imdb_nconst.eq.,data_nascita.is.null,codice_fiscale.is.null,codice_fiscale.eq.'
+
 /**
  * Fetches a list of artists with optional filtering.
  * @param filters - Optional filters for search, is_rasi (tipologia), and field filters.
@@ -14,6 +18,8 @@ export const getArtisti = async (filters?: {
   search?: string
   is_rasi?: boolean | 'all'
   fieldFilters?: ArtistaFieldFilter[]
+  /** When true, keep only artisti missing identity/anagrafica fields (Data Health). */
+  incomplete?: boolean
 }) => {
   let query = supabase
     .from('artisti')
@@ -80,6 +86,10 @@ export const getArtisti = async (filters?: {
       // calling .or() multiple times results in: (Group1) AND (Group2) AND ...
       query = query.or(`nome.ilike.%${term}%,cognome.ilike.%${term}%,codice_ipn.ilike.%${term}%,codice_fiscale.ilike.%${term}%`)
     })
+  }
+
+  if (filters?.incomplete) {
+    query = query.or(ARTISTI_INCOMPLETE_OR)
   }
 
   const { data, error } = await query

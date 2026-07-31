@@ -1,7 +1,7 @@
 # Proposta layout Dashboard home — wireframe a sezioni
 
 **Data:** 2026-07-31  
-**Stato:** Proposta (da validare con operatori/admin)  
+**Stato:** Implementato (home redesign v1 + Data Health impatto)  
 **Branch:** `cursor/dashboard-data-health-individuazione-02bc`  
 **Scope:** solo `/dashboard` (home operatori/admin). Fuori scope: restyling sidebar, area artista, redesign pagine figlie.
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { getArtisti, getPartecipazioniCountByArtistaId, deleteArtista, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -129,11 +129,15 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
 
 export default function ArtistiPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [artisti, setArtisti] = useState<Artista[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [tipologiaFilter, setTipologiaFilter] = useState<'all' | true | false>('all')
   const [filters, setFilters] = useState<ArtistaFieldFilter[]>([])
+  const [incompleteMode, setIncompleteMode] = useState(
+    () => searchParams?.get('incomplete') === '1'
+  )
   const [selectedArtist, setSelectedArtist] = useState<Artista | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -150,15 +154,38 @@ export default function ArtistiPage() {
   
   useEffect(() => {
     fetchArtisti()
-  }, [searchQuery, tipologiaFilter, filters])
+  }, [searchQuery, tipologiaFilter, filters, incompleteMode])
+
+  useEffect(() => {
+    if (searchParams?.get('incomplete') === '1') {
+      setIncompleteMode(true)
+    }
+  }, [searchParams])
+
+  const clearIncompleteMode = () => {
+    setIncompleteMode(false)
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    params.delete('incomplete')
+    const qs = params.toString()
+    router.replace(qs ? `/dashboard/artisti?${qs}` : '/dashboard/artisti')
+  }
 
   const fetchArtisti = async () => {
-    if (artisti.length === 0 && !searchQuery && tipologiaFilter === 'all' && filters.length === 0) setLoading(true)
+    if (
+      artisti.length === 0 &&
+      !searchQuery &&
+      tipologiaFilter === 'all' &&
+      filters.length === 0 &&
+      !incompleteMode
+    ) {
+      setLoading(true)
+    }
     try {
       const { data, error } = await getArtisti({
         search: searchQuery,
         is_rasi: tipologiaFilter,
         fieldFilters: filters,
+        incomplete: incompleteMode || undefined,
       })
       if (error) throw error
       setArtisti(data || [])
@@ -180,7 +207,7 @@ export default function ArtistiPage() {
     setFilters(prev => prev.filter(f => f.field !== field))
   }
 
-  const hasActiveFilters = searchQuery || tipologiaFilter !== 'all' || filters.length > 0
+  const hasActiveFilters = searchQuery || tipologiaFilter !== 'all' || filters.length > 0 || incompleteMode
 
   const getStatusBadge = (stato: string | null) => {
     if (!stato) return null
@@ -409,7 +436,12 @@ export default function ArtistiPage() {
             <ArtistiFilterPopover onAdd={addFilter} />
             <Button
               variant="outline"
-              onClick={() => { setSearchQuery(''); setTipologiaFilter('all'); setFilters([]) }}
+              onClick={() => {
+                setSearchQuery('')
+                setTipologiaFilter('all')
+                setFilters([])
+                if (incompleteMode) clearIncompleteMode()
+              }}
               disabled={!hasActiveFilters}
             >
               Reset
@@ -418,6 +450,17 @@ export default function ArtistiPage() {
           {/* Filter Chips */}
           {hasActiveFilters && (
             <div className="mt-3 flex flex-wrap gap-2">
+              {incompleteMode && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearIncompleteMode}
+                  className="h-8 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                >
+                  Incomplete (Data Health)
+                  <X className="h-3 w-3 ml-2" />
+                </Button>
+              )}
               {searchQuery && (
                 <Button variant="outline" size="sm" onClick={() => setSearchQuery('')} className="h-8">
                   Ricerca: {searchQuery}

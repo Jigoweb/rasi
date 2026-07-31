@@ -1,9 +1,17 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { CampagnaIndividuazione } from '@/features/individuazioni/services/individuazioni.service'
 
+const CAMPAGNA_STATI = new Set(['bozza', 'in_corso', 'completata', 'archiviata'])
+
 export function useIndividuazioniFilters(campagne: CampagnaIndividuazione[]) {
+  const searchParams = useSearchParams()
+  const statoFromUrl = searchParams?.get('stato')
+  const initialStatus =
+    statoFromUrl && CAMPAGNA_STATI.has(statoFromUrl) ? statoFromUrl : 'all'
+
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus)
   const [emittenteFilter, setEmittenteFilter] = useState<string>('all')
   const [annoFilter, setAnnoFilter] = useState<string>('all')
 

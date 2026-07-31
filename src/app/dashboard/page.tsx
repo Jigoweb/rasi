@@ -1,44 +1,58 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/shared/lib/supabase'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import { Badge } from '@/shared/components/ui/badge'
-import { Button } from '@/shared/components/ui/button'
-import { Users, FileText, Calendar, TrendingUp, Euro, Activity, Search, Download, Database, Loader2 } from 'lucide-react'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import { getFullDatabaseExport, formatFullDatabaseExport } from '@/features/report/services/report-export.service'
+import { DashboardActivityFeed } from '@/features/dashboard/components/DashboardActivityFeed'
+import { DashboardAttentionQueue } from '@/features/dashboard/components/DashboardAttentionQueue'
 import { DashboardDataHealthCard } from '@/features/dashboard/components/DashboardDataHealthCard'
+import { DashboardExportFooter } from '@/features/dashboard/components/DashboardExportFooter'
+import { DashboardKpiStrip } from '@/features/dashboard/components/DashboardKpiStrip'
+import { DashboardMatchingTrend } from '@/features/dashboard/components/DashboardMatchingTrend'
+import type { AttentionItem, MatchingTrendPoint } from '@/features/dashboard/components/dashboard-home.types'
+import { countMetricsByImpact } from '@/features/dashboard/services/catalog-health-impact'
+import {
+  createSupabaseAttentionDeps,
+  loadAttentionQueue,
+} from '@/features/dashboard/services/dashboard-attention.service'
 import {
   createSupabaseDashboardDataDeps,
-  loadDashboardRpcData,
   loadDashboardHealthData,
   loadDashboardPrimaryData,
+  loadDashboardRpcData,
   loadDashboardSecondaryData,
   type AttivitaItem,
   type DashboardStats,
   type Metric,
-  type StatsAggiuntive,
 } from '@/features/dashboard/services/dashboard-data.service'
-
-function tempoRelativo(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime()
-  const min = Math.floor(diff / 60000)
-  if (min < 1) return 'adesso'
-  if (min < 60) return `${min} min fa`
-  const ore = Math.floor(min / 60)
-  if (ore < 24) return `${ore} or${ore === 1 ? 'a' : 'e'} fa`
-  const giorni = Math.floor(ore / 24)
-  if (giorni < 30) return `${giorni} giorn${giorni === 1 ? 'o' : 'i'} fa`
-  const mesi = Math.floor(giorni / 30)
-  return `${mesi} mes${mesi === 1 ? 'e' : 'i'} fa`
-}
+import {
+  createSupabaseMatchingTrendDeps,
+  loadMatchingTrend,
+} from '@/features/dashboard/services/dashboard-trend.service'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [totalArtisti, setTotalArtisti] = useState(0)
+  const [totalOpere, setTotalOpere] = useState(0)
+  const [artistiMetrics, setArtistiMetrics] = useState<Metric[]>([])
+  const [opereMetrics, setOpereMetrics] = useState<Metric[]>([])
+  const [artistiIncompleti, setArtistiIncompleti] = useState(0)
+  const [opereIncomplete, setOpereIncomplete] = useState(0)
+  const [healthLoading, setHealthLoading] = useState(true)
+  const [attivitaRecenti, setAttivitaRecenti] = useState<AttivitaItem[]>([])
+  const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([])
+  const [attentionLoading, setAttentionLoading] = useState(true)
+  const [trendPoints, setTrendPoints] = useState<MatchingTrendPoint[]>([])
+  const [trendLoading, setTrendLoading] = useState(true)
+  const [individuazioniTotal, setIndividuazioniTotal] = useState(0)
+
   const { startExport, state: exportState } = useExportProcess()
   const isExporting = exportState.status === 'exporting'
+  const exportingThis = isExporting && exportState.campagnaId === 'full-database-export'
+
+  const periodoLabel = new Date().toLocaleString('it-IT', { month: 'long', year: 'numeric' })
 
   const handleExportFull = async () => {
     await startExport(
@@ -47,7 +61,13 @@ export default function DashboardPage() {
       'xlsx',
       async (onProgress, signal) => {
         const { data, error } = await getFullDatabaseExport((progress) => {
-          onProgress({ fetched: progress.fetched, total: progress.total, percentage: progress.percentage, phase: progress.phase, estimatedTimeRemaining: progress.estimatedTimeRemaining })
+          onProgress({
+            fetched: progress.fetched,
+            total: progress.total,
+            percentage: progress.percentage,
+            phase: progress.phase,
+            estimatedTimeRemaining: progress.estimatedTimeRemaining,
+          })
         }, signal)
 
         if (signal.aborted) throw new Error('Export cancelled')
@@ -67,32 +87,53 @@ export default function DashboardPage() {
 
         const maxWidth = 50
         const colWidths = Object.keys(formattedData[0] || {}).map(key => ({
-          wch: Math.min(maxWidth, Math.max(key.length, ...formattedData.slice(0, 100).map(row => String(row[key as keyof typeof row] || '').length)))
+          wch: Math.min(
+            maxWidth,
+            Math.max(
+              key.length,
+              ...formattedData.slice(0, 100).map(row => String(row[key as keyof typeof row] || '').length)
+            )
+          ),
         }))
         worksheet['!cols'] = colWidths
 
         onProgress({ fetched: data.length, total: data.length, percentage: 100, phase: 'done' })
-        XLSX.writeFile(workbook, `banca_dati_completa_${new Date().toISOString().split('T')[0]}.xlsx`, { bookType: 'xlsx' })
+        XLSX.writeFile(
+          workbook,
+          `banca_dati_completa_${new Date().toISOString().split('T')[0]}.xlsx`,
+          { bookType: 'xlsx' }
+        )
       }
     )
   }
-  const [totalArtisti, setTotalArtisti] = useState(0)
-  const [totalOpere, setTotalOpere] = useState(0)
-  const [artistiMetrics, setArtistiMetrics] = useState<Metric[]>([])
-  const [opereMetrics, setOpereMetrics] = useState<Metric[]>([])
-  const [artistiIncompleti, setArtistiIncompleti] = useState(0)
-  const [opereIncomplete, setOpereIncomplete] = useState(0)
-  const [healthLoading, setHealthLoading] = useState(true)
-  const [attivitaRecenti, setAttivitaRecenti] = useState<AttivitaItem[]>([])
-  const [statsAggiuntive, setStatsAggiuntive] = useState<StatsAggiuntive>({
-    individuazioni: 0,
-    partecipazioni: 0,
-    campagneRipartizione: 0,
-    ultimoDato: null,
-  })
 
   useEffect(() => {
     let cancelled = false
+
+    const applyHealth = (health: {
+      artistiIncompleti: number
+      opereIncomplete: number
+      artistiMetrics: Metric[]
+      opereMetrics: Metric[]
+    }) => {
+      setArtistiIncompleti(health.artistiIncompleti)
+      setOpereIncomplete(health.opereIncomplete)
+      setArtistiMetrics(health.artistiMetrics)
+      setOpereMetrics(health.opereMetrics)
+      setHealthLoading(false)
+
+      const criticalGaps = countMetricsByImpact(health.opereMetrics, ['critical']).maxMissing
+      void loadAttentionQueue(createSupabaseAttentionDeps(supabase as any), {
+        criticalOpereGaps: criticalGaps,
+      })
+        .then(items => {
+          if (!cancelled) setAttentionItems(items)
+        })
+        .catch(error => console.error('Error fetching attention queue:', error))
+        .finally(() => {
+          if (!cancelled) setAttentionLoading(false)
+        })
+    }
 
     const fetchStats = async () => {
       const deps = createSupabaseDashboardDataDeps(supabase as any)
@@ -102,6 +143,15 @@ export default function DashboardPage() {
         lastDay: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0],
       }
 
+      void loadMatchingTrend(createSupabaseMatchingTrendDeps(supabase as any), { days: 30, now })
+        .then(points => {
+          if (!cancelled) setTrendPoints(points)
+        })
+        .catch(error => console.error('Error fetching matching trend:', error))
+        .finally(() => {
+          if (!cancelled) setTrendLoading(false)
+        })
+
       try {
         try {
           const snapshot = await loadDashboardRpcData(supabase as any, range)
@@ -110,14 +160,10 @@ export default function DashboardPage() {
           setStats(snapshot.primary.stats)
           setTotalArtisti(snapshot.primary.totalArtisti)
           setTotalOpere(snapshot.primary.totalOpere)
+          setIndividuazioniTotal(snapshot.primary.individuazioniTotal)
           setAttivitaRecenti(snapshot.secondary.attivitaRecenti)
-          setStatsAggiuntive(snapshot.secondary.statsAggiuntive)
-          setArtistiIncompleti(snapshot.health.artistiIncompleti)
-          setOpereIncomplete(snapshot.health.opereIncomplete)
-          setArtistiMetrics(snapshot.health.artistiMetrics)
-          setOpereMetrics(snapshot.health.opereMetrics)
           setLoading(false)
-          setHealthLoading(false)
+          applyHealth(snapshot.health)
           return
         } catch (rpcError) {
           console.warn('Dashboard metrics RPC unavailable, falling back to client loaders:', rpcError)
@@ -129,33 +175,35 @@ export default function DashboardPage() {
         setStats(primary.stats)
         setTotalArtisti(primary.totalArtisti)
         setTotalOpere(primary.totalOpere)
+        setIndividuazioniTotal(primary.individuazioniTotal)
         setLoading(false)
 
         void loadDashboardSecondaryData(deps, primary)
           .then(secondary => {
             if (cancelled) return
             setAttivitaRecenti(secondary.attivitaRecenti)
-            setStatsAggiuntive(secondary.statsAggiuntive)
           })
           .catch(error => console.error('Error fetching secondary dashboard stats:', error))
 
         void loadDashboardHealthData(deps, primary)
           .then(health => {
             if (cancelled) return
-            setArtistiIncompleti(health.artistiIncompleti)
-            setOpereIncomplete(health.opereIncomplete)
-            setArtistiMetrics(health.artistiMetrics)
-            setOpereMetrics(health.opereMetrics)
+            applyHealth(health)
           })
-          .catch(error => console.error('Error fetching dashboard health:', error))
-          .finally(() => {
-            if (!cancelled) setHealthLoading(false)
+          .catch(error => {
+            console.error('Error fetching dashboard health:', error)
+            if (!cancelled) {
+              setHealthLoading(false)
+              setAttentionLoading(false)
+            }
           })
       } catch (error) {
         console.error('Error fetching stats:', error)
         if (!cancelled) {
           setLoading(false)
           setHealthLoading(false)
+          setAttentionLoading(false)
+          setTrendLoading(false)
         }
       }
     }
@@ -167,247 +215,31 @@ export default function DashboardPage() {
     }
   }, [])
 
-  const attivitaConfig: Record<AttivitaItem['tipo'], {
-    Icon: React.ElementType
-    bg: string
-    iconBg: string
-    iconColor: string
-  }> = {
-    artista: { Icon: Users, bg: 'bg-blue-50', iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
-    opera: { Icon: FileText, bg: 'bg-purple-50', iconBg: 'bg-purple-100', iconColor: 'text-purple-600' },
-    campagna_individuazione: { Icon: Activity, bg: 'bg-green-50', iconBg: 'bg-green-100', iconColor: 'text-green-600' },
-    campagna_programmazione: { Icon: Calendar, bg: 'bg-orange-50', iconBg: 'bg-orange-100', iconColor: 'text-orange-600' },
-  }
-
-  const statCards = [
-    {
-      title: 'Artisti Attivi',
-      value: (stats?.artisti_attivi || 0).toLocaleString('it-IT'),
-      icon: Users,
-      description: 'Artisti con stato attivo',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50',
-    },
-    {
-      title: 'Opere Catalogate',
-      value: ((stats?.opere_totali || 0) + (stats?.episodi_totali || 0)).toLocaleString('it-IT'),
-      icon: FileText,
-      description: `${(stats?.opere_film || 0).toLocaleString('it-IT')} film · ${(stats?.opere_serie_tv || 0).toLocaleString('it-IT')} serie · ${(stats?.episodi_totali || 0).toLocaleString('it-IT')} episodi`,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50',
-    },
-    {
-      title: 'Programmazioni Mese',
-      value: (stats?.programmazioni_mese || 0).toLocaleString('it-IT'),
-      icon: Calendar,
-      description: `Trasmissioni ${new Date().toLocaleString('it-IT', { month: 'long', year: 'numeric' })}`,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50',
-    },
-    {
-      title: 'Report Attivi',
-      value: (stats?.campagne_attive || 0).toLocaleString('it-IT'),
-      icon: Search,
-      description: 'Campagne individuazione in corso',
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-50',
-    },
-    {
-      title: 'Importo Distribuito',
-      value: `€${(stats?.importo_distribuito || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      icon: Euro,
-      description: 'Totale campagne con stato distribuita',
-      color: 'text-emerald-600',
-      bgColor: 'bg-emerald-50',
-    },
-    {
-      title: 'Tasso Matching',
-      value: indTotaleZero(stats) ? '—' : `${stats?.tasso_matching || 0}%`,
-      icon: TrendingUp,
-      description: 'Individuazioni non respinte su totale',
-      color: 'text-indigo-600',
-      bgColor: 'bg-indigo-50',
-    },
-  ]
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-gray-600">Panoramica generale del sistema RASI</p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-16 bg-gray-200 rounded"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const tassoMatching =
+    individuazioniTotal > 0 && stats ? stats.tasso_matching : null
 
   return (
     <div className="space-y-6 lg:space-y-8 p-4 lg:p-0">
-      {/* Header */}
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-gray-600 text-sm lg:text-base">Panoramica generale del sistema RASI</p>
-          <div className="mt-2 flex gap-2 lg:hidden">
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Sistema Operativo</Badge>
-          </div>
-        </div>
-        <div className="hidden lg:flex gap-2">
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Sistema Operativo</Badge>
-        </div>
+      <div>
+        <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Panoramica operativa</h1>
+        <p className="text-gray-600 text-sm lg:text-base capitalize">{periodoLabel}</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
-        {statCards.map((stat, index) => (
-          <Card key={index} className="hover:shadow-md transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-xl lg:text-2xl font-bold mt-1">{stat.value}</p>
-                  <p className="text-xs text-gray-500 mt-1">{stat.description}</p>
-                </div>
-                <div className={`p-3 rounded-lg ${stat.bgColor}`}>
-                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <DashboardKpiStrip
+        loading={loading}
+        campagneAttive={stats?.campagne_attive || 0}
+        tassoMatching={tassoMatching}
+        programmazioniMese={stats?.programmazioni_mese || 0}
+        importoDistribuito={stats?.importo_distribuito || 0}
+      />
 
-      {/* Attività Recenti + Statistiche Sistema */}
+      <DashboardAttentionQueue items={attentionItems} loading={attentionLoading || healthLoading} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-
-        {/* Attività Recenti — feed reale */}
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Attività Recenti</CardTitle>
-            <CardDescription className="text-sm">Ultime operazioni nel sistema</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 lg:p-6">
-            {attivitaRecenti.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">Nessuna attività recente</p>
-            ) : (
-              <div className="space-y-3">
-                {attivitaRecenti.map((item, i) => {
-                  const { Icon, bg, iconBg, iconColor } = attivitaConfig[item.tipo]
-                  return (
-                    <div key={i} className={`flex items-center gap-3 p-3 ${bg} rounded-lg`}>
-                      <div className={`${iconBg} p-2 rounded-full shrink-0`}>
-                        <Icon className={`h-4 w-4 ${iconColor}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{item.label}</p>
-                        <p className="text-xs text-gray-500 truncate">
-                          {item.dettaglio} · {tempoRelativo(item.timestamp)}
-                        </p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Statistiche Sistema — metriche DB reali */}
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Statistiche Sistema</CardTitle>
-            <CardDescription className="text-sm">Metriche database in tempo reale</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 lg:p-6">
-            <div className="space-y-3 lg:space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Individuazioni totali</span>
-                <span className="text-sm text-gray-700 font-mono font-semibold">
-                  {statsAggiuntive.individuazioni.toLocaleString('it-IT')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Partecipazioni registrate</span>
-                <span className="text-sm text-gray-700 font-mono font-semibold">
-                  {statsAggiuntive.partecipazioni.toLocaleString('it-IT')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Campagne ripartizione</span>
-                <span className="text-sm text-gray-700 font-mono font-semibold">
-                  {statsAggiuntive.campagneRipartizione.toLocaleString('it-IT')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Record totali DB</span>
-                <span className="text-sm text-gray-700 font-mono font-semibold">
-                  {(
-                    (stats?.artisti_attivi || 0) +
-                    (stats?.opere_totali || 0) +
-                    (stats?.episodi_totali || 0) +
-                    statsAggiuntive.individuazioni +
-                    statsAggiuntive.partecipazioni
-                  ).toLocaleString('it-IT')}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Ultimo dato caricato</span>
-                <span className="text-sm text-gray-500">
-                  {statsAggiuntive.ultimoDato
-                    ? tempoRelativo(statsAggiuntive.ultimoDato)
-                    : '—'}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <DashboardMatchingTrend points={trendPoints} loading={trendLoading} />
+        <DashboardActivityFeed items={attivitaRecenti} loading={loading} />
       </div>
 
-      {/* Export Banca Dati */}
-      <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Database className="h-5 w-5" />
-                Esportazione Banca Dati
-              </CardTitle>
-              <CardDescription className="text-sm mt-1">
-                Export unificato XLSX: opera + episodio + artista + ruolo. Una riga per partecipazione.
-              </CardDescription>
-            </div>
-            <Badge variant="secondary">XLSX</Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={handleExportFull}
-            disabled={isExporting || loading}
-            className="w-full sm:w-auto"
-          >
-            {isExporting && exportState.campagnaId === 'full-database-export' ? (
-              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Esportazione in corso...</>
-            ) : (
-              <><Download className="h-4 w-4 mr-2" />Esporta Banca Dati Completa</>
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Data Health */}
       <DashboardDataHealthCard
         healthLoading={healthLoading}
         artistiIncompleti={artistiIncompleti}
@@ -417,10 +249,12 @@ export default function DashboardPage() {
         artistiMetrics={artistiMetrics}
         opereMetrics={opereMetrics}
       />
+
+      <DashboardExportFooter
+        onExport={handleExportFull}
+        isExporting={isExporting}
+        exportingThis={exportingThis}
+      />
     </div>
   )
-}
-
-function indTotaleZero(stats: DashboardStats | null): boolean {
-  return !stats || stats.tasso_matching === 0
 }

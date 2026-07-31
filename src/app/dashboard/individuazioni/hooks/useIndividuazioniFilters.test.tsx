@@ -2,6 +2,12 @@ import { renderHook, act } from '@testing-library/react'
 import { useIndividuazioniFilters } from './useIndividuazioniFilters'
 import type { CampagnaIndividuazione } from '@/features/individuazioni/services/individuazioni.service'
 
+jest.mock('next/navigation', () => ({
+  useSearchParams: jest.fn(() => new URLSearchParams()),
+}))
+
+import { useSearchParams } from 'next/navigation'
+
 const campagna = (overrides: Partial<CampagnaIndividuazione>): CampagnaIndividuazione => ({
   id: 'campagna-1',
   nome: 'Estate Rai',
@@ -15,6 +21,10 @@ const campagna = (overrides: Partial<CampagnaIndividuazione>): CampagnaIndividua
 })
 
 describe('useIndividuazioniFilters', () => {
+  beforeEach(() => {
+    ;(useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams())
+  })
+
   it('filters campagne by search, status, emittente and anno', () => {
     const campagne = [
       campagna({ id: 'rai-2026', nome: 'Estate Rai' }),
@@ -50,5 +60,12 @@ describe('useIndividuazioniFilters', () => {
     expect(result.current.statusFilter).toBe('all')
     expect(result.current.emittenteFilter).toBe('all')
     expect(result.current.annoFilter).toBe('all')
+  })
+
+  it('initializes status filter from ?stato= query param', () => {
+    ;(useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams('stato=in_corso'))
+
+    const { result } = renderHook(() => useIndividuazioniFilters([campagna({ stato: 'in_corso' })]))
+    expect(result.current.statusFilter).toBe('in_corso')
   })
 })

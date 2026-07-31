@@ -188,7 +188,16 @@ export const getRuoliTipologie = async () => {
   return { data, error }
 }
 
-export const getOpere = async (filters?: { search?: string; tipo?: string }) => {
+/** Same OR used by dashboard Data Health incomplete opere count */
+export const OPERE_INCOMPLETE_OR =
+  'titolo.is.null,titolo.eq.,tipo.is.null,anno_produzione.is.null,imdb_tconst.is.null,imdb_tconst.eq.,titolo_originale.is.null,titolo_originale.eq.'
+
+export const getOpere = async (filters?: {
+  search?: string
+  tipo?: string
+  /** When true, keep only opere missing matching-critical fields (Data Health). */
+  incomplete?: boolean
+}) => {
   let query = supabase
     .from('opere')
     .select('*')
@@ -203,6 +212,10 @@ export const getOpere = async (filters?: { search?: string; tipo?: string }) => 
 
   if (filters?.tipo && filters.tipo !== 'all') {
     query = query.eq('tipo', filters.tipo as 'film' | 'serie_tv' | 'animazione')
+  }
+
+  if (filters?.incomplete) {
+    query = query.or(OPERE_INCOMPLETE_OR)
   }
 
   const { data, error } = await query
