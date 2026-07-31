@@ -22,6 +22,26 @@ export interface IndividuazioneEpisodeAlertSummary {
   }>
 }
 
+export type IndividuazioneEpisodeAlertType =
+  | 'catalog_episode_not_censito'
+  | 'programmazione_episode_data_invalid'
+
+export interface IndividuazioneEpisodeAlert {
+  id: string
+  tipoAlert: IndividuazioneEpisodeAlertType
+  programmazioneId: string
+  operaId: string | null
+  campagneProgrammazioneId: string | null
+  numeroStagione: number | null
+  numeroEpisodio: number | null
+  titolo: string
+  titoloOriginale: string | null
+  titoloEpisodio: string | null
+  operaTitolo: string | null
+  dataTrasmissione: string | null
+  oraInizio: string | null
+}
+
 export interface CampagnaIndividuazione {
   id: string
   nome: string
@@ -536,7 +556,21 @@ export const getCampagnaIndividuazioneEpisodeAlertSummary = async (
   }
 }
 
-function normalizeEpisodeAlertSummary(payload: unknown): IndividuazioneEpisodeAlertSummary {
+export const getCampagnaIndividuazioneEpisodeAlerts = async (
+  campagnaId: string
+): Promise<{ data: IndividuazioneEpisodeAlert[]; error: unknown }> => {
+  const rpcClient = supabase as unknown as SupabaseRpcClient
+  const { data, error } = await rpcClient.rpc('get_individuazione_episode_alerts', {
+    p_campagna_id: campagnaId,
+  })
+
+  return {
+    data: normalizeEpisodeAlerts(data),
+    error,
+  }
+}
+
+export function normalizeEpisodeAlertSummary(payload: unknown): IndividuazioneEpisodeAlertSummary {
   const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
   const topOpere = Array.isArray(root.topOpere) ? root.topOpere : []
 
@@ -557,7 +591,31 @@ function normalizeEpisodeAlertSummary(payload: unknown): IndividuazioneEpisodeAl
   }
 }
 
-function normalizeEpisodeAlertType(value: unknown): 'catalog_episode_not_censito' | 'programmazione_episode_data_invalid' {
+export function normalizeEpisodeAlerts(payload: unknown): IndividuazioneEpisodeAlert[] {
+  const rows = Array.isArray(payload) ? payload : []
+  return rows.map(item => {
+    const record = item && typeof item === 'object' ? item as Record<string, unknown> : {}
+    return {
+      id: String(record.id || ''),
+      tipoAlert: normalizeEpisodeAlertType(record.tipoAlert ?? record.tipo_alert),
+      programmazioneId: String(record.programmazioneId ?? record.programmazione_id ?? ''),
+      operaId: toNullableString(record.operaId ?? record.opera_id),
+      campagneProgrammazioneId: toNullableString(
+        record.campagneProgrammazioneId ?? record.campagne_programmazione_id
+      ),
+      numeroStagione: toNullableNumber(record.numeroStagione ?? record.numero_stagione),
+      numeroEpisodio: toNullableNumber(record.numeroEpisodio ?? record.numero_episodio),
+      titolo: String(record.titolo || '-'),
+      titoloOriginale: toNullableString(record.titoloOriginale ?? record.titolo_originale),
+      titoloEpisodio: toNullableString(record.titoloEpisodio ?? record.titolo_episodio),
+      operaTitolo: toNullableString(record.operaTitolo ?? record.opera_titolo),
+      dataTrasmissione: toNullableString(record.dataTrasmissione ?? record.data_trasmissione),
+      oraInizio: toNullableString(record.oraInizio ?? record.ora_inizio),
+    }
+  }).filter(alert => alert.id.length > 0)
+}
+
+function normalizeEpisodeAlertType(value: unknown): IndividuazioneEpisodeAlertType {
   return value === 'catalog_episode_not_censito'
     ? 'catalog_episode_not_censito'
     : 'programmazione_episode_data_invalid'
@@ -566,6 +624,18 @@ function normalizeEpisodeAlertType(value: unknown): 'catalog_episode_not_censito
 function toNumber(value: unknown): number {
   const numeric = typeof value === 'number' ? value : Number(value ?? 0)
   return Number.isFinite(numeric) ? numeric : 0
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value == null || value === '') return null
+  const numeric = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function toNullableString(value: unknown): string | null {
+  if (value == null) return null
+  const text = String(value).trim()
+  return text.length > 0 ? text : null
 }
 
 export {
