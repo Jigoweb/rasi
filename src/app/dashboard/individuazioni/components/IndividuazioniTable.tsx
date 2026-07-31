@@ -1,5 +1,7 @@
+import { useMemo } from 'react'
 import {
   AlertCircle,
+  Download,
   Edit,
   Eye,
   Info,
@@ -8,9 +10,11 @@ import {
   RotateCw,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { EmptyState } from '@/shared/components/page-states'
 import { clickableRowClassName, handleClickableRowKeyDown } from '@/shared/lib/clickable-row'
 import {
@@ -29,6 +33,7 @@ import {
 } from '@/shared/components/ui/table'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { isProcessingStale } from '@/features/programmazioni/services/programmazioni.service'
+import { classifyIndividuazioniBulkSelection } from '@/features/individuazioni/services/individuazioni-bulk-actions.service'
 import type {
   CampagnaIndividuazione,
   IndividuazioneProcessingProgress,
@@ -50,6 +55,11 @@ interface IndividuazioniTableProps {
   onFetchProcessingProgress: (campagnaId: string) => void
   hasActiveFilters?: boolean
   onResetFilters?: () => void
+  selectedIds?: Set<string>
+  onSelectionChange?: (ids: Set<string>) => void
+  onBulkExport?: (campagne: CampagnaIndividuazione[]) => void
+  onBulkDelete?: (campagne: CampagnaIndividuazione[]) => void
+  isBulkExporting?: boolean
 }
 
 export default function IndividuazioniTable({
@@ -67,14 +77,108 @@ export default function IndividuazioniTable({
   onFetchProcessingProgress,
   hasActiveFilters = false,
   onResetFilters,
+  selectedIds,
+  onSelectionChange,
+  onBulkExport,
+  onBulkDelete,
+  isBulkExporting = false,
 }: IndividuazioniTableProps) {
+  const selectionEnabled = !!selectedIds && !!onSelectionChange
+  const visibleIds = useMemo(() => campagne.map(campagna => campagna.id), [campagne])
+  const selectedVisibleCount = useMemo(
+    () => visibleIds.filter(id => selectedIds?.has(id)).length,
+    [selectedIds, visibleIds]
+  )
+  const allVisibleSelected = selectionEnabled && visibleIds.length > 0 && selectedVisibleCount === visibleIds.length
+  const tableColSpan = selectionEnabled ? 10 : 9
+
+  const bulkActions = useMemo(() => {
+    if (!selectionEnabled || !selectedIds) return null
+    return classifyIndividuazioniBulkSelection(campagne, selectedIds, canStartProcess)
+  }, [selectionEnabled, selectedIds, campagne, canStartProcess])
+
+  function toggleRowSelection(id: string, checked: boolean) {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (checked) next.add(id)
+    else next.delete(id)
+    onSelectionChange(next)
+  }
+
+  function toggleSelectAllVisible(checked: boolean) {
+    if (!selectedIds || !onSelectionChange) return
+    const next = new Set(selectedIds)
+    if (checked) visibleIds.forEach(id => next.add(id))
+    else visibleIds.forEach(id => next.delete(id))
+    onSelectionChange(next)
+  }
+
+  function clearSelection() {
+    onSelectionChange?.(new Set())
+  }
+
   return (
     <Card>
       <CardContent className="p-0">
+        {selectionEnabled && selectedIds && selectedIds.size > 0 && bulkActions && (
+          <div className="border-b bg-muted/30 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-medium">
+              {selectedIds.size} selezionat{selectedIds.size === 1 ? 'a' : 'e'}
+              {selectedVisibleCount < selectedIds.size && (
+                <span className="text-muted-foreground font-normal">
+                  {' '}({selectedVisibleCount} visibili)
+                </span>
+              )}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={bulkActions.exportable.length === 0 || isBulkExporting}
+                onClick={() => onBulkExport?.(bulkActions.exportable)}
+                className="gap-1.5"
+              >
+                {isBulkExporting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                Export XLSX
+                {bulkActions.exportable.length > 0 ? ` (${bulkActions.exportable.length})` : ''}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={bulkActions.deletable.length === 0 || isBulkExporting}
+                onClick={() => onBulkDelete?.(bulkActions.deletable)}
+                className="gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Elimina
+                {bulkActions.deletable.length > 0 ? ` (${bulkActions.deletable.length})` : ''}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={clearSelection} disabled={isBulkExporting}>
+                <X className="h-4 w-4 mr-1" />
+                Deseleziona
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="hidden lg:block">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
+              {selectionEnabled && (
+                <TableHead className="py-4 w-10 px-4">
+                  <Checkbox
+                    checked={allVisibleSelected}
+                    onCheckedChange={checked => toggleSelectAllVisible(checked === true)}
+                    aria-label="Seleziona tutte le individuazioni visibili"
+                    disabled={visibleIds.length === 0 || isBulkExporting}
+                  />
+                </TableHead>
+              )}
               <TableHead className="py-4 px-6">Nome Campagna</TableHead>
               <TableHead className="py-4">Emittente</TableHead>
               <TableHead className="py-4">Anno</TableHead>
@@ -89,13 +193,13 @@ export default function IndividuazioniTable({
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center">
+                <TableCell colSpan={tableColSpan} className="h-32 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : campagne.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={tableColSpan} className="h-32 text-center text-muted-foreground">
                   {hasActiveFilters ? 'Nessuna campagna corrisponde ai filtri attuali.' : 'Non ci sono campagne di individuazione disponibili.'}
                   {hasActiveFilters && onResetFilters && (
                     <div className="mt-3">
@@ -110,6 +214,7 @@ export default function IndividuazioniTable({
               campagne.map(campagna => {
                 const progress = processingProgressMap[campagna.id]
                 const showResume = canShowResume(campagna, progress)
+                const isSelected = selectedIds?.has(campagna.id) ?? false
 
                 return (
                   <TableRow
@@ -118,9 +223,20 @@ export default function IndividuazioniTable({
                     role="link"
                     tabIndex={0}
                     aria-label={`Apri dettaglio individuazione ${campagna.nome}`}
+                    data-state={isSelected ? 'selected' : undefined}
                     onClick={() => onOpenDetail(campagna.id)}
                     onKeyDown={event => handleClickableRowKeyDown(event, () => onOpenDetail(campagna.id))}
                   >
+                    {selectionEnabled && (
+                      <TableCell className="py-4 px-4" onClick={event => event.stopPropagation()}>
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={checked => toggleRowSelection(campagna.id, checked === true)}
+                          aria-label={`Seleziona ${campagna.nome}`}
+                          disabled={isBulkExporting}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="py-4 px-6">
                       <div className="flex items-center gap-2">
                         <Sparkles className="h-4 w-4 text-muted-foreground" />
@@ -232,6 +348,7 @@ export default function IndividuazioniTable({
             campagne.map(campagna => {
               const progress = processingProgressMap[campagna.id]
               const showResume = canShowResume(campagna, progress)
+              const isSelected = selectedIds?.has(campagna.id) ?? false
 
               return (
                 <Card
@@ -240,19 +357,32 @@ export default function IndividuazioniTable({
                   tabIndex={0}
                   aria-label={`Apri dettaglio individuazione ${campagna.nome}`}
                   className={`p-4 ${clickableRowClassName}`}
+                  data-state={isSelected ? 'selected' : undefined}
                   onClick={() => onOpenDetail(campagna.id)}
                   onKeyDown={event => handleClickableRowKeyDown(event, () => onOpenDetail(campagna.id))}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 space-y-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-muted-foreground" />
-                          <h2 className="font-medium text-foreground">{campagna.nome}</h2>
+                      <div className="flex items-start gap-3">
+                        {selectionEnabled && (
+                          <div className="pt-0.5" onClick={event => event.stopPropagation()}>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={checked => toggleRowSelection(campagna.id, checked === true)}
+                              aria-label={`Seleziona ${campagna.nome}`}
+                              disabled={isBulkExporting}
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-muted-foreground" />
+                            <h2 className="font-medium text-foreground">{campagna.nome}</h2>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {campagna.emittenti?.nome || 'Emittente non indicata'} • {campagna.anno || '-'}
+                          </p>
                         </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {campagna.emittenti?.nome || 'Emittente non indicata'} • {campagna.anno || '-'}
-                        </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <IndividuazioneStatusBadge stato={campagna.stato} progress={progress} />
