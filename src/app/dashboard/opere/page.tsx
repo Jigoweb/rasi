@@ -582,8 +582,8 @@ export default function OperePage() {
             <p className="text-gray-600">Gestione del catalogo opere</p>
           </div>
         </div>
-        <Card>
-          <CardContent className="p-6">
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">
             <div className="animate-pulse space-y-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-12 bg-gray-200 rounded"></div>
@@ -626,8 +626,8 @@ export default function OperePage() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent>
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <SearchInput

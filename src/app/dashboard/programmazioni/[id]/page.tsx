@@ -413,8 +413,8 @@ export default function CampagnaDettaglioPage() {
             <p className="text-gray-600">Caricamento dati</p>
           </div>
         </div>
-        <Card>
-          <CardContent className="p-6">
+        <Card className="gap-4 py-4">
+          <CardContent className="px-4">
             <div className="animate-pulse space-y-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <div key={i} className="h-12 bg-gray-200 rounded"></div>
@@ -452,8 +452,8 @@ export default function CampagnaDettaglioPage() {
         </div>
       </div>
 
-      <Card>
-        <CardContent>
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <div className="text-sm font-medium text-gray-500">Nome Campagna</div>
@@ -528,8 +528,8 @@ export default function CampagnaDettaglioPage() {
         loadingHealth={loadingHealth}
       />
 
-      <Card>
-        <CardContent>
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <div className="relative">
@@ -638,8 +638,8 @@ function DataCoverageSummary({
   const summary = buildDataCoverageSummary(health)
 
   return (
-    <Card>
-      <CardContent>
+    <Card className="gap-4 py-4">
+      <CardContent className="px-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex items-center gap-2">

@@ -64,8 +64,8 @@ export default function EpisodeAlertPanel({
   const topOpere = summary.topOpere.slice(0, 3)
 
   return (
-    <Card className="border-amber-200 bg-amber-50/60">
-      <CardContent className="p-5 space-y-4">
+    <Card className="gap-4 border-amber-200 bg-amber-50/60 py-4">
+      <CardContent className="space-y-3 px-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
             <div className="text-xs font-semibold uppercase tracking-[0.08em] text-amber-900">

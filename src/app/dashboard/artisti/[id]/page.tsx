@@ -450,15 +450,15 @@ export default function ArtistaProfiloPage() {
       </div>
 
       {/* Dettagli Artista */}
-      <Card>
+      <Card className="gap-4 py-4">
         <CardHeader>
           <CardTitle className="flex items-center">
             <User className="mr-2 h-5 w-5" />
             Informazioni Artista
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-4 lg:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
+        <CardContent className="px-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground">
                 <Hash className="mr-2 h-4 w-4" />

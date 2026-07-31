@@ -156,8 +156,8 @@ export default function RipartizioniPage() {
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-4">
+      <Card className="gap-4 py-4">
+        <CardContent className="px-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <SearchInput
