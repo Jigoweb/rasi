@@ -141,7 +141,10 @@ export default function BulkImportProgrammazioniDialog({
   const [isDragging, setIsDragging] = useState(false)
   const [dropError, setDropError] = useState<string | null>(null)
   const [showWarningConfirm, setShowWarningConfirm] = useState(false)
+  const [isActionPending, setIsActionPending] = useState(false)
+  const [retryingRowId, setRetryingRowId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const isRunning = step === 'running'
 
   const availableEmittenti = useMemo(
     () => emittenti.filter(e => e.mappingStatus == null || e.mappingStatus === 'configured'),
@@ -217,37 +220,70 @@ export default function BulkImportProgrammazioniDialog({
   }
 
   const handleCancel = useCallback(() => {
+    if (isRunning || isActionPending) return
     reset()
     setEmittenteValue('')
     setAnnoValue('')
     setDropError(null)
+    setIsActionPending(false)
+    setRetryingRowId(null)
     onOpenChange(false)
-  }, [reset, onOpenChange])
+  }, [reset, onOpenChange, isRunning, isActionPending])
 
   const canContinueToReview = Boolean(emittenteValue) && annoValue.trim() !== '' && rows.length > 0
 
-  const handleContinue = useCallback(() => {
-    void previewAll()
-  }, [previewAll])
+  const handleContinue = useCallback(async () => {
+    if (isActionPending) return
+    setIsActionPending(true)
+    try {
+      await previewAll()
+    } finally {
+      setIsActionPending(false)
+    }
+  }, [previewAll, isActionPending])
 
-  const handleAvviaClick = useCallback(() => {
+  const handleAvviaClick = useCallback(async () => {
+    if (isActionPending) return
     if (hasSafeWarnings && !confirmedSafeWarnings) {
       setShowWarningConfirm(true)
       return
     }
-    void startImport()
-  }, [hasSafeWarnings, confirmedSafeWarnings, startImport])
+    setIsActionPending(true)
+    try {
+      await startImport()
+    } finally {
+      setIsActionPending(false)
+    }
+  }, [hasSafeWarnings, confirmedSafeWarnings, startImport, isActionPending])
 
-  const handleConfirmWarnings = useCallback(() => {
+  const handleConfirmWarnings = useCallback(async () => {
+    if (isActionPending) return
     setShowWarningConfirm(false)
-    void confirmSafeWarningsAndStart()
-  }, [confirmSafeWarningsAndStart])
+    setIsActionPending(true)
+    try {
+      await confirmSafeWarningsAndStart()
+    } finally {
+      setIsActionPending(false)
+    }
+  }, [confirmSafeWarningsAndStart, isActionPending])
+
+  const handleRetryRow = useCallback(async (id: string) => {
+    if (retryingRowId) return
+    setRetryingRowId(id)
+    try {
+      await retryRow(id)
+    } finally {
+      setRetryingRowId(null)
+    }
+  }, [retryRow, retryingRowId])
 
   const handleDone = useCallback(() => {
     reset()
     setEmittenteValue('')
     setAnnoValue('')
     setDropError(null)
+    setIsActionPending(false)
+    setRetryingRowId(null)
     onImportComplete?.()
     onOpenChange(false)
   }, [reset, onImportComplete, onOpenChange])
@@ -263,7 +299,19 @@ export default function BulkImportProgrammazioniDialog({
           if (!next) handleCancel()
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-2xl max-h-[85vh] overflow-y-auto"
+          showCloseButton={!isRunning}
+          onEscapeKeyDown={(event) => {
+            if (isRunning || isActionPending) event.preventDefault()
+          }}
+          onPointerDownOutside={(event) => {
+            if (isRunning || isActionPending) event.preventDefault()
+          }}
+          onInteractOutside={(event) => {
+            if (isRunning || isActionPending) event.preventDefault()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{STEP_TITLES[step]}</DialogTitle>
             <DialogDescription>{STEP_DESCRIPTIONS[step]}</DialogDescription>
@@ -359,8 +407,10 @@ export default function BulkImportProgrammazioniDialog({
               )}
 
               <DialogFooter>
-                <Button variant="outline" onClick={handleCancel}>Annulla</Button>
-                <Button disabled={!canContinueToReview} onClick={handleContinue}>Continua</Button>
+                <Button variant="outline" disabled={isActionPending} onClick={handleCancel}>Annulla</Button>
+                <Button disabled={!canContinueToReview || isActionPending} onClick={() => void handleContinue()}>
+                  {isActionPending ? 'Verifica…' : 'Continua'}
+                </Button>
               </DialogFooter>
             </div>
           )}
@@ -407,8 +457,10 @@ export default function BulkImportProgrammazioniDialog({
               </p>
 
               <DialogFooter>
-                <Button variant="outline" onClick={handleCancel}>Annulla</Button>
-                <Button disabled={!canStart} onClick={handleAvviaClick}>Avvia import</Button>
+                <Button variant="outline" disabled={isActionPending} onClick={handleCancel}>Annulla</Button>
+                <Button disabled={!canStart || isActionPending} onClick={() => void handleAvviaClick()}>
+                  {isActionPending ? 'Avvio…' : 'Avvia import'}
+                </Button>
               </DialogFooter>
             </div>
           )}
@@ -454,10 +506,11 @@ export default function BulkImportProgrammazioniDialog({
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => retryRow(row.id)}
+                              disabled={retryingRowId !== null}
+                              onClick={() => void handleRetryRow(row.id)}
                             >
                               <RotateCcw className="mr-1 h-3 w-3" />
-                              Riprova
+                              {retryingRowId === row.id ? 'Riprovo…' : 'Riprova'}
                             </Button>
                           )}
                         </TableCell>
@@ -500,8 +553,10 @@ export default function BulkImportProgrammazioniDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowWarningConfirm(false)}>Annulla</Button>
-            <Button onClick={handleConfirmWarnings}>Procedi su tutti i warning safe</Button>
+            <Button variant="outline" disabled={isActionPending} onClick={() => setShowWarningConfirm(false)}>Annulla</Button>
+            <Button disabled={isActionPending} onClick={() => void handleConfirmWarnings()}>
+              {isActionPending ? 'Avvio…' : 'Procedi su tutti i warning safe'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

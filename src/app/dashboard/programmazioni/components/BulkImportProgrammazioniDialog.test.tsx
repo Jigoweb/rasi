@@ -160,8 +160,8 @@ describe('BulkImportProgrammazioniDialog', () => {
     expect(screen.getByText(/Formato non supportato/i)).toBeInTheDocument()
   })
 
-  it('shows retry button for failed rows in the running step', () => {
-    const retryRow = jest.fn()
+  it('shows retry button for failed rows in the running step', async () => {
+    const retryRow = jest.fn().mockResolvedValue(undefined)
     mockUseBulkImport.mockReturnValue(baseHookState({
       step: 'running',
       rows: [
@@ -179,6 +179,27 @@ describe('BulkImportProgrammazioniDialog', () => {
     const retryButton = screen.getByRole('button', { name: /Riprova/i })
     fireEvent.click(retryButton)
     expect(retryRow).toHaveBeenCalledWith('r2')
+    await screen.findByRole('button', { name: /Riprova/i })
+  })
+
+  it('hides dismiss controls while import is running', () => {
+    const onOpenChange = jest.fn()
+    const reset = jest.fn()
+    mockUseBulkImport.mockReturnValue(baseHookState({
+      step: 'running',
+      reset,
+      rows: [makeRow({ id: 'r1', runStatus: 'uploading' })],
+      summary: { total: 1, ok: 1, warningSafe: 0, error: 0, completed: 0, failed: 0 },
+    }))
+
+    render(
+      <BulkImportProgrammazioniDialog open onOpenChange={onOpenChange} emittenti={emittenti} />
+    )
+
+    expect(screen.queryByRole('button', { name: /^Close$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Annulla/i })).not.toBeInTheDocument()
+    expect(reset).not.toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalled()
   })
 
   it('shows the summary counts in the done step', () => {
