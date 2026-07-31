@@ -59,4 +59,36 @@ describe('useIndividuazioniDelete', () => {
     await waitFor(() => expect(campagne).toEqual([]))
     expect(result.current.isDeleteDialogOpen).toBe(false)
   })
+
+  it('deletes multiple selected campaigns in bulk', async () => {
+    let campagne = [campagna(), campagna({ id: 'campagna-2', nome: 'Sky' })]
+    const updateCampagne = jest.fn(next => {
+      campagne = typeof next === 'function' ? next(campagne) : next
+    })
+    const onDeleted = jest.fn()
+    getDeleteCampagnaIndividuazioneInfo.mockResolvedValue({
+      data: {
+        individuazioni_count: 2,
+        campagne_programmazione_nome: 'Prog',
+      },
+      error: null,
+    })
+    deleteCampagnaIndividuazione.mockResolvedValue({ error: null })
+
+    const { result } = renderHook(() => useIndividuazioniDelete({ updateCampagne, onDeleted }))
+
+    await act(async () => {
+      await result.current.openBulkDeleteDialog(campagne)
+    })
+
+    expect(result.current.bulkDeleteItems).toHaveLength(2)
+
+    await act(async () => {
+      await result.current.confirmBulkDelete()
+    })
+
+    await waitFor(() => expect(campagne).toEqual([]))
+    expect(onDeleted).toHaveBeenCalledWith(['campagna-1', 'campagna-2'])
+    expect(result.current.isBulkDeleteDialogOpen).toBe(false)
+  })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { BarChart3, Calendar, CheckCircle, Filter, Loader2, Sparkles, Tv, Users, X } from 'lucide-react'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -10,12 +10,16 @@ import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
+import { useExportProcess } from '@/shared/contexts/export-process-context'
 import { PageErrorState, PageLoadingState } from '@/shared/components/page-states'
 import { SearchInput } from '@/shared/components/search-input'
+import { notifyError, notifySuccess } from '@/shared/lib/toast'
 import {
   updateCampagnaIndividuazioneMetadata,
   type CampagnaIndividuazione,
 } from '@/features/individuazioni/services/individuazioni.service'
+import { downloadCampagneIndividuazioneXlsxBatch } from '@/features/individuazioni/services/individuazioni-export.service'
+import BulkDeleteIndividuazioniDialog from './components/BulkDeleteIndividuazioniDialog'
 import DeleteIndividuazioneDialog from './components/DeleteIndividuazioneDialog'
 import IndividuazioniTable from './components/IndividuazioniTable'
 import { useIndividuazioniDelete } from './hooks/useIndividuazioniDelete'
@@ -27,7 +31,10 @@ export default function IndividuazioniPage() {
   const [campagnaToEdit, setCampagnaToEdit] = useState<CampagnaIndividuazione | null>(null)
   const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
   const [isSavingMetadata, setIsSavingMetadata] = useState(false)
+  const [selectedCampagnaIds, setSelectedCampagnaIds] = useState<Set<string>>(new Set())
+  const [isBulkExporting, setIsBulkExporting] = useState(false)
   const { resumeById, canStartProcess } = useIndividuazioneProcess()
+  const { startExport, state: exportState } = useExportProcess()
   const {
     campagne,
     setCampagne,
@@ -55,6 +62,16 @@ export default function IndividuazioniPage() {
     resetFilters,
     hasActiveFilters,
   } = useIndividuazioniFilters(campagne)
+
+  const removeSelectedCampagnaIds = useCallback((ids: string[]) => {
+    setSelectedCampagnaIds(prev => {
+      if (ids.length === 0) return prev
+      const next = new Set(prev)
+      ids.forEach(id => next.delete(id))
+      return next
+    })
+  }, [])
+
   const {
     isDeleteDialogOpen,
     campagnaToDelete,
@@ -65,7 +82,65 @@ export default function IndividuazioniPage() {
     openDeleteDialog,
     closeDeleteDialog,
     confirmDelete,
-  } = useIndividuazioniDelete({ updateCampagne: setCampagne })
+    isBulkDeleteDialogOpen,
+    bulkDeleteItems,
+    isLoadingBulkDeleteInfo,
+    isBulkDeleting,
+    bulkDeleteProgress,
+    openBulkDeleteDialog,
+    closeBulkDeleteDialog,
+    confirmBulkDelete,
+  } = useIndividuazioniDelete({
+    updateCampagne: setCampagne,
+    onDeleted: removeSelectedCampagnaIds,
+  })
+
+  const handleBulkExport = useCallback(async (selected: CampagnaIndividuazione[]) => {
+    if (selected.length === 0 || exportState.status === 'exporting' || isBulkExporting) return
+
+    setIsBulkExporting(true)
+    try {
+      await startExport(
+        selected.length === 1 ? selected[0].id : 'bulk-export',
+        selected.length === 1
+          ? selected[0].nome
+          : `Export ${selected.length} campagne`,
+        'xlsx',
+        async (onProgress, signal) => {
+          const result = await downloadCampagneIndividuazioneXlsxBatch(
+            selected,
+            progress => {
+              onProgress({
+                fetched: progress.fetched,
+                total: progress.total,
+                percentage: progress.percentage,
+                phase: progress.phase,
+                estimatedTimeRemaining: progress.estimatedTimeRemaining,
+              })
+            },
+            signal,
+          )
+
+          if (result.exported === 0) {
+            throw new Error('Nessun dato da esportare nelle campagne selezionate')
+          }
+
+          if (result.skippedEmpty > 0) {
+            notifySuccess(
+              `${result.exported} file XLSX scaricati`,
+              `${result.skippedEmpty} campagne senza dati saltate`
+            )
+          }
+        }
+      )
+    } catch (error) {
+      if (!(error instanceof Error && error.message === 'Export cancelled')) {
+        notifyError('Export non riuscito', error)
+      }
+    } finally {
+      setIsBulkExporting(false)
+    }
+  }, [exportState.status, isBulkExporting, startExport])
 
   function openEditDialog(campagna: CampagnaIndividuazione) {
     setCampagnaToEdit(campagna)
@@ -101,6 +176,7 @@ export default function IndividuazioniPage() {
       setCampagnaToEdit(null)
     } catch (error) {
       console.error('Errore aggiornamento individuazione:', error)
+      notifyError('Aggiornamento non riuscito', error)
     } finally {
       setIsSavingMetadata(false)
     }
@@ -286,6 +362,11 @@ export default function IndividuazioniPage() {
         onFetchProcessingProgress={fetchProcessingProgress}
         hasActiveFilters={hasActiveFilters}
         onResetFilters={resetFilters}
+        selectedIds={selectedCampagnaIds}
+        onSelectionChange={setSelectedCampagnaIds}
+        onBulkExport={handleBulkExport}
+        onBulkDelete={openBulkDeleteDialog}
+        isBulkExporting={isBulkExporting || exportState.status === 'exporting'}
       />
 
       <DeleteIndividuazioneDialog
@@ -297,6 +378,16 @@ export default function IndividuazioniPage() {
         deleteProgress={deleteProgress}
         onOpenChange={closeDeleteDialog}
         onConfirm={confirmDelete}
+      />
+
+      <BulkDeleteIndividuazioniDialog
+        open={isBulkDeleteDialogOpen}
+        items={bulkDeleteItems}
+        isLoading={isLoadingBulkDeleteInfo}
+        isDeleting={isBulkDeleting}
+        progress={bulkDeleteProgress}
+        onOpenChange={closeBulkDeleteDialog}
+        onConfirm={confirmBulkDelete}
       />
 
       <Dialog open={Boolean(campagnaToEdit)} onOpenChange={(open) => { if (!open) setCampagnaToEdit(null) }}>

@@ -512,6 +512,8 @@ function normalizeSingleRelation<T>(value: T | T[] | null | undefined): T | null
 export {
   formatIndividuazioniForExport,
   getIndividuazioniForExport,
+  downloadCampagnaIndividuazioneExport,
+  downloadCampagneIndividuazioneXlsxBatch,
 } from './individuazioni-export.service'
 
 // ============================================

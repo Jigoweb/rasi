@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx'
 import { supabase } from '@/shared/lib/supabase'
 
 export interface ExportProgress {
@@ -8,7 +9,119 @@ export interface ExportProgress {
   estimatedTimeRemaining?: number
 }
 
+export type IndividuazioneExportFormat = 'csv' | 'xlsx'
+
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+export function buildIndividuazioneExportFileName(campagnaNome: string | null | undefined, campagnaId: string): string {
+  const safeName = campagnaNome?.replace(/[^a-z0-9]/gi, '_') || campagnaId
+  return `individuazioni_${safeName}_${new Date().toISOString().split('T')[0]}`
+}
+
+export function getIndividuazioneExportColumnWidths(formattedData: Record<string, unknown>[]) {
+  return Object.keys(formattedData[0] || {}).map(key => ({
+    wch: Math.min(50, Math.max(key.length, ...formattedData.map(row => String(row[key] || '').length))),
+  }))
+}
+
+/**
+ * Scarica un singolo file CSV/XLSX per una campagna di individuazione.
+ */
+export async function downloadCampagnaIndividuazioneExport(
+  campagna: { id: string; nome?: string | null },
+  format: IndividuazioneExportFormat,
+  onProgress?: (progress: ExportProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const { data, error } = await getIndividuazioniForExport(campagna.id, onProgress, signal)
+
+  if (signal?.aborted) throw new Error('Export cancelled')
+  if (error) throw error
+  if (!data || data.length === 0) {
+    throw new Error(`Nessun dato da esportare per "${campagna.nome || campagna.id}"`)
+  }
+
+  onProgress?.({ fetched: data.length, total: data.length, percentage: 90, phase: 'formatting' })
+  const formattedData = formatIndividuazioniForExport(data)
+  if (signal?.aborted) throw new Error('Export cancelled')
+
+  onProgress?.({ fetched: data.length, total: data.length, percentage: 95, phase: 'generating' })
+  const worksheet = XLSX.utils.json_to_sheet(formattedData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Individuazioni')
+  worksheet['!cols'] = getIndividuazioneExportColumnWidths(formattedData)
+
+  const fileName = buildIndividuazioneExportFileName(campagna.nome, campagna.id)
+  if (signal?.aborted) throw new Error('Export cancelled')
+  onProgress?.({ fetched: data.length, total: data.length, percentage: 100, phase: 'done' })
+
+  if (format === 'csv') {
+    XLSX.writeFile(workbook, `${fileName}.csv`, { bookType: 'csv' })
+  } else {
+    XLSX.writeFile(workbook, `${fileName}.xlsx`, { bookType: 'xlsx' })
+  }
+}
+
+/**
+ * Esporta più campagne come file XLSX distinti (uno per campagna), in sequenza.
+ */
+export async function downloadCampagneIndividuazioneXlsxBatch(
+  campagne: Array<{ id: string; nome?: string | null }>,
+  onProgress?: (progress: ExportProgress & { campagnaIndex: number; campagneTotal: number; campagnaNome: string }) => void,
+  signal?: AbortSignal,
+): Promise<{ exported: number; skippedEmpty: number }> {
+  let exported = 0
+  let skippedEmpty = 0
+  const total = campagne.length
+
+  for (let index = 0; index < campagne.length; index++) {
+    if (signal?.aborted) throw new Error('Export cancelled')
+    const campagna = campagne[index]
+    const basePct = Math.round((index / total) * 100)
+
+    try {
+      await downloadCampagnaIndividuazioneExport(
+        campagna,
+        'xlsx',
+        progress => {
+          const localShare = Math.round(progress.percentage / total)
+          onProgress?.({
+            ...progress,
+            percentage: Math.min(99, basePct + localShare),
+            campagnaIndex: index + 1,
+            campagneTotal: total,
+            campagnaNome: campagna.nome || campagna.id,
+          })
+        },
+        signal,
+      )
+      exported += 1
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith('Nessun dato da esportare')) {
+        skippedEmpty += 1
+        continue
+      }
+      throw error
+    }
+
+    // Piccola pausa tra download multipli così il browser non li blocca.
+    if (index < campagne.length - 1) {
+      await delay(350)
+    }
+  }
+
+  onProgress?.({
+    fetched: exported,
+    total: exported,
+    percentage: 100,
+    phase: 'done',
+    campagnaIndex: total,
+    campagneTotal: total,
+    campagnaNome: `${exported} file`,
+  })
+
+  return { exported, skippedEmpty }
+}
 
 export const getIndividuazioniForExport = async (
   campagnaId: string,
