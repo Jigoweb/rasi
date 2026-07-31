@@ -8,6 +8,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Users, FileText, Calendar, TrendingUp, Euro, Activity, Search, Download, Database, Loader2 } from 'lucide-react'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import { getFullDatabaseExport, formatFullDatabaseExport } from '@/features/report/services/report-export.service'
+import { DashboardDataHealthCard } from '@/features/dashboard/components/DashboardDataHealthCard'
 import {
   createSupabaseDashboardDataDeps,
   loadDashboardRpcData,
@@ -19,12 +20,6 @@ import {
   type Metric,
   type StatsAggiuntive,
 } from '@/features/dashboard/services/dashboard-data.service'
-
-function percentComplete(m: Metric): number {
-  if (!m.total) return 0
-  const v = Math.max(0, m.total - m.missing)
-  return Math.floor((v / m.total) * 100)
-}
 
 function tempoRelativo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime()
@@ -413,91 +408,15 @@ export default function DashboardPage() {
       </Card>
 
       {/* Data Health */}
-      <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-lg">Data Health</CardTitle>
-            {healthLoading && (
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                Caricamento
-              </Badge>
-            )}
-          </div>
-          <CardDescription className="text-sm">Completamento complessivo e campi mancanti</CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 lg:p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 border rounded-lg bg-white">
-              <p className="text-sm font-medium text-gray-600">Artisti incompleti</p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold">{artistiIncompleti.toLocaleString('it-IT')}</p>
-                <span className="text-xs text-gray-500">di {totalArtisti.toLocaleString('it-IT')}</span>
-              </div>
-            </div>
-            <div className="p-4 border rounded-lg bg-white">
-              <p className="text-sm font-medium text-gray-600">Opere incomplete</p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-2xl font-bold">{opereIncomplete.toLocaleString('it-IT')}</p>
-                <span className="text-xs text-gray-500">di {totalOpere.toLocaleString('it-IT')}</span>
-              </div>
-            </div>
-            <div className="p-4 border rounded-lg bg-white">
-              <p className="text-sm font-medium text-gray-600">Completamento complessivo</p>
-              <p className="text-2xl font-bold">
-                {(() => {
-                  const all = [...artistiMetrics, ...opereMetrics]
-                  const totals = all.reduce((acc, m) => acc + m.total, 0)
-                  const miss = all.reduce((acc, m) => acc + m.missing, 0)
-                  if (!totals) return '—'
-                  return `${Math.round(((totals - miss) / totals) * 100)}%`
-                })()}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="text-sm font-semibold mb-3">Artisti</h3>
-              <div className="space-y-3">
-                {artistiMetrics.map((m, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-700">{m.label}</span>
-                      <Badge variant="outline" className="mb-1">{percentComplete(m)}%</Badge>
-                    </div>
-                    <div className="h-2 bg-gray-200 rounded">
-                      <div className="h-2 bg-blue-600 rounded" style={{ width: `${percentComplete(m)}%` }} />
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Coperti: {Math.max(0, m.total - m.missing).toLocaleString('it-IT')} / {m.total.toLocaleString('it-IT')}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold mb-3">Opere</h3>
-              <div className="space-y-3">
-                {opereMetrics.map((m, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-700">{m.label}</span>
-                      <Badge variant="outline" className="mb-1">{percentComplete(m)}%</Badge>
-                    </div>
-                    <div className="h-2 bg-gray-200 rounded">
-                      <div className="h-2 bg-purple-600 rounded" style={{ width: `${percentComplete(m)}%` }} />
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500">
-                      Coperti: {Math.max(0, m.total - m.missing).toLocaleString('it-IT')} / {m.total.toLocaleString('it-IT')}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <DashboardDataHealthCard
+        healthLoading={healthLoading}
+        artistiIncompleti={artistiIncompleti}
+        opereIncomplete={opereIncomplete}
+        totalArtisti={totalArtisti}
+        totalOpere={totalOpere}
+        artistiMetrics={artistiMetrics}
+        opereMetrics={opereMetrics}
+      />
     </div>
   )
 }

@@ -1,4 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  annotateCatalogHealthMetric,
+  sortCatalogHealthMetrics,
+  type CatalogHealthImpact,
+} from './catalog-health-impact'
 
 export interface DashboardStats {
   artisti_attivi: number
@@ -26,7 +31,15 @@ export interface StatsAggiuntive {
   ultimoDato: string | null
 }
 
-export type Metric = { label: string; missing: number; total: number }
+export type Metric = {
+  key: string
+  label: string
+  missing: number
+  total: number
+  impact: CatalogHealthImpact
+  impactLabel: string
+  impactHint: string
+}
 
 export interface DashboardDateRange {
   firstDay: string
@@ -178,22 +191,22 @@ export async function loadDashboardHealthData(
   return {
     artistiIncompleti,
     opereIncomplete,
-    artistiMetrics: [
-      { label: 'Codice IPN', missing: artistsMissing[0] ?? 0, total: totals.totalArtisti },
-      { label: 'Nome', missing: artistsMissing[1] ?? 0, total: totals.totalArtisti },
-      { label: 'Cognome', missing: artistsMissing[2] ?? 0, total: totals.totalArtisti },
-      { label: 'Stato', missing: artistsMissing[3] ?? 0, total: totals.totalArtisti },
-      { label: 'IMDB nconst', missing: artistsMissing[4] ?? 0, total: totals.totalArtisti },
-      { label: 'Data nascita', missing: artistsMissing[5] ?? 0, total: totals.totalArtisti },
-      { label: 'Codice fiscale', missing: artistsMissing[6] ?? 0, total: totals.totalArtisti },
-    ],
-    opereMetrics: [
-      { label: 'Titolo', missing: opereMissing[0] ?? 0, total: totals.totalOpere },
-      { label: 'Tipo', missing: opereMissing[1] ?? 0, total: totals.totalOpere },
-      { label: 'Anno produzione', missing: opereMissing[2] ?? 0, total: totals.totalOpere },
-      { label: 'IMDB tconst', missing: opereMissing[3] ?? 0, total: totals.totalOpere },
-      { label: 'Titolo originale', missing: opereMissing[4] ?? 0, total: totals.totalOpere },
-    ],
+    artistiMetrics: sortCatalogHealthMetrics([
+      annotateCatalogHealthMetric({ label: 'Codice IPN', missing: artistsMissing[0] ?? 0, total: totals.totalArtisti }),
+      annotateCatalogHealthMetric({ label: 'Nome', missing: artistsMissing[1] ?? 0, total: totals.totalArtisti }),
+      annotateCatalogHealthMetric({ label: 'Cognome', missing: artistsMissing[2] ?? 0, total: totals.totalArtisti }),
+      annotateCatalogHealthMetric({ label: 'Stato', missing: artistsMissing[3] ?? 0, total: totals.totalArtisti }),
+      annotateCatalogHealthMetric({ label: 'IMDB nconst', missing: artistsMissing[4] ?? 0, total: totals.totalArtisti }),
+      annotateCatalogHealthMetric({ label: 'Data nascita', missing: artistsMissing[5] ?? 0, total: totals.totalArtisti }),
+      annotateCatalogHealthMetric({ label: 'Codice fiscale', missing: artistsMissing[6] ?? 0, total: totals.totalArtisti }),
+    ]),
+    opereMetrics: sortCatalogHealthMetrics([
+      annotateCatalogHealthMetric({ label: 'Titolo', missing: opereMissing[0] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'Tipo', missing: opereMissing[1] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'Anno produzione', missing: opereMissing[2] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'IMDB tconst', missing: opereMissing[3] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'Titolo originale', missing: opereMissing[4] ?? 0, total: totals.totalOpere }),
+    ]),
   }
 }
 
@@ -230,8 +243,26 @@ export function normalizeDashboardRpcPayload(payload: any): DashboardRpcData {
     health: {
       artistiIncompleti: payload.health?.artistiIncompleti ?? payload.health?.artisti_incompleti ?? 0,
       opereIncomplete: payload.health?.opereIncomplete ?? payload.health?.opere_incomplete ?? 0,
-      artistiMetrics: payload.health?.artistiMetrics ?? payload.health?.artisti_metrics ?? [],
-      opereMetrics: payload.health?.opereMetrics ?? payload.health?.opere_metrics ?? [],
+      artistiMetrics: sortCatalogHealthMetrics(
+        (payload.health?.artistiMetrics ?? payload.health?.artisti_metrics ?? []).map((metric: any) =>
+          annotateCatalogHealthMetric({
+            key: metric.key,
+            label: metric.label,
+            missing: metric.missing ?? 0,
+            total: metric.total ?? 0,
+          })
+        )
+      ),
+      opereMetrics: sortCatalogHealthMetrics(
+        (payload.health?.opereMetrics ?? payload.health?.opere_metrics ?? []).map((metric: any) =>
+          annotateCatalogHealthMetric({
+            key: metric.key,
+            label: metric.label,
+            missing: metric.missing ?? 0,
+            total: metric.total ?? 0,
+          })
+        )
+      ),
     },
   }
 }

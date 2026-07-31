@@ -72,8 +72,22 @@ describe('dashboard data service', () => {
 
     expect(health.artistiMetrics).toHaveLength(7)
     expect(health.opereMetrics).toHaveLength(5)
-    expect(health.artistiMetrics[0]).toEqual({ label: 'Codice IPN', missing: 1, total: 10 })
-    expect(health.opereMetrics[0]).toEqual({ label: 'Titolo', missing: 1, total: 20 })
+    expect(health.artistiMetrics.find(m => m.label === 'Codice IPN')).toMatchObject({
+      key: 'codice_ipn',
+      missing: 1,
+      total: 10,
+      impact: 'admin',
+      impactLabel: 'Anagrafica',
+    })
+    expect(health.opereMetrics.find(m => m.label === 'Titolo')).toMatchObject({
+      key: 'titolo',
+      missing: 1,
+      total: 20,
+      impact: 'critical',
+      impactLabel: 'Critico matching',
+    })
+    expect(health.opereMetrics[0].impact).toBe('critical')
+    expect(health.artistiMetrics.every(m => m.impact === 'identity' || m.impact === 'admin')).toBe(true)
   })
 
   it('normalizes the dashboard RPC payload into page data groups', () => {
@@ -111,6 +125,15 @@ describe('dashboard data service', () => {
 
     expect(payload.primary.individuazioniTotal).toBe(200)
     expect(payload.secondary.statsAggiuntive.partecipazioni).toBe(40)
-    expect(payload.health.artistiMetrics[0].label).toBe('Codice IPN')
+    expect(payload.health.artistiMetrics[0]).toMatchObject({
+      label: 'Codice IPN',
+      impact: 'admin',
+      impactLabel: 'Anagrafica',
+    })
+    expect(payload.health.opereMetrics[0]).toMatchObject({
+      label: 'Titolo',
+      impact: 'critical',
+      impactLabel: 'Critico matching',
+    })
   })
 })
