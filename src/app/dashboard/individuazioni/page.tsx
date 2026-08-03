@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BarChart3, Calendar, CheckCircle, Filter, Loader2, Sparkles, Tv, Users, X } from 'lucide-react'
+import { BarChart3, CheckCircle, Filter, Loader2, Sparkles, Users, X } from 'lucide-react'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
