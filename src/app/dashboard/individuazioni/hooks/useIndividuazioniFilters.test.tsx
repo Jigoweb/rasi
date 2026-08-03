@@ -68,4 +68,44 @@ describe('useIndividuazioniFilters', () => {
     const { result } = renderHook(() => useIndividuazioniFilters([campagna({ stato: 'in_corso' })]))
     expect(result.current.statusFilter).toBe('in_corso')
   })
+
+  it('separates interrotto from in_corso using progress map', () => {
+    const nowRunning = {
+      last_activity_at: new Date().toISOString(),
+      job_stato: 'running',
+    } as any
+    const stale = {
+      last_activity_at: '2026-06-23T10:00:00.000Z',
+      job_stato: 'error',
+    } as any
+
+    const campagne = [
+      campagna({ id: 'running', stato: 'in_corso' }),
+      campagna({ id: 'stopped', stato: 'in_corso' }),
+      campagna({ id: 'done', stato: 'completata' }),
+    ]
+    const progressMap = {
+      running: nowRunning,
+      stopped: stale,
+    }
+
+    const { result } = renderHook(() => useIndividuazioniFilters(campagne, progressMap))
+
+    act(() => {
+      result.current.setStatusFilter('in_corso')
+    })
+    expect(result.current.filteredCampagne.map(c => c.id)).toEqual(['running'])
+
+    act(() => {
+      result.current.setStatusFilter('interrotto')
+    })
+    expect(result.current.filteredCampagne.map(c => c.id)).toEqual(['stopped'])
+    expect(result.current.statusFilterLabel).toBe('Interrotto')
+  })
+
+  it('accepts ?stato=interrotto from URL', () => {
+    ;(useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams('stato=interrotto'))
+    const { result } = renderHook(() => useIndividuazioniFilters([]))
+    expect(result.current.statusFilter).toBe('interrotto')
+  })
 })

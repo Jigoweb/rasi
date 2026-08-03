@@ -1,14 +1,31 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import type { CampagnaIndividuazione } from '@/features/individuazioni/services/individuazioni.service'
+import type {
+  CampagnaIndividuazione,
+  IndividuazioneProcessingProgress,
+} from '@/features/individuazioni/services/individuazioni.service'
+import {
+  getIndividuazioneStatusFilterLabel,
+  matchesIndividuazioneStatusFilter,
+} from '@/features/individuazioni/utils/individuazione-display-status'
 
-const CAMPAGNA_STATI = new Set(['bozza', 'in_corso', 'completata', 'archiviata'])
+const CAMPAGNA_STATUS_FILTERS = new Set([
+  'bozza',
+  'in_corso',
+  'interrotto',
+  'da_verificare',
+  'completata',
+  'archiviata',
+])
 
-export function useIndividuazioniFilters(campagne: CampagnaIndividuazione[]) {
+export function useIndividuazioniFilters(
+  campagne: CampagnaIndividuazione[],
+  processingProgressMap: Record<string, IndividuazioneProcessingProgress | null> = {},
+) {
   const searchParams = useSearchParams()
   const statoFromUrl = searchParams?.get('stato')
   const initialStatus =
-    statoFromUrl && CAMPAGNA_STATI.has(statoFromUrl) ? statoFromUrl : 'all'
+    statoFromUrl && CAMPAGNA_STATUS_FILTERS.has(statoFromUrl) ? statoFromUrl : 'all'
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>(initialStatus)
@@ -27,7 +44,9 @@ export function useIndividuazioniFilters(campagne: CampagnaIndividuazione[]) {
     }
 
     if (statusFilter !== 'all') {
-      filtered = filtered.filter(c => c.stato === statusFilter)
+      filtered = filtered.filter(c =>
+        matchesIndividuazioneStatusFilter(c, statusFilter, processingProgressMap[c.id])
+      )
     }
 
     if (emittenteFilter !== 'all') {
@@ -39,7 +58,7 @@ export function useIndividuazioniFilters(campagne: CampagnaIndividuazione[]) {
     }
 
     return filtered
-  }, [annoFilter, campagne, emittenteFilter, searchTerm, statusFilter])
+  }, [annoFilter, campagne, emittenteFilter, processingProgressMap, searchTerm, statusFilter])
 
   const uniqueAnni = useMemo(() => {
     const anni = campagne.map(c => c.anno).filter((v): v is number => v !== null && v !== undefined)
@@ -73,6 +92,7 @@ export function useIndividuazioniFilters(campagne: CampagnaIndividuazione[]) {
     setSearchTerm,
     statusFilter,
     setStatusFilter,
+    statusFilterLabel: getIndividuazioneStatusFilterLabel(statusFilter),
     emittenteFilter,
     setEmittenteFilter,
     annoFilter,

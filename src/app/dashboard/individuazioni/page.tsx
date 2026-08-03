@@ -33,6 +33,7 @@ export default function IndividuazioniPage() {
   const [isSavingMetadata, setIsSavingMetadata] = useState(false)
   const [selectedCampagnaIds, setSelectedCampagnaIds] = useState<Set<string>>(new Set())
   const [isBulkExporting, setIsBulkExporting] = useState(false)
+  const [isBulkResuming, setIsBulkResuming] = useState(false)
   const { resumeById, canStartProcess } = useIndividuazioneProcess()
   const { startExport, state: exportState } = useExportProcess()
   const {
@@ -52,6 +53,7 @@ export default function IndividuazioniPage() {
     setSearchTerm,
     statusFilter,
     setStatusFilter,
+    statusFilterLabel,
     emittenteFilter,
     setEmittenteFilter,
     annoFilter,
@@ -61,7 +63,7 @@ export default function IndividuazioniPage() {
     uniqueEmittenti,
     resetFilters,
     hasActiveFilters,
-  } = useIndividuazioniFilters(campagne)
+  } = useIndividuazioniFilters(campagne, processingProgressMap)
 
   const removeSelectedCampagnaIds = useCallback((ids: string[]) => {
     setSelectedCampagnaIds(prev => {
@@ -141,6 +143,44 @@ export default function IndividuazioniPage() {
       setIsBulkExporting(false)
     }
   }, [exportState.status, isBulkExporting, startExport])
+
+  const handleBulkResume = useCallback((selected: CampagnaIndividuazione[]) => {
+    if (selected.length === 0 || isBulkResuming) return
+
+    setIsBulkResuming(true)
+    let started = 0
+    try {
+      // Avvio in parallelo (come bulk su Programmazioni): ogni job va sul worker
+      // e finisce nel toast floating, senza attendere il completamento in serie.
+      for (const campagna of selected) {
+        if (!canStartProcess(campagna.campagne_programmazione_id)) continue
+        started += 1
+        void resumeById(
+          campagna.campagne_programmazione_id,
+          campagna.campagne_programmazione?.nome ?? campagna.nome,
+          campagna.id,
+        )
+      }
+
+      if (started === 0) {
+        notifyError('Nessuna campagna riprendibile', 'Le selezionate sono già in elaborazione o non risultano interrotte.')
+        return
+      }
+
+      notifySuccess(
+        started === 1 ? 'Ripresa avviata' : `${started} riprese avviate`,
+        'Puoi seguire l\'avanzamento dai toast in basso a destra.'
+      )
+      setSelectedCampagnaIds(prev => {
+        const next = new Set(prev)
+        selected.forEach(c => next.delete(c.id))
+        return next
+      })
+      void loadCampagne()
+    } finally {
+      setIsBulkResuming(false)
+    }
+  }, [canStartProcess, isBulkResuming, loadCampagne, resumeById])
 
   function openEditDialog(campagna: CampagnaIndividuazione) {
     setCampagnaToEdit(campagna)
@@ -280,6 +320,7 @@ export default function IndividuazioniPage() {
                   <SelectItem value="all">Tutti gli stati</SelectItem>
                   <SelectItem value="completata">Completata</SelectItem>
                   <SelectItem value="in_corso">In corso</SelectItem>
+                  <SelectItem value="interrotto">Interrotto</SelectItem>
                   <SelectItem value="bozza">Bozza</SelectItem>
                   <SelectItem value="archiviata">Archiviata</SelectItem>
                 </SelectContent>
@@ -325,7 +366,7 @@ export default function IndividuazioniPage() {
             )}
             {statusFilter !== 'all' && (
               <Button variant="outline" size="sm" onClick={() => setStatusFilter('all')}>
-                <X className="h-3 w-3 mr-1" /> Stato: {statusFilter === 'in_corso' ? 'In corso' : statusFilter}
+                <X className="h-3 w-3 mr-1" /> Stato: {statusFilterLabel}
               </Button>
             )}
             {emittenteFilter !== 'all' && (
@@ -366,7 +407,9 @@ export default function IndividuazioniPage() {
         onSelectionChange={setSelectedCampagnaIds}
         onBulkExport={handleBulkExport}
         onBulkDelete={openBulkDeleteDialog}
+        onBulkResume={handleBulkResume}
         isBulkExporting={isBulkExporting || exportState.status === 'exporting'}
+        isBulkResuming={isBulkResuming}
       />
 
       <DeleteIndividuazioneDialog

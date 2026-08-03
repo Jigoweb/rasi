@@ -34,6 +34,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { isProcessingStale } from '@/features/programmazioni/services/programmazioni.service'
 import { classifyIndividuazioniBulkSelection } from '@/features/individuazioni/services/individuazioni-bulk-actions.service'
+import { canResumeCampagnaIndividuazione } from '@/features/individuazioni/utils/individuazione-display-status'
 import type {
   CampagnaIndividuazione,
   IndividuazioneProcessingProgress,
@@ -59,7 +60,9 @@ interface IndividuazioniTableProps {
   onSelectionChange?: (ids: Set<string>) => void
   onBulkExport?: (campagne: CampagnaIndividuazione[]) => void
   onBulkDelete?: (campagne: CampagnaIndividuazione[]) => void
+  onBulkResume?: (campagne: CampagnaIndividuazione[]) => void
   isBulkExporting?: boolean
+  isBulkResuming?: boolean
 }
 
 export default function IndividuazioniTable({
@@ -81,7 +84,9 @@ export default function IndividuazioniTable({
   onSelectionChange,
   onBulkExport,
   onBulkDelete,
+  onBulkResume,
   isBulkExporting = false,
+  isBulkResuming = false,
 }: IndividuazioniTableProps) {
   const selectionEnabled = !!selectedIds && !!onSelectionChange
   const visibleIds = useMemo(() => campagne.map(campagna => campagna.id), [campagne])
@@ -91,11 +96,18 @@ export default function IndividuazioniTable({
   )
   const allVisibleSelected = selectionEnabled && visibleIds.length > 0 && selectedVisibleCount === visibleIds.length
   const tableColSpan = selectionEnabled ? 10 : 9
+  const bulkBusy = isBulkExporting || isBulkResuming
 
   const bulkActions = useMemo(() => {
     if (!selectionEnabled || !selectedIds) return null
-    return classifyIndividuazioniBulkSelection(campagne, selectedIds, canStartProcess)
-  }, [selectionEnabled, selectedIds, campagne, canStartProcess])
+    return classifyIndividuazioniBulkSelection(
+      campagne,
+      selectedIds,
+      id => !canStartProcess(id),
+      processingProgressMap,
+      canStartProcess,
+    )
+  }, [selectionEnabled, selectedIds, campagne, canStartProcess, processingProgressMap])
 
   function toggleRowSelection(id: string, checked: boolean) {
     if (!selectedIds || !onSelectionChange) return
@@ -131,10 +143,27 @@ export default function IndividuazioniTable({
               )}
             </p>
             <div className="flex flex-wrap gap-2">
+              {bulkActions.resumable.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={bulkBusy}
+                  onClick={() => onBulkResume?.(bulkActions.resumable)}
+                  className="gap-1.5 border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
+                >
+                  {isBulkResuming ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RotateCw className="h-3.5 w-3.5" />
+                  )}
+                  Riprendi
+                  {` (${bulkActions.resumable.length})`}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
-                disabled={bulkActions.exportable.length === 0 || isBulkExporting}
+                disabled={bulkActions.exportable.length === 0 || bulkBusy}
                 onClick={() => onBulkExport?.(bulkActions.exportable)}
                 className="gap-1.5"
               >
@@ -149,7 +178,7 @@ export default function IndividuazioniTable({
               <Button
                 size="sm"
                 variant="destructive"
-                disabled={bulkActions.deletable.length === 0 || isBulkExporting}
+                disabled={bulkActions.deletable.length === 0 || bulkBusy}
                 onClick={() => onBulkDelete?.(bulkActions.deletable)}
                 className="gap-1.5"
               >
@@ -157,7 +186,7 @@ export default function IndividuazioniTable({
                 Elimina
                 {bulkActions.deletable.length > 0 ? ` (${bulkActions.deletable.length})` : ''}
               </Button>
-              <Button size="sm" variant="ghost" onClick={clearSelection} disabled={isBulkExporting}>
+              <Button size="sm" variant="ghost" onClick={clearSelection} disabled={bulkBusy}>
                 <X className="h-4 w-4 mr-1" />
                 Deseleziona
               </Button>
@@ -175,7 +204,7 @@ export default function IndividuazioniTable({
                     checked={allVisibleSelected}
                     onCheckedChange={checked => toggleSelectAllVisible(checked === true)}
                     aria-label="Seleziona tutte le individuazioni visibili"
-                    disabled={visibleIds.length === 0 || isBulkExporting}
+                    disabled={visibleIds.length === 0 || bulkBusy}
                   />
                 </TableHead>
               )}
@@ -233,7 +262,7 @@ export default function IndividuazioniTable({
                           checked={isSelected}
                           onCheckedChange={checked => toggleRowSelection(campagna.id, checked === true)}
                           aria-label={`Seleziona ${campagna.nome}`}
-                          disabled={isBulkExporting}
+                          disabled={bulkBusy}
                         />
                       </TableCell>
                     )}
@@ -370,7 +399,7 @@ export default function IndividuazioniTable({
                               checked={isSelected}
                               onCheckedChange={checked => toggleRowSelection(campagna.id, checked === true)}
                               aria-label={`Seleziona ${campagna.nome}`}
-                              disabled={isBulkExporting}
+                              disabled={bulkBusy}
                             />
                           </div>
                         )}
@@ -599,11 +628,7 @@ function canShowResume(
   campagna: CampagnaIndividuazione,
   progress: IndividuazioneProcessingProgress | null | undefined
 ): boolean {
-  return campagna.stato === 'in_corso' && (
-    progress?.job_stato === 'error' ||
-    isProcessingStale(progress) ||
-    (!progress?.last_activity_at && progress?.job_stato !== 'running')
-  )
+  return canResumeCampagnaIndividuazione(campagna, progress)
 }
 
 function formatNumber(num: number | undefined) {

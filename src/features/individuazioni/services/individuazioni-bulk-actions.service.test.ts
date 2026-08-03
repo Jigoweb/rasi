@@ -39,20 +39,35 @@ describe('individuazioni-bulk-actions.service', () => {
     expect(canDeleteCampagnaIndividuazione(running, () => false)).toBe(true)
   })
 
-  it('classifies selected campaigns into exportable and deletable', () => {
+  it('classifies selected campaigns into exportable, deletable and resumable', () => {
     const empty = campagna({ id: 'empty', statistiche: { individuazioni_create: 0 } })
     const ready = campagna({ id: 'ready' })
     const processing = campagna({ id: 'proc', stato: 'in_corso', campagne_programmazione_id: 'busy' })
+    const interrupted = campagna({
+      id: 'int',
+      stato: 'in_corso',
+      campagne_programmazione_id: 'prog-int',
+      statistiche: { individuazioni_create: 0 },
+    })
+    const now = Date.parse('2026-08-03T12:00:00.000Z')
 
     const result = classifyIndividuazioniBulkSelection(
-      [empty, ready, processing],
-      new Set(['empty', 'ready', 'proc']),
+      [empty, ready, processing, interrupted],
+      new Set(['empty', 'ready', 'proc', 'int']),
       id => id === 'busy',
+      {
+        int: { last_activity_at: '2026-08-03T11:00:00.000Z', job_stato: 'error' } as any,
+        proc: { last_activity_at: '2026-08-03T11:55:00.000Z', job_stato: 'running' } as any,
+      },
+      id => id !== 'busy',
+      now,
     )
 
     expect(result.exportable.map(c => c.id)).toEqual(['ready', 'proc'])
-    expect(result.deletable.map(c => c.id)).toEqual(['empty', 'ready'])
-    expect(result.skippedExportCount).toBe(1)
+    expect(result.deletable.map(c => c.id)).toEqual(['empty', 'ready', 'int'])
+    expect(result.resumable.map(c => c.id)).toEqual(['int'])
+    expect(result.skippedExportCount).toBe(2)
     expect(result.skippedDeleteCount).toBe(1)
+    expect(result.skippedResumeCount).toBe(3)
   })
 })
