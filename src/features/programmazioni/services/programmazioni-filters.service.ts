@@ -1,3 +1,5 @@
+import { matchesMultiValueFilter } from '@/shared/lib/multi-value-filter'
+
 export interface FilterableCampagnaProgrammazione {
   id: string
   nome: string
@@ -12,8 +14,10 @@ export interface FilterableCampagnaProgrammazione {
 export interface CampagneProgrammazioneFilters {
   searchQuery: string
   statusFilter: string
-  emittenteFilter: string
-  annoFilter: string
+  /** Empty = tutte le emittenti */
+  emittenteFilter: string[]
+  /** Empty = tutti gli anni (valori stringa, es. "2026") */
+  annoFilter: string[]
 }
 
 export function filterCampagneProgrammazione<T extends FilterableCampagnaProgrammazione>(
@@ -35,11 +39,11 @@ export function filterCampagneProgrammazione<T extends FilterableCampagnaProgram
       return false
     }
 
-    if (filters.emittenteFilter !== 'all' && campagna.emittente_id !== filters.emittenteFilter) {
+    if (!matchesMultiValueFilter(filters.emittenteFilter, campagna.emittente_id)) {
       return false
     }
 
-    if (filters.annoFilter !== 'all' && campagna.anno?.toString() !== filters.annoFilter) {
+    if (!matchesMultiValueFilter(filters.annoFilter, campagna.anno)) {
       return false
     }
 

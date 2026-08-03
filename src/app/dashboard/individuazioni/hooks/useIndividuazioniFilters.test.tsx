@@ -35,8 +35,8 @@ describe('useIndividuazioniFilters', () => {
     act(() => {
       result.current.setSearchTerm('rai')
       result.current.setStatusFilter('completata')
-      result.current.setEmittenteFilter('rai')
-      result.current.setAnnoFilter('2026')
+      result.current.setEmittenteFilter(['rai'])
+      result.current.setAnnoFilter(['2026'])
     })
 
     expect(result.current.filteredCampagne.map(c => c.id)).toEqual(['rai-2026'])
@@ -47,19 +47,37 @@ describe('useIndividuazioniFilters', () => {
     ])
   })
 
+  it('supports multiple emittenti and anni', () => {
+    const campagne = [
+      campagna({ id: 'rai-2026' }),
+      campagna({ id: 'sky-2025', emittente_id: 'sky', emittenti: { nome: 'Sky' }, anno: 2025 }),
+      campagna({ id: 'sky-2026', emittente_id: 'sky', emittenti: { nome: 'Sky' }, anno: 2026 }),
+    ]
+    const { result } = renderHook(() => useIndividuazioniFilters(campagne))
+
+    act(() => {
+      result.current.setEmittenteFilter(['rai', 'sky'])
+      result.current.setAnnoFilter(['2026'])
+    })
+
+    expect(result.current.filteredCampagne.map(c => c.id).sort()).toEqual(['rai-2026', 'sky-2026'])
+  })
+
   it('resets all filters', () => {
     const { result } = renderHook(() => useIndividuazioniFilters([campagna({})]))
 
     act(() => {
       result.current.setSearchTerm('rai')
       result.current.setStatusFilter('completata')
+      result.current.setEmittenteFilter(['rai'])
+      result.current.setAnnoFilter(['2026'])
       result.current.resetFilters()
     })
 
     expect(result.current.searchTerm).toBe('')
     expect(result.current.statusFilter).toBe('all')
-    expect(result.current.emittenteFilter).toBe('all')
-    expect(result.current.annoFilter).toBe('all')
+    expect(result.current.emittenteFilter).toEqual([])
+    expect(result.current.annoFilter).toEqual([])
   })
 
   it('initializes status filter from ?stato= query param', () => {

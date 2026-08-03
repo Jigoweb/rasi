@@ -49,6 +49,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { MultiSelect } from '@/shared/components/ui/multi-select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
@@ -160,8 +161,8 @@ export default function ProgrammazioniPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [emittenteFilter, setEmittenteFilter] = useState<string>('all')
-  const [annoFilter, setAnnoFilter] = useState<string>('all')
+  const [emittenteFilter, setEmittenteFilter] = useState<string[]>([])
+  const [annoFilter, setAnnoFilter] = useState<string[]>([])
   const [selectedCampagna, setSelectedCampagna] = useState<CampagnaProgrammazione | null>(null)
   const [selectedCampagnaIds, setSelectedCampagnaIds] = useState<Set<string>>(new Set())
 
@@ -1017,33 +1018,30 @@ export default function ProgrammazioniPage() {
                   </SelectContent>
                 </Select>
 
-                  {/* Filtro Emittente */}
-                  <Select value={emittenteFilter} onValueChange={setEmittenteFilter}>
-                    <SelectTrigger className="w-full sm:w-52">
-                      <Tv className="h-4 w-4 mr-2 shrink-0" />
-                      <SelectValue placeholder="Emittente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tutte le emittenti</SelectItem>
-                      {uniqueEmittenti.map((e) => (
-                        <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Filtro Emittente (multi) */}
+                  <div className="w-full sm:w-56">
+                    <MultiSelect
+                      options={uniqueEmittenti.map(e => ({ value: e.id, label: e.nome }))}
+                      selected={emittenteFilter}
+                      onChange={setEmittenteFilter}
+                      placeholder="Tutte le emittenti"
+                      className="w-full"
+                    />
+                  </div>
 
-                  {/* Filtro Anno */}
-                  <Select value={annoFilter} onValueChange={setAnnoFilter}>
-                    <SelectTrigger className="w-full sm:w-32">
-                      <Calendar className="h-4 w-4 mr-2 shrink-0" />
-                      <SelectValue placeholder="Anno" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Tutti gli anni</SelectItem>
-                      {uniqueAnni.map((anno) => (
-                        <SelectItem key={anno} value={anno.toString()}>{anno}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Filtro Anno (multi) */}
+                  <div className="w-full sm:w-44">
+                    <MultiSelect
+                      options={uniqueAnni.map(anno => ({
+                        value: anno.toString(),
+                        label: anno.toString(),
+                      }))}
+                      selected={annoFilter}
+                      onChange={setAnnoFilter}
+                      placeholder="Tutti gli anni"
+                      className="w-full"
+                    />
+                  </div>
 
                   {/* Reset */}
                   <Button 
@@ -1051,8 +1049,8 @@ export default function ProgrammazioniPage() {
                     onClick={() => { 
                       setSearchQuery('')
                       setStatusFilter('all')
-                      setEmittenteFilter('all')
-                      setAnnoFilter('all')
+                      setEmittenteFilter([])
+                      setAnnoFilter([])
                     }}
                     className="sm:ml-auto"
                   >
@@ -1073,16 +1071,27 @@ export default function ProgrammazioniPage() {
                     <X className="h-3 w-3 mr-1" /> Stato: {statusFilter === 'in_corso' ? 'In elaborazione' : statusFilter}
                   </Button>
                 )}
-                {emittenteFilter !== 'all' && (
-                  <Button variant="outline" size="sm" onClick={() => setEmittenteFilter('all')}>
-                    <X className="h-3 w-3 mr-1" /> Emittente: {uniqueEmittenti.find(e => e.id === emittenteFilter)?.nome}
+                {emittenteFilter.map(id => (
+                  <Button
+                    key={`emittente-${id}`}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEmittenteFilter(prev => prev.filter(value => value !== id))}
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Emittente: {uniqueEmittenti.find(e => e.id === id)?.nome ?? id}
                   </Button>
-                )}
-                {annoFilter !== 'all' && (
-                  <Button variant="outline" size="sm" onClick={() => setAnnoFilter('all')}>
-                    <X className="h-3 w-3 mr-1" /> Anno: {annoFilter}
+                ))}
+                {annoFilter.map(anno => (
+                  <Button
+                    key={`anno-${anno}`}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAnnoFilter(prev => prev.filter(value => value !== anno))}
+                  >
+                    <X className="h-3 w-3 mr-1" /> Anno: {anno}
                   </Button>
-                )}
+                ))}
               </div>
 
               <div className="mt-4 text-sm text-gray-600">

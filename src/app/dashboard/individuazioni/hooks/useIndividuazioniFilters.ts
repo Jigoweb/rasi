@@ -8,6 +8,7 @@ import {
   getIndividuazioneStatusFilterLabel,
   matchesIndividuazioneStatusFilter,
 } from '@/features/individuazioni/utils/individuazione-display-status'
+import { hasMultiValueFilter, matchesMultiValueFilter } from '@/shared/lib/multi-value-filter'
 
 const CAMPAGNA_STATUS_FILTERS = new Set([
   'bozza',
@@ -29,8 +30,8 @@ export function useIndividuazioniFilters(
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>(initialStatus)
-  const [emittenteFilter, setEmittenteFilter] = useState<string>('all')
-  const [annoFilter, setAnnoFilter] = useState<string>('all')
+  const [emittenteFilter, setEmittenteFilter] = useState<string[]>([])
+  const [annoFilter, setAnnoFilter] = useState<string[]>([])
 
   const filteredCampagne = useMemo(() => {
     let filtered = campagne
@@ -49,12 +50,12 @@ export function useIndividuazioniFilters(
       )
     }
 
-    if (emittenteFilter !== 'all') {
-      filtered = filtered.filter(c => c.emittente_id === emittenteFilter)
+    if (hasMultiValueFilter(emittenteFilter)) {
+      filtered = filtered.filter(c => matchesMultiValueFilter(emittenteFilter, c.emittente_id))
     }
 
-    if (annoFilter !== 'all') {
-      filtered = filtered.filter(c => c.anno?.toString() === annoFilter)
+    if (hasMultiValueFilter(annoFilter)) {
+      filtered = filtered.filter(c => matchesMultiValueFilter(annoFilter, c.anno))
     }
 
     return filtered
@@ -78,14 +79,14 @@ export function useIndividuazioniFilters(
   const resetFilters = () => {
     setSearchTerm('')
     setStatusFilter('all')
-    setEmittenteFilter('all')
-    setAnnoFilter('all')
+    setEmittenteFilter([])
+    setAnnoFilter([])
   }
 
   const hasActiveFilters = searchTerm.trim().length > 0 ||
     statusFilter !== 'all' ||
-    emittenteFilter !== 'all' ||
-    annoFilter !== 'all'
+    hasMultiValueFilter(emittenteFilter) ||
+    hasMultiValueFilter(annoFilter)
 
   return {
     searchTerm,
