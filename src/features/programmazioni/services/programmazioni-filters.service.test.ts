@@ -37,19 +37,30 @@ describe('programmazioni filters', () => {
     const filtered = filterCampagneProgrammazione(campagne, {
       searchQuery: 'netflix',
       statusFilter: 'bozza',
-      emittenteFilter: 'e1',
-      annoFilter: '2026',
+      emittenteFilter: ['e1'],
+      annoFilter: ['2026'],
     })
 
     expect(filtered.map(campagna => campagna.id)).toEqual(['c1'])
   })
 
-  it('searches both campaign and emittente names case-insensitively', () => {
+  it('supports multiple emittenti and anni at once', () => {
+    const filtered = filterCampagneProgrammazione(campagne, {
+      searchQuery: '',
+      statusFilter: 'all',
+      emittenteFilter: ['e1', 'e2'],
+      annoFilter: ['2025'],
+    })
+
+    expect(filtered.map(campagna => campagna.id).sort()).toEqual(['c2', 'c3'])
+  })
+
+  it('treats empty multi filters as all', () => {
     expect(filterCampagneProgrammazione(campagne, {
       searchQuery: 'rai',
       statusFilter: 'all',
-      emittenteFilter: 'all',
-      annoFilter: 'all',
+      emittenteFilter: [],
+      annoFilter: [],
     }).map(campagna => campagna.id)).toEqual(['c2'])
   })
 

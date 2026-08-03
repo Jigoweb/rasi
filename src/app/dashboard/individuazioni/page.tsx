@@ -2,12 +2,13 @@
 
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BarChart3, Calendar, CheckCircle, Filter, Loader2, Sparkles, Tv, Users, X } from 'lucide-react'
+import { BarChart3, CheckCircle, Filter, Loader2, Sparkles, Users, X } from 'lucide-react'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { MultiSelect } from '@/shared/components/ui/multi-select'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { useIndividuazioneProcess } from '@/shared/contexts/individuazione-process-context'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
@@ -326,31 +327,31 @@ export default function IndividuazioniPage() {
                 </SelectContent>
               </Select>
 
-              <Select value={emittenteFilter} onValueChange={setEmittenteFilter}>
-                <SelectTrigger className="w-full sm:w-52">
-                  <Tv className="h-4 w-4 mr-2 shrink-0" />
-                  <SelectValue placeholder="Emittente" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutte le emittenti</SelectItem>
-                  {uniqueEmittenti.map(emittente => (
-                    <SelectItem key={emittente.id} value={emittente.id}>{emittente.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="w-full sm:w-56">
+                <MultiSelect
+                  options={uniqueEmittenti.map(emittente => ({
+                    value: emittente.id,
+                    label: emittente.nome,
+                  }))}
+                  selected={emittenteFilter}
+                  onChange={setEmittenteFilter}
+                  placeholder="Tutte le emittenti"
+                  className="w-full"
+                />
+              </div>
 
-              <Select value={annoFilter} onValueChange={setAnnoFilter}>
-                <SelectTrigger className="w-full sm:w-32">
-                  <Calendar className="h-4 w-4 mr-2 shrink-0" />
-                  <SelectValue placeholder="Anno" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti gli anni</SelectItem>
-                  {uniqueAnni.map(anno => (
-                    <SelectItem key={anno} value={anno.toString()}>{anno}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="w-full sm:w-44">
+                <MultiSelect
+                  options={uniqueAnni.map(anno => ({
+                    value: anno.toString(),
+                    label: anno.toString(),
+                  }))}
+                  selected={annoFilter}
+                  onChange={setAnnoFilter}
+                  placeholder="Tutti gli anni"
+                  className="w-full"
+                />
+              </div>
 
               <Button variant="outline" onClick={resetFilters} disabled={!hasActiveFilters} className="sm:ml-auto">
                 Reset filtri
@@ -369,16 +370,27 @@ export default function IndividuazioniPage() {
                 <X className="h-3 w-3 mr-1" /> Stato: {statusFilterLabel}
               </Button>
             )}
-            {emittenteFilter !== 'all' && (
-              <Button variant="outline" size="sm" onClick={() => setEmittenteFilter('all')}>
-                <X className="h-3 w-3 mr-1" /> Emittente: {uniqueEmittenti.find(e => e.id === emittenteFilter)?.nome}
+            {emittenteFilter.map(id => (
+              <Button
+                key={`emittente-${id}`}
+                variant="outline"
+                size="sm"
+                onClick={() => setEmittenteFilter(prev => prev.filter(value => value !== id))}
+              >
+                <X className="h-3 w-3 mr-1" />
+                Emittente: {uniqueEmittenti.find(e => e.id === id)?.nome ?? id}
               </Button>
-            )}
-            {annoFilter !== 'all' && (
-              <Button variant="outline" size="sm" onClick={() => setAnnoFilter('all')}>
-                <X className="h-3 w-3 mr-1" /> Anno: {annoFilter}
+            ))}
+            {annoFilter.map(anno => (
+              <Button
+                key={`anno-${anno}`}
+                variant="outline"
+                size="sm"
+                onClick={() => setAnnoFilter(prev => prev.filter(value => value !== anno))}
+              >
+                <X className="h-3 w-3 mr-1" /> Anno: {anno}
               </Button>
-            )}
+            ))}
           </div>
 
           <div className="mt-4 text-sm text-muted-foreground">
