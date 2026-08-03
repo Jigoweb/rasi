@@ -10,6 +10,7 @@ import {
   FLOATING_PROGRESS_MAX_VISIBLE,
   selectFloatingProcesses,
 } from '@/shared/components/individuazione-progress-stack'
+import { getIndividuazioneProgressDisplay } from '@/features/campagne-individuazione/utils/individuazione-progress-display'
 import {
   Loader2,
   Sparkles,
@@ -130,9 +131,7 @@ export function FloatingProgressIndicator() {
       {visible.map((process) => {
         const campagnaId = process.campagna?.id
         const progress = process.progress
-        const percentage = progress && progress.programmazioni_totali > 0
-          ? Math.round((progress.programmazioni_processate / progress.programmazioni_totali) * 100)
-          : 0
+        const display = progress ? getIndividuazioneProgressDisplay(progress) : null
 
         return (
           <div
@@ -166,16 +165,20 @@ export function FloatingProgressIndicator() {
               </p>
             </div>
 
-            {process.status === 'processing' && (
+            {process.status === 'processing' && display && (
               <div className="flex items-center gap-2">
                 <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${percentage}%` }}
-                  />
+                  {display.isIndeterminate ? (
+                    <div className="h-full w-1/3 bg-primary/80 animate-pulse rounded-full" />
+                  ) : (
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${display.percentage ?? 0}%` }}
+                    />
+                  )}
                 </div>
-                <span className="text-xs font-medium text-muted-foreground w-8">
-                  {percentage}%
+                <span className="text-xs font-medium text-muted-foreground min-w-8 text-right">
+                  {display.isIndeterminate ? '…' : `${display.percentage}%`}
                 </span>
               </div>
             )}
@@ -309,9 +312,7 @@ export function IndividuazioneProgressDialog() {
   }
 
   const progress = state.progress
-  const percentage = progress && progress.programmazioni_totali > 0
-    ? Math.round((progress.programmazioni_processate / progress.programmazioni_totali) * 100)
-    : 0
+  const display = progress ? getIndividuazioneProgressDisplay(progress) : null
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -340,7 +341,7 @@ export function IndividuazioneProgressDialog() {
         </DialogHeader>
 
         {/* Processing State */}
-        {state.status === 'processing' && progress && (
+        {state.status === 'processing' && progress && display && (
           <div className="py-6 space-y-4">
             {/* Progress header */}
             <div className="flex items-center gap-3">
@@ -355,7 +356,7 @@ export function IndividuazioneProgressDialog() {
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {progress.phase === 'processing' && (
-                    <>Chunk {progress.current_chunk}/{progress.total_chunks}</>
+                    <>Chunk {display.chunksLabel}</>
                   )}
                   {progress.phase === 'init' && 'Preparazione dati...'}
                   {progress.phase === 'finalizing' && 'Calcolo statistiche finali...'}
@@ -367,21 +368,25 @@ export function IndividuazioneProgressDialog() {
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Progresso</span>
-                <span className="font-medium">
-                  {progress.programmazioni_processate.toLocaleString()}/{progress.programmazioni_totali.toLocaleString()}
-                </span>
+                <span className="font-medium">{display.progressLabel}</span>
               </div>
               <div className="h-3 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
-                  style={{ width: `${percentage}%` }}
-                />
+                {display.isIndeterminate ? (
+                  <div className="h-full w-1/3 bg-primary/80 animate-pulse rounded-full" />
+                ) : (
+                  <div
+                    className="h-full bg-primary transition-all duration-300 ease-out rounded-full"
+                    style={{ width: `${display.percentage ?? 0}%` }}
+                  />
+                )}
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{percentage}% completato</span>
                 <span>
-                  {(progress.programmazioni_totali - progress.programmazioni_processate).toLocaleString()} rimanenti
+                  {display.isIndeterminate
+                    ? 'Avanzamento in corso'
+                    : `${display.percentage}% completato`}
                 </span>
+                {display.remainingLabel && <span>{display.remainingLabel}</span>}
               </div>
             </div>
 
@@ -395,7 +400,7 @@ export function IndividuazioneProgressDialog() {
               </div>
               <div className="bg-muted/50 rounded-lg p-3 text-center">
                 <p className="text-xl font-bold text-foreground">
-                  {progress.current_chunk}/{progress.total_chunks}
+                  {display.chunksLabel}
                 </p>
                 <p className="text-xs text-muted-foreground">Chunk processati</p>
               </div>
@@ -588,6 +593,9 @@ interface ProcessBlockedDialogProps {
 
 export function ProcessBlockedDialog({ open, onClose }: ProcessBlockedDialogProps) {
   const { state, maximize } = useIndividuazioneProcess()
+  const blockedDisplay = state.progress
+    ? getIndividuazioneProgressDisplay(state.progress)
+    : null
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -606,21 +614,25 @@ export function ProcessBlockedDialog({ open, onClose }: ProcessBlockedDialogProp
           <div className="bg-muted/50 border rounded-lg p-4 space-y-2">
             <p className="text-sm font-medium">Campagna in elaborazione:</p>
             <p className="text-sm text-muted-foreground">{state.campagna?.nome}</p>
-            {state.progress && (
+            {blockedDisplay && (
               <div className="pt-2">
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
                   <span>Progresso</span>
                   <span>
-                    {Math.round((state.progress.programmazioni_processate / state.progress.programmazioni_totali) * 100)}%
+                    {blockedDisplay.isIndeterminate
+                      ? blockedDisplay.progressLabel
+                      : `${blockedDisplay.percentage}%`}
                   </span>
                 </div>
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-primary transition-all"
-                    style={{ 
-                      width: `${(state.progress.programmazioni_processate / state.progress.programmazioni_totali) * 100}%` 
-                    }}
-                  />
+                  {blockedDisplay.isIndeterminate ? (
+                    <div className="h-full w-1/3 bg-primary/80 animate-pulse rounded-full" />
+                  ) : (
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${blockedDisplay.percentage ?? 0}%` }}
+                    />
+                  )}
                 </div>
               </div>
             )}
