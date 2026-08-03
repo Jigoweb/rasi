@@ -205,3 +205,18 @@ it('normalizeTitle idempotent on new patterns', () => {
     expect(normalizeTitle(normalizeTitle(x))).toBe(normalizeTitle(x))
   }
 })
+
+describe('SKY gap contract — loose keys for matcher A1/D2', () => {
+  // Live matcher must use these keys at match-time (see migration matcher_sky_gap_a_d).
+  it('strips trailing season digits from SKY series titles', () => {
+    expect(normalizeTitle('Vikings 5')).toBe('Vikings')
+    expect(normalizeTitle('VIKINGS 4')).toBe('Vikings')
+    expect(normalizeTitle('The Sopranos 3')).toBe('The Sopranos')
+    expect(normalizeTitle('DEXTER 2')).toBe('Dexter')
+  })
+  it('buildMatchKey collapses season-suffixed titles onto catalog base', () => {
+    expect(buildMatchKey('Vikings 5')).toBe('vikings')
+    expect(buildMatchKey('The Sopranos 4')).toBe('sopranos')
+    expect(buildMatchKey('MOTHERS AND DAUGHTERS')).toBe('mothers and daughters')
+  })
+})
