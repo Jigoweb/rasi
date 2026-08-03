@@ -537,4 +537,179 @@ BEGIN
             -- match come "episodio mancante", così a valle finisce in coda di revisione.
             IF NOT v_episodio_trovato THEN
                 IF v_has_episode_data THEN
-                    -- Caso A: prog ha dati episodio specifici 
+                    -- Caso A: prog ha dati episodio specifici ma nessun match in catalogo
+                    -- → match a livello serie, da revisionare (niente scarto duro)
+                    v_episodio_mancante := TRUE;
+                END IF;
+                -- Caso B: prog "marcata serie" solo per numero_stagione → procedi
+                v_score_episodio := 0;
+                v_episodio_applicato := FALSE;
+            ELSE
+                v_score_episodio := v_best_episodio_score;
+                v_episodio_applicato := TRUE;
+                v_dettagli := jsonb_set(v_dettagli, '{episodio}', jsonb_build_object(
+                    'score', ROUND(v_score_episodio * 100, 2),
+                    'episodio_id', v_best_episodio_id,
+                    'prog_stagione', v_prog.numero_stagione,
+                    'prog_episodio', v_prog.numero_episodio,
+                    'prog_titolo_ep', v_prog.titolo_episodio
+                ));
+
+                IF v_prog_anno_rilascio IS NOT NULL AND v_best_episodio_anno IS NOT NULL THEN
+                    v_anno_disponibile := TRUE;
+                    v_anno_confronto := v_best_episodio_anno;
+                    v_anno_match_source := 'episodio';
+                    v_anno_peso := CASE
+                        WHEN v_episodio_applicato AND v_best_episodio_score >= 0.8 THEN 5
+                        WHEN v_is_serie THEN 10
+                        ELSE 15
+                    END;
+
+                    v_score_anno := public.score_year_overlap(
+                        v_prog_anno_rilascio,
+                        v_prog_anno_rilascio_fine,
+                        v_best_episodio_anno,
+                        v_best_episodio_anno,
+                        p_tolleranza_anno_soft,
+                        p_tolleranza_anno_hard
+                    );
+
+                    v_dettagli := jsonb_set(v_dettagli, '{anno}', jsonb_build_object(
+                        'score', ROUND(v_score_anno * v_anno_peso, 2),
+                        'programmazione', v_prog_anno_rilascio,
+                        'programmazione_fine', v_prog_anno_rilascio_fine,
+                        'riferimento', v_anno_confronto,
+                        'fonte', v_anno_match_source,
+                        'opera', v_opera.anno_produzione,
+                        'opera_fine', v_opera.anno_produzione_fine,
+                        'peso', v_anno_peso,
+                        'tolleranza_soft', p_tolleranza_anno_soft,
+                        'tolleranza_hard', p_tolleranza_anno_hard,
+                        'fallback_soft', false,
+                        'hard_scarto', false
+                    ));
+                END IF;
+            END IF;
+        END IF;
+
+        -- =====================================================
+        -- CALCOLO PUNTEGGIO TOTALE (0-100)
+        -- =====================================================
+        v_score_totale := (v_score_titolo * 50);
+
+        IF v_score_titolo_orig > 0 THEN
+            v_score_totale := v_score_totale + (v_score_titolo_orig * 10);
+        END IF;
+
+        -- Anno: peso variabile (5 se serie+episodio certo, altrimenti 10/15)
+        v_score_totale := v_score_totale + (v_score_anno * COALESCE(v_anno_peso, 15));
+
+        -- Regia: positivo (bonus) o negativo (penalità no-match)
+        v_score_totale := v_score_totale + (v_score_regia * 10);
+
+        IF v_episodio_applicato AND v_score_episodio > 0 THEN
+            v_score_totale := v_score_totale + (v_score_episodio * 15);
+        END IF;
+
+        -- Floor a 0
+        v_score_totale := GREATEST(v_score_totale, 0);
+
+        -- =====================================================
+        -- SOGLIA ADATTIVA: 35% del peso massimo possibile, floor 25
+        -- Conta solo i discriminanti effettivamente disponibili
+        -- =====================================================
+        v_peso_massimo := 50;  -- titolo sempre presente
+        IF v_score_titolo_orig > 0 THEN
+            v_peso_massimo := v_peso_massimo + 10;
+        END IF;
+        IF v_anno_disponibile THEN
+            v_peso_massimo := v_peso_massimo + 15;
+        END IF;
+        IF v_regia_disponibile THEN
+            v_peso_massimo := v_peso_massimo + 10;
+        END IF;
+        IF v_episodio_applicato THEN
+            v_peso_massimo := v_peso_massimo + 15;
+        END IF;
+
+        v_soglia_adattata := GREATEST(v_peso_massimo * 0.35, 25);
+
+        v_dettagli := jsonb_set(v_dettagli, '{totale}', jsonb_build_object(
+            'score', ROUND(v_score_totale, 2),
+            'peso_massimo', v_peso_massimo,
+            'soglia_applicata', ROUND(v_soglia_adattata, 2),
+            'is_serie', v_is_serie,
+            'has_episode_data', v_has_episode_data,
+            'episodio_applicato', v_episodio_applicato,
+            'episodio_mancante', v_episodio_mancante,
+            'anno_disponibile', v_anno_disponibile,
+            'regia_disponibile', v_regia_disponibile,
+            'has_regia_penalita', v_score_regia < 0
+        ));
+        -- Flag top-level per il routing a valle (process_programmazioni_chunk):
+        -- match a livello serie senza episodio puntuale → coda di revisione.
+        v_dettagli := jsonb_set(v_dettagli, '{episodio_mancante}', to_jsonb(COALESCE(v_episodio_mancante, FALSE)));
+
+        -- Applica soglia adattiva
+        IF v_score_totale < v_soglia_adattata THEN
+            CONTINUE;
+        END IF;
+
+        -- Trova partecipazioni
+        IF v_episodio_mancante THEN
+            -- Attribuzione a LIVELLO SERIE: per le serie il cui cast in catalogo è
+            -- registrato solo a livello episodio (e la numerazione non si allinea a Netflix),
+            -- attribuisce il cast DISTINTO della serie — un (artista, ruolo) una sola volta,
+            -- con episodio_id NULL. Il catalogo contiene solo gli artisti rappresentati,
+            -- quindi è tipicamente 1-2 per opera (niente over-attribution). Va in revisione
+            -- a valle (episodio_mancante=true); punteggio ridotto ×0.8.
+            FOR v_partecipazione IN
+                SELECT DISTINCT ON (p.artista_id, p.ruolo_id)
+                    p.id AS partecipazione_id, p.artista_id, p.ruolo_id
+                FROM partecipazioni p
+                WHERE p.opera_id = v_opera.id
+                  AND (p_artista_ids IS NULL OR p.artista_id = ANY(p_artista_ids))
+                ORDER BY p.artista_id, p.ruolo_id, p.id
+            LOOP
+                RETURN QUERY SELECT
+                    v_partecipazione.partecipazione_id,
+                    v_opera.id,
+                    NULL::UUID,                         -- livello serie: nessun episodio puntuale
+                    v_partecipazione.artista_id,
+                    v_partecipazione.ruolo_id,
+                    ROUND(v_score_totale * 0.8, 2)::NUMERIC,
+                    v_dettagli;
+            END LOOP;
+        ELSE
+            FOR v_partecipazione IN
+                SELECT
+                    p.id as partecipazione_id,
+                    p.artista_id,
+                    p.ruolo_id,
+                    p.opera_id,
+                    p.episodio_id
+                FROM partecipazioni p
+                WHERE p.opera_id = v_opera.id
+                  AND (
+                      (NOT v_is_serie AND (p.episodio_id IS NULL OR p.episodio_id = v_best_episodio_id))
+                      OR (v_is_serie AND p.episodio_id = v_best_episodio_id)
+                      OR (v_is_serie AND p.episodio_id IS NULL)
+                  )
+                  AND (p_artista_ids IS NULL OR p.artista_id = ANY(p_artista_ids))
+            LOOP
+                RETURN QUERY SELECT
+                    v_partecipazione.partecipazione_id,
+                    v_opera.id,
+                    COALESCE(v_best_episodio_id, v_partecipazione.episodio_id),
+                    v_partecipazione.artista_id,
+                    v_partecipazione.ruolo_id,
+                    ROUND(v_score_totale, 2)::NUMERIC,
+                    v_dettagli;
+            END LOOP;
+        END IF;
+
+    END LOOP;
+
+    RETURN;
+END;
+$$ LANGUAGE plpgsql STABLE;
