@@ -15,7 +15,7 @@ const campagna: CampagnaProgrammazione = {
 }
 
 describe('UploadProgrammazioniDialog', () => {
-  it('renders the upload step for an existing campaign', () => {
+  it('renders a single header for an existing campaign upload', () => {
     render(
       <UploadProgrammazioniDialog
         open
@@ -40,8 +40,39 @@ describe('UploadProgrammazioniDialog', () => {
       />
     )
 
-    expect(screen.getAllByText('Caricamento Dati').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Carica il file per la campagna/)).toBeInTheDocument()
-    expect(screen.getByText('Seleziona File')).toBeInTheDocument()
+    expect(screen.getByText('Caricamento dati')).toBeInTheDocument()
+    expect(screen.getByText(/Carica il file Excel o CSV per la campagna Campagna Test/)).toBeInTheDocument()
+    expect(screen.getByText('Seleziona file')).toBeInTheDocument()
+    expect(screen.queryByText('Campagna creata. Seleziona il file per continuare.')).not.toBeInTheDocument()
+  })
+
+  it('shows a compact success banner after creating a campaign', () => {
+    render(
+      <UploadProgrammazioniDialog
+        open
+        onOpenChange={jest.fn()}
+        step={2}
+        isResumingUpload={false}
+        detailsForm={<div />}
+        selectedCampagna={campagna}
+        selectedFile={null}
+        fileInputRef={{ current: null }}
+        onFileUpload={jest.fn()}
+        isPreparingUpload={false}
+        isUploading={false}
+        parsedRowCount={0}
+        headerError={null}
+        uploadError={null}
+        onDismissUploadError={jest.fn()}
+        uploadProgress={{}}
+        isUploadReady={false}
+        onUploadDatabase={jest.fn()}
+        onClose={jest.fn()}
+      />
+    )
+
+    expect(screen.getByText('Caricamento dati')).toBeInTheDocument()
+    expect(screen.getByText('Campagna creata. Seleziona il file per continuare.')).toBeInTheDocument()
+    expect(screen.queryByText('Campagna creata con successo!')).not.toBeInTheDocument()
   })
 })
