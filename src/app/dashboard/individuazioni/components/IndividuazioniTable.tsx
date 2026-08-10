@@ -173,7 +173,11 @@ export default function IndividuazioniTable({
                   <Download className="h-3.5 w-3.5" />
                 )}
                 Export XLSX
-                {bulkActions.exportable.length > 0 ? ` (${bulkActions.exportable.length})` : ''}
+                {bulkActions.exportable.length > 1
+                  ? ` ZIP (${bulkActions.exportable.length})`
+                  : bulkActions.exportable.length === 1
+                    ? ' (1)'
+                    : ''}
               </Button>
               <Button
                 size="sm"

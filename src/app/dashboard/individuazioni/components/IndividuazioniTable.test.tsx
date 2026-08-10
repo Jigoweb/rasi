@@ -85,6 +85,31 @@ describe('IndividuazioniTable', () => {
     expect(onSelectionChange).toHaveBeenCalled()
   })
 
+  it('labels bulk export as ZIP when multiple exportable campaigns are selected', () => {
+    const selectedIds = new Set(['campagna-1', 'campagna-2'])
+
+    render(
+      <IndividuazioniTable
+        {...baseProps}
+        campagne={[
+          campagna as any,
+          {
+            ...campagna,
+            id: 'campagna-2',
+            nome: 'Individuazione Sky',
+            campagne_programmazione_id: 'programmazione-2',
+            statistiche: { individuazioni_create: 5 },
+          } as any,
+        ]}
+        selectedIds={selectedIds}
+        onSelectionChange={jest.fn()}
+        onBulkExport={jest.fn()}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /Export XLSX ZIP \(2\)/i })).toBeInTheDocument()
+  })
+
   it('does not navigate when toggling a row checkbox', () => {
     const onOpenDetail = jest.fn()
     const onSelectionChange = jest.fn()

@@ -1,4 +1,8 @@
-import { formatIndividuazioniForExport, buildIndividuazioneExportFileName } from './individuazioni-export.service'
+import {
+  formatIndividuazioniForExport,
+  buildIndividuazioneExportFileName,
+  uniqueZipEntryName,
+} from './individuazioni-export.service'
 
 describe('formatIndividuazioniForExport', () => {
   it('formats artist and matching fields for spreadsheet export', () => {
@@ -23,5 +27,14 @@ describe('buildIndividuazioneExportFileName', () => {
     expect(buildIndividuazioneExportFileName('Mozart / Sky UNO', 'abc')).toMatch(
       /^individuazioni_Mozart___Sky_UNO_\d{4}-\d{2}-\d{2}$/
     )
+  })
+})
+
+describe('uniqueZipEntryName', () => {
+  it('keeps the first name and suffixes duplicates', () => {
+    const used = new Set<string>()
+    expect(uniqueZipEntryName('campagna_a', used)).toBe('campagna_a.xlsx')
+    expect(uniqueZipEntryName('campagna_a.xlsx', used)).toBe('campagna_a_2.xlsx')
+    expect(uniqueZipEntryName('campagna_a', used)).toBe('campagna_a_3.xlsx')
   })
 })

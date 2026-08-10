@@ -128,9 +128,16 @@ export default function IndividuazioniPage() {
             throw new Error('Nessun dato da esportare nelle campagne selezionate')
           }
 
-          if (result.skippedEmpty > 0) {
+          if (result.archiveKind === 'zip') {
             notifySuccess(
-              `${result.exported} file XLSX scaricati`,
+              `ZIP con ${result.exported} file XLSX scaricato`,
+              result.skippedEmpty > 0
+                ? `${result.skippedEmpty} campagne senza dati saltate`
+                : undefined
+            )
+          } else if (result.skippedEmpty > 0) {
+            notifySuccess(
+              'File XLSX scaricato',
               `${result.skippedEmpty} campagne senza dati saltate`
             )
           }

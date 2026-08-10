@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import JSZip from 'jszip'
 import { supabase } from '@/shared/lib/supabase'
 
 export interface ExportProgress {
@@ -10,6 +11,12 @@ export interface ExportProgress {
 }
 
 export type IndividuazioneExportFormat = 'csv' | 'xlsx'
+
+export type BulkXlsxExportProgress = ExportProgress & {
+  campagnaIndex: number
+  campagneTotal: number
+  campagnaNome: string
+}
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -24,15 +31,61 @@ export function getIndividuazioneExportColumnWidths(formattedData: Record<string
   }))
 }
 
-/**
- * Scarica un singolo file CSV/XLSX per una campagna di individuazione.
- */
-export async function downloadCampagnaIndividuazioneExport(
+export function buildIndividuazioneWorkbook(formattedData: Record<string, unknown>[]) {
+  const worksheet = XLSX.utils.json_to_sheet(formattedData)
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Individuazioni')
+  worksheet['!cols'] = getIndividuazioneExportColumnWidths(formattedData)
+  return workbook
+}
+
+export function workbookToXlsxBytes(workbook: XLSX.WorkBook): Uint8Array {
+  const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
+  return new Uint8Array(buffer)
+}
+
+/** Evita collisioni di nome file dentro lo ZIP. */
+export function uniqueZipEntryName(baseName: string, usedNames: Set<string>): string {
+  const withExt = baseName.endsWith('.xlsx') ? baseName : `${baseName}.xlsx`
+  if (!usedNames.has(withExt)) {
+    usedNames.add(withExt)
+    return withExt
+  }
+
+  const stem = withExt.replace(/\.xlsx$/i, '')
+  let index = 2
+  let candidate = `${stem}_${index}.xlsx`
+  while (usedNames.has(candidate)) {
+    index += 1
+    candidate = `${stem}_${index}.xlsx`
+  }
+  usedNames.add(candidate)
+  return candidate
+}
+
+export function triggerBrowserDownload(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  anchor.rel = 'noopener'
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+function bytesToBlob(bytes: Uint8Array, type: string): Blob {
+  const copy = new Uint8Array(bytes.byteLength)
+  copy.set(bytes)
+  return new Blob([copy.buffer], { type })
+}
+
+async function buildCampagnaXlsxBytes(
   campagna: { id: string; nome?: string | null },
-  format: IndividuazioneExportFormat,
   onProgress?: (progress: ExportProgress) => void,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<{ fileName: string; bytes: Uint8Array; rowCount: number }> {
   const { data, error } = await getIndividuazioniForExport(campagna.id, onProgress, signal)
 
   if (signal?.aborted) throw new Error('Export cancelled')
@@ -46,48 +99,81 @@ export async function downloadCampagnaIndividuazioneExport(
   if (signal?.aborted) throw new Error('Export cancelled')
 
   onProgress?.({ fetched: data.length, total: data.length, percentage: 95, phase: 'generating' })
-  const worksheet = XLSX.utils.json_to_sheet(formattedData)
-  const workbook = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Individuazioni')
-  worksheet['!cols'] = getIndividuazioneExportColumnWidths(formattedData)
-
+  const workbook = buildIndividuazioneWorkbook(formattedData)
+  const bytes = workbookToXlsxBytes(workbook)
   const fileName = buildIndividuazioneExportFileName(campagna.nome, campagna.id)
+
   if (signal?.aborted) throw new Error('Export cancelled')
   onProgress?.({ fetched: data.length, total: data.length, percentage: 100, phase: 'done' })
 
-  if (format === 'csv') {
-    XLSX.writeFile(workbook, `${fileName}.csv`, { bookType: 'csv' })
-  } else {
-    XLSX.writeFile(workbook, `${fileName}.xlsx`, { bookType: 'xlsx' })
-  }
+  return { fileName, bytes, rowCount: data.length }
 }
 
 /**
- * Esporta più campagne come file XLSX distinti (uno per campagna), in sequenza.
+ * Scarica un singolo file CSV/XLSX per una campagna di individuazione.
+ */
+export async function downloadCampagnaIndividuazioneExport(
+  campagna: { id: string; nome?: string | null },
+  format: IndividuazioneExportFormat,
+  onProgress?: (progress: ExportProgress) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (format === 'xlsx') {
+    const { fileName, bytes } = await buildCampagnaXlsxBytes(campagna, onProgress, signal)
+    triggerBrowserDownload(
+      bytesToBlob(bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+      `${fileName}.xlsx`,
+    )
+    return
+  }
+
+  const { data, error } = await getIndividuazioniForExport(campagna.id, onProgress, signal)
+
+  if (signal?.aborted) throw new Error('Export cancelled')
+  if (error) throw error
+  if (!data || data.length === 0) {
+    throw new Error(`Nessun dato da esportare per "${campagna.nome || campagna.id}"`)
+  }
+
+  onProgress?.({ fetched: data.length, total: data.length, percentage: 90, phase: 'formatting' })
+  const formattedData = formatIndividuazioniForExport(data)
+  if (signal?.aborted) throw new Error('Export cancelled')
+
+  onProgress?.({ fetched: data.length, total: data.length, percentage: 95, phase: 'generating' })
+  const workbook = buildIndividuazioneWorkbook(formattedData)
+  const fileName = buildIndividuazioneExportFileName(campagna.nome, campagna.id)
+  if (signal?.aborted) throw new Error('Export cancelled')
+  onProgress?.({ fetched: data.length, total: data.length, percentage: 100, phase: 'done' })
+  XLSX.writeFile(workbook, `${fileName}.csv`, { bookType: 'csv' })
+}
+
+/**
+ * Esporta più campagne come XLSX: un file se ce n'è uno solo, altrimenti uno ZIP
+ * con un foglio Excel per campagna.
  */
 export async function downloadCampagneIndividuazioneXlsxBatch(
   campagne: Array<{ id: string; nome?: string | null }>,
-  onProgress?: (progress: ExportProgress & { campagnaIndex: number; campagneTotal: number; campagnaNome: string }) => void,
+  onProgress?: (progress: BulkXlsxExportProgress) => void,
   signal?: AbortSignal,
-): Promise<{ exported: number; skippedEmpty: number }> {
-  let exported = 0
+): Promise<{ exported: number; skippedEmpty: number; archiveKind: 'xlsx' | 'zip' }> {
+  const files: Array<{ name: string; bytes: Uint8Array }> = []
+  const usedNames = new Set<string>()
   let skippedEmpty = 0
   const total = campagne.length
 
   for (let index = 0; index < campagne.length; index++) {
     if (signal?.aborted) throw new Error('Export cancelled')
     const campagna = campagne[index]
-    const basePct = Math.round((index / total) * 100)
+    const basePct = Math.round((index / Math.max(total, 1)) * 90)
 
     try {
-      await downloadCampagnaIndividuazioneExport(
+      const built = await buildCampagnaXlsxBytes(
         campagna,
-        'xlsx',
         progress => {
-          const localShare = Math.round(progress.percentage / total)
+          const localShare = Math.round((progress.percentage / 100) * (90 / Math.max(total, 1)))
           onProgress?.({
             ...progress,
-            percentage: Math.min(99, basePct + localShare),
+            percentage: Math.min(90, basePct + localShare),
             campagnaIndex: index + 1,
             campagneTotal: total,
             campagnaNome: campagna.nome || campagna.id,
@@ -95,7 +181,10 @@ export async function downloadCampagneIndividuazioneXlsxBatch(
         },
         signal,
       )
-      exported += 1
+      files.push({
+        name: uniqueZipEntryName(built.fileName, usedNames),
+        bytes: built.bytes,
+      })
     } catch (error) {
       if (error instanceof Error && error.message.startsWith('Nessun dato da esportare')) {
         skippedEmpty += 1
@@ -103,24 +192,78 @@ export async function downloadCampagneIndividuazioneXlsxBatch(
       }
       throw error
     }
+  }
 
-    // Piccola pausa tra download multipli così il browser non li blocca.
-    if (index < campagne.length - 1) {
-      await delay(350)
-    }
+  if (files.length === 0) {
+    return { exported: 0, skippedEmpty, archiveKind: 'xlsx' }
+  }
+
+  if (signal?.aborted) throw new Error('Export cancelled')
+
+  if (files.length === 1) {
+    onProgress?.({
+      fetched: files.length,
+      total: files.length,
+      percentage: 100,
+      phase: 'done',
+      campagnaIndex: total,
+      campagneTotal: total,
+      campagnaNome: files[0].name,
+    })
+    triggerBrowserDownload(
+      bytesToBlob(files[0].bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+      files[0].name,
+    )
+    return { exported: 1, skippedEmpty, archiveKind: 'xlsx' }
   }
 
   onProgress?.({
-    fetched: exported,
-    total: exported,
+    fetched: files.length,
+    total: files.length,
+    percentage: 95,
+    phase: 'generating',
+    campagnaIndex: total,
+    campagneTotal: total,
+    campagnaNome: `ZIP (${files.length} file)`,
+  })
+
+  const zip = new JSZip()
+  for (const file of files) {
+    zip.file(file.name, file.bytes)
+  }
+
+  const zipBlob = await zip.generateAsync(
+    { type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } },
+    metadata => {
+      const zipPct = 95 + Math.round((metadata.percent / 100) * 5)
+      onProgress?.({
+        fetched: files.length,
+        total: files.length,
+        percentage: Math.min(99, zipPct),
+        phase: 'generating',
+        campagnaIndex: total,
+        campagneTotal: total,
+        campagnaNome: `ZIP (${files.length} file)`,
+      })
+    },
+  )
+
+  if (signal?.aborted) throw new Error('Export cancelled')
+
+  const zipName = `individuazioni_export_${new Date().toISOString().split('T')[0]}.zip`
+  triggerBrowserDownload(zipBlob, zipName)
+
+  onProgress?.({
+    fetched: files.length,
+    total: files.length,
     percentage: 100,
     phase: 'done',
     campagnaIndex: total,
     campagneTotal: total,
-    campagnaNome: `${exported} file`,
+    campagnaNome: zipName,
   })
 
-  return { exported, skippedEmpty }
+  return { exported: files.length, skippedEmpty, archiveKind: 'zip' }
 }
 
 export const getIndividuazioniForExport = async (
