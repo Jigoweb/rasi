@@ -9,8 +9,7 @@ import { DashboardAttentionQueue } from '@/features/dashboard/components/Dashboa
 import { DashboardDataHealthCard } from '@/features/dashboard/components/DashboardDataHealthCard'
 import { DashboardExportFooter } from '@/features/dashboard/components/DashboardExportFooter'
 import { DashboardKpiStrip } from '@/features/dashboard/components/DashboardKpiStrip'
-import { DashboardMatchingTrend } from '@/features/dashboard/components/DashboardMatchingTrend'
-import type { AttentionItem, MatchingTrendPoint } from '@/features/dashboard/components/dashboard-home.types'
+import type { AttentionItem } from '@/features/dashboard/components/dashboard-home.types'
 import { countMetricsByImpact } from '@/features/dashboard/services/catalog-health-impact'
 import {
   createSupabaseAttentionDeps,
@@ -26,10 +25,6 @@ import {
   type DashboardStats,
   type Metric,
 } from '@/features/dashboard/services/dashboard-data.service'
-import {
-  createSupabaseMatchingTrendDeps,
-  loadMatchingTrend,
-} from '@/features/dashboard/services/dashboard-trend.service'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -44,8 +39,6 @@ export default function DashboardPage() {
   const [attivitaRecenti, setAttivitaRecenti] = useState<AttivitaItem[]>([])
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([])
   const [attentionLoading, setAttentionLoading] = useState(true)
-  const [trendPoints, setTrendPoints] = useState<MatchingTrendPoint[]>([])
-  const [trendLoading, setTrendLoading] = useState(true)
   const [individuazioniTotal, setIndividuazioniTotal] = useState(0)
 
   const { startExport, state: exportState } = useExportProcess()
@@ -143,15 +136,6 @@ export default function DashboardPage() {
         lastDay: new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0],
       }
 
-      void loadMatchingTrend(createSupabaseMatchingTrendDeps(supabase as any), { days: 30, now })
-        .then(points => {
-          if (!cancelled) setTrendPoints(points)
-        })
-        .catch(error => console.error('Error fetching matching trend:', error))
-        .finally(() => {
-          if (!cancelled) setTrendLoading(false)
-        })
-
       try {
         try {
           const snapshot = await loadDashboardRpcData(supabase as any, range)
@@ -203,7 +187,6 @@ export default function DashboardPage() {
           setLoading(false)
           setHealthLoading(false)
           setAttentionLoading(false)
-          setTrendLoading(false)
         }
       }
     }
@@ -235,10 +218,7 @@ export default function DashboardPage() {
 
       <DashboardAttentionQueue items={attentionItems} loading={attentionLoading || healthLoading} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-        <DashboardMatchingTrend points={trendPoints} loading={trendLoading} />
-        <DashboardActivityFeed items={attivitaRecenti} loading={loading} />
-      </div>
+      <DashboardActivityFeed items={attivitaRecenti} loading={loading} />
 
       <DashboardDataHealthCard
         healthLoading={healthLoading}
