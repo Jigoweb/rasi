@@ -9,6 +9,10 @@ import {
   countMetricsByImpact,
   type CatalogHealthImpact,
 } from '@/features/dashboard/services/catalog-health-impact'
+import {
+  completenessBadgeClass,
+  completenessBarClass,
+} from '@/features/dashboard/services/catalog-health-colors'
 import type { Metric } from '@/features/dashboard/services/dashboard-data.service'
 import { Loader2 } from 'lucide-react'
 
@@ -18,30 +22,9 @@ function percentComplete(m: Metric): number {
   return Math.floor((v / m.total) * 100)
 }
 
-function impactBadgeClass(impact: CatalogHealthImpact): string {
-  switch (impact) {
-    case 'critical':
-      return 'bg-red-50 text-red-700 border-red-200'
-    case 'matching':
-      return 'bg-amber-50 text-amber-800 border-amber-200'
-    case 'identity':
-      return 'bg-sky-50 text-sky-800 border-sky-200'
-    default:
-      return 'bg-gray-50 text-gray-600 border-gray-200'
-  }
-}
-
-function barClass(impact: CatalogHealthImpact): string {
-  switch (impact) {
-    case 'critical':
-      return 'bg-red-600'
-    case 'matching':
-      return 'bg-amber-500'
-    case 'identity':
-      return 'bg-sky-600'
-    default:
-      return 'bg-gray-400'
-  }
+/** Impact is categorical metadata — keep badges neutral so "critico" ≠ "errore". */
+function impactBadgeClass(_impact: CatalogHealthImpact): string {
+  return 'bg-gray-50 text-gray-700 border-gray-200'
 }
 
 function MetricRow({ metric }: { metric: Metric }) {
@@ -58,13 +41,13 @@ function MetricRow({ metric }: { metric: Metric }) {
           </div>
           <p className="mt-1 text-xs text-gray-500 leading-snug">{metric.impactHint}</p>
         </div>
-        <Badge variant="outline" className="shrink-0 tabular-nums">
+        <Badge variant="outline" className={`shrink-0 tabular-nums ${completenessBadgeClass(complete)}`}>
           {complete}%
         </Badge>
       </div>
       <div className="mt-2 h-2 rounded bg-gray-200">
         <div
-          className={`h-2 rounded ${barClass(metric.impact)}`}
+          className={`h-2 rounded ${completenessBarClass(complete)}`}
           style={{ width: `${complete}%` }}
         />
       </div>
@@ -129,7 +112,7 @@ export function DashboardDataHealthCard({
       <CardContent className="p-4 lg:p-6 space-y-6">
         <div className="rounded-lg border bg-white p-3 lg:p-4">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-            Legenda impatto individuazione
+            Legenda
           </p>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(CATALOG_HEALTH_IMPACT_LABEL) as CatalogHealthImpact[]).map(impact => (
@@ -139,9 +122,9 @@ export function DashboardDataHealthCard({
             ))}
           </div>
           <p className="mt-3 text-xs text-gray-500 leading-relaxed">
-            Il matching lavora sul catalogo opere (titolo, anno, tipo, IMDB, titolo originale).
-            Gli artisti entrano via partecipazioni: nome/cognome servono all’identità del risultato,
-            IPN/CF/nascita/stato sono anagrafica e non segnali di matching.
+            Le etichette indicano il ruolo del campo nel matching; i colori delle barre e delle
+            percentuali riflettono solo la completezza (verde = 100%, blu ≥ 80%, ambra ≥ 50%,
+            rosso sotto). Titolo al 100% non è un allarme.
           </p>
         </div>
 

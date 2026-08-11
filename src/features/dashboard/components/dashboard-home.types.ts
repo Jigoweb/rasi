@@ -9,13 +9,6 @@ export type AttentionItem = {
   description?: string
 }
 
-export type MatchingTrendPoint = {
-  date: string
-  total: number
-  valid: number
-  rate: number
-}
-
 export type ActivityFeedItem = {
   tipo: string
   label: string

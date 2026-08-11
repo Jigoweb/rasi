@@ -290,8 +290,9 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
     countCampagneIndividuazioneInCorso: () => count(
       (supabase as any)
         .from('campagne_individuazione')
-        .select('id', { count: 'exact', head: true })
+        .select('id, campagne_programmazione!inner(stato)', { count: 'exact', head: true })
         .eq('stato', 'in_corso')
+        .eq('campagne_programmazione.stato', 'in_corso')
     ),
     sumImportoDistribuito: async () => {
       const { data } = await supabase

@@ -1,8 +1,24 @@
 import {
+  ACTIVE_CAMPAGNA_INDIVIDUAZIONE_STATI_FOR_REVIEW,
+  ACTIVE_PROGRAMMAZIONE_STATO_FOR_OPEN_RUNS,
   buildAttentionQueue,
   loadAttentionQueue,
   type DashboardAttentionDeps,
 } from './dashboard-attention.service'
+
+describe('attention queue filter constants', () => {
+  it('keeps review matches only on non-archived individuazione campaigns', () => {
+    expect(ACTIVE_CAMPAGNA_INDIVIDUAZIONE_STATI_FOR_REVIEW).toEqual([
+      'bozza',
+      'in_corso',
+      'completata',
+    ])
+  })
+
+  it('requires programmazione parent still in_corso for open-run attention', () => {
+    expect(ACTIVE_PROGRAMMAZIONE_STATO_FOR_OPEN_RUNS).toBe('in_corso')
+  })
+})
 
 describe('buildAttentionQueue', () => {
   it('omits items with count === 0', () => {
@@ -76,6 +92,7 @@ describe('buildAttentionQueue', () => {
     expect(queue[1]).toMatchObject({
       id: 'upload-campagne-errore',
       severity: 'high',
+      title: 'Campagne programmazione in errore',
       href: '/dashboard/programmazioni',
       count: 1,
     })
