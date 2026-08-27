@@ -2,7 +2,6 @@
 
 import * as React from "react"
 import { ChevronsUpDown, X, Search } from "lucide-react"
-import { cn } from "@/shared/lib/utils"
 import { Button } from "@/shared/components/ui/button"
 import { Checkbox } from "@/shared/components/ui/checkbox"
 import { Badge } from "@/shared/components/ui/badge"

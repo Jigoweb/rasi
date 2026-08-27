@@ -59,7 +59,7 @@ export default async function CmsDocumentsPage() {
                     <Badge variant="outline">{doc.category}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {/* @ts-ignore */}
+                    {/* @ts-expect-error joined relation typing */}
                     {doc.pages ? doc.pages.title : '-'}
                   </TableCell>
                   <TableCell>

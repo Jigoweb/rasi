@@ -6,10 +6,8 @@ import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
 import { 
   Loader2, 
-  Download, 
   CheckCircle, 
   XCircle, 
-  Eye, 
   Minimize2,
   X,
   AlertTriangle
@@ -21,7 +19,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 // ============================================
 
 export function FloatingExportIndicator() {
-  const { state, maximize, reset, cancelExport } = useExportProcess()
+  const { state, maximize, reset } = useExportProcess()
 
   // Don't show if idle or not minimized
   if (state.status === 'idle' || !state.isMinimized) {
@@ -30,14 +28,6 @@ export function FloatingExportIndicator() {
 
   const progress = state.progress
   const percentage = progress ? progress.percentage : 0
-
-  const formatTime = (seconds?: number) => {
-    if (!seconds) return ''
-    if (seconds < 60) return `${seconds}s`
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}m ${secs}s`
-  }
 
   return (
     <div 
@@ -248,7 +238,7 @@ export function ExportProgressDialog() {
                   <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-red-900 mb-1">
-                      Errore durante l'esportazione
+                      Errore durante l&apos;esportazione
                     </p>
                     <p className="text-xs text-red-700 font-mono break-all">
                       {state.error}
@@ -303,9 +293,9 @@ export function ExportProgressDialog() {
       <AlertDialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Annullare l'esportazione?</AlertDialogTitle>
+            <AlertDialogTitle>Annullare l&apos;esportazione?</AlertDialogTitle>
             <AlertDialogDescription>
-              Sei sicuro di voler annullare l'esportazione? I dati caricati finora verranno persi.
+              Sei sicuro di voler annullare l&apos;esportazione? I dati caricati finora verranno persi.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
