@@ -100,7 +100,7 @@ describe('isKnownTransform', () => {
 describe('TRANSFORMS registry', () => {
   it('contains all named transforms', () => {
     // Every key in TRANSFORMS must be a callable function (catches accidental deletions)
-    for (const [key, fn] of Object.entries(TRANSFORMS)) {
+    for (const [, fn] of Object.entries(TRANSFORMS)) {
       expect(typeof fn).toBe('function')
     }
 

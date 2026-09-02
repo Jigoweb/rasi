@@ -46,6 +46,42 @@ async function getCampagnaProgrammazioneStato(campagnaId: string): Promise<strin
   return typeof data?.stato === 'string' ? data.stato : null
 }
 
+/** Totale palinsesto persistito in `campagne_individuazione.statistiche` all'init. */
+export function programmazioniTotaliFromStatistiche(statistiche: unknown): number | null {
+  if (!statistiche || typeof statistiche !== 'object' || Array.isArray(statistiche)) {
+    return null
+  }
+  const raw = (statistiche as Record<string, unknown>).programmazioni_totali
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+  if (!Number.isFinite(n) || n <= 0) return null
+  return Math.trunc(n)
+}
+
+/**
+ * Totale da usare sul resume. Non azzera in silenzio: se il count PostgREST
+ * fallisce (timeout su campagne grandi) e manca lo snapshot init, lancia.
+ */
+export async function resolveResumeProgrammazioniTotali(
+  campagnaProgrammazioneId: string,
+  statistiche: unknown
+): Promise<number> {
+  const fromStats = programmazioniTotaliFromStatistiche(statistiche)
+  if (fromStats != null) return fromStats
+
+  const { count, error } = await supabaseService
+    .from('programmazioni')
+    .select('id', { count: 'exact', head: true })
+    .eq('campagna_programmazione_id', campagnaProgrammazioneId)
+
+  if (error) {
+    throw new Error(`count programmazioni on resume: ${error.message}`)
+  }
+  if (count == null) {
+    throw new Error('count programmazioni on resume: conteggio assente')
+  }
+  return count
+}
+
 /** Acquisisce/rinnova il lock server-side della campagna. */
 async function acquireLock(
   campagnaId: string,
@@ -288,7 +324,7 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
     if (resume) {
       let ciQuery = supabaseService
         .from('campagne_individuazione')
-        .select('id')
+        .select('id, statistiche')
         .eq('campagne_programmazione_id', campagneProgrammazioneId)
 
       if (requestedCampagneIndividuazioneId) {
@@ -310,12 +346,10 @@ export async function runIndividuazioneJob(opts: RunOptions): Promise<void> {
         return
       }
       campagneIndividuazioneId = ci.id as string
-
-      const { count } = await supabaseService
-        .from('programmazioni')
-        .select('id', { count: 'exact', head: true })
-        .eq('campagna_programmazione_id', campagneProgrammazioneId)
-      programmazioniTotali = count ?? 0
+      programmazioniTotali = await resolveResumeProgrammazioniTotali(
+        campagneProgrammazioneId,
+        (ci as { statistiche?: unknown }).statistiche
+      )
     } else {
       const { data: initResult, error: initError } = await supabaseService.rpc(
         'init_campagna_individuazione',

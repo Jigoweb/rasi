@@ -23,7 +23,7 @@ function percentComplete(m: Metric): number {
 }
 
 /** Impact is categorical metadata — keep badges neutral so "critico" ≠ "errore". */
-function impactBadgeClass(_impact: CatalogHealthImpact): string {
+function impactBadgeClass(): string {
   return 'bg-gray-50 text-gray-700 border-gray-200'
 }
 
@@ -35,7 +35,7 @@ function MetricRow({ metric }: { metric: Metric }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium text-gray-800">{metric.label}</span>
-            <Badge variant="outline" className={impactBadgeClass(metric.impact)}>
+            <Badge variant="outline" className={impactBadgeClass()}>
               {metric.impactLabel}
             </Badge>
           </div>
@@ -116,7 +116,7 @@ export function DashboardDataHealthCard({
           </p>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(CATALOG_HEALTH_IMPACT_LABEL) as CatalogHealthImpact[]).map(impact => (
-              <Badge key={impact} variant="outline" className={impactBadgeClass(impact)}>
+              <Badge key={impact} variant="outline" className={impactBadgeClass()}>
                 {CATALOG_HEALTH_IMPACT_LABEL[impact]}
               </Badge>
             ))}

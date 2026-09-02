@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import OperePage from './page'
 import { OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
+import { supabase } from '@/shared/lib/supabase-client'
 
 const mockReplace = jest.fn()
 let mockSearchParams = new URLSearchParams()
@@ -70,7 +71,6 @@ describe('OperePage Select validation', () => {
     mockSearchParams = new URLSearchParams()
     mockReplace.mockClear()
     queryBuilder = createQueryBuilder()
-    const { supabase } = require('@/shared/lib/supabase-client')
     ;(supabase.from as jest.Mock).mockImplementation(() => queryBuilder)
   })
 

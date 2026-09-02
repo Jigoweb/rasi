@@ -59,7 +59,6 @@ export default async function CmsDocumentsPage() {
                     <Badge variant="outline">{doc.category}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
-                    {/* @ts-ignore */}
                     {doc.pages ? doc.pages.title : '-'}
                   </TableCell>
                   <TableCell>
