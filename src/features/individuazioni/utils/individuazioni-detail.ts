@@ -83,6 +83,12 @@ export function normalizeMatchScore(score: number | null | undefined): number {
   return score > 1 ? score : score * 100
 }
 
+/** Stessa formattazione Match % usata in UI e nell'export (scala 0–1 o 0–100). */
+export function formatMatchPercent(score: number | null | undefined): string {
+  if (score == null || Number.isNaN(score)) return ''
+  return `${Math.round(normalizeMatchScore(score))}%`
+}
+
 export function getMatchScoreBand(score: number | null | undefined): MatchScoreBand {
   const normalized = normalizeMatchScore(score)
   if (normalized <= 0) return 'unknown'

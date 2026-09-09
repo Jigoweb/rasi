@@ -4,6 +4,7 @@ import {
   normalizeIndividuazioneDetailStats,
   normalizeIndividuazioneStatus,
   normalizeMatchScore,
+  formatMatchPercent,
 } from './individuazioni-detail'
 
 describe('individuazioni detail utils', () => {
@@ -20,6 +21,13 @@ describe('individuazioni detail utils', () => {
     expect(getMatchScoreBand(95)).toBe('high')
     expect(getMatchScoreBand(75)).toBe('medium')
     expect(getMatchScoreBand(0.52)).toBe('low')
+  })
+
+  it('formats match percent like platform and export (round after normalize)', () => {
+    expect(formatMatchPercent(26.765)).toBe('27%')
+    expect(formatMatchPercent(0.26765)).toBe('27%')
+    expect(formatMatchPercent(80.39)).toBe('80%')
+    expect(formatMatchPercent(null)).toBe('')
   })
 
   it('normalizes rpc payload keys and defaults missing metrics', () => {

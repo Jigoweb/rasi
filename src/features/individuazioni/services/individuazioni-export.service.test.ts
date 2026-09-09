@@ -9,15 +9,47 @@ describe('formatIndividuazioniForExport', () => {
     expect(formatIndividuazioniForExport([{
       titolo: 'Film',
       artisti: { nome: 'Mario', cognome: 'Rossi', nome_arte: '' },
+      opere: { codice_opera: 'OP-1', titolo: 'Film Catalogo', titolo_originale: 'Catalogue Film' },
       ruoli_tipologie: { nome: 'Attore' },
       punteggio_matching: 0.91,
       stato: 'validato',
     }])).toMatchObject([{
       titolo: 'Film',
       artista: 'Mario Rossi',
+      opera_matchata: 'Film Catalogo',
+      opera_titolo_originale: 'Catalogue Film',
+      codice_opera: 'OP-1',
       ruolo: 'Attore',
       tasso_matching: '91%',
       stato: 'validato',
+    }])
+  })
+
+  it('rounds percent-scale match scores like the platform UI (not *100 again)', () => {
+    expect(formatIndividuazioniForExport([{
+      titolo: 'Serie',
+      artisti: null,
+      opere: { codice_opera: 'OP-2', titolo: 'Serie Matchata', titolo_originale: null },
+      ruoli_tipologie: null,
+      punteggio_matching: 26.765,
+      stato: 'dubbioso',
+    }])).toMatchObject([{
+      opera_matchata: 'Serie Matchata',
+      codice_opera: 'OP-2',
+      tasso_matching: '27%',
+    }])
+  })
+
+  it('exports empty opera fields when no matched work is linked', () => {
+    expect(formatIndividuazioniForExport([{
+      titolo: 'Sconosciuto',
+      opere: null,
+      punteggio_matching: null,
+    }])).toMatchObject([{
+      opera_matchata: '',
+      opera_titolo_originale: '',
+      codice_opera: '',
+      tasso_matching: '',
     }])
   })
 })

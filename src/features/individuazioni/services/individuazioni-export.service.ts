@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { supabase } from '@/shared/lib/supabase'
+import { formatMatchPercent } from '@/features/individuazioni/utils/individuazioni-detail'
 
 export interface ExportProgress {
   fetched: number
@@ -332,7 +333,9 @@ export const getIndividuazioniForExport = async (
           punteggio_matching,
           metodo,
           stato,
+          opera_id,
           artisti(nome, cognome, nome_arte),
+          opere(codice_opera, titolo, titolo_originale),
           ruoli_tipologie(nome)
         `)
         .eq('campagna_individuazioni_id', campagnaId)
@@ -416,8 +419,11 @@ export const formatIndividuazioniForExport = (individuazioni: any[]) => {
     total_net_ad_revenue: ind.total_net_ad_revenue ?? '',
     total_revenue: ind.total_revenue ?? '',
     artista: ind.artisti ? (ind.artisti.nome_arte || `${ind.artisti.nome || ''} ${ind.artisti.cognome || ''}`.trim()) : '',
+    opera_matchata: ind.opere?.titolo || '',
+    opera_titolo_originale: ind.opere?.titolo_originale || '',
+    codice_opera: ind.opere?.codice_opera || '',
     ruolo: ind.ruoli_tipologie?.nome || '',
-    tasso_matching: ind.punteggio_matching != null ? `${Math.round(ind.punteggio_matching * 100)}%` : '',
+    tasso_matching: formatMatchPercent(ind.punteggio_matching),
     metodo_matching: ind.metodo || '',
     stato: ind.stato || '',
   }))

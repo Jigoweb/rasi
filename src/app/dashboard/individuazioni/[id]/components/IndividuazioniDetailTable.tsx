@@ -22,6 +22,7 @@ import {
   getMatchScoreBandLabel,
   getStatusDisplay,
   normalizeIndividuazioneStatus,
+  formatMatchPercent,
   normalizeMatchScore,
 } from '@/features/individuazioni/utils/individuazioni-detail'
 import type {
@@ -539,10 +540,6 @@ function getNormalizedEpisodeCode(ind: Individuazione) {
 
 function isBroadcasterEpisodeCode(episode?: number | null, season?: number | null) {
   return season == null && typeof episode === 'number' && episode > 200
-}
-
-function formatMatchPercent(score: number) {
-  return `${Math.round(normalizeMatchScore(score))}%`
 }
 
 function getMatchColor(score: number) {
