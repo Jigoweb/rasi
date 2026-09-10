@@ -126,8 +126,14 @@ async function main() {
 
   const candidates = routes.filter((r) => {
     if (args.only && r.target_table !== args.only) return false;
-    if (r.target_table === "pages") return r.status === "update_content" || r.status === "new";
-    if (r.target_table === "bandi_news") return r.status === "update_content" || r.status === "new";
+    if (r.target_table === "pages") {
+      if (!r.category || !r.slug) return false;
+      return r.status === "update_content" || r.status === "new";
+    }
+    if (r.target_table === "bandi_news") {
+      if (!r.slug) return false;
+      return r.status === "update_content" || r.status === "new";
+    }
     return false;
   });
 
@@ -141,7 +147,7 @@ async function main() {
   for (let i = 0; i < selected.length; i++) {
     const r = selected[i];
     log(`Processo ${i + 1}/${selected.length}: ${r.target_table} ${r.path}`);
-    await sleep(1);
+    await sleep(150);
     const html = await fetchHtml(r.url);
     log(`html_len=${html.length}`);
     const title = extractTitle(html);
@@ -161,12 +167,32 @@ async function main() {
       if (args.dryRun) {
         log(`[DRY] pages ${r.category}/${r.slug} title="${safeMessage(title || "")}" content_len=${payload.content.length}`);
       } else {
-        const { error } = await supabase
+        const { data: existing } = await supabase
           .from("pages")
-          .update(payload, { returning: "minimal" })
+          .select("id")
           .eq("category", r.category)
-          .eq("slug", r.slug);
-        if (error) throw new Error(`DB update pages ${r.category}/${r.slug}: ${safeMessage(error.message)}`);
+          .eq("slug", r.slug)
+          .maybeSingle();
+        if (existing?.id) {
+          const { error } = await supabase
+            .from("pages")
+            .update(payload, { returning: "minimal" })
+            .eq("id", existing.id);
+          if (error) throw new Error(`DB update pages ${r.category}/${r.slug}: ${safeMessage(error.message)}`);
+        } else {
+          const { error } = await supabase.from("pages").insert([
+            {
+              category: r.category,
+              slug: r.slug,
+              title: title || `${r.category}/${r.slug}`,
+              template_type: r.template_type || "institutional",
+              content: payload.content,
+              is_published: Boolean(args.publish),
+              updated_at: payload.updated_at,
+            },
+          ]);
+          if (error) throw new Error(`DB insert pages ${r.category}/${r.slug}: ${safeMessage(error.message)}`);
+        }
         log(`OK pages ${r.category}/${r.slug}`);
       }
     }
