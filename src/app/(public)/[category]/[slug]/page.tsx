@@ -1,15 +1,10 @@
-import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { supabaseServer } from "@/shared/lib/supabase-server";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { InstitutionalArticle } from "@/features/public-site/components/InstitutionalArticle";
 
-// Template components
 function InstitutionalTemplate({ title, content }: { title: string; content: string }) {
-  return (
-    <article className="max-w-3xl mx-auto py-16 px-4 md:px-6">
-      <h1 className="font-poppins text-4xl md:text-5xl font-bold text-anthropic-dark mb-8">{title}</h1>
-      <div className="prose prose-lg prose-anthropic font-lora text-anthropic-dark/80" dangerouslySetInnerHTML={{ __html: content }} />
-    </article>
-  );
+  return <InstitutionalArticle title={title} content={content} />;
 }
 
 function ServiceTemplate({ title, content }: { title: string; content: string }) {
@@ -164,6 +159,24 @@ function BandoTemplate({
       </div>
     </section>
   );
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ category: string; slug: string }>;
+}): Promise<Metadata> {
+  const { category, slug } = await params;
+  const { data } = await supabaseServer
+    .from("pages")
+    .select("title,content")
+    .eq("category", category)
+    .eq("slug", slug)
+    .eq("is_published", true)
+    .single();
+  if (!data) return { title: "R.A.S.I." };
+  const excerpt = (data.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+  return { title: `${data.title} | R.A.S.I.`, description: excerpt || data.title };
 }
 
 export default async function DynamicPage({ params }: { params: Promise<{ category: string; slug: string }> }) {

@@ -6,35 +6,37 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
-import { Textarea } from '@/shared/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/shared/lib/supabase-client';
 import { Save, ArrowLeft } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
+import { FaqEditor, parseFaqContent, type FaqItem } from './FaqEditor';
+import { RichTextEditor } from './RichTextEditor';
 
 export function PageForm({ initialData, isNew = false }: { initialData: any, isNew?: boolean }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [isPublished, setIsPublished] = useState(initialData.is_published || false);
   const [templateType, setTemplateType] = useState(initialData.template_type || 'institutional');
+  const [content, setContent] = useState(initialData.content || '');
+  const [faqItems, setFaqItems] = useState<FaqItem[]>(parseFaqContent(initialData.content || ''));
 
   const { register, handleSubmit, formState: { errors } } = useForm({
     defaultValues: {
       title: initialData.title || '',
       category: initialData.category || '',
       slug: initialData.slug || '',
-      content: initialData.content || '',
     }
   });
 
   const onSubmit = async (data: any) => {
     setLoading(true);
-    
+
     const payload = {
       title: data.title,
       category: data.category,
       slug: data.slug,
-      content: data.content,
+      content: templateType === 'faq' ? JSON.stringify(faqItems) : content,
       template_type: templateType,
       is_published: isPublished,
       updated_at: new Date().toISOString()
@@ -70,9 +72,9 @@ export function PageForm({ initialData, isNew = false }: { initialData: any, isN
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <Label htmlFor="title">Titolo Pagina</Label>
-          <Input 
-            id="title" 
-            {...register('title', { required: 'Il titolo è obbligatorio' })} 
+          <Input
+            id="title"
+            {...register('title', { required: 'Il titolo è obbligatorio' })}
           />
           {errors.title && <span className="text-sm text-red-500">{errors.title.message as string}</span>}
         </div>
@@ -95,37 +97,35 @@ export function PageForm({ initialData, isNew = false }: { initialData: any, isN
 
         <div className="space-y-2">
           <Label htmlFor="category">Categoria (Percorso principale)</Label>
-          <Input 
-            id="category" 
+          <Input
+            id="category"
             placeholder="es. chi-siamo, norme"
-            {...register('category', { required: 'La categoria è obbligatoria' })} 
+            {...register('category', { required: 'La categoria è obbligatoria' })}
           />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="slug">Slug (URL)</Label>
-          <Input 
-            id="slug" 
+          <Input
+            id="slug"
             placeholder="es. statuto, servizi-artistici"
-            {...register('slug', { required: 'Lo slug è obbligatorio' })} 
+            {...register('slug', { required: 'Lo slug è obbligatorio' })}
           />
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="content">Contenuto (HTML / Rich Text)</Label>
-        <p className="text-xs text-muted-foreground mb-2">Supporta tag HTML nativi: &lt;h2&gt;, &lt;p&gt;, &lt;ul&gt;, &lt;strong&gt;</p>
-        <Textarea 
-          id="content" 
-          rows={15}
-          className="font-mono text-sm"
-          {...register('content')} 
-        />
+        <Label>Contenuto</Label>
+        {templateType === 'faq' ? (
+          <FaqEditor items={faqItems} onChange={setFaqItems} />
+        ) : (
+          <RichTextEditor value={content} onChange={setContent} />
+        )}
       </div>
 
       <div className="flex items-center space-x-2 border p-4 rounded-lg bg-gray-50">
-        <Switch 
-          id="publish-status" 
+        <Switch
+          id="publish-status"
           checked={isPublished}
           onCheckedChange={setIsPublished}
         />

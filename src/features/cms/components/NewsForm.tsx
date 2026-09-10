@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/shared/lib/supabase-client';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
-import { Textarea } from '@/shared/components/ui/textarea';
 import { Label } from '@/shared/components/ui/label';
+import { RichTextEditor } from './RichTextEditor';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { useForm, Controller } from 'react-hook-form';
@@ -25,6 +25,7 @@ export function NewsForm({ initialData, isNew = false }: { initialData?: any; is
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [content, setContent] = useState(initialData?.content || '');
   const { register, handleSubmit, control, formState: { errors } } = useForm<NewsFormData>({
     defaultValues: {
       title: initialData?.title || '',
@@ -43,7 +44,7 @@ export function NewsForm({ initialData, isNew = false }: { initialData?: any; is
     const payload = {
       title: data.title,
       slug: data.slug,
-      content: data.content,
+      content,
       status: data.status,
       cover_image_url: data.cover_image_url,
       published_at: data.isPublished ? (initialData?.published_at || new Date().toISOString()) : null,
@@ -119,13 +120,8 @@ export function NewsForm({ initialData, isNew = false }: { initialData?: any; is
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="content">Contenuto (HTML supportato)</Label>
-        <Textarea 
-          id="content" 
-          {...register('content')} 
-          className="min-h-[300px]"
-          placeholder="<p>Testo della news...</p>"
-        />
+        <Label htmlFor="content">Contenuto</Label>
+        <RichTextEditor value={content} onChange={setContent} />
       </div>
 
       <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50">

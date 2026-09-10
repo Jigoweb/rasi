@@ -29,7 +29,8 @@ export function DocumentForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { register, handleSubmit, control, formState: { errors } } = useForm<DocumentFormData>({
+  const [uploading, setUploading] = useState(false);
+  const { register, handleSubmit, control, setValue, watch, formState: { errors } } = useForm<DocumentFormData>({
     defaultValues: {
       title: initialData?.title || '',
       file_url: initialData?.file_url || '',
@@ -129,11 +130,37 @@ export function DocumentForm({
         </div>
 
         <div className="space-y-2">
+          <Label htmlFor="file">Carica file su Storage</Label>
+          <Input
+            id="file"
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              if (!file) return;
+              setUploading(true);
+              setError(null);
+              const path = `documents/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+              const { error: uploadError } = await supabase.storage.from("public-uploads").upload(path, file, {
+                upsert: false,
+              });
+              if (uploadError) {
+                setError(uploadError.message);
+                setUploading(false);
+                return;
+              }
+              const { data } = supabase.storage.from("public-uploads").getPublicUrl(path);
+              setValue("file_url", data.publicUrl, { shouldValidate: true });
+              setUploading(false);
+            }}
+          />
           <Label htmlFor="file_url">URL File / Allegato</Label>
           <Input id="file_url" {...register('file_url', { required: 'L\'URL del file è obbligatorio' })} placeholder="https://..." />
           {errors.file_url && <span className="text-red-500 text-xs">{errors.file_url.message}</span>}
           <p className="text-xs text-muted-foreground">
-            Inserisci il link al file caricato nello storage (es. PDF).
+            Carica un file oppure incolla un URL (anche dai PDF WordPress).
+            {uploading ? " Upload in corso…" : ""}
+            {watch("file_url") ? ` File: ${watch("file_url")}` : ""}
           </p>
         </div>
       </div>

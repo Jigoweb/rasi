@@ -1,5 +1,23 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/shared/lib/supabase-server";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const { data } = await supabaseServer
+    .from("bandi_news")
+    .select("title,content")
+    .eq("slug", slug)
+    .not("published_at", "is", null)
+    .single();
+  if (!data) return { title: "News | R.A.S.I." };
+  const excerpt = (data.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+  return { title: `${data.title} | R.A.S.I.`, description: excerpt || data.title };
+}
 
 export default async function NewsDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
