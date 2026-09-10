@@ -77,16 +77,21 @@ Responsabilità:
 | `anno_fuori_tolleranza` | Anno fuori tolleranza | `anno.hard_scarto === true` |
 | `regia_incoerente` | Regia incoerente | `regia.penalita === true` **oppure** score regia `< 0` |
 | `episodio_mancante` | Episodio mancante | `episodio_mancante === true` (top-level o `totale.episodio_mancante`) |
-| `episodio_da_verificare` | Episodio da verificare | `episode_normalization_fallback.confidence === 'review_required'` |
+| `episodio_da_verificare` | Episodio da verificare | `episode_normalization_fallback.confidence === 'review_required'` **oppure**, quando i campi riga sono disponibili, codice episodio emittente da review (stessa regola di `getEpisodeNormalizationLabel`: stagione assente e `numero_episodio > 200`), e **non** già coperto da `episodio_mancante` |
 
 Note:
 
 - Codici **immutabili** una volta rilasciati (label UI possono cambiare).
 - Assenza del blocco / score → `false` (non errore).
-- Allineare le soglie a quelle già usate in `matching-details.ts` per non creare
-  una seconda semantica.
+- Score titolo/titolo originale in JSONB sono già in scala 0–100
+  (`ROUND(similarity * 100)` nel matcher); le soglie 70/60 coincidono con
+  `getSimilarityTone` in `matching-details.ts`.
+- `extractMatchingSignalFlags` accetta `dettagli_matching` e, opzionalmente,
+  campi riga episodio per allineare export/badge/filtri alla tabella attuale.
 - I segnali `ok` / `neutral` restano nel drawer di revisione, **fuori** da export e
   filtri MVP.
+- Mutua esclusione soft: se `episodio_mancante` è `true`, non impostare anche
+  `episodio_da_verificare` (evita doppio filtro sullo stesso caso).
 
 ### 2. Export Excel / CSV
 
