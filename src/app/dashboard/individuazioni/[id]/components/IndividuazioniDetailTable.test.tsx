@@ -122,7 +122,7 @@ describe('IndividuazioniDetailTable', () => {
 
     expect(screen.getAllByText('In revisione').length).toBeGreaterThan(0)
     expect(screen.queryByText('score basso')).not.toBeInTheDocument()
-    expect(screen.getAllByText('episodio mancante').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Episodio mancante').length).toBeGreaterThan(0)
     expect(screen.queryByText('revisione senza motivo tracciato')).not.toBeInTheDocument()
     expect(screen.getByText('(1)')).toBeInTheDocument()
     expect(screen.getByText('Serie da controllare')).toBeInTheDocument()

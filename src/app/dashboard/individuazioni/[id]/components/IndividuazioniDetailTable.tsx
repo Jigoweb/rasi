@@ -25,6 +25,10 @@ import {
   formatMatchPercent,
   normalizeMatchScore,
 } from '@/features/individuazioni/utils/individuazioni-detail'
+import {
+  getActiveMatchingSignalCodes,
+  getMatchingSignalLabel,
+} from '@/features/individuazioni/utils/matching-signal-codes'
 import type {
   Individuazione,
   IndividuazioneGroupBy,
@@ -429,36 +433,32 @@ type ReviewReason = {
 function getReviewReasons(ind: Individuazione): ReviewReason[] {
   const reasons: ReviewReason[] = []
   const normalizedStatus = normalizeIndividuazioneStatus(ind.stato)
-  const hasMissingEpisode = ind.dettagli_matching?.episodio_mancante === true
-  const needsEpisodeReview = getEpisodeNormalizationLabel(ind) === 'review episodio'
+  const activeCodes = getActiveMatchingSignalCodes(ind.dettagli_matching, {
+    numero_episodio: ind.numero_episodio,
+    numero_stagione: ind.numero_stagione,
+  })
 
-  if (hasMissingEpisode) {
+  for (const code of activeCodes) {
     reasons.push({
-      label: 'episodio mancante',
-      variant: 'outline',
-      className: 'border-amber-200 bg-amber-50 text-amber-900',
-    })
-  } else if (normalizedStatus === 'dubbioso') {
-    reasons.push({
-      label: 'revisione senza motivo tracciato',
-      variant: 'outline',
-      className: 'border-amber-200 bg-amber-50 text-amber-900',
-    })
-  }
-
-  if (needsEpisodeReview && !hasMissingEpisode) {
-    reasons.push({
-      label: 'episodio da verificare',
+      label: getMatchingSignalLabel(code),
       variant: 'outline',
       className: 'border-amber-200 bg-amber-50 text-amber-900',
     })
   }
 
   if (reasons.length === 0) {
-    reasons.push({
-      label: normalizedStatus === 'validato' ? 'validato' : 'nessun motivo specifico',
-      variant: 'secondary',
-    })
+    if (normalizedStatus === 'dubbioso') {
+      reasons.push({
+        label: 'revisione senza motivo tracciato',
+        variant: 'outline',
+        className: 'border-amber-200 bg-amber-50 text-amber-900',
+      })
+    } else {
+      reasons.push({
+        label: normalizedStatus === 'validato' ? 'validato' : 'nessun motivo specifico',
+        variant: 'secondary',
+      })
+    }
   }
 
   return reasons

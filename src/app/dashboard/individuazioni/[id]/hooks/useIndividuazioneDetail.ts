@@ -16,6 +16,8 @@ import {
   type Individuazione,
   type IndividuazioneSortBy,
   type IndividuazioneSortDirection,
+  type MatchingSignalCode,
+  type MatchingSignalFilterMode,
   type SearchField,
 } from '@/features/individuazioni/services/individuazioni.service'
 
@@ -42,6 +44,8 @@ export function useIndividuazioneDetail(campagnaId: string) {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [searchField, setSearchField] = useState<SearchField>('titolo')
   const [statoFilter, setStatoFilter] = useState<string>('all')
+  const [matchingSignalCodes, setMatchingSignalCodes] = useState<MatchingSignalCode[]>([])
+  const [matchingSignalMode, setMatchingSignalMode] = useState<MatchingSignalFilterMode>('or')
   const [sortBy, setSortBy] = useState<IndividuazioneSortBy>('review_priority')
   const [sortDirection, setSortDirection] = useState<IndividuazioneSortDirection>('asc')
   const [groupBy, setGroupBy] = useState<IndividuazioneGroupBy>('none')
@@ -109,6 +113,8 @@ export function useIndividuazioneDetail(campagnaId: string) {
         search: debouncedSearchTerm || undefined,
         searchField,
         stato: statoFilter !== 'all' ? statoFilter : undefined,
+        matchingSignalCodes: matchingSignalCodes.length > 0 ? matchingSignalCodes : undefined,
+        matchingSignalMode,
         withCount: isFirstPage,
         sortBy,
         sortDirection,
@@ -133,7 +139,17 @@ export function useIndividuazioneDetail(campagnaId: string) {
         setLoadingMore(false)
       }
     }
-  }, [campagnaId, debouncedSearchTerm, page, searchField, sortBy, sortDirection, statoFilter])
+  }, [
+    campagnaId,
+    debouncedSearchTerm,
+    matchingSignalCodes,
+    matchingSignalMode,
+    page,
+    searchField,
+    sortBy,
+    sortDirection,
+    statoFilter,
+  ])
 
   useEffect(() => {
     if (!campagna) return
@@ -150,6 +166,16 @@ export function useIndividuazioneDetail(campagnaId: string) {
 
   const handleStatoFilterChange = useCallback((value: string) => {
     setStatoFilter(value)
+    setPage(1)
+  }, [])
+
+  const handleMatchingSignalCodesChange = useCallback((codes: MatchingSignalCode[]) => {
+    setMatchingSignalCodes(codes)
+    setPage(1)
+  }, [])
+
+  const handleMatchingSignalModeChange = useCallback((mode: MatchingSignalFilterMode) => {
+    setMatchingSignalMode(mode)
     setPage(1)
   }, [])
 
@@ -309,6 +335,8 @@ export function useIndividuazioneDetail(campagnaId: string) {
     searchTerm,
     searchField,
     statoFilter,
+    matchingSignalCodes,
+    matchingSignalMode,
     sortBy,
     sortDirection,
     groupBy,
@@ -318,6 +346,8 @@ export function useIndividuazioneDetail(campagnaId: string) {
     handleSearch,
     handleSearchFieldChange,
     handleStatoFilterChange,
+    handleMatchingSignalCodesChange,
+    handleMatchingSignalModeChange,
     handleSortChange,
     handleGroupByChange,
     loadMore,

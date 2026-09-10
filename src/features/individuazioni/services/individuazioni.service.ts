@@ -6,8 +6,14 @@ import {
   type IndividuazioneDetailStats,
   type IndividuazioneStatus,
 } from '../utils/individuazioni-detail'
+import {
+  applyMatchingSignalFilters,
+  type MatchingSignalFilterMode,
+} from '../utils/matching-signal-filters'
+import type { MatchingSignalCode } from '../utils/matching-signal-codes'
 
 export type { IndividuazioneDetailStats, IndividuazioneStatus }
+export type { MatchingSignalCode, MatchingSignalFilterMode }
 
 export interface IndividuazioneEpisodeAlertSummary {
   totale: number
@@ -283,6 +289,8 @@ export const getIndividuazioni = async (
     search?: string
     searchField?: SearchField
     stato?: string
+    matchingSignalCodes?: MatchingSignalCode[]
+    matchingSignalMode?: MatchingSignalFilterMode
     withCount?: boolean
     sortBy?: IndividuazioneSortBy
     sortDirection?: IndividuazioneSortDirection
@@ -295,6 +303,7 @@ export const getIndividuazioni = async (
   const withCount = options?.withCount ?? true
   const sortBy = options?.sortBy || 'data_trasmissione'
   const sortDirection = options?.sortDirection || 'desc'
+  const matchingSignalMode = options?.matchingSignalMode || 'or'
 
   // Se si cerca per artista o opera, dobbiamo prima trovare gli ID corrispondenti
   let filterIds: string[] | null = null
@@ -348,6 +357,12 @@ export const getIndividuazioni = async (
   if (normalizedStatus) {
     query = query.eq('stato', normalizedStatus)
   }
+
+  query = applyMatchingSignalFilters(
+    query,
+    options?.matchingSignalCodes,
+    matchingSignalMode,
+  )
 
   query = applyIndividuazioniSort(query, sortBy, sortDirection)
     .range(offset, offset + pageSize - 1)

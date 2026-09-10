@@ -3,11 +3,13 @@
 import { useCallback, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Download, Edit, Loader2, Search } from 'lucide-react'
+import { ArrowLeft, Download, Edit, Filter, Loader2, Search } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
@@ -18,8 +20,11 @@ import {
   type Individuazione,
   type IndividuazioneDetailStats,
   type IndividuazioneStatus,
+  type MatchingSignalCode,
+  type MatchingSignalFilterMode,
   type SearchField,
 } from '@/features/individuazioni/services/individuazioni.service'
+import { MATCHING_SIGNAL_CATALOG } from '@/features/individuazioni/utils/matching-signal-codes'
 import {
   updateIndividuazioniByIds,
   updateIndividuazioniByScope,
@@ -79,6 +84,8 @@ export default function IndividuazioneDetailPage() {
     searchTerm,
     searchField,
     statoFilter,
+    matchingSignalCodes,
+    matchingSignalMode,
     sortBy,
     sortDirection,
     groupBy,
@@ -87,6 +94,8 @@ export default function IndividuazioneDetailPage() {
     handleSearch,
     handleSearchFieldChange,
     handleStatoFilterChange,
+    handleMatchingSignalCodesChange,
+    handleMatchingSignalModeChange,
     handleSortChange,
     handleGroupByChange,
     handleExportDialogOpenChange,
@@ -374,6 +383,74 @@ export default function IndividuazioneDetailPage() {
                 <SelectItem value="respinto">Respinto</SelectItem>
               </SelectContent>
             </Select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full md:w-auto justify-start">
+                  <Filter className="h-4 w-4 mr-2" />
+                  Segnali
+                  {matchingSignalCodes.length > 0 ? ` (${matchingSignalCodes.length})` : ''}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-4" align="end">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-medium">Segnali di matching</p>
+                    <p className="text-xs text-muted-foreground">
+                      Mostra solo risultati con evidenze problematiche selezionate.
+                    </p>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {MATCHING_SIGNAL_CATALOG.map(item => {
+                      const checked = matchingSignalCodes.includes(item.code)
+                      return (
+                        <label
+                          key={item.code}
+                          className="flex items-center gap-2 text-sm cursor-pointer"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={value => {
+                              const next = value === true
+                                ? [...matchingSignalCodes, item.code]
+                                : matchingSignalCodes.filter(code => code !== item.code)
+                              handleMatchingSignalCodesChange(next as MatchingSignalCode[])
+                            }}
+                            aria-label={item.label}
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <div className="space-y-2 border-t pt-3">
+                    <p className="text-xs font-medium text-muted-foreground">Combinazione</p>
+                    <Select
+                      value={matchingSignalMode}
+                      onValueChange={value => handleMatchingSignalModeChange(value as MatchingSignalFilterMode)}
+                      disabled={matchingSignalCodes.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="or">Almeno uno (OR)</SelectItem>
+                        <SelectItem value="and">Tutti (AND)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {matchingSignalCodes.length > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleMatchingSignalCodesChange([])}
+                    >
+                      Azzera segnali
+                    </Button>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </CardContent>
       </Card>

@@ -52,6 +52,35 @@ describe('formatIndividuazioniForExport', () => {
       tasso_matching: '',
     }])
   })
+
+  it('exports SI/NO columns for problematic matching signals', () => {
+    expect(formatIndividuazioniForExport([{
+      titolo: 'Film',
+      numero_episodio: 1,
+      numero_stagione: 1,
+      dettagli_matching: {
+        titolo: { score: 40 },
+        regia: { penalita: true },
+        episodio_mancante: true,
+      },
+    }])).toMatchObject([{
+      'Titolo debole': 'SI',
+      'Titolo originale debole': 'NO',
+      'Anno con scostamento': 'NO',
+      'Anno fuori tolleranza': 'NO',
+      'Regia incoerente': 'SI',
+      'Episodio mancante': 'SI',
+      'Episodio da verificare': 'NO',
+    }])
+  })
+
+  it('exports all NO signal columns when dettagli_matching is missing', () => {
+    expect(formatIndividuazioniForExport([{ titolo: 'Film' }])).toMatchObject([{
+      'Titolo debole': 'NO',
+      'Regia incoerente': 'NO',
+      'Episodio mancante': 'NO',
+    }])
+  })
 })
 
 describe('buildIndividuazioneExportFileName', () => {

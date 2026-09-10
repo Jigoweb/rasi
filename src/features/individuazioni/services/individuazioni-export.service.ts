@@ -2,6 +2,11 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { supabase } from '@/shared/lib/supabase'
 import { formatMatchPercent } from '@/features/individuazioni/utils/individuazioni-detail'
+import {
+  MATCHING_SIGNAL_CATALOG,
+  extractMatchingSignalFlags,
+  formatSignalFlag,
+} from '@/features/individuazioni/utils/matching-signal-codes'
 
 export interface ExportProgress {
   fetched: number
@@ -334,6 +339,7 @@ export const getIndividuazioniForExport = async (
           metodo,
           stato,
           opera_id,
+          dettagli_matching,
           artisti(nome, cognome, nome_arte),
           opere(codice_opera, titolo, titolo_originale),
           ruoli_tipologie(nome)
@@ -393,38 +399,49 @@ export const getIndividuazioniForExport = async (
 }
 
 export const formatIndividuazioniForExport = (individuazioni: any[]) => {
-  return individuazioni.map(ind => ({
-    canale: ind.canale || '',
-    emittente: ind.emittente || '',
-    tipo: ind.tipo || '',
-    titolo: ind.titolo || '',
-    titolo_originale: ind.titolo_originale || '',
-    numero_episodio: ind.numero_episodio ?? '',
-    titolo_episodio: ind.titolo_episodio || '',
-    titolo_episodio_originale: ind.titolo_episodio_originale || '',
-    numero_stagione: ind.numero_stagione ?? '',
-    anno: ind.anno ?? '',
-    production: ind.production || '',
-    regia: ind.regia || '',
-    data_trasmissione: ind.data_trasmissione || '',
-    ora_inizio: ind.ora_inizio || '',
-    ora_fine: ind.ora_fine || '',
-    durata_minuti: ind.durata_minuti ?? '',
-    data_inizio: ind.data_inizio || '',
-    data_fine: ind.data_fine || '',
-    retail_price: ind.retail_price ?? '',
-    sales_month: ind.sales_month ?? '',
-    track_price_local_currency: ind.track_price_local_currency ?? '',
-    views: ind.views ?? '',
-    total_net_ad_revenue: ind.total_net_ad_revenue ?? '',
-    total_revenue: ind.total_revenue ?? '',
-    artista: ind.artisti ? (ind.artisti.nome_arte || `${ind.artisti.nome || ''} ${ind.artisti.cognome || ''}`.trim()) : '',
-    opera_matchata: ind.opere?.titolo || '',
-    opera_titolo_originale: ind.opere?.titolo_originale || '',
-    codice_opera: ind.opere?.codice_opera || '',
-    ruolo: ind.ruoli_tipologie?.nome || '',
-    tasso_matching: formatMatchPercent(ind.punteggio_matching),
-    metodo_matching: ind.metodo || '',
-    stato: ind.stato || '',
-  }))
+  return individuazioni.map(ind => {
+    const signalFlags = extractMatchingSignalFlags(ind.dettagli_matching, {
+      numero_episodio: ind.numero_episodio,
+      numero_stagione: ind.numero_stagione,
+    })
+    const signalColumns = Object.fromEntries(
+      MATCHING_SIGNAL_CATALOG.map(item => [item.label, formatSignalFlag(signalFlags[item.code])]),
+    )
+
+    return {
+      canale: ind.canale || '',
+      emittente: ind.emittente || '',
+      tipo: ind.tipo || '',
+      titolo: ind.titolo || '',
+      titolo_originale: ind.titolo_originale || '',
+      numero_episodio: ind.numero_episodio ?? '',
+      titolo_episodio: ind.titolo_episodio || '',
+      titolo_episodio_originale: ind.titolo_episodio_originale || '',
+      numero_stagione: ind.numero_stagione ?? '',
+      anno: ind.anno ?? '',
+      production: ind.production || '',
+      regia: ind.regia || '',
+      data_trasmissione: ind.data_trasmissione || '',
+      ora_inizio: ind.ora_inizio || '',
+      ora_fine: ind.ora_fine || '',
+      durata_minuti: ind.durata_minuti ?? '',
+      data_inizio: ind.data_inizio || '',
+      data_fine: ind.data_fine || '',
+      retail_price: ind.retail_price ?? '',
+      sales_month: ind.sales_month ?? '',
+      track_price_local_currency: ind.track_price_local_currency ?? '',
+      views: ind.views ?? '',
+      total_net_ad_revenue: ind.total_net_ad_revenue ?? '',
+      total_revenue: ind.total_revenue ?? '',
+      artista: ind.artisti ? (ind.artisti.nome_arte || `${ind.artisti.nome || ''} ${ind.artisti.cognome || ''}`.trim()) : '',
+      opera_matchata: ind.opere?.titolo || '',
+      opera_titolo_originale: ind.opere?.titolo_originale || '',
+      codice_opera: ind.opere?.codice_opera || '',
+      ruolo: ind.ruoli_tipologie?.nome || '',
+      tasso_matching: formatMatchPercent(ind.punteggio_matching),
+      metodo_matching: ind.metodo || '',
+      stato: ind.stato || '',
+      ...signalColumns,
+    }
+  })
 }

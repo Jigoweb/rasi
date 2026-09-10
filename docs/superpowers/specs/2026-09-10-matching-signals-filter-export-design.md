@@ -77,7 +77,7 @@ Responsabilità:
 | `anno_fuori_tolleranza` | Anno fuori tolleranza | `anno.hard_scarto === true` |
 | `regia_incoerente` | Regia incoerente | `regia.penalita === true` **oppure** score regia `< 0` |
 | `episodio_mancante` | Episodio mancante | `episodio_mancante === true` (top-level o `totale.episodio_mancante`) |
-| `episodio_da_verificare` | Episodio da verificare | `episode_normalization_fallback.confidence === 'review_required'` **oppure**, quando i campi riga sono disponibili, codice episodio emittente da review (stessa regola di `getEpisodeNormalizationLabel`: stagione assente e `numero_episodio > 200`), e **non** già coperto da `episodio_mancante` |
+| `episodio_da_verificare` | Episodio da verificare | `episode_normalization_fallback.confidence === 'review_required'` **oppure**, quando i campi riga sono disponibili, codice episodio emittente da review (stessa regola di `getEpisodeNormalizationLabel`: stagione assente e `numero_episodio > 200`) **salvo** normalizzazione già confermata (`confidence === 'high'`), e **non** già coperto da `episodio_mancante` |
 
 Note:
 
