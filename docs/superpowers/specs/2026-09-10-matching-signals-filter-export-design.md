@@ -1,7 +1,7 @@
 # Filtri segnali di matching (export Excel + app)
 
 **Data:** 2026-09-10  
-**Stato:** Design approvato (in attesa review spec)  
+**Stato:** Implementato (MVP)  
 **Branch di riferimento:** `cursor/matching-signals-filter-design-7051`
 
 ## Problema
