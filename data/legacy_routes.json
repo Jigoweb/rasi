@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-04-21T13:58:44.600Z",
+  "generated_at": "2026-09-10T14:19:24.633206Z",
   "routes": [
     {
       "url": "https://www.reteartistispettacolo.it/it/",
       "path": "/",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/10-buoni-motivi-per-firmare-il-mandato-r-a-s-i/",
@@ -60,9 +60,8 @@
       "url": "https://www.reteartistispettacolo.it/it/accordi/",
       "path": "/accordi",
       "source": "page",
-      "target_table": "category_index",
-      "category": "accordi",
-      "status": "handled"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/art-90-dl-cura-italia-destinati-ad-autori-artisti-interpreti-esecutori-e-mandatari/",
@@ -76,9 +75,8 @@
       "url": "https://www.reteartistispettacolo.it/it/artisti/",
       "path": "/artisti",
       "source": "page",
-      "target_table": "category_index",
-      "category": "artisti",
-      "status": "handled"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/artisti-in-azione-corsi-di-recitazione-in-inglese-con-cristina-moglia/",
@@ -92,16 +90,14 @@
       "url": "https://www.reteartistispettacolo.it/it/bando-larte-del-precario/",
       "path": "/bando-larte-del-precario",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-larte-del-precario",
-      "status": "done"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/bando-larte-nellera-della-rivoluzione-i-a/",
       "path": "/bando-larte-nellera-della-rivoluzione-i-a",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-larte-nellera-della-rivoluzione-i-a",
+      "target_table": "pages",
       "status": "new"
     },
     {
@@ -116,9 +112,8 @@
       "url": "https://www.reteartistispettacolo.it/it/bando-oltre-i-confini/",
       "path": "/bando-oltre-i-confini",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-oltre-i-confini",
-      "status": "done"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/bando-r-a-s-i-2025/",
@@ -126,6 +121,14 @@
       "source": "post",
       "target_table": "bandi_news",
       "slug": "bando-r-a-s-i-2025",
+      "status": "new"
+    },
+    {
+      "url": "https://www.reteartistispettacolo.it/it/bando-r-a-s-i-2026/",
+      "path": "/bando-r-a-s-i-2026",
+      "source": "post",
+      "target_table": "bandi_news",
+      "slug": "bando-r-a-s-i-2026",
       "status": "new"
     },
     {
@@ -137,51 +140,52 @@
       "status": "new"
     },
     {
+      "url": "https://www.reteartistispettacolo.it/it/bando-sotto-lo-stesso-tetto/",
+      "path": "/bando-sotto-lo-stesso-tetto",
+      "source": "page",
+      "target_table": "pages",
+      "status": "new"
+    },
+    {
       "url": "https://www.reteartistispettacolo.it/it/bando-tematico-applausisu-la-testa/",
       "path": "/bando-tematico-applausisu-la-testa",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-tematico-applausisu-la-testa",
+      "target_table": "pages",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/bando-tematico-artisti-in-isolamento/",
       "path": "/bando-tematico-artisti-in-isolamento",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-tematico-artisti-in-isolamento",
-      "status": "done"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/bando-tematico-buona-la-prima/",
       "path": "/bando-tematico-buona-la-prima",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-tematico-buona-la-prima",
-      "status": "done"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/bando-tematico-live/",
       "path": "/bando-tematico-live",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-tematico-live",
-      "status": "done"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/bando-tematico-lultima-guerra/",
       "path": "/bando-tematico-lultima-guerra",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-tematico-lultima-guerra",
-      "status": "done"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/bando-tematico-per-la-promozione-delle-attivita-professionali-degli-artisti/",
       "path": "/bando-tematico-per-la-promozione-delle-attivita-professionali-degli-artisti",
       "source": "page",
-      "target_table": "bandi_news",
-      "slug": "bando-tematico-per-la-promozione-delle-attivita-professionali-degli-artisti",
+      "target_table": "pages",
       "status": "new"
     },
     {
@@ -253,9 +257,8 @@
       "url": "https://www.reteartistispettacolo.it/it/chi-siamo/",
       "path": "/chi-siamo",
       "source": "page",
-      "target_table": "category_index",
-      "category": "chi-siamo",
-      "status": "handled"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/ciak-preparati-nuovo-servizio-r-a-s-i-di-casting-coaching-gratuito-per-gli-artisti-mandanti/",
@@ -285,7 +288,8 @@
       "url": "https://www.reteartistispettacolo.it/it/codice-civile/",
       "path": "/codice-civile",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "norme",
       "slug": "codice-civile",
       "status": "new"
     },
@@ -300,15 +304,16 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/contatti/",
       "path": "/contatti",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/contratto-tipo-canale-tv-nazionale/",
       "path": "/contratto-tipo-canale-tv-nazionale",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "utilizzatori",
       "slug": "contratto-tipo-canale-tv-nazionale",
       "status": "new"
     },
@@ -316,7 +321,8 @@
       "url": "https://www.reteartistispettacolo.it/it/contratto-tipo-piattaforme-tv-nazionali/",
       "path": "/contratto-tipo-piattaforme-tv-nazionali",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "utilizzatori",
       "slug": "contratto-tipo-piattaforme-tv-nazionali",
       "status": "new"
     },
@@ -371,22 +377,23 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/cookie-policy/",
       "path": "/cookie-policy",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/cosa-fa-rete-artisti-spettacolo-per-gli-artisti-che-le-hanno-dato-il-mandato/",
       "path": "/cosa-fa-rete-artisti-spettacolo-per-gli-artisti-che-le-hanno-dato-il-mandato",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo/",
       "path": "/covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "norme",
       "slug": "covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo",
       "status": "new"
     },
@@ -394,8 +401,9 @@
       "url": "https://www.reteartistispettacolo.it/it/covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo-2/",
       "path": "/covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo-2",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo-2",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo",
       "status": "new"
     },
     {
@@ -426,8 +434,9 @@
       "url": "https://www.reteartistispettacolo.it/it/d-lgs-15-3-2017-in-attuazione-direttiva-2014-26-ue/",
       "path": "/d-lgs-15-3-2017-in-attuazione-direttiva-2014-26-ue",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "d-lgs-15-3-2017-in-attuazione-direttiva-2014-26-ue",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "d-lgs-15-3017-in-attuazione-direttiva0146-ue",
       "status": "new"
     },
     {
@@ -442,16 +451,18 @@
       "url": "https://www.reteartistispettacolo.it/it/decreto-mibac-26-2-2019/",
       "path": "/decreto-mibac-26-2-2019",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "decreto-mibac-26-2-2019",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "decreto-mibac6019",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/decreto-mibac-5-9-2018/",
       "path": "/decreto-mibac-5-9-2018",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "decreto-mibac-5-9-2018",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "decreto-mibac-5-9018",
       "status": "new"
     },
     {
@@ -530,7 +541,8 @@
       "url": "https://www.reteartistispettacolo.it/it/direttiva-eu-mercato-unico-digitale/",
       "path": "/direttiva-eu-mercato-unico-digitale",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "norme",
       "slug": "direttiva-eu-mercato-unico-digitale",
       "status": "new"
     },
@@ -554,40 +566,45 @@
       "url": "https://www.reteartistispettacolo.it/it/dl-1-del-24-01-2012-art-39-liberalizzazione/",
       "path": "/dl-1-del-24-01-2012-art-39-liberalizzazione",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dl-1-del-24-01-2012-art-39-liberalizzazione",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dl-1-del4-01012-art-39-liberalizzazione",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/dl-163-del-10-11-2014/",
       "path": "/dl-163-del-10-11-2014",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dl-163-del-10-11-2014",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dl-163-del-10-11014",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/dl-22-del-21-02-2014/",
       "path": "/dl-22-del-21-02-2014",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dl-22-del-21-02-2014",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dl2-del1-02014",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/dl-64-del-30-04-2010-art-7/",
       "path": "/dl-64-del-30-04-2010-art-7",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dl-64-del-30-04-2010-art-7",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dl-64-del-30-04010-art-7",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/dm-mibac-del-20-06-2014-compenso-copia-privata/",
       "path": "/dm-mibac-del-20-06-2014-compenso-copia-privata",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dm-mibac-del-20-06-2014-compenso-copia-privata",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dm-mibac-del0-06014-compenso-copia-privata",
       "status": "new"
     },
     {
@@ -602,7 +619,8 @@
       "url": "https://www.reteartistispettacolo.it/it/dpcm-del-01-09-1975/",
       "path": "/dpcm-del-01-09-1975",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "norme",
       "slug": "dpcm-del-01-09-1975",
       "status": "new"
     },
@@ -610,15 +628,17 @@
       "url": "https://www.reteartistispettacolo.it/it/dpcm-del-02-02-2015/",
       "path": "/dpcm-del-02-02-2015",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dpcm-del-02-02-2015",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dpcm-del-02-02015",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/dpcm-del-15-07-1976/",
       "path": "/dpcm-del-15-07-1976",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "norme",
       "slug": "dpcm-del-15-07-1976",
       "status": "new"
     },
@@ -626,16 +646,18 @@
       "url": "https://www.reteartistispettacolo.it/it/dpcm-del-17-01-2014/",
       "path": "/dpcm-del-17-01-2014",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dpcm-del-17-01-2014",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dpcm-del-17-01014",
       "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/dpcm-del-19-12-2012-requisiti-collecting/",
       "path": "/dpcm-del-19-12-2012-requisiti-collecting",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "dpcm-del-19-12-2012-requisiti-collecting",
+      "target_table": "pages",
+      "category": "norme",
+      "slug": "dpcm-del-19-12012-requisiti-collecting",
       "status": "new"
     },
     {
@@ -649,16 +671,20 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/elenco-opere-musicali-interpretate-da-artisti-rasi/",
       "path": "/elenco-opere-musicali-interpretate-da-artisti-rasi",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "category": "utilizzatori",
+      "slug": "elenco-opere-musicali-interpretate-da-artisti-rasi",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/elenco-opere-video-interpretate-da-artisti-rasi/",
       "path": "/elenco-opere-video-interpretate-da-artisti-rasi",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "category": "utilizzatori",
+      "slug": "elenco-opere-video-interpretate-da-artisti-rasi",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/elogio-ad-un-mito-ciao-carlo-croccolo/",
@@ -784,11 +810,7 @@
       "path": "/inizio-attivita",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "inizio-attivita",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "inizio-attivita"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/keep-rollin-studio-workshop-con-la-regista-laura-luchetti/",
@@ -810,7 +832,8 @@
       "url": "https://www.reteartistispettacolo.it/it/legge-633-del-1941/",
       "path": "/legge-633-del-1941",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "norme",
       "slug": "legge-633-del-1941",
       "status": "new"
     },
@@ -818,7 +841,8 @@
       "url": "https://www.reteartistispettacolo.it/it/legge-93-del-05-02-1992/",
       "path": "/legge-93-del-05-02-1992",
       "source": "post",
-      "target_table": "bandi_news",
+      "target_table": "pages",
+      "category": "norme",
       "slug": "legge-93-del-05-02-1992",
       "status": "new"
     },
@@ -835,11 +859,7 @@
       "path": "/linee-di-condotta",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "linee-di-condotta",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "linee-di-condotta"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/liquidazione-imaie-per-gli-artisti-la-proposta-di-rasi-diventa-legge/",
@@ -852,16 +872,16 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/login/",
       "path": "/login",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/logout/",
       "path": "/logout",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/ludwig-sound-presenta-devon-jah-brothers-streaming-concert/",
@@ -875,33 +895,29 @@
       "url": "https://www.reteartistispettacolo.it/it/mandato-artista-alla-rasi/",
       "path": "/mandato-artista-alla-rasi",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "mandato-artista-alla-rasi",
-      "status": "new"
+      "target_table": "unknown",
+      "status": "needs_review"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/mandato-artista-minorenne-alla-rasi/",
       "path": "/mandato-artista-minorenne-alla-rasi",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "mandato-artista-minorenne-alla-rasi",
-      "status": "new"
+      "target_table": "unknown",
+      "status": "needs_review"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/mandato-erede-artista-alla-r-a-s-i/",
       "path": "/mandato-erede-artista-alla-r-a-s-i",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "mandato-erede-artista-alla-r-a-s-i",
-      "status": "new"
+      "target_table": "unknown",
+      "status": "needs_review"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/mandato-erede-minorenne-artista-alla-r-a-s-i/",
       "path": "/mandato-erede-minorenne-artista-alla-r-a-s-i",
       "source": "post",
-      "target_table": "bandi_news",
-      "slug": "mandato-erede-minorenne-artista-alla-r-a-s-i",
-      "status": "new"
+      "target_table": "unknown",
+      "status": "needs_review"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/mario-donatone-ci-saluta-un-pezzo-di-cinema/",
@@ -914,9 +930,9 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/members/",
       "path": "/members",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/mibac-12-mln-a-disposizione-degli-eventi-annullati-o-rimandati/",
@@ -953,9 +969,9 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/modulistica/",
       "path": "/modulistica",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/news-decreto-e-sostegni/",
@@ -969,9 +985,8 @@
       "url": "https://www.reteartistispettacolo.it/it/norme/",
       "path": "/norme",
       "source": "page",
-      "target_table": "category_index",
-      "category": "norme",
-      "status": "handled"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/nuove-misure-di-sostegno-per-i-lavoratori-dello-spettacolo/",
@@ -1002,18 +1017,14 @@
       "path": "/organi-sociali",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "organi-sociali",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "organi-sociali"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/password-reset/",
       "path": "/password-reset",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/per-nina-zilli-al-via-il-ti-amo-mi-uccidi-tour/",
@@ -1028,33 +1039,21 @@
       "path": "/personal-data-policy",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "personal-data-policy",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "personal-data-policy"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/privacy-policy/",
       "path": "/privacy-policy",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "privacy-policy",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "privacy-policy"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/procedure-di-trattamento-dei-reclami/",
       "path": "/procedure-di-trattamento-dei-reclami",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "procedure-di-trattamento-dei-reclami",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "procedure-di-trattamento-dei-reclami"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/progetti-spettacolo-regione-lazio/",
@@ -1068,9 +1067,8 @@
       "url": "https://www.reteartistispettacolo.it/it/promozione/",
       "path": "/promozione",
       "source": "page",
-      "target_table": "category_index",
-      "category": "promozione",
-      "status": "handled"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/pubblicazione-esiti-domande-a-siae-per-contributo-fondo-aie-decreto-del-ministero-della-cultura-del-13-agosto-2021-n-311/",
@@ -1093,18 +1091,14 @@
       "path": "/quali-artisti-possono-dare-il-mandato",
       "source": "page",
       "target_table": "pages",
-      "category": "artisti",
-      "slug": "quali-artisti-possono-dare-il-mandato",
-      "template_type": "faq",
-      "status": "update_content",
-      "legacy_slug": "quali-artisti-possono-dare-il-mandato"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/quando-gli-artisti-maturano-il-compenso-per-i-diritti-connessi/",
       "path": "/quando-gli-artisti-maturano-il-compenso-per-i-diritti-connessi",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/r-a-s-i-allassemblea-generale-di-scapr/",
@@ -1149,63 +1143,51 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/register/",
       "path": "/register",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/regolamento-adesione/",
       "path": "/regolamento-adesione",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "regolamento-adesione",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "regolamento-adesione"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/regolamento-attivita-di-promozione-e-patrocinio/",
       "path": "/regolamento-attivita-di-promozione-e-patrocinio",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/regolamento-conferimento-mandato/",
       "path": "/regolamento-conferimento-mandato",
       "source": "page",
       "target_table": "pages",
-      "category": "artisti",
-      "slug": "regolamento-conferimento-mandato",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "regolamento-conferimento-mandato"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/regolamento-ripartizione-artisti-video/",
       "path": "/regolamento-ripartizione-artisti-video",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/regolamento-ripartizione-mandato-artisti/",
       "path": "/regolamento-ripartizione-mandato-artisti",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/relazione-di-trasparenza/",
       "path": "/relazione-di-trasparenza",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "relazione-di-trasparenza",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "relazione-di-trasparenza"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/riff-festival-premio-rasi-per-la-miglior-interpretazione/",
@@ -1234,31 +1216,23 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/servizi-agli-artisti/",
       "path": "/servizi-agli-artisti",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/servizi-artistici/",
       "path": "/servizi-artistici",
       "source": "page",
       "target_table": "pages",
-      "category": "servizi",
-      "slug": "servizi-artistici",
-      "template_type": "service",
-      "status": "update_content",
-      "legacy_slug": "servizi-artistici"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/servizi-burocratici/",
       "path": "/servizi-burocratici",
       "source": "page",
       "target_table": "pages",
-      "category": "servizi",
-      "slug": "servizi-burocratici",
-      "template_type": "service",
-      "status": "update_content",
-      "legacy_slug": "servizi-burocratici"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/servizi-per-gli-artisti/",
@@ -1271,16 +1245,16 @@
     {
       "url": "https://www.reteartistispettacolo.it/it/settore-musica/",
       "path": "/settore-musica",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/settore-opere-cinematografiche/",
       "path": "/settore-opere-cinematografiche",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/sky-non-paga-il-diritto-dautore/",
@@ -1311,11 +1285,7 @@
       "path": "/statuto",
       "source": "page",
       "target_table": "pages",
-      "category": "chi-siamo",
-      "slug": "statuto",
-      "template_type": "institutional",
-      "status": "update_content",
-      "legacy_slug": "statuto"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/stefano-dorazio-saluto-allindimenticato-batterista-dei-pooh/",
@@ -1332,9 +1302,7 @@
       "target_table": "pages",
       "category": "utilizzatori",
       "slug": "tariffe-diritti-connessi-musica",
-      "template_type": "document_list",
-      "status": "update_content",
-      "legacy_slug": "tariffe-diritti-connessi-musica"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/tariffe-diritti-connessi-video/",
@@ -1343,30 +1311,28 @@
       "target_table": "pages",
       "category": "utilizzatori",
       "slug": "tariffe-diritti-connessi-video",
-      "template_type": "document_list",
-      "status": "update_content",
-      "legacy_slug": "tariffe-diritti-connessi-video"
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/tp-artisti-in-azione/",
       "path": "/tp-artisti-in-azione",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/tptyc/",
       "path": "/tptyc",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/user/",
       "path": "/user",
-      "target_table": "unknown",
       "source": "page",
-      "status": "needs_review"
+      "target_table": "pages",
+      "status": "new"
     },
     {
       "url": "https://www.reteartistispettacolo.it/it/welcome-to-ilaria-della-bidia-una-voce-che-libera-lanima/",

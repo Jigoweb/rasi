@@ -97,6 +97,12 @@ const sitemapBandi = [
   { slug: 'bando-tematico-live', title: 'Bando tematico "Live"', status: 'closed' },
   { slug: 'bando-tematico-lultima-guerra', title: 'Bando tematico "L’ultima guerra"', status: 'closed' },
   { slug: 'bando-larte-nellera-della-rivoluzione-ia', title: 'Bando tematico "L’arte nell’era della rivoluzione I. A."', status: 'closed' },
+  { slug: 'bando-sotto-lo-stesso-tetto', title: 'Bando “Sotto lo stesso tetto”', status: 'active' },
+  { slug: 'bando-rasi-2026', title: 'BANDO R.A.S.I. 2026', status: 'active' },
+  { slug: 'bando-rasi-2025', title: 'BANDO R.A.S.I. 2025', status: 'closed' },
+  { slug: 'incontrarti-iv-ed-grazie', title: 'IncontrArti IV ed. – Grazie', status: 'closed' },
+  { slug: 'r-a-s-i-allassemblea-generale-di-scapr', title: 'R.A.S.I. all’assemblea generale di SCAPR – Ljubljana 2025', status: 'closed' },
+  { slug: 'rasi-e-netflix-firmano-laccordo-per-lutilizzo-delle-interpretazioni-degli-artisti-della-collecting', title: 'RASI e Netflix firmano l’accordo per l’utilizzo delle interpretazioni degli artisti della collecting', status: 'closed' },
 ];
 
 async function seedFull() {

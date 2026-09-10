@@ -155,6 +155,7 @@ async function main() {
             ? JSON.stringify([{ question: title || `${r.category}/${r.slug}`, answer: contentHtml }])
             : contentHtml,
         updated_at: new Date().toISOString(),
+        ...(args.publish ? { is_published: true } : {}),
       };
 
       if (args.dryRun) {
