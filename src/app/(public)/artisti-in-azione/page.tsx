@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/shared/components/ui/button";
+import { PromozioneForm } from "@/features/public-site/forms/PromozioneForm";
 
 export const metadata: Metadata = {
   title: "Artisti in azione | R.A.S.I.",
@@ -27,7 +28,7 @@ export default function ArtistiInAzionePage() {
         </Button>
       </Link>
       <div id="promuovi" className="mt-12">
-        {/* Form mounted by Fase 3 */}
+        <PromozioneForm />
       </div>
     </section>
   );

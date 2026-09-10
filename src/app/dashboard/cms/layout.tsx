@@ -25,6 +25,9 @@ export default function CmsLayout({
         <Link href="/dashboard/cms/documents">
           <Button variant="ghost">Documenti e Modulistica</Button>
         </Link>
+        <Link href="/dashboard/cms/submissions">
+          <Button variant="ghost">Richieste sito</Button>
+        </Link>
       </div>
 
       <div>
