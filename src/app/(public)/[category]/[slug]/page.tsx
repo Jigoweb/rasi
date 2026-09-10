@@ -170,7 +170,7 @@ export default async function DynamicPage({ params }: { params: Promise<{ catego
   const { category, slug } = await params;
 
   // Interroga il DB di Supabase tramite server client
-  const { data: pageData, error } = await supabaseServer
+  const { data: pageData } = await supabaseServer
     .from('pages')
     .select('*')
     .eq('category', category)
@@ -178,12 +178,13 @@ export default async function DynamicPage({ params }: { params: Promise<{ catego
     .eq('is_published', true)
     .single();
 
-  if (error || !pageData) {
+  if (!pageData) {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center text-center px-4">
         <h1 className="font-poppins text-4xl font-bold text-anthropic-dark mb-4">Pagina in allestimento</h1>
-        <p className="font-lora text-anthropic-mid-gray">La pagina /{category}/{slug} verrà migrata a breve nel nuovo sistema.</p>
-        <p className="text-xs text-red-500 mt-4">Nota tecnica: {error?.message || 'Record non trovato'}</p>
+        <p className="font-lora text-anthropic-mid-gray">
+          Il contenuto di questa pagina è in corso di pubblicazione.
+        </p>
       </div>
     );
   }
