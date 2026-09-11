@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-08-03",
+  "method": "SELECT from match_programmazione_to_partecipazioni(prog_id, 0.7, NULL, 3, 5) — read-only, no writes",
+  "samples": [
+    {
+      "bucket": "A",
+      "manual_title": "VIKINGS 5",
+      "manual_artist": "SINGH MOSE",
+      "programmazione_id": "66c47444-a5a7-46bd-aa7d-5720b701390b",
+      "programmazione_title": "Vikings 5",
+      "programmazione_anno": 2017,
+      "numero_stagione": null,
+      "numero_episodio": 1,
+      "titolo_episodio": "Vikings 5 Ep.01",
+      "matcher_n_matches": 1,
+      "matcher_n_artists": 1,
+      "matcher_max_score": 72.5,
+      "matched_artist": "SINGH MOSE'",
+      "matched_opera": "VIKINGS",
+      "episodio_applicato": true,
+      "platform_indiv_for_artist_in_sky_campaigns": 0,
+      "interpretation": "Matcher live già recupera SINGH su Vikings 5 (title via titolo_originale_programmazione → VIKINGS, ep-only perché stagione NULL). Gap vs manuale non è fallimento del predicato A corrente su questo sample: manca la riga in individuazioni campagna (mandato/filtro artisti o campagna non ha persistito il match)."
+    },
+    {
+      "bucket": "D",
+      "manual_title": "MOTHERS AND DAUGHTERS",
+      "manual_artists": ["BACKUS CHRISTOPHER", "SORVINO MIRA"],
+      "programmazione_id": "32b09ce1-669e-4891-b2a7-48ad80ae56be",
+      "programmazione_title": "Mothers And Daughters",
+      "programmazione_anno": 2016,
+      "matcher_n_matches": 2,
+      "matcher_n_artists": 2,
+      "matcher_max_score": 80.0,
+      "matched_artists": ["BACKUS CHRISTOPHER", "SORVINO MIRA"],
+      "matched_opera": "MOTHERS AND DAUGHTERS",
+      "opera_similarity": 1.0,
+      "platform_indiv_for_artists_in_sky_campaigns": 0,
+      "interpretation": "Matcher live già trova opera+cast corretti (score 80). Bucket D qui è gap di persistenza campagna / mandato, non di similarità titolo. Upper bound S1 su D resta valido se si rieseguono campagne senza filtro che esclude questi artisti."
+    }
+  ],
+  "catalog_checks": {
+    "vikings": {
+      "opera_titolo": "VIKINGS",
+      "n_episodi": 57,
+      "sim_vs_Vikings_5": 0.8,
+      "sim_vs_Vikings": 1.0
+    },
+    "mothers": {
+      "opera_id": "750e6c72-8fd8-4b36-9ecf-a4a74f4d53e5",
+      "opera_titolo": "MOTHERS AND DAUGHTERS",
+      "n_cast": 2,
+      "sim": 1.0
+    }
+  },
+  "implications_for_S1": [
+    "Su questi sample il matcher corrente già soddisfa le precondizioni A/D: S1 non è solo 'fix futuro', include anche riesecuzione campagne / ampliamento mandato artisti.",
+    "Per altre serie (Sopranos/Dexter/Romanzo) non risultano programmazioni SKY 2015-2019 con quei pattern titolo: il recupero A lì dipende da presenza programmazione o da titoli alias diversi.",
+    "Strip stagione (A1) aiuta il confronto manuale (VIKINGS 5 vs VIKINGS) e i casi in cui similarity scende sotto 0.7."
+  ]
+}
