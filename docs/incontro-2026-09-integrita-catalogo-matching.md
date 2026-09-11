@@ -79,7 +79,7 @@ Traduzione dei tre casi:
 
 Effetto atteso: FRINGE/HAWAII/YELLOWSTONE smettono di generare i falsi positivi segnalati. Calano le individuazioni automatiche su episodi non in repertorio (è voluto: oggi quelle righe sono diritti inesistenti).
 
-Contratto eseguibile interno: policy `current` vs `proposed` (test sui tre casi Sky). Documento cliente: `docs/ALGORITMO_INDIVIDUAZIONI.md`.
+Contratto eseguibile interno: policy `current` vs `proposed` (test sui tre casi Sky). Documento cliente A (PDF): `docs/cliente-pacchetto-2026-09-11/pdf/A-Algoritmo-di-individuazione.pdf`.
 
 Il porting SQL **non parte** finché questa regola non è approvata: alza la precisione e riduce il richiamo.
 
@@ -215,19 +215,21 @@ Vincoli:
 
 ## 7. Bozza di risposta al cliente
 
-Versione da inviare (con zip allegati): `docs/cliente-pacchetto-2026-09-11/BOZZA-MAIL-DA-INVIARE.md`.
+Versione da inviare (zip con tre PDF + CSV): `docs/cliente-pacchetto-2026-09-11/BOZZA-MAIL-DA-INVIARE.md`.
 
-Non promettere un diff riga-per-riga datato. Non chiedere revisione manuale delle 20.000 righe. Non allegare `LOGICA_INDIVIDUAZIONI.md` (obsoleto).
+Non allegare Markdown. Non allegare `LOGICA_INDIVIDUAZIONI.md`. Non promettere un diff riga-per-riga datato. Non chiedere revisione manuale delle 20.000 righe.
 
 ---
 
 ## 8. Materiali
 
-**Pacchetto cliente (da zippare e allegare):** `docs/cliente-pacchetto-2026-09-11/allegati/`
+**Pacchetto cliente:** `docs/cliente-pacchetto-2026-09-11/pdf/`
 
-- Algoritmo: `docs/ALGORITMO_INDIVIDUAZIONI.md`
-- Analisi (questa nota, versione senza path interni): nel pacchetto
-- CSV gap per artista: `scripts/diagnostics/noco-vs-supabase-repertorio-mancante-2026-09-11.csv`
+- A — algoritmo generale (per revisione)
+- B — casistiche Sky e proposta
+- C — differenze Noco / catalogo + CSV in `allegati/`
+
+Fonte HTML: `docs/cliente-pacchetto-2026-09-11/pdf-src/`
 
 **Solo interni:**
 

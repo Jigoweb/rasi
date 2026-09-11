@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <title>Report casistiche Sky e proposta di modifica</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <p class="cover-kicker">RASI · Individuazioni</p>
+  <h1>Casistiche Sky e proposta di modifica</h1>
+  <p class="subtitle">FRINGE, HAWAII FIVE-0, YELLOWSTONE — settembre 2026</p>
+  <p class="meta">
+    Report per incontro in sede · 11 settembre 2026<br />
+    Complemento al documento sull’algoritmo (documento A). Qui si esaminano solo i tre titoli segnalati.
+  </p>
+
+  <h2>1. Cosa è stato verificato</h2>
+  <p>
+    Sono stati ripresi gli esempi indicati (trasmissioni Sky, in particolare 2022) e confrontati con:
+  </p>
+  <ul>
+    <li>il repertorio nella Banca dati Rasi su Noco;</li>
+    <li>il catalogo oggi in uso nel programma.</li>
+  </ul>
+  <p>
+    Su questi tre titoli le due fonti dicono <strong>la stessa cosa</strong> del cliente.
+    Non manca repertorio rispetto a Noco. Non c’è un errore di somiglianza sul titolo della serie.
+    Le individuazioni extra nascono da una regola dell’algoritmo (fase episodio, descritta nel documento A).
+  </p>
+  <div class="note">
+    Ripristinare Noco <strong>non</strong> corregge questi tre casi. Il catalogo è già allineato.
+    Va cambiata la regola con cui, se manca l’episodio esatto, il programma ne usa un altro.
+  </div>
+
+  <h2>2. FRINGE</h2>
+  <p>
+    In catalogo (Noco e sistema attuale) esiste <strong>una sola puntata</strong>: stagione 2, episodio 2,
+    con John Smeallie Youngs.
+  </p>
+  <p>
+    Il palinsesto Sky ha trasmesso altri episodi 2 di altre stagioni. Il programma, non trovando
+    stagione+episodio esatti, ha usato l’unico «episodio 2» disponibile, cioè la 2x2.
+    In elenco restano i numeri del palinsesto: sembra che in banca dati ci siano gli episodi 2 di tutte le stagioni.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Palinsesto</th>
+        <th>In catalogo</th>
+        <th>Cosa ha fatto il programma</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>FRINGE, episodio 2 di una stagione diversa dalla 2</td>
+        <td>Solo 2x2</td>
+        <td>Abbinamento all’unica 2x2; in lista resta la stagione del palinsesto</td>
+      </tr>
+      <tr>
+        <td>FRINGE 2x2</td>
+        <td>2x2 presente</td>
+        <td>Abbinamento corretto</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. HAWAII FIVE-0</h2>
+  <p>
+    In catalogo, stagione 2: episodi <strong>3, 4, 5 e 23</strong> (William Baldwin).
+    Non ci sono 2x1 né 2x10. Esiste invece 5x10 (Eric Roberts).
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Palinsesto</th>
+        <th>In catalogo</th>
+        <th>Cosa ha fatto il programma</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Stagione 2, episodio 10</td>
+        <td>2x10 assente; presente 5x10</td>
+        <td>Usa l’episodio 10 di un’altra stagione (Roberts)</td>
+      </tr>
+      <tr>
+        <td>Stagione 2, episodio 1</td>
+        <td>2x1 assente; esiste un episodio 1 altrove</td>
+        <td>Usa l’episodio 1 di un’altra stagione, oppure gli artisti della serie</td>
+      </tr>
+      <tr>
+        <td>Stagione 2, episodi 3, 4, 5</td>
+        <td>Presenti</td>
+        <td>Abbinamento corretto</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. YELLOWSTONE</h2>
+  <p>
+    In catalogo, stagione 3: episodi <strong>1, 2 e 4</strong> con Michael Nouri.
+    Vittorio Thermes è censito sulle stagioni <strong>4 e 5</strong>, non sulla 3.
+  </p>
+  <p>
+    Il palinsesto ha puntate 3x3 e 3x5–3x10. Quelle puntate non sono in repertorio.
+    Il programma ha trovato lo stesso numero di episodio su un’altra stagione e ha attribuito Thermes.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Palinsesto</th>
+        <th>In catalogo</th>
+        <th>Cosa ha fatto il programma</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Stagione 3, episodi 1, 2, 4</td>
+        <td>Presenti, Nouri</td>
+        <td>Abbinamento corretto (Nouri)</td>
+      </tr>
+      <tr>
+        <td>Stagione 3, episodio 3 (e 5–10)</td>
+        <td>Assenti in stagione 3; stesso numero in 4–5 con Thermes</td>
+        <td>Abbinamento all’altra stagione: compare Thermes</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. La regola in causa</h2>
+  <p>Dopo aver riconosciuto il titolo della serie (correttamente), oggi il programma:</p>
+  <ol>
+    <li>cerca stagione e episodio esatti;</li>
+    <li>se non ci sono, accetta lo stesso numero di episodio in <strong>un’altra stagione</strong>;</li>
+    <li>se non c’è proprio quell’episodio, attribuisce gli artisti dell’<strong>intera serie</strong> e marca il risultato come da controllare;</li>
+    <li>in elenco lascia stagione ed episodio del palinsesto.</li>
+  </ol>
+  <p>
+    I punti 2 e 3 sono stati introdotti per recuperare palinsesti incompleti (stagione mancante, numerazioni diverse).
+    Sui palinsesti Sky, dove stagione ed episodio <strong>ci sono</strong>, producono diritti su puntate non coperte dal repertorio.
+  </p>
+
+  <h2>6. Proposta di modifica</h2>
+  <p>
+    Per le trasmissioni in cui stagione ed episodio sono noti: <strong>precisione prima del recupero</strong>.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Situazione</th>
+        <th>Oggi</th>
+        <th>Proposta</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Stagione ed episodio presenti in catalogo</td>
+        <td>Individua</td>
+        <td>Individua (invariato)</td>
+      </tr>
+      <tr>
+        <td>Stagione ed episodio noti, ma non in catalogo</td>
+        <td>Usa un altro episodio con lo stesso numero, o gli artisti di tutta la serie</td>
+        <td>Nessuna individuazione automatica. Solo avviso: episodio non presente in repertorio</td>
+      </tr>
+      <tr>
+        <td>Stagione assente, e quel numero episodio esiste una volta sola in catalogo</td>
+        <td>Usa quell’episodio</td>
+        <td>Consentito (è l’unico candidato)</td>
+      </tr>
+      <tr>
+        <td>Stagione assente, e lo stesso numero esiste su più stagioni</td>
+        <td>Usa il primo trovato</td>
+        <td>Nessuna individuazione automatica</td>
+      </tr>
+      <tr>
+        <td>Artisti di altri episodi su una puntata specifica</td>
+        <td>Sì</td>
+        <td>No</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Effetto atteso sui tre titoli</h3>
+  <ul>
+    <li>FRINGE: restano solo le individuazioni sulla 2x2. Le altre «episodio 2» non generano artisti in automatico.</li>
+    <li>HAWAII FIVE-0: restano 2x3, 2x4, 2x5, 2x23. Spariscono 2x1 e 2x10 (e Roberts sulla 2x10).</li>
+    <li>YELLOWSTONE: restano 3x1, 3x2, 3x4 con Nouri. Sparisce Thermes dalle puntate di stagione 3 non in repertorio.</li>
+  </ul>
+  <p>
+    Calano le individuazioni automatiche su episodi che il repertorio non copre. È voluto:
+    oggi quelle righe sono diritti inesistenti.
+  </p>
+
+  <h3>Cosa non cambia con questa modifica</h3>
+  <ul>
+    <li>Il catalogo di questi tre titoli (è già allineato a Noco).</li>
+    <li>I buchi di repertorio di altri artisti (LASARDO, GRAHAM CURRIE, ecc.): sono il documento C.</li>
+    <li>I palinsesti senza stagione, con numerazione continua: problema diverso, da trattare a parte.</li>
+    <li>Le campagne Sky già chiuse: restano com’erano finché non si rilancia l’individuazione.</li>
+  </ul>
+
+  <div class="warn">
+    <strong>Da confermare in incontro.</strong>
+    La modifica alza la precisione e riduce il recupero. Non parte senza approvazione.
+    Dopo l’ok va applicata al programma e va rilanciata l’individuazione sulle campagne interessate.
+  </div>
+
+  <p class="footer-note">
+    Fine documento B · Casistiche Sky e proposta · 11 settembre 2026
+  </p>
+</body>
+</html>

@@ -1,4 +1,4 @@
-cognome,nome,noco_partecipazioni,mancanti_in_supabase_staging,pct_mancante,perdita
+cognome,nome,partecipazioni_in_noco,mancanti_nel_catalogo_attuale,percentuale_mancante,tipo_perdita
 THOVEZ,MARINA,3641,549,15.1,parziale
 LASARDO,ROBERT ALFRED,193,193,100.0,totale
 THERMES,STEFANO,1734,153,8.8,parziale
