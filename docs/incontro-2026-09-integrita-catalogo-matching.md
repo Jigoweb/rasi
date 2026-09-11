@@ -79,7 +79,7 @@ Traduzione dei tre casi:
 
 Effetto atteso: FRINGE/HAWAII/YELLOWSTONE smettono di generare i falsi positivi segnalati. Calano le individuazioni automatiche su episodi non in repertorio (è voluto: oggi quelle righe sono diritti inesistenti).
 
-Contratto eseguibile: `src/features/individuazioni/utils/episode-match-policy.ts` (policy `current` vs `proposed`, test sui tre casi).
+Contratto eseguibile interno: policy `current` vs `proposed` (test sui tre casi Sky). Documento cliente: `docs/ALGORITMO_INDIVIDUAZIONI.md`.
 
 Il porting SQL **non parte** finché questa regola non è approvata: alza la precisione e riduce il richiamo.
 
@@ -117,7 +117,7 @@ Snapshot del 11/09/2026, chiave `id_mandante_rasi` / `id_opera` (staging).
 | Artisti con perdita **totale** del repertorio Noco | 9 |
 | Artisti con perdita **parziale** | 140 |
 
-Elenco per artista: `scripts/diagnostics/noco-vs-supabase-repertorio-mancante-2026-09-11.csv`.
+Elenco per artista: CSV nel pacchetto cliente (`docs/cliente-pacchetto-2026-09-11/allegati/`). Copia interna: `scripts/diagnostics/noco-vs-supabase-repertorio-mancante-2026-09-11.csv`.
 
 #### Perdita totale (repertorio Noco = 0 in staging)
 
@@ -215,26 +215,24 @@ Vincoli:
 
 ## 7. Bozza di risposta al cliente
 
-Oggetto: Individuazioni Sky / integrità banca dati — analisi e incontro
+Versione da inviare (con zip allegati): `docs/cliente-pacchetto-2026-09-11/BOZZA-MAIL-DA-INVIARE.md`.
 
-Buongiorno,
-
-abbiamo analizzato gli esempi (FRINGE, HAWAII FIVE-0, YELLOWSTONE, Manuale d’Amore) confrontando la Banca dati Rasi su Noco con il catalogo attuale.
-
-Sui tre titoli Sky il repertorio Noco e quello attuale coincidono con quanto indicate (FRINGE solo S2E2; HAWAII S2 solo 3/4/5/23; YELLOWSTONE S3 solo 1/2/4 con Nouri, Thermes dalle stagioni 4–5). Le individuazioni errate dipendono da una regola del programma che, se manca l’episodio esatto, usa lo stesso numero di un’altra stagione. Non è un problema di similarità del titolo. Proponiamo di spegnere questa regola: niente individuazione automatica se stagione+episodio non sono in catalogo.
-
-Sul catalogo: l’anagrafica artisti è allineata (750 vs 769, i 22 in più sono inserimenti successivi). Il buco è nel repertorio: 2.676 collegamenti artista–opera presenti in Noco non sono nel sistema attuale (es. LASARDO 193/193, GRAHAM CURRIE 30/30, BROWNING 105, PARÈ 107, Thermes Vittorio 58). Le modifiche/inserimenti fatti dopo il trasferimento (oltre 3.200 collegamenti e 22 artisti) si possono conservare. Per Mattei: in Noco è solo su Manuale d’Amore 2011; nel sistema attuale risulta anche sul 2005 — associazione da rimuovere. Manca IL MIO WEST (1998).
-
-In incontro vi proponiamo: (1) nuova regola di matching per le serie; (2) ripristino selettivo del repertorio Noco senza cancellare il lavoro AGCOM.
-
-Restiamo a disposizione per la data in sede.
+Non promettere un diff riga-per-riga datato. Non chiedere revisione manuale delle 20.000 righe. Non allegare `LOGICA_INDIVIDUAZIONI.md` (obsoleto).
 
 ---
 
-## 8. Materiali tecnici
+## 8. Materiali
 
-- Policy eseguibile: `src/features/individuazioni/utils/episode-match-policy.ts`
+**Pacchetto cliente (da zippare e allegare):** `docs/cliente-pacchetto-2026-09-11/allegati/`
+
+- Algoritmo: `docs/ALGORITMO_INDIVIDUAZIONI.md`
+- Analisi (questa nota, versione senza path interni): nel pacchetto
 - CSV gap per artista: `scripts/diagnostics/noco-vs-supabase-repertorio-mancante-2026-09-11.csv`
+
+**Solo interni:**
+
+- Policy eseguibile e test sui tre casi Sky
 - Query di controllo: `scripts/diagnostics/catalog_integrity_reconciliation.sql`
 - Spec: `docs/superpowers/specs/2026-09-11-integrita-catalogo-e-precisione-matching-design.md`
 - Report migrazione giugno 2026: `docs/Report_Verifica_Migrazione_Database_2026-06-10.md` (parziale; questa analisi lo aggiorna)
+- `docs/LOGICA_INDIVIDUAZIONI.md` — storico, non allineato al codice

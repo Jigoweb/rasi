@@ -1,3 +1,7 @@
+> **Storico — non usare, non allegare al cliente.**  
+> Aggiornato il 11 settembre 2026: questo file descrive un matcher precedente (scarto se episodio assente, soglia anno ±2, soglia fissa 35). Il comportamento in produzione è diverso (fallback episodio su altra stagione, cast di serie, soglia adattiva, tolleranza anno 3/5).  
+> Documento corrente: `docs/ALGORITMO_INDIVIDUAZIONI.md`. Pacchetto incontro: `docs/cliente-pacchetto-2026-09-11/`.
+
 # 🔄 Logica di Individuazioni - Documentazione Completa
 
 ## 📋 Panoramica

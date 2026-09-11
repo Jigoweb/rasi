@@ -1,0 +1,26 @@
+Pacchetto per l'incontro — 11 settembre 2026
+Integrità catalogo Noco e affidabilità delle individuazioni
+
+Contenuto (tre file):
+
+1) 01-Algoritmo-individuazioni-stato-attuale-e-proposta-2026-09-11.md
+   Come funziona oggi il programma che genera le individuazioni,
+   perché sui titoli Sky produce falsi positivi, e la regola proposta.
+
+2) 02-Analisi-integrita-catalogo-e-matching-2026-09-11.md
+   I due problemi distinti (matcher vs buco di repertorio), i numeri
+   del confronto Noco / catalogo attuale, e le opzioni di ripristino.
+
+3) 03-Repertorio-Noco-mancante-per-artista-2026-09-11.csv
+   Elenco per artista: quante partecipazioni ci sono in Noco e quante
+   mancano nel sistema attuale.
+   Colonne:
+     cognome, nome
+     noco_partecipazioni          = righe in Noco
+     mancanti_in_supabase_staging = righe Noco non presenti oggi
+     pct_mancante                 = percentuale
+     perdita                      = totale | parziale
+
+Non è richiesto rivedere riga per riga il catalogo.
+I 2.676 ripristini si fanno in automatico; in incontro si decide
+la regola di matching e l'approccio di riconciliazione.
