@@ -12,6 +12,15 @@ describe('catalog health impact', () => {
     expect(resolveCatalogHealthPolicy({ key: 'imdb_tconst' })?.impact).toBe('matching')
   })
 
+  it('marks opera matching discriminators used by individuazione', () => {
+    expect(resolveCatalogHealthPolicy({ key: 'regista' })?.impact).toBe('matching')
+    expect(resolveCatalogHealthPolicy({ label: 'Regia' })?.impact).toBe('matching')
+    expect(resolveCatalogHealthPolicy({ key: 'alias_titoli' })?.impact).toBe('matching')
+    expect(resolveCatalogHealthPolicy({ key: 'codice_isan' })?.impact).toBe('matching')
+    expect(resolveCatalogHealthPolicy({ key: 'anno_produzione_fine' })?.impact).toBe('matching')
+    expect(resolveCatalogHealthPolicy({ key: 'episodi' })?.impact).toBe('matching')
+  })
+
   it('marks artist identity vs admin fields for individuazione clarity', () => {
     expect(resolveCatalogHealthPolicy({ label: 'Nome' })?.impact).toBe('identity')
     expect(resolveCatalogHealthPolicy({ label: 'Cognome' })?.impact).toBe('identity')

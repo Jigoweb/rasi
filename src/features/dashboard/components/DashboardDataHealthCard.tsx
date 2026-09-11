@@ -17,7 +17,7 @@ import type { Metric } from '@/features/dashboard/services/dashboard-data.servic
 import { Loader2 } from 'lucide-react'
 
 function percentComplete(m: Metric): number {
-  if (!m.total) return 0
+  if (!m.total) return 100
   const v = Math.max(0, m.total - m.missing)
   return Math.floor((v / m.total) * 100)
 }
@@ -163,7 +163,7 @@ export function DashboardDataHealthCard({
           <div>
             <h3 className="text-sm font-semibold mb-1">Opere — segnali individuazione</h3>
             <p className="text-xs text-gray-500 mb-3">
-              Ordinati per criticità matching. Titolo e anno sono i gap da chiudere per primi.
+              Ordinati per criticità matching. Titolo, anno e regia sono i gap da chiudere per primi.
             </p>
             <div className="space-y-4">
               {opereMetrics.map(metric => (

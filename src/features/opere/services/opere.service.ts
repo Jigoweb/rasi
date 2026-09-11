@@ -1,4 +1,7 @@
 import { supabase } from '@/shared/lib/supabase-client'
+import { OPERE_INCOMPLETE_OR } from './opere-health'
+
+export { OPERE_INCOMPLETE_OR } from './opere-health'
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -188,14 +191,10 @@ export const getRuoliTipologie = async () => {
   return { data, error }
 }
 
-/** Same OR used by dashboard Data Health incomplete opere count */
-export const OPERE_INCOMPLETE_OR =
-  'titolo.is.null,titolo.eq.,tipo.is.null,anno_produzione.is.null,imdb_tconst.is.null,imdb_tconst.eq.,titolo_originale.is.null,titolo_originale.eq.'
-
 export const getOpere = async (filters?: {
   search?: string
   tipo?: string
-  /** When true, keep only opere missing matching-critical fields (Data Health). */
+  /** When true, keep only opere missing matching-useful fields (Data Health). */
   incomplete?: boolean
 }) => {
   let query = supabase

@@ -63,6 +63,13 @@ describe('Opere Service', () => {
 
       expect(mockOr).toHaveBeenCalledWith(OPERE_INCOMPLETE_OR)
     })
+
+    it('treats missing regia and series without episodes as incomplete matching data', () => {
+      expect(OPERE_INCOMPLETE_OR).toContain('regista.is.null')
+      expect(OPERE_INCOMPLETE_OR).toContain('regista.eq.{}')
+      expect(OPERE_INCOMPLETE_OR).toContain('tipo.eq.serie_tv')
+      expect(OPERE_INCOMPLETE_OR).toContain('has_episodes.eq.false')
+    })
   })
 
   describe('getOperaById', () => {

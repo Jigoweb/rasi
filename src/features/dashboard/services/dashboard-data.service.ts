@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere-health'
 import {
   annotateCatalogHealthMetric,
   sortCatalogHealthMetrics,
@@ -95,8 +96,6 @@ export interface DashboardDataDeps {
 
 const ARTISTI_INCOMPLETI_OR =
   'codice_ipn.is.null,codice_ipn.eq.,nome.is.null,nome.eq.,cognome.is.null,cognome.eq.,stato.is.null,imdb_nconst.is.null,imdb_nconst.eq.,data_nascita.is.null,codice_fiscale.is.null,codice_fiscale.eq.'
-const OPERE_INCOMPLETE_OR =
-  'titolo.is.null,titolo.eq.,tipo.is.null,anno_produzione.is.null,imdb_tconst.is.null,imdb_tconst.eq.,titolo_originale.is.null,titolo_originale.eq.'
 
 export async function loadDashboardPrimaryData(
   deps: DashboardDataDeps,
@@ -175,7 +174,7 @@ export async function loadDashboardSecondaryData(
 
 export async function loadDashboardHealthData(
   deps: DashboardDataDeps,
-  totals: Pick<DashboardPrimaryData, 'totalArtisti' | 'totalOpere'>
+  totals: Pick<DashboardPrimaryData, 'totalArtisti' | 'totalOpere' | 'stats'>
 ): Promise<DashboardHealthData> {
   const [
     artistiIncompleti,
@@ -188,6 +187,8 @@ export async function loadDashboardHealthData(
     deps.countMissingArtistiFields(),
     deps.countMissingOpereFields(),
   ])
+
+  const opereSerieTv = totals.stats?.opere_serie_tv ?? 0
 
   return {
     artistiIncompleti,
@@ -207,6 +208,11 @@ export async function loadDashboardHealthData(
       annotateCatalogHealthMetric({ label: 'Anno produzione', missing: opereMissing[2] ?? 0, total: totals.totalOpere }),
       annotateCatalogHealthMetric({ label: 'IMDB tconst', missing: opereMissing[3] ?? 0, total: totals.totalOpere }),
       annotateCatalogHealthMetric({ label: 'Titolo originale', missing: opereMissing[4] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'Regia', missing: opereMissing[5] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'Alias titoli', missing: opereMissing[6] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'Codice ISAN', missing: opereMissing[7] ?? 0, total: totals.totalOpere }),
+      annotateCatalogHealthMetric({ label: 'Anno produzione fine', missing: opereMissing[8] ?? 0, total: opereSerieTv }),
+      annotateCatalogHealthMetric({ label: 'Episodi (serie TV)', missing: opereMissing[9] ?? 0, total: opereSerieTv }),
     ]),
   }
 }
@@ -370,6 +376,11 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
       count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('anno_produzione', null)),
       count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('imdb_tconst.is.null,imdb_tconst.eq.')),
       count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo_originale.is.null,titolo_originale.eq.')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('regista.is.null,regista.eq.{}')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('alias_titoli.is.null,alias_titoli.eq.{}')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('codice_isan.is.null,codice_isan.eq.')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'serie_tv').is('anno_produzione_fine', null)),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'serie_tv').eq('has_episodes', false)),
     ]),
   }
 }
