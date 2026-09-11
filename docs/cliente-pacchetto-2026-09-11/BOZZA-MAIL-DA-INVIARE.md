@@ -8,7 +8,7 @@
 
 Buongiorno Pasquale,
 
-abbiamo chiuso l’analisi sugli esempi che ci avete inviato (FRINGE, HAWAII FIVE-0, YELLOWSTONE, Manuale d’Amore) e sul confronto tra la Banca dati Rasi su Noco e il catalogo attuale. In allegato trovate tre file: come funziona oggi l’algoritmo di individuazione, la nota di analisi, e l’elenco per artista del repertorio Noco che manca nel sistema.
+abbiamo chiuso l’analisi sugli esempi che ci avete inviato (FRINGE, HAWAII FIVE-0, YELLOWSTONE, Manuale d’Amore) e sul confronto tra la Banca dati Rasi su Noco e il catalogo attuale. In allegato uno zip con tre documenti: come funziona oggi l’algoritmo di individuazione, la nota di analisi, e l’elenco per artista del repertorio Noco che manca nel sistema.
 
 Sono **due problemi distinti**.
 
@@ -31,5 +31,5 @@ Matteo
 
 ---
 
-**Allegare lo zip** `RASI-incontro-catalogo-matching-2026-09-11.zip` (tre file dentro).  
-Non allegare questa bozza. Non promettere un diff riga-per-riga datato: non esiste. Non chiedere al cliente di rivedere il catalogo a mano.
+**Allegare solo lo zip** `RASI-incontro-catalogo-matching-2026-09-11.zip`.  
+Non allegare questa bozza. Non promettere un diff riga-per-riga datato: non esiste. Non chiedere al cliente di rivedere il catalogo a mano. Non allegare `LOGICA_INDIVIDUAZIONI.md` né il PDF storico sulle criticità individuazioni (descrivono un matcher che non è più quello in produzione).
