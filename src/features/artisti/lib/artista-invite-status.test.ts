@@ -6,6 +6,8 @@ describe('deriveArtistaInviteStatus', () => {
       status: 'non_invitato',
       label: 'Non invitato',
       user: null,
+      accessAction: 'invite',
+      accessActionLabel: 'Invita',
     })
   })
 
@@ -20,10 +22,12 @@ describe('deriveArtistaInviteStatus', () => {
       status: 'in_attesa',
       label: 'Invito in attesa',
       user,
+      accessAction: 'resend',
+      accessActionLabel: 'Reinvia',
     })
   })
 
-  it('returns attivo when linked user has signed in', () => {
+  it('returns attivo with reset access when linked user has signed in', () => {
     const user = {
       id: 'u1',
       email: 'a@example.com',
@@ -34,6 +38,8 @@ describe('deriveArtistaInviteStatus', () => {
       status: 'attivo',
       label: 'Attivo',
       user,
+      accessAction: 'reset',
+      accessActionLabel: 'Reset accesso',
     })
   })
 })

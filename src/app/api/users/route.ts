@@ -5,6 +5,11 @@ import {
   mergeUserMetadataWithRole,
 } from './role-update'
 import { findUserByArtistaId } from './find-by-artista'
+import {
+  resolveAuthInviteOrigin,
+  buildAuthInviteRedirectUrl,
+  sendResendAccessEmail,
+} from './resend-access'
 // Lazy initialization of admin client
 let supabaseAdmin: SupabaseClient | null = null
 
@@ -155,8 +160,14 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
     const { email, artista_id, action, userId: targetUserId } = body
+    const inviteRedirectTo = buildAuthInviteRedirectUrl(
+      resolveAuthInviteOrigin(
+        process.env.NEXT_PUBLIC_SITE_URL,
+        req.headers.get('origin')
+      )
+    )
 
-    // Reinvio invito
+    // Reinvio invito o reset accesso per utente Auth già esistente
     if (action === 'resend_invite') {
       if (!targetUserId) {
         return NextResponse.json({ success: false, error: 'userId è obbligatorio per reinvio' }, { status: 400 })
@@ -166,21 +177,38 @@ export async function POST(req: NextRequest) {
       if (getUserError || !targetUser) {
         return NextResponse.json({ success: false, error: 'Utente non trovato' }, { status: 404 })
       }
-      if (!targetUser.email) {
-        return NextResponse.json({ success: false, error: 'Utente senza email' }, { status: 400 })
-      }
-      // generateLink con tipo invite per reinviare
-      const { error: linkError } = await adminClient.auth.admin.inviteUserByEmail(
-        targetUser.email,
+      const resend = await sendResendAccessEmail(
         {
-          data: targetUser.user_metadata,
-          redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || req.headers.get('origin') || 'http://localhost:3000'}/auth/callback?invite=true`
+          id: targetUser.id,
+          email: targetUser.email,
+          email_confirmed_at: targetUser.email_confirmed_at,
+          last_sign_in_at: targetUser.last_sign_in_at,
+          user_metadata: (targetUser.user_metadata ?? null) as Record<string, unknown> | null,
+        },
+        resolveAuthInviteOrigin(
+          process.env.NEXT_PUBLIC_SITE_URL,
+          req.headers.get('origin')
+        ),
+        {
+          inviteUserByEmail: (targetEmail, options) =>
+            adminClient.auth.admin.inviteUserByEmail(targetEmail, options),
+          resetPasswordForEmail: (targetEmail, options) =>
+            adminClient.auth.resetPasswordForEmail(targetEmail, options),
+          updateUserMetadata: async (userId, metadata) => {
+            const { error } = await adminClient.auth.admin.updateUserById(userId, {
+              user_metadata: metadata,
+            })
+            return { error }
+          },
         }
       )
-      if (linkError) {
-        return NextResponse.json({ success: false, error: linkError.message }, { status: 500 })
+      if (!resend.ok) {
+        return NextResponse.json(
+          { success: false, error: resend.error },
+          { status: resend.status }
+        )
       }
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, method: resend.method })
     }
 
     if (!email || !artista_id) {
@@ -236,7 +264,7 @@ export async function POST(req: NextRequest) {
           ruolo: 'artista',
           artista_id: artista_id
         },
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || req.headers.get('origin') || 'http://localhost:3000'}/auth/callback?invite=true`
+        redirectTo: inviteRedirectTo
       }
     )
 

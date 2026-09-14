@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useAuth, AVAILABLE_ROLES, UserRole } from '@/shared/contexts/auth-context'
 import { rolesAssignableBy } from '@/shared/lib/auth-permissions'
+import { deriveArtistaInviteStatus } from '@/features/artisti/lib/artista-invite-status'
 import { supabase } from '@/shared/lib/supabase-client'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -133,6 +134,7 @@ export default function UtentiPage() {
 
   // Resend invite loading state
   const [resendingInvite, setResendingInvite] = useState<string | null>(null)
+  const [resendSuccess, setResendSuccess] = useState<string | null>(null)
 
   // Redirect users without permission
   useEffect(() => {
@@ -314,6 +316,7 @@ export default function UtentiPage() {
 
   async function handleResendInvite(userData: UserData) {
     setResendingInvite(userData.id)
+    setResendSuccess(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
@@ -325,7 +328,14 @@ export default function UtentiPage() {
       })
       const result = await response.json()
       if (!result.success) throw new Error(result.error)
+      setError(null)
+      setResendSuccess(
+        result.method === 'recovery'
+          ? `Email per reimpostare la password inviata a ${userData.email}`
+          : `Invito reinviato a ${userData.email}`
+      )
     } catch (err: any) {
+      setResendSuccess(null)
       setError(err.message)
     } finally {
       setResendingInvite(null)
@@ -569,6 +579,17 @@ export default function UtentiPage() {
         </Card>
       )}
 
+      {resendSuccess && (
+        <Card className="gap-4 py-4 border-green-200 bg-green-50">
+          <CardContent className="px-4">
+            <div className="flex items-center gap-2 text-green-700">
+              <CheckCircle2 className="h-5 w-5" />
+              <span>{resendSuccess}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters Section */}
       <Card className="gap-4 py-4">
         <CardHeader>
@@ -751,7 +772,7 @@ export default function UtentiPage() {
                               <Pencil className="h-4 w-4 mr-2" />
                               Modifica Email
                             </DropdownMenuItem>
-                            {userData.ruolo === 'artista' && !userData.last_sign_in_at && (
+                            {userData.ruolo === 'artista' && (
                               <DropdownMenuItem
                                 onClick={() => handleResendInvite(userData)}
                                 disabled={resendingInvite === userData.id}
@@ -760,7 +781,12 @@ export default function UtentiPage() {
                                   ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                   : <RefreshCw className="h-4 w-4 mr-2" />
                                 }
-                                Reinvia Invito
+                                {deriveArtistaInviteStatus({
+                                  id: userData.id,
+                                  email: userData.email,
+                                  invited_at: userData.invited_at,
+                                  last_sign_in_at: userData.last_sign_in_at,
+                                }).accessActionLabel}
                               </DropdownMenuItem>
                             )}
                             {isAdmin && (

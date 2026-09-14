@@ -170,7 +170,11 @@ export function ArtistaInviteHeader({ artistaId, contactEmail }: Props) {
       const result = await response.json()
       if (!result.success) throw new Error(result.error || 'Reinvio fallito')
 
-      setActionSuccess('Invito reinviato')
+      setActionSuccess(
+        result.method === 'recovery'
+          ? 'Email per reimpostare la password inviata'
+          : 'Invito reinviato'
+      )
       await refreshStatus()
     } catch (err: unknown) {
       setActionError(err instanceof Error ? err.message : 'Errore reinvio')
@@ -194,20 +198,20 @@ export function ArtistaInviteHeader({ artistaId, contactEmail }: Props) {
                 {statusResult.user.email}
               </span>
             )}
-            {statusResult.status === 'non_invitato' && (
+            {statusResult.accessAction === 'invite' && (
               <Button size="sm" variant="outline" onClick={openInviteDialog} disabled={submitting}>
                 <Mail className="h-4 w-4 mr-1" />
                 Invita
               </Button>
             )}
-            {statusResult.status === 'in_attesa' && (
+            {(statusResult.accessAction === 'resend' || statusResult.accessAction === 'reset') && (
               <Button size="sm" variant="outline" onClick={handleResend} disabled={submitting}>
                 {submitting ? (
                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-1" />
                 )}
-                Reinvia
+                {statusResult.accessActionLabel}
               </Button>
             )}
           </>
