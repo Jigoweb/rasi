@@ -1065,6 +1065,30 @@ export type Database = {
           },
         ]
       }
+      public_form_submissions: {
+        Row: {
+          created_at: string | null
+          id: string
+          kind: string
+          payload: Json
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          kind: string
+          payload?: Json
+          status?: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          kind?: string
+          payload?: Json
+          status?: string
+        }
+        Relationships: []
+      }
       ripartizioni: {
         Row: {
           altre_trattenute: number | null

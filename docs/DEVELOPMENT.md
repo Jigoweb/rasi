@@ -60,6 +60,14 @@ By default it listens on `http://localhost:8080/health`; keep `NEXT_PUBLIC_WORKE
 
 Use `supabase/migrations/` and `db/init/` as the source of database setup context. Do not apply archived SQL or historical setup docs without checking `docs/README.md` and the current migration history.
 
+`supabase/migrations/` are incremental and assume the base tables from `db/init/*.sql` (`opere`, `artisti`, and so on). GitHub **Supabase Preview** applies only the migrations folder onto an empty preview database, so the check fails with `relation "public.opere" does not exist` (same error as a local `supabase start` without `scripts/dev/bootstrap-local-supabase.sh`). This is preview-DB-only: production already has the base schema.
+
+Do not rewrite historical matcher migrations to paper over Preview. Close/reopen of a PR does not create `opere` either. Unblock options:
+
+1. Keep the Supabase Preview check non-required (PR #27 merged with the same red check).
+2. Point branching at a parent project that already contains the base schema, so Preview applies only *new* migration files.
+3. After merge to `main`, apply only the PR's new files (for the public site: `supabase/migrations/20260910143000_public_form_submissions.sql`) on production — never the full migrations folder against an empty database.
+
 ## Verification
 
 The full local verification command is:

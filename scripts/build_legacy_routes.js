@@ -72,6 +72,62 @@ function categorizePath(p) {
   return { kind: "unknown", segments };
 }
 
+const NORME_SLUGS = new Set([
+  "codice-civile",
+  "decreto-mibac-5-9-2018",
+  "decreto-mibac-26-2-2019",
+  "dpcm-del-15-07-1976",
+  "dpcm-del-19-12-2012-requisiti-collecting",
+  "dl-64-del-30-04-2010-art-7",
+  "legge-633-del-1941",
+  "legge-93-del-05-02-1992",
+  "dl-1-del-24-01-2012-art-39-liberalizzazione",
+  "dl-22-del-21-02-2014",
+  "dl-163-del-10-11-2014",
+  "dpcm-del-02-02-2015",
+  "dm-mibac-del-20-06-2014-compenso-copia-privata",
+  "dpcm-del-17-01-2014",
+  "dpcm-del-01-09-1975",
+  "d-lgs-15-3-2017-in-attuazione-direttiva-2014-26-ue",
+  "direttiva-eu-mercato-unico-digitale",
+  "covid-19-sostegno-artisti",
+  "covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo",
+  "covid-19-sostegno-artisti-e-lavoratori-dello-spettacolo-2",
+]);
+
+const DOCUMENT_SLUGS = new Set([
+  "contratto-tipo-canale-tv-nazionale",
+  "contratto-tipo-piattaforme-tv-nazionali",
+  "tariffe-diritti-connessi-video",
+  "tariffe-diritti-connessi-musica",
+  "elenco-opere-video-interpretate-da-artisti-rasi",
+  "elenco-opere-musicali-interpretate-da-artisti-rasi",
+]);
+
+const MANDATO_SLUGS = new Set([
+  "mandato-artista-alla-rasi",
+  "mandato-artista-minorenne-alla-rasi",
+  "mandato-erede-artista-alla-r-a-s-i",
+  "mandato-erede-minorenne-artista-alla-r-a-s-i",
+]);
+
+function classifyWpPostSlug(slug) {
+  if (MANDATO_SLUGS.has(slug)) return { table: "ignore" };
+  if (NORME_SLUGS.has(slug)) {
+    return { table: "pages", category: "norme", slug: slug.replace(/-2$/, "") };
+  }
+  if (DOCUMENT_SLUGS.has(slug)) {
+    const nested =
+      slug === "elenco-opere-video-interpretate-da-artisti-rasi"
+        ? "elenco-opere-video-interpretate"
+        : slug === "elenco-opere-musicali-interpretate-da-artisti-rasi"
+          ? "elenco-opere-musicali-interpretate"
+          : slug;
+    return { table: "pages", category: "utilizzatori", slug: nested };
+  }
+  return { table: "bandi_news", slug };
+}
+
 function guessTemplateType({ category, slug }) {
   if (category === "servizi") return "service";
   if (category === "accordi") return "document_list";
@@ -147,6 +203,33 @@ async function main() {
 
     if (row.source === "post") {
       const slug = p.split("/").filter(Boolean).slice(-1)[0];
+      const classified = classifyWpPostSlug(slug);
+      if (classified.table === "ignore") {
+        routes.push({
+          url: row.loc,
+          path: p,
+          source: row.source,
+          target_table: "unknown",
+          status: "needs_review",
+        });
+        continue;
+      }
+      if (classified.table === "pages") {
+        const key = `${classified.category}/${classified.slug}`;
+        const existing = pagesByKey.get(key);
+        const status = !existing ? "new" : contentLooksPlaceholder(existing.content) ? "update_content" : "done";
+        routes.push({
+          url: row.loc,
+          path: p,
+          source: row.source,
+          target_table: "pages",
+          category: classified.category,
+          slug: classified.slug,
+          template_type: existing?.template_type || guessTemplateType(classified),
+          status,
+        });
+        continue;
+      }
       const existing = newsBySlug.get(slug);
       const status = !existing ? "new" : contentLooksPlaceholder(existing.content) ? "update_content" : "done";
       routes.push({
