@@ -1,0 +1,1019 @@
+{
+  "meta": {
+    "manual_total_rows": 17495,
+    "miss_pairs": 494,
+    "miss_rows": 14972,
+    "baseline_hit_rows": 2523,
+    "baseline_hit_pairs": 127,
+    "note": "S1/S2/S3 recovered counts are UPPER BOUNDS assuming matcher/data fixes succeed whenever catalog preconditions already hold."
+  },
+  "scenarios": {
+    "S0": {
+      "scenario": "S0",
+      "miss_pairs": 494,
+      "miss_rows": 14972,
+      "in_scope_pairs": 494,
+      "in_scope_rows": 14972,
+      "out_of_scope_pairs": 0,
+      "out_of_scope_rows": 0,
+      "recovered_pairs": 0,
+      "recovered_rows": 0,
+      "residual_pairs": 494,
+      "residual_rows": 14972,
+      "recovered_pct_of_miss_rows": 0.0,
+      "recovered_pct_of_in_scope_rows": 0.0,
+      "recovered_pct_of_manual_rows": 0.0,
+      "by_bucket": {
+        "D": {
+          "pairs": 298,
+          "rows": 7197,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        },
+        "C": {
+          "pairs": 65,
+          "rows": 1537,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        },
+        "B": {
+          "pairs": 68,
+          "rows": 2874,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        },
+        "A": {
+          "pairs": 63,
+          "rows": 3364,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        }
+      },
+      "residual_reasons": {
+        "baseline_D": {
+          "pairs": 298,
+          "rows": 7197
+        },
+        "baseline_C": {
+          "pairs": 65,
+          "rows": 1537
+        },
+        "baseline_B": {
+          "pairs": 68,
+          "rows": 2874
+        },
+        "baseline_A": {
+          "pairs": 63,
+          "rows": 3364
+        }
+      },
+      "residuals_top": [
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2016,
+          "rows": 462,
+          "bucket": "B",
+          "residual_reason": "baseline_B",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2017,
+          "rows": 458,
+          "bucket": "B",
+          "residual_reason": "baseline_B",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "DEXTER 2",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2019,
+          "rows": 248,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2018,
+          "rows": 242,
+          "bucket": "B",
+          "residual_reason": "baseline_B",
+          "canale": "SKY ATLANTIC+1"
+        },
+        {
+          "titolo_raw": "S.W.A.T. - SQUADRA SPECIALE ANTICRIMINE",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2017,
+          "rows": 184,
+          "bucket": "C",
+          "residual_reason": "baseline_C",
+          "canale": "SKY CINEMA MAX COLLECTION"
+        },
+        {
+          "titolo_raw": "CITY ON A HILL 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2019,
+          "rows": 164,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "VIKINGS 5",
+          "artista": "SINGH MOSE",
+          "anno": 2019,
+          "rows": 160,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2019,
+          "rows": 152,
+          "bucket": "B",
+          "residual_reason": "baseline_B",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "MA TU DI CHE SEGNO 6?",
+          "artista": "AUTUORO CRISTIAN",
+          "anno": 2016,
+          "rows": 150,
+          "bucket": "B",
+          "residual_reason": "baseline_B",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "A MAN APART",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2016,
+          "rows": 142,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "DEXTER 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2018,
+          "rows": 140,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC+1"
+        },
+        {
+          "titolo_raw": "Spongebob - Fuori Dall'acqua",
+          "artista": "ZUCCA MARIO",
+          "anno": 2016,
+          "rows": 137,
+          "bucket": "D",
+          "residual_reason": "baseline_D",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "DEXTER 3",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2019,
+          "rows": 136,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "MOTHERS AND DAUGHTERS",
+          "artista": "BACKUS CHRISTOPHER",
+          "anno": 2017,
+          "rows": 124,
+          "bucket": "D",
+          "residual_reason": "baseline_D",
+          "canale": "SKY CINEMA+1"
+        },
+        {
+          "titolo_raw": "MOTHERS AND DAUGHTERS",
+          "artista": "SORVINO MIRA",
+          "anno": 2017,
+          "rows": 124,
+          "bucket": "D",
+          "residual_reason": "baseline_D",
+          "canale": "SKY CINEMA+1"
+        },
+        {
+          "titolo_raw": "Vikings 4",
+          "artista": "SINGH MOSE",
+          "anno": 2018,
+          "rows": 124,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC +1"
+        },
+        {
+          "titolo_raw": "Romanzo Criminale La serie",
+          "artista": "GIOIELLI LORENZO",
+          "anno": 2016,
+          "rows": 122,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "Sky Atlantic"
+        },
+        {
+          "titolo_raw": "L'ULTIMA DISCESA",
+          "artista": "SORVINO MIRA",
+          "anno": 2019,
+          "rows": 122,
+          "bucket": "D",
+          "residual_reason": "baseline_D",
+          "canale": "SKY CINEMA POP UP 2"
+        },
+        {
+          "titolo_raw": "DEXTER 5",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2019,
+          "rows": 120,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "DEXTER 6",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2019,
+          "rows": 120,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "The Sopranos 4",
+          "artista": "CASTELLUCCIO FEDERICO",
+          "anno": 2016,
+          "rows": 116,
+          "bucket": "A",
+          "residual_reason": "baseline_A",
+          "canale": "Sky Atlantic"
+        },
+        {
+          "titolo_raw": "QUANTO BASTA",
+          "artista": "SPANG MARIATANITA",
+          "anno": 2019,
+          "rows": 110,
+          "bucket": "D",
+          "residual_reason": "baseline_D",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Exposed - Nell'ombra Di Un Delitto",
+          "artista": "SORVINO MIRA",
+          "anno": 2019,
+          "rows": 108,
+          "bucket": "D",
+          "residual_reason": "baseline_D",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Rio",
+          "artista": "CASTELNUOVO FRANCESCO",
+          "anno": 2018,
+          "rows": 102,
+          "bucket": "C",
+          "residual_reason": "baseline_C",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "S.W.A.T. - Squadra Speciale Anticrimine",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2019,
+          "rows": 100,
+          "bucket": "C",
+          "residual_reason": "baseline_C",
+          "canale": "SKY CINEMA UNO"
+        }
+      ]
+    },
+    "S1": {
+      "scenario": "S1",
+      "miss_pairs": 494,
+      "miss_rows": 14972,
+      "in_scope_pairs": 494,
+      "in_scope_rows": 14972,
+      "out_of_scope_pairs": 0,
+      "out_of_scope_rows": 0,
+      "recovered_pairs": 361,
+      "recovered_rows": 10561,
+      "residual_pairs": 133,
+      "residual_rows": 4411,
+      "recovered_pct_of_miss_rows": 70.54,
+      "recovered_pct_of_in_scope_rows": 70.54,
+      "recovered_pct_of_manual_rows": 60.37,
+      "by_bucket": {
+        "D": {
+          "pairs": 298,
+          "rows": 7197,
+          "recovered_pairs": 298,
+          "recovered_rows": 7197
+        },
+        "C": {
+          "pairs": 65,
+          "rows": 1537,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        },
+        "B": {
+          "pairs": 68,
+          "rows": 2874,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        },
+        "A": {
+          "pairs": 63,
+          "rows": 3364,
+          "recovered_pairs": 63,
+          "recovered_rows": 3364
+        }
+      },
+      "residual_reasons": {
+        "opera_assente": {
+          "pairs": 40,
+          "rows": 1269
+        },
+        "serie_senza_episodi": {
+          "pairs": 7,
+          "rows": 39
+        },
+        "cast_assente": {
+          "pairs": 68,
+          "rows": 2874
+        },
+        "artista_assente": {
+          "pairs": 18,
+          "rows": 229
+        }
+      },
+      "residuals_top": [
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2016,
+          "rows": 462,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2017,
+          "rows": 458,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2018,
+          "rows": 242,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY ATLANTIC+1"
+        },
+        {
+          "titolo_raw": "S.W.A.T. - SQUADRA SPECIALE ANTICRIMINE",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2017,
+          "rows": 184,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA MAX COLLECTION"
+        },
+        {
+          "titolo_raw": "THE SHANNARA CHRONICLES 1",
+          "artista": "REMAR WILLIAM JAMES",
+          "anno": 2019,
+          "rows": 152,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY ATLANTIC"
+        },
+        {
+          "titolo_raw": "MA TU DI CHE SEGNO 6?",
+          "artista": "AUTUORO CRISTIAN",
+          "anno": 2016,
+          "rows": 150,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Rio",
+          "artista": "CASTELNUOVO FRANCESCO",
+          "anno": 2018,
+          "rows": 102,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "S.W.A.T. - Squadra Speciale Anticrimine",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2019,
+          "rows": 100,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Una Notte In Giallo",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2015,
+          "rows": 98,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "SWEETWATER",
+          "artista": "YOUNGS JOHN SMEALLIE",
+          "anno": 2016,
+          "rows": 92,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "RIO",
+          "artista": "CASTELNUOVO FRANCESCO",
+          "anno": 2019,
+          "rows": 84,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA HITS/COLLECTION"
+        },
+        {
+          "titolo_raw": "MA TU DI CHE SEGNO 6?",
+          "artista": "AUTUORO CRISTIAN",
+          "anno": 2019,
+          "rows": 76,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "S.W.A.T. - Squadra Speciale Anticrimine",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2018,
+          "rows": 72,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA ACTION"
+        },
+        {
+          "titolo_raw": "Tre Uomini E Una Gamba",
+          "artista": "CROCCOLO CARLO",
+          "anno": 2016,
+          "rows": 71,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Ti Ricordi Di Me?",
+          "artista": "MONITILLO RICCARDO MONITILLO ROCCO RICCARDO",
+          "anno": 2015,
+          "rows": 65,
+          "bucket": "C",
+          "residual_reason": "artista_assente",
+          "canale": "SKY CINEMA PASSION"
+        },
+        {
+          "titolo_raw": "MA TU DI CHE SEGNO 6?",
+          "artista": "AUTUORO CRISTIAN",
+          "anno": 2015,
+          "rows": 62,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA CHRISTMAS"
+        },
+        {
+          "titolo_raw": "WALK OF SHAME",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2018,
+          "rows": 62,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "BAD COMPANY",
+          "artista": "YOUNGS JOHN SMEALLIE",
+          "anno": 2017,
+          "rows": 58,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA CLASSICS"
+        },
+        {
+          "titolo_raw": "SWEETWATER",
+          "artista": "YOUNGS JOHN SMEALLIE",
+          "anno": 2017,
+          "rows": 56,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA MAX +1"
+        },
+        {
+          "titolo_raw": "UN RAGAZZO VERAMENTE SPECIALE",
+          "artista": "FARGAS JUAN ANTONIO",
+          "anno": 2017,
+          "rows": 54,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "PARKER",
+          "artista": "ZUCCA MARIO",
+          "anno": 2015,
+          "rows": 53,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA MAX"
+        },
+        {
+          "titolo_raw": "LEZIONI DI CIOCCOLATO",
+          "artista": "TREVISANELLO GIOVANNI",
+          "anno": 2019,
+          "rows": 51,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Cose Da Pazzi",
+          "artista": "CROCCOLO CARLO",
+          "anno": 2017,
+          "rows": 49,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "Parker",
+          "artista": "ZUCCA MARIO",
+          "anno": 2018,
+          "rows": 46,
+          "bucket": "B",
+          "residual_reason": "cast_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "WALK OF SHAME",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2019,
+          "rows": 46,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        }
+      ]
+    },
+    "S2": {
+      "scenario": "S2",
+      "miss_pairs": 494,
+      "miss_rows": 14972,
+      "in_scope_pairs": 494,
+      "in_scope_rows": 14972,
+      "out_of_scope_pairs": 0,
+      "out_of_scope_rows": 0,
+      "recovered_pairs": 429,
+      "recovered_rows": 13435,
+      "residual_pairs": 65,
+      "residual_rows": 1537,
+      "recovered_pct_of_miss_rows": 89.73,
+      "recovered_pct_of_in_scope_rows": 89.73,
+      "recovered_pct_of_manual_rows": 76.79,
+      "by_bucket": {
+        "D": {
+          "pairs": 298,
+          "rows": 7197,
+          "recovered_pairs": 298,
+          "recovered_rows": 7197
+        },
+        "C": {
+          "pairs": 65,
+          "rows": 1537,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        },
+        "B": {
+          "pairs": 68,
+          "rows": 2874,
+          "recovered_pairs": 68,
+          "recovered_rows": 2874
+        },
+        "A": {
+          "pairs": 63,
+          "rows": 3364,
+          "recovered_pairs": 63,
+          "recovered_rows": 3364
+        }
+      },
+      "residual_reasons": {
+        "opera_assente": {
+          "pairs": 40,
+          "rows": 1269
+        },
+        "serie_senza_episodi": {
+          "pairs": 7,
+          "rows": 39
+        },
+        "artista_assente": {
+          "pairs": 18,
+          "rows": 229
+        }
+      },
+      "residuals_top": [
+        {
+          "titolo_raw": "S.W.A.T. - SQUADRA SPECIALE ANTICRIMINE",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2017,
+          "rows": 184,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA MAX COLLECTION"
+        },
+        {
+          "titolo_raw": "Rio",
+          "artista": "CASTELNUOVO FRANCESCO",
+          "anno": 2018,
+          "rows": 102,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "S.W.A.T. - Squadra Speciale Anticrimine",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2019,
+          "rows": 100,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Una Notte In Giallo",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2015,
+          "rows": 98,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "RIO",
+          "artista": "CASTELNUOVO FRANCESCO",
+          "anno": 2019,
+          "rows": 84,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA HITS/COLLECTION"
+        },
+        {
+          "titolo_raw": "S.W.A.T. - Squadra Speciale Anticrimine",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2018,
+          "rows": 72,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA ACTION"
+        },
+        {
+          "titolo_raw": "Tre Uomini E Una Gamba",
+          "artista": "CROCCOLO CARLO",
+          "anno": 2016,
+          "rows": 71,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Ti Ricordi Di Me?",
+          "artista": "MONITILLO RICCARDO MONITILLO ROCCO RICCARDO",
+          "anno": 2015,
+          "rows": 65,
+          "bucket": "C",
+          "residual_reason": "artista_assente",
+          "canale": "SKY CINEMA PASSION"
+        },
+        {
+          "titolo_raw": "WALK OF SHAME",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2018,
+          "rows": 62,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "LEZIONI DI CIOCCOLATO",
+          "artista": "TREVISANELLO GIOVANNI",
+          "anno": 2019,
+          "rows": 51,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Cose Da Pazzi",
+          "artista": "CROCCOLO CARLO",
+          "anno": 2017,
+          "rows": 49,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "WALK OF SHAME",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2019,
+          "rows": 46,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "COMMEDIASEXI",
+          "artista": "BIONDI LYDIA",
+          "anno": 2018,
+          "rows": 43,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Cose Da Pazzi",
+          "artista": "CROCCOLO CARLO",
+          "anno": 2016,
+          "rows": 36,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "CATTIVE COMPAGNIE",
+          "artista": "YOUNGS JOHN SMEALLIE",
+          "anno": 2018,
+          "rows": 36,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA CLASSICS"
+        },
+        {
+          "titolo_raw": "PUSH",
+          "artista": "YAMANOUCHI HARUHIKO",
+          "anno": 2019,
+          "rows": 34,
+          "bucket": "C",
+          "residual_reason": "artista_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "LEZIONI DI CIOCCOLATO",
+          "artista": "TREVISANELLO GIOVANNI",
+          "anno": 2018,
+          "rows": 33,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "COMMEDIASEXI",
+          "artista": "BIONDI LYDIA",
+          "anno": 2019,
+          "rows": 31,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA HITS/COLLECTION"
+        },
+        {
+          "titolo_raw": "Una Notte In Giallo",
+          "artista": "DAVITIAN KENNETH",
+          "anno": 2016,
+          "rows": 26,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "THE YOUNG MESSIAH",
+          "artista": "BRADLEY HAROLD BRADLEY JR HAROLD WILLARD",
+          "anno": 2019,
+          "rows": 24,
+          "bucket": "C",
+          "residual_reason": "artista_assente",
+          "canale": "SKY CINEMA FAMILY"
+        },
+        {
+          "titolo_raw": "BANZAI",
+          "artista": "YAMANOUCHI HARUHIKO",
+          "anno": 2019,
+          "rows": 23,
+          "bucket": "C",
+          "residual_reason": "artista_assente",
+          "canale": "SKY CINEMA HITS/COLLECTION"
+        },
+        {
+          "titolo_raw": "MANGIA PREGA AMA",
+          "artista": "BIONDI LYDIA",
+          "anno": 2019,
+          "rows": 23,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "INNAMORATI DI ME",
+          "artista": "CENCIOTTI DANIELA",
+          "anno": 2019,
+          "rows": 19,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA UNO"
+        },
+        {
+          "titolo_raw": "Cose Da Pazzi",
+          "artista": "CROCCOLO CARLO",
+          "anno": 2015,
+          "rows": 18,
+          "bucket": "C",
+          "residual_reason": "opera_assente",
+          "canale": "SKY CINEMA COMEDY"
+        },
+        {
+          "titolo_raw": "Le Avventure Acquatiche Di Steve Zissou",
+          "artista": "YAMANOUCHI HARUHIKO",
+          "anno": 2019,
+          "rows": 18,
+          "bucket": "C",
+          "residual_reason": "artista_assente",
+          "canale": "SKY CINEMA DUE+24"
+        }
+      ]
+    },
+    "S3": {
+      "scenario": "S3",
+      "miss_pairs": 494,
+      "miss_rows": 14972,
+      "in_scope_pairs": 429,
+      "in_scope_rows": 13435,
+      "out_of_scope_pairs": 65,
+      "out_of_scope_rows": 1537,
+      "recovered_pairs": 429,
+      "recovered_rows": 13435,
+      "residual_pairs": 0,
+      "residual_rows": 0,
+      "recovered_pct_of_miss_rows": 89.73,
+      "recovered_pct_of_in_scope_rows": 100.0,
+      "recovered_pct_of_manual_rows": 76.79,
+      "by_bucket": {
+        "D": {
+          "pairs": 298,
+          "rows": 7197,
+          "recovered_pairs": 298,
+          "recovered_rows": 7197
+        },
+        "C": {
+          "pairs": 65,
+          "rows": 1537,
+          "recovered_pairs": 0,
+          "recovered_rows": 0
+        },
+        "B": {
+          "pairs": 68,
+          "rows": 2874,
+          "recovered_pairs": 68,
+          "recovered_rows": 2874
+        },
+        "A": {
+          "pairs": 63,
+          "rows": 3364,
+          "recovered_pairs": 63,
+          "recovered_rows": 3364
+        }
+      },
+      "residual_reasons": {},
+      "residuals_top": []
+    }
+  },
+  "projections": {
+    "S0": {
+      "covered_rows": 2523,
+      "covered_pairs": 127,
+      "row_coverage_pct_manual": 14.42,
+      "pair_coverage_pct_est": 20.45,
+      "gap_rows_remaining_in_scope": 14972,
+      "gap_rows_out_of_scope": 0
+    },
+    "S1": {
+      "covered_rows": 13084,
+      "covered_pairs": 488,
+      "row_coverage_pct_manual": 74.79,
+      "pair_coverage_pct_est": 78.58,
+      "gap_rows_remaining_in_scope": 4411,
+      "gap_rows_out_of_scope": 0
+    },
+    "S2": {
+      "covered_rows": 15958,
+      "covered_pairs": 556,
+      "row_coverage_pct_manual": 91.21,
+      "pair_coverage_pct_est": 89.53,
+      "gap_rows_remaining_in_scope": 1537,
+      "gap_rows_out_of_scope": 0
+    },
+    "S3": {
+      "covered_rows": 15958,
+      "covered_pairs": 556,
+      "row_coverage_pct_manual": 91.21,
+      "pair_coverage_pct_est": 89.53,
+      "gap_rows_remaining_in_scope": 0,
+      "gap_rows_out_of_scope": 1537
+    }
+  },
+  "recommendation": [
+    "1. Codice D (film dual-key/normalize/year) — max righe tecnico",
+    "2. Codice A (episodio fallback + strip stagione)",
+    "3. Dati B selettivo (partecipazioni dove diritti)",
+    "4. C fuori scope salvo decisione collecting"
+  ],
+  "sample_replay": {
+    "generated_at": "2026-08-03",
+    "method": "SELECT from match_programmazione_to_partecipazioni(prog_id, 0.7, NULL, 3, 5) — read-only, no writes",
+    "samples": [
+      {
+        "bucket": "A",
+        "manual_title": "VIKINGS 5",
+        "manual_artist": "SINGH MOSE",
+        "programmazione_id": "66c47444-a5a7-46bd-aa7d-5720b701390b",
+        "programmazione_title": "Vikings 5",
+        "programmazione_anno": 2017,
+        "numero_stagione": null,
+        "numero_episodio": 1,
+        "titolo_episodio": "Vikings 5 Ep.01",
+        "matcher_n_matches": 1,
+        "matcher_n_artists": 1,
+        "matcher_max_score": 72.5,
+        "matched_artist": "SINGH MOSE'",
+        "matched_opera": "VIKINGS",
+        "episodio_applicato": true,
+        "platform_indiv_for_artist_in_sky_campaigns": 0,
+        "interpretation": "Matcher live già recupera SINGH su Vikings 5 (title via titolo_originale_programmazione → VIKINGS, ep-only perché stagione NULL). Gap vs manuale non è fallimento del predicato A corrente su questo sample: manca la riga in individuazioni campagna (mandato/filtro artisti o campagna non ha persistito il match)."
+      },
+      {
+        "bucket": "D",
+        "manual_title": "MOTHERS AND DAUGHTERS",
+        "manual_artists": [
+          "BACKUS CHRISTOPHER",
+          "SORVINO MIRA"
+        ],
+        "programmazione_id": "32b09ce1-669e-4891-b2a7-48ad80ae56be",
+        "programmazione_title": "Mothers And Daughters",
+        "programmazione_anno": 2016,
+        "matcher_n_matches": 2,
+        "matcher_n_artists": 2,
+        "matcher_max_score": 80.0,
+        "matched_artists": [
+          "BACKUS CHRISTOPHER",
+          "SORVINO MIRA"
+        ],
+        "matched_opera": "MOTHERS AND DAUGHTERS",
+        "opera_similarity": 1.0,
+        "platform_indiv_for_artists_in_sky_campaigns": 0,
+        "interpretation": "Matcher live già trova opera+cast corretti (score 80). Bucket D qui è gap di persistenza campagna / mandato, non di similarità titolo. Upper bound S1 su D resta valido se si rieseguono campagne senza filtro che esclude questi artisti."
+      }
+    ],
+    "catalog_checks": {
+      "vikings": {
+        "opera_titolo": "VIKINGS",
+        "n_episodi": 57,
+        "sim_vs_Vikings_5": 0.8,
+        "sim_vs_Vikings": 1.0
+      },
+      "mothers": {
+        "opera_id": "750e6c72-8fd8-4b36-9ecf-a4a74f4d53e5",
+        "opera_titolo": "MOTHERS AND DAUGHTERS",
+        "n_cast": 2,
+        "sim": 1.0
+      }
+    },
+    "implications_for_S1": [
+      "Su questi sample il matcher corrente già soddisfa le precondizioni A/D: S1 non è solo 'fix futuro', include anche riesecuzione campagne / ampliamento mandato artisti.",
+      "Per altre serie (Sopranos/Dexter/Romanzo) non risultano programmazioni SKY 2015-2019 con quei pattern titolo: il recupero A lì dipende da presenza programmazione o da titoli alias diversi.",
+      "Strip stagione (A1) aiuta il confronto manuale (VIKINGS 5 vs VIKINGS) e i casi in cui similarity scende sotto 0.7."
+    ]
+  }
+}
