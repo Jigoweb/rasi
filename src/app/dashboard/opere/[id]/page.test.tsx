@@ -8,10 +8,13 @@ jest.mock('next/navigation', () => ({
 }))
 
 jest.mock('@/features/opere/services/opere.service', () => ({
-  getOperaById: jest.fn(async () => ({ data: { id: 'uuid-opera', codice_opera: 'OP001', titolo: 'Opera Test', titolo_originale: 'Originale', tipo: 'film', anno_produzione: 2020, imdb_tconst: null }, error: null })),
+  getOperaById: jest.fn(async () => ({ data: { id: 'uuid-opera', codice_opera: 'OP001', titolo: 'Opera Test', titolo_originale: 'Originale', tipo: 'film', anno_produzione: 2020, imdb_tconst: null, deleted_at: null }, error: null })),
   getPartecipazioniByOperaId: jest.fn(async () => ({ data: [], error: null })),
   getEpisodiByOperaId: jest.fn(async () => ({ data: [], error: null })),
   getRuoliTipologie: jest.fn(async () => ({ data: [], error: null })),
+  getUserEmailById: jest.fn(async () => null),
+  getCatalogAuditLog: jest.fn(async () => ({ data: [], error: null })),
+  restoreOpera: jest.fn(async () => ({ error: null })),
 }))
 
 describe('OperaDetailPage', () => {

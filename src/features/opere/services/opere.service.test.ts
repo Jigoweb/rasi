@@ -1,5 +1,5 @@
 import { supabase } from '@/shared/lib/supabase-client'
-import { getOpere, getOperaById, createOpera, updateOpera, OPERE_INCOMPLETE_OR } from './opere.service'
+import { getOpere, getOperaById, createOpera, updateOpera, deleteOpera, restoreOpera, deleteEpisodio, deletePartecipazione, deletePartecipazioniMultiple, getCatalogAuditLog, OPERE_INCOMPLETE_OR } from './opere.service'
 import type { TablesInsert, TablesUpdate } from '@/shared/lib/supabase'
 
 const mockSingle: jest.Mock = jest.fn()
@@ -9,6 +9,9 @@ const mockEq: jest.Mock = jest.fn()
 const mockInsert: jest.Mock = jest.fn()
 const mockUpdate: jest.Mock = jest.fn()
 const mockOr: jest.Mock = jest.fn()
+const mockIs: jest.Mock = jest.fn()
+const mockNot: jest.Mock = jest.fn()
+const mockRpc: jest.Mock = jest.fn()
 
 jest.mock('@/shared/lib/supabase-client', () => ({
   supabase: {
@@ -18,6 +21,7 @@ jest.mock('@/shared/lib/supabase-client', () => ({
       update: mockUpdate,
       or: mockOr,
     })),
+    rpc: (...args: unknown[]) => mockRpc(...args),
   },
 }))
 
@@ -31,19 +35,24 @@ describe('Opere Service', () => {
     mockInsert.mockClear()
     mockUpdate.mockClear()
     mockOr.mockClear()
+    mockIs.mockClear()
+    mockNot.mockClear()
+    mockRpc.mockClear()
     ;(supabase.from as jest.Mock).mockClear()
   })
 
   beforeEach(() => {
-    mockEq.mockReturnValue({ single: mockSingle, order: mockOrder, select: mockSelect, or: mockOr })
-    mockSelect.mockReturnValue({ order: mockOrder, eq: mockEq, single: mockSingle, or: mockOr })
+    mockEq.mockReturnValue({ single: mockSingle, order: mockOrder, select: mockSelect, or: mockOr, is: mockIs, not: mockNot, eq: mockEq })
+    mockSelect.mockReturnValue({ order: mockOrder, eq: mockEq, single: mockSingle, or: mockOr, is: mockIs, not: mockNot })
+    mockIs.mockReturnValue({ order: mockOrder, eq: mockEq, or: mockOr, not: mockNot })
+    mockNot.mockReturnValue({ order: mockOrder, is: mockIs, eq: mockEq, or: mockOr })
     mockInsert.mockReturnValue({ select: mockSelect })
     mockUpdate.mockReturnValue({ eq: mockEq, select: mockSelect })
-    mockOr.mockReturnValue({ order: mockOrder, eq: mockEq, or: mockOr })
+    mockOr.mockReturnValue({ order: mockOrder, eq: mockEq, is: mockIs, or: mockOr })
   })
 
   describe('getOpere', () => {
-    it('should call supabase.from("opere").select("*").order("anno_produzione")', async () => {
+    it('should list only active opere by default', async () => {
       const mockData = [{ id: '1', titolo: 'Opera 1' }]
       mockOrder.mockResolvedValue({ data: mockData, error: null })
 
@@ -51,6 +60,7 @@ describe('Opere Service', () => {
 
       expect(supabase.from).toHaveBeenCalledWith('opere')
       expect(mockSelect).toHaveBeenCalledWith('*')
+      expect(mockIs).toHaveBeenCalledWith('deleted_at', null)
       expect(mockOrder).toHaveBeenCalledWith('anno_produzione', { ascending: false })
       expect(data).toEqual(mockData)
     })
@@ -69,6 +79,79 @@ describe('Opere Service', () => {
       expect(OPERE_INCOMPLETE_OR).toContain('regista.eq.{}')
       expect(OPERE_INCOMPLETE_OR).toContain('tipo.eq.serie_tv')
       expect(OPERE_INCOMPLETE_OR).toContain('has_episodes.eq.false')
+    })
+
+    it('should list only removed opere when deleted is removed', async () => {
+      mockOrder.mockResolvedValue({ data: [], error: null })
+
+      await getOpere({ deleted: 'removed' })
+
+      expect(mockNot).toHaveBeenCalledWith('deleted_at', 'is', null)
+      expect(mockIs).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('deleteOpera', () => {
+    it('should soft-delete via RPC without deleting individuazioni', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: null })
+
+      const { error } = await deleteOpera('uuid-1')
+
+      expect(mockRpc).toHaveBeenCalledWith('soft_delete_opera', { p_id: 'uuid-1' })
+      expect(error).toBeNull()
+    })
+  })
+
+  describe('restoreOpera', () => {
+    it('should restore via RPC', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: null })
+
+      const { error } = await restoreOpera('uuid-1')
+
+      expect(mockRpc).toHaveBeenCalledWith('restore_opera', { p_id: 'uuid-1' })
+      expect(error).toBeNull()
+    })
+  })
+
+  describe('deleteEpisodio', () => {
+    it('should soft-delete via RPC', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: null })
+
+      await deleteEpisodio('ep-1')
+
+      expect(mockRpc).toHaveBeenCalledWith('soft_delete_episodio', { p_id: 'ep-1' })
+    })
+  })
+
+  describe('deletePartecipazione', () => {
+    it('should soft-delete via RPC', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: null })
+
+      await deletePartecipazione('p-1')
+
+      expect(mockRpc).toHaveBeenCalledWith('soft_delete_partecipazione', { p_id: 'p-1' })
+    })
+  })
+
+  describe('deletePartecipazioniMultiple', () => {
+    it('should bulk soft-delete via RPC', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: null })
+
+      await deletePartecipazioniMultiple(['p-1', 'p-2'])
+
+      expect(mockRpc).toHaveBeenCalledWith('soft_delete_partecipazioni', { p_ids: ['p-1', 'p-2'] })
+    })
+  })
+
+  describe('getCatalogAuditLog', () => {
+    it('should query audit rows for an opera', async () => {
+      mockOrder.mockResolvedValue({ data: [], error: null })
+
+      await getCatalogAuditLog('opera', 'uuid-1')
+
+      expect(supabase.from).toHaveBeenCalledWith('catalog_audit_log')
+      expect(mockEq).toHaveBeenCalledWith('entity_type', 'opera')
+      expect(mockEq).toHaveBeenCalledWith('entity_id', 'uuid-1')
     })
   })
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation';
 import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, updateArtista } from '@/features/artisti/services/artisti.service';
-import { getRuoliTipologie, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service';
+import { getRuoliTipologie, getIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service';
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
@@ -264,16 +264,8 @@ export default function ArtistaProfiloPage() {
   const handleDelete = async () => {
     if (!selectedPartecipazione) return
     
-    const hasIndividuazioni = partecipazioneIndividuazioni.length > 0
-    const shouldDeleteIndividuazioni = hasIndividuazioni && deleteIndividuazioniToo
-    
     setIsDeleting(true)
     try {
-      if (shouldDeleteIndividuazioni) {
-        const { error: indErr } = await deleteIndividuazioniByPartecipazioneId(selectedPartecipazione.id)
-        if (indErr) throw indErr
-      }
-      
       const { error } = await deletePartecipazione(selectedPartecipazione.id)
       if (error) throw error
       
@@ -346,16 +338,9 @@ export default function ArtistaProfiloPage() {
     if (selectedIds.size === 0) return
 
     const ids = Array.from(selectedIds)
-    const hasIndividuazioni = bulkPartecipazioneIndividuazioni.length > 0
-    const shouldDeleteIndividuazioni = hasIndividuazioni && bulkDeleteIndividuazioniToo
 
     setIsBulkDeleting(true)
     try {
-      if (shouldDeleteIndividuazioni) {
-        const { error: indErr } = await deleteIndividuazioniByPartecipazioneIds(ids)
-        if (indErr) throw indErr
-      }
-
       const { error } = await deletePartecipazioniMultiple(ids)
       if (error) throw error
 
@@ -902,22 +887,12 @@ export default function ArtistaProfiloPage() {
                   ))}
                 </ul>
                 <p className="text-sm text-amber-800">
-                  Per eliminare la partecipazione dovrai eliminare anche le individuazioni associate.
+                  La partecipazione esce dal catalogo. Le individuazioni già generate restano nello storico.
                 </p>
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox
-                    id="delete-individuazioni"
-                    checked={deleteIndividuazioniToo}
-                    onCheckedChange={(checked) => setDeleteIndividuazioniToo(!!checked)}
-                  />
-                  <Label htmlFor="delete-individuazioni" className="text-sm font-normal cursor-pointer">
-                    Elimina anche le individuazioni generate da questa partecipazione
-                  </Label>
-                </div>
               </div>
             )}
-            <p className="text-sm text-red-600">
-              Questa azione non può essere annullata.
+            <p className="text-sm text-muted-foreground">
+              La partecipazione sparisce dalle liste attive e dal matching. Può essere ripristinata.
             </p>
           </div>
           <DialogFooter>
@@ -971,22 +946,12 @@ export default function ArtistaProfiloPage() {
                   ))}
                 </ul>
                 <p className="text-sm text-amber-800">
-                  Puoi eliminare le partecipazioni mantenendo le individuazioni (rimarranno con il riferimento alla partecipazione annullato) oppure eliminare anche le individuazioni.
+                  Le partecipazioni escono dal catalogo. Le individuazioni già generate restano nello storico.
                 </p>
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox
-                    id="bulk-delete-individuazioni"
-                    checked={bulkDeleteIndividuazioniToo}
-                    onCheckedChange={(checked) => setBulkDeleteIndividuazioniToo(!!checked)}
-                  />
-                  <Label htmlFor="bulk-delete-individuazioni" className="text-sm font-normal cursor-pointer">
-                    Elimina anche le individuazioni generate da queste partecipazioni
-                  </Label>
-                </div>
               </div>
             )}
-            <p className="text-sm text-red-600">
-              Questa azione non può essere annullata.
+            <p className="text-sm text-muted-foreground">
+              Le partecipazioni spariscono dalle liste attive e dal matching. Possono essere ripristinate.
             </p>
           </div>
           <DialogFooter>

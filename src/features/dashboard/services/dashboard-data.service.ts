@@ -282,10 +282,10 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
 
   return {
     countActiveArtisti: () => count(supabase.from('artisti').select('id', { count: 'exact', head: true }).eq('stato', 'attivo')),
-    countOpere: () => count(supabase.from('opere').select('id', { count: 'exact', head: true })),
-    countEpisodi: () => count(supabase.from('episodi').select('id', { count: 'exact', head: true })),
-    countFilm: () => count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'film')),
-    countSerieTv: () => count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'serie_tv')),
+    countOpere: () => count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null)),
+    countEpisodi: () => count(supabase.from('episodi').select('id', { count: 'exact', head: true }).is('deleted_at', null)),
+    countFilm: () => count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'film').is('deleted_at', null)),
+    countSerieTv: () => count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'serie_tv').is('deleted_at', null)),
     countProgrammazioniInRange: range => count(
       supabase
         .from('programmazioni')
@@ -315,7 +315,7 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
     loadRecentActivities: async () => {
       const [ultArtisti, ultOpere, ultCampagneInd, ultCampagneProg] = await Promise.all([
         supabase.from('artisti').select('id, nome, cognome, created_at').order('created_at', { ascending: false }).limit(3),
-        supabase.from('opere').select('id, titolo, created_at').order('created_at', { ascending: false }).limit(3),
+        supabase.from('opere').select('id, titolo, created_at').is('deleted_at', null).order('created_at', { ascending: false }).limit(3),
         supabase.from('campagne_individuazione').select('id, nome, updated_at, stato').eq('stato', 'completata').order('updated_at', { ascending: false }).limit(3),
         (supabase as any).from('campagne_programmazione').select('id, nome, created_at').order('created_at', { ascending: false }).limit(3),
       ])
@@ -353,14 +353,14 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
         .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
         .slice(0, 5)
     },
-    countPartecipazioni: () => count(supabase.from('partecipazioni').select('id', { count: 'exact', head: true })),
+    countPartecipazioni: () => count(supabase.from('partecipazioni').select('id', { count: 'exact', head: true }).is('deleted_at', null)),
     countCampagneRipartizione: () => count(supabase.from('campagne_ripartizione').select('id', { count: 'exact', head: true })),
     loadUltimoDatoCaricato: async () => {
       const { data } = await supabase.from('programmazioni').select('created_at').order('created_at', { ascending: false }).limit(1)
       return data?.[0]?.created_at || null
     },
     countArtistiIncompleti: () => count(supabase.from('artisti').select('id', { count: 'exact', head: true }).or(ARTISTI_INCOMPLETI_OR)),
-    countOpereIncomplete: () => count(supabase.from('opere').select('id', { count: 'exact', head: true }).or(OPERE_INCOMPLETE_OR)),
+    countOpereIncomplete: () => count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).or(OPERE_INCOMPLETE_OR)),
     countMissingArtistiFields: () => Promise.all([
       count(supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_ipn.is.null,codice_ipn.eq.')),
       count(supabase.from('artisti').select('id', { count: 'exact', head: true }).or('nome.is.null,nome.eq.')),
@@ -371,16 +371,16 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
       count(supabase.from('artisti').select('id', { count: 'exact', head: true }).or('codice_fiscale.is.null,codice_fiscale.eq.')),
     ]),
     countMissingOpereFields: () => Promise.all([
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo.is.null,titolo.eq.')),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('tipo', null)),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('anno_produzione', null)),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('imdb_tconst.is.null,imdb_tconst.eq.')),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('titolo_originale.is.null,titolo_originale.eq.')),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('regista.is.null,regista.eq.{}')),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('alias_titoli.is.null,alias_titoli.eq.{}')),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).or('codice_isan.is.null,codice_isan.eq.')),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'serie_tv').is('anno_produzione_fine', null)),
-      count(supabase.from('opere').select('id', { count: 'exact', head: true }).eq('tipo', 'serie_tv').eq('has_episodes', false)),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).or('titolo.is.null,titolo.eq.')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).is('tipo', null)),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).is('anno_produzione', null)),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).or('imdb_tconst.is.null,imdb_tconst.eq.')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).or('titolo_originale.is.null,titolo_originale.eq.')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).or('regista.is.null,regista.eq.{}')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).or('alias_titoli.is.null,alias_titoli.eq.{}')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).or('codice_isan.is.null,codice_isan.eq.')),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('tipo', 'serie_tv').is('anno_produzione_fine', null)),
+      count(supabase.from('opere').select('id', { count: 'exact', head: true }).is('deleted_at', null).eq('tipo', 'serie_tv').eq('has_episodes', false)),
     ]),
   }
 }
