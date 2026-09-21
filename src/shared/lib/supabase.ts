@@ -340,6 +340,42 @@ export type Database = {
         }
         Relationships: []
       }
+      catalog_audit_log: {
+        Row: {
+          action: string
+          actor_id: string | null
+          changed_fields: string[] | null
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          new_data: Json | null
+          old_data: Json | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          changed_fields?: string[] | null
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          changed_fields?: string[] | null
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          new_data?: Json | null
+          old_data?: Json | null
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           category: string
@@ -425,6 +461,9 @@ export type Database = {
           codice_isan: string | null
           created_at: string | null
           data_prima_messa_in_onda: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deleted_cascade_from: string | null
           descrizione: string | null
           durata_minuti: number | null
           id: string
@@ -439,6 +478,9 @@ export type Database = {
           codice_isan?: string | null
           created_at?: string | null
           data_prima_messa_in_onda?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_cascade_from?: string | null
           descrizione?: string | null
           durata_minuti?: number | null
           id?: string
@@ -453,6 +495,9 @@ export type Database = {
           codice_isan?: string | null
           created_at?: string | null
           data_prima_messa_in_onda?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_cascade_from?: string | null
           descrizione?: string | null
           durata_minuti?: number | null
           id?: string
@@ -705,6 +750,9 @@ export type Database = {
           codici_esterni: Json | null
           created_at: string | null
           created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deleted_cascade_from: string | null
           dettagli_serie: Json | null
           durata_minuti: number | null
           has_episodes: boolean
@@ -728,6 +776,9 @@ export type Database = {
           codici_esterni?: Json | null
           created_at?: string | null
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_cascade_from?: string | null
           dettagli_serie?: Json | null
           durata_minuti?: number | null
           has_episodes?: boolean
@@ -751,6 +802,9 @@ export type Database = {
           codici_esterni?: Json | null
           created_at?: string | null
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_cascade_from?: string | null
           dettagli_serie?: Json | null
           durata_minuti?: number | null
           has_episodes?: boolean
@@ -845,6 +899,9 @@ export type Database = {
           artista_id: string
           created_at: string | null
           created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          deleted_cascade_from: string | null
           episodio_id: string | null
           id: string
           metadati: Json | null
@@ -866,6 +923,9 @@ export type Database = {
           artista_id: string
           created_at?: string | null
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_cascade_from?: string | null
           episodio_id?: string | null
           id?: string
           metadati?: Json | null
@@ -887,6 +947,9 @@ export type Database = {
           artista_id?: string
           created_at?: string | null
           created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          deleted_cascade_from?: string | null
           episodio_id?: string | null
           id?: string
           metadati?: Json | null
@@ -1358,6 +1421,9 @@ export type Database = {
           similarity_score: number
         }[]
       }
+      restore_episodio: { Args: { p_id: string }; Returns: undefined }
+      restore_opera: { Args: { p_id: string }; Returns: undefined }
+      restore_partecipazione: { Args: { p_id: string }; Returns: undefined }
       search_opere_fuzzy: {
         Args: { query_text: string; similarity_threshold?: number }
         Returns: {
@@ -1371,6 +1437,10 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      soft_delete_episodio: { Args: { p_id: string }; Returns: undefined }
+      soft_delete_opera: { Args: { p_id: string }; Returns: undefined }
+      soft_delete_partecipazione: { Args: { p_id: string }; Returns: undefined }
+      soft_delete_partecipazioni: { Args: { p_ids: string[] }; Returns: undefined }
     }
     Enums: {
       categoria_ruolo: "recitazione" | "doppiaggio" | "direzione" | "tecnico"

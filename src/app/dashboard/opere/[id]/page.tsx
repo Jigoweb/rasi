@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
+import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, getUserEmailById, restoreOpera } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
 import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2, Clock, Building2 } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
@@ -28,6 +28,8 @@ import { Label } from '@/shared/components/ui/label'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
+import { CatalogAuditTimeline } from '@/features/opere/components/catalog-audit-timeline'
+import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -159,7 +161,8 @@ export default function OperaDetailPage() {
         getUserEmailById(oData.updated_by).then(email => setUpdatedByEmail(email))
       }
 
-      const { data: pData, error: pErr } = await getPartecipazioniByOperaId(operaId)
+      const includeDeleted = Boolean(oData?.deleted_at)
+      const { data: pData, error: pErr } = await getPartecipazioniByOperaId(operaId, { includeDeleted })
       if (pErr) throw pErr
       
       // Ordina partecipazioni: per opere con episodi ordina per stagione/episodio, altrimenti per nome artista
@@ -182,7 +185,7 @@ export default function OperaDetailPage() {
       setPartecipazioni(sortedPartecipazioni)
 
       if (oData && operaHaEpisodi(oData)) {
-        const { data: eData, error: eErr } = await getEpisodiByOperaId(operaId)
+        const { data: eData, error: eErr } = await getEpisodiByOperaId(operaId, { includeDeleted })
         if (eErr) throw eErr
         setEpisodi(eData || [])
       } else {
@@ -262,16 +265,8 @@ export default function OperaDetailPage() {
   const handleDeletePartecipazione = async () => {
     if (!selectedPartecipazione) return
     
-    const hasIndividuazioni = partecipazioneIndividuazioni.length > 0
-    const shouldDeleteIndividuazioni = hasIndividuazioni && deleteIndividuazioniToo
-    
     setIsDeletingPartecipazione(true)
     try {
-      if (shouldDeleteIndividuazioni) {
-        const { error: indErr } = await deleteIndividuazioniByPartecipazioneId(selectedPartecipazione.id)
-        if (indErr) throw indErr
-      }
-      
       const { error } = await deletePartecipazione(selectedPartecipazione.id)
       if (error) throw error
       
@@ -344,16 +339,9 @@ export default function OperaDetailPage() {
     if (selectedPartecipazioniIds.size === 0) return
 
     const ids = Array.from(selectedPartecipazioniIds)
-    const hasIndividuazioni = bulkPartecipazioneIndividuazioni.length > 0
-    const shouldDeleteIndividuazioni = hasIndividuazioni && bulkDeleteIndividuazioniToo
 
     setIsBulkDeletingPartecipazioni(true)
     try {
-      if (shouldDeleteIndividuazioni) {
-        const { error: indErr } = await deleteIndividuazioniByPartecipazioneIds(ids)
-        if (indErr) throw indErr
-      }
-
       const { error } = await deletePartecipazioniMultiple(ids)
       if (error) throw error
 
@@ -983,6 +971,26 @@ export default function OperaDetailPage() {
                 Titolo originale: <span className="italic">{opera.titolo_originale}</span>
               </p>
             )}
+            {opera.deleted_at && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge variant="destructive">Rimossa dal catalogo</Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const { error } = await restoreOpera(opera.id)
+                    if (error) {
+                      notifyError('Ripristino non riuscito', error)
+                      return
+                    }
+                    notifySuccess('Opera ripristinata')
+                    fetchData()
+                  }}
+                >
+                  Ripristina
+                </Button>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1104,6 +1112,10 @@ export default function OperaDetailPage() {
                 <div className="font-medium">{(opera as any).casa_produzione}</div>
               </div>
             )}
+          </div>
+          <div className="mt-6 pt-4 border-t space-y-3">
+            <h3 className="text-sm font-medium">Storico modifiche</h3>
+            <CatalogAuditTimeline entityType="opera" entityId={opera.id} />
           </div>
           <div className="mt-6 pt-4 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex gap-2">
@@ -2425,22 +2437,12 @@ export default function OperaDetailPage() {
                   ))}
                 </ul>
                 <p className="text-sm text-amber-800">
-                  Puoi eliminare la partecipazione mantenendo le individuazioni (rimarranno con il riferimento alla partecipazione annullato) oppure eliminare anche le individuazioni.
+                  Puoi rimuovere la partecipazione dal catalogo. Le individuazioni già generate restano nello storico.
                 </p>
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox
-                    id="delete-individuazioni"
-                    checked={deleteIndividuazioniToo}
-                    onCheckedChange={(checked) => setDeleteIndividuazioniToo(!!checked)}
-                  />
-                  <Label htmlFor="delete-individuazioni" className="text-sm font-normal cursor-pointer">
-                    Elimina anche le individuazioni generate da questa partecipazione
-                  </Label>
-                </div>
               </div>
             )}
-            <p className="text-sm text-red-600">
-              Questa azione non può essere annullata.
+            <p className="text-sm text-muted-foreground">
+              La partecipazione sparisce dalle liste attive e dal matching. Può essere ripristinata.
             </p>
           </div>
           <DialogFooter>
@@ -2494,22 +2496,12 @@ export default function OperaDetailPage() {
                   ))}
                 </ul>
                 <p className="text-sm text-amber-800">
-                  Puoi eliminare le partecipazioni mantenendo le individuazioni (rimarranno con il riferimento alla partecipazione annullato) oppure eliminare anche le individuazioni.
+                  Le partecipazioni escono dal catalogo attivo. Le individuazioni già generate restano nello storico.
                 </p>
-                <div className="flex items-center space-x-2 pt-2">
-                  <Checkbox
-                    id="bulk-delete-individuazioni"
-                    checked={bulkDeleteIndividuazioniToo}
-                    onCheckedChange={(checked) => setBulkDeleteIndividuazioniToo(!!checked)}
-                  />
-                  <Label htmlFor="bulk-delete-individuazioni" className="text-sm font-normal cursor-pointer">
-                    Elimina anche le individuazioni generate da queste partecipazioni
-                  </Label>
-                </div>
               </div>
             )}
-            <p className="text-sm text-red-600">
-              Questa azione non può essere annullata.
+            <p className="text-sm text-muted-foreground">
+              Le partecipazioni spariscono dalle liste attive e dal matching. Possono essere ripristinate.
             </p>
           </div>
           <DialogFooter>
@@ -2766,14 +2758,15 @@ export default function OperaDetailPage() {
       <Dialog open={showDeleteEpisodioDialog} onOpenChange={setShowDeleteEpisodioDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Elimina Episodio</DialogTitle>
+            <DialogTitle>Rimuovi episodio</DialogTitle>
             <DialogDescription>
-              Sei sicuro di voler eliminare l&apos;episodio S{episodioToDelete?.numero_stagione}E{episodioToDelete?.numero_episodio}
-              {episodioToDelete?.titolo_episodio ? ` - ${episodioToDelete.titolo_episodio}` : ''}?
+              Stai per rimuovere l&apos;episodio S{episodioToDelete?.numero_stagione}E{episodioToDelete?.numero_episodio}
+              {episodioToDelete?.titolo_episodio ? ` - ${episodioToDelete.titolo_episodio}` : ''}.
+              Le partecipazioni collegate escono dal matching. Lo storico resta.
             </DialogDescription>
           </DialogHeader>
-          <p className="text-sm text-red-600">
-            Questa azione non può essere annullata.
+          <p className="text-sm text-muted-foreground">
+            L&apos;episodio può essere ripristinato in seguito.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowDeleteEpisodioDialog(false); setEpisodioToDelete(null) }}>

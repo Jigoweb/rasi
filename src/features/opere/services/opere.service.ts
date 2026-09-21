@@ -9,6 +9,8 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
  * Fetches all opere with their episodi for full export, using cursor-based pagination.
  * Denormalizes: opere without episodes = 1 row, opere with episodes = N rows (one per episode).
  */
+export type CatalogDeletedFilter = 'active' | 'removed' | 'all'
+
 export const getOpereForExport = async (
   onProgress?: (progress: { fetched: number; total: number; percentage: number; phase: 'fetching' | 'formatting' | 'generating' | 'done'; estimatedTimeRemaining?: number }) => void,
   signal?: AbortSignal
@@ -20,6 +22,7 @@ export const getOpereForExport = async (
     const { count: totalOpere, error: countError } = await supabase
       .from('opere')
       .select('*', { count: 'exact', head: true })
+      .is('deleted_at', null)
 
     if (countError) return { data: null, error: countError }
 
@@ -39,6 +42,7 @@ export const getOpereForExport = async (
       let query = supabase
         .from('opere')
         .select('id, codice_opera, titolo, titolo_originale, alias_titoli, tipo, has_episodes, anno_produzione, anno_produzione_fine, regista, codice_isan, imdb_tconst, stato_validazione, dettagli_serie, created_at, updated_at')
+        .is('deleted_at', null)
         .order('id', { ascending: true })
         .limit(batchSize)
 
@@ -89,6 +93,7 @@ export const getOpereForExport = async (
         let epQuery = supabase
           .from('episodi')
           .select('id, opera_id, numero_stagione, numero_episodio, titolo_episodio, durata_minuti, data_prima_messa_in_onda, codice_isan, imdb_tconst')
+          .is('deleted_at', null)
           .order('id', { ascending: true })
           .limit(batchSize)
 
@@ -196,11 +201,20 @@ export const getOpere = async (filters?: {
   tipo?: string
   /** When true, keep only opere missing matching-useful fields (Data Health). */
   incomplete?: boolean
+  deleted?: CatalogDeletedFilter
 }) => {
   let query = supabase
     .from('opere')
     .select('*')
-    .order('anno_produzione', { ascending: false })
+
+  const deleted = filters?.deleted ?? 'active'
+  if (deleted === 'active') {
+    query = query.is('deleted_at', null)
+  } else if (deleted === 'removed') {
+    query = query.not('deleted_at', 'is', null)
+  }
+
+  query = query.order('anno_produzione', { ascending: false })
 
   if (filters?.search) {
     const s = filters.search.trim()
@@ -267,28 +281,25 @@ export const updateOpera = async (
 }
 
 /**
- * Counts the number of participations for a given opera.
- * Used to check if an opera can be deleted.
+ * Counts the number of active participations for a given opera.
  */
 export const getPartecipazioniCountByOperaId = async (operaId: string) => {
   const { count, error } = await supabase
     .from('partecipazioni')
     .select('*', { count: 'exact', head: true })
     .eq('opera_id', operaId)
+    .is('deleted_at', null)
 
   return { count: count ?? 0, error }
 }
 
-/**
- * Deletes an opera by ID.
- * Note: This will fail if the opera has associated participations or individuazioni due to FK constraints.
- */
 export const deleteOpera = async (id: string) => {
-  const { error } = await supabase
-    .from('opere')
-    .delete()
-    .eq('id', id)
+  const { error } = await supabase.rpc('soft_delete_opera', { p_id: id })
+  return { error }
+}
 
+export const restoreOpera = async (id: string) => {
+  const { error } = await supabase.rpc('restore_opera', { p_id: id })
   return { error }
 }
 
@@ -331,14 +342,15 @@ export const deleteIndividuazioniByOperaId = async (operaId: string) => {
   return { error }
 }
 
-export const getPartecipazioniByOperaId = async (operaId: string) => {
-  const { data, error } = await supabase
+export const getPartecipazioniByOperaId = async (operaId: string, options?: { includeDeleted?: boolean }) => {
+  let query = supabase
     .from('partecipazioni')
     .select(`
       id,
       personaggio,
       note,
       created_at,
+      deleted_at,
       artista_id,
       opera_id,
       episodio_id,
@@ -348,7 +360,12 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
       episodi ( id, numero_stagione, numero_episodio, titolo_episodio )
     `)
     .eq('opera_id', operaId)
-    .order('created_at', { ascending: false })
+
+  if (!options?.includeDeleted) {
+    query = query.is('deleted_at', null)
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false })
 
   return { data, error }
 }
@@ -373,11 +390,12 @@ export const updatePartecipazione = async (
 }
 
 export const deletePartecipazione = async (id: string) => {
-  const { error } = await supabase
-    .from('partecipazioni')
-    .delete()
-    .eq('id', id)
+  const { error } = await supabase.rpc('soft_delete_partecipazione', { p_id: id })
+  return { error }
+}
 
+export const restorePartecipazione = async (id: string) => {
+  const { error } = await supabase.rpc('restore_partecipazione', { p_id: id })
   return { error }
 }
 
@@ -456,11 +474,8 @@ export const deleteIndividuazioniByPartecipazioneIds = async (partecipazioneIds:
 }
 
 export const deletePartecipazioniMultiple = async (ids: string[]) => {
-  const { error } = await supabase
-    .from('partecipazioni')
-    .delete()
-    .in('id', ids)
-
+  if (ids.length === 0) return { error: null }
+  const { error } = await supabase.rpc('soft_delete_partecipazioni', { p_ids: ids })
   return { error }
 }
 
@@ -475,6 +490,35 @@ export const createPartecipazione = async (payload: {
   personaggio?: string | null
   note?: string | null
 }) => {
+  let existingQuery = supabase
+    .from('partecipazioni')
+    .select('id, deleted_at')
+    .eq('artista_id', payload.artista_id)
+    .eq('opera_id', payload.opera_id)
+    .eq('ruolo_id', payload.ruolo_id)
+
+  existingQuery = payload.episodio_id
+    ? existingQuery.eq('episodio_id', payload.episodio_id)
+    : existingQuery.is('episodio_id', null)
+
+  const { data: existing } = await existingQuery.maybeSingle()
+
+  if (existing?.id && existing.deleted_at) {
+    const { data, error } = await supabase
+      .from('partecipazioni')
+      .update({
+        personaggio: payload.personaggio ?? null,
+        note: payload.note ?? null,
+        deleted_at: null,
+        deleted_by: null,
+        deleted_cascade_from: null,
+      })
+      .eq('id', existing.id)
+      .select('*')
+      .single()
+    return { data, error }
+  }
+
   const { data, error } = await supabase
     .from('partecipazioni')
     .insert(payload)
@@ -585,11 +629,17 @@ export const checkPartecipazioniDuplicate = async (
   return duplicateIndices
 }
 
-export const getEpisodiByOperaId = async (operaId: string) => {
-  const { data, error } = await supabase
+export const getEpisodiByOperaId = async (operaId: string, options?: { includeDeleted?: boolean }) => {
+  let query = supabase
     .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
+    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati, deleted_at')
     .eq('opera_id', operaId)
+
+  if (!options?.includeDeleted) {
+    query = query.is('deleted_at', null)
+  }
+
+  const { data, error } = await query
     .order('numero_stagione', { ascending: true })
     .order('numero_episodio', { ascending: true })
 
@@ -623,12 +673,27 @@ export const updateEpisodio = async (
 }
 
 export const deleteEpisodio = async (id: string) => {
-  const { error } = await supabase
-    .from('episodi')
-    .delete()
-    .eq('id', id)
-
+  const { error } = await supabase.rpc('soft_delete_episodio', { p_id: id })
   return { error }
+}
+
+export const restoreEpisodio = async (id: string) => {
+  const { error } = await supabase.rpc('restore_episodio', { p_id: id })
+  return { error }
+}
+
+export const getCatalogAuditLog = async (
+  entityType: 'opera' | 'episodio' | 'partecipazione',
+  entityId: string
+) => {
+  const { data, error } = await supabase
+    .from('catalog_audit_log')
+    .select('*')
+    .eq('entity_type', entityType)
+    .eq('entity_id', entityId)
+    .order('created_at', { ascending: false })
+
+  return { data, error }
 }
 
 // Upsert batch di episodi - trova per opera_id + numero_stagione + numero_episodio
@@ -674,6 +739,9 @@ export const upsertEpisodi = async (
             data_prima_messa_in_onda: ep.data_prima_messa_in_onda,
             imdb_tconst: ep.imdb_tconst,
             metadati: ep.metadati,
+            deleted_at: null,
+            deleted_by: null,
+            deleted_cascade_from: null,
           })
           .eq('id', existing.id)
 

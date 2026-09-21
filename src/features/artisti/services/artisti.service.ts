@@ -150,8 +150,9 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         numero_stagione
       )
     `)
-    .eq('artista_id', artistaId)
-    .order('created_at', { ascending: false })
+      .eq('artista_id', artistaId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
 
   return { data, error }
 }

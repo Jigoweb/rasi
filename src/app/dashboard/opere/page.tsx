@@ -17,10 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle, RotateCcw } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
-import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
+import { createOpera, updateOpera, getOperaById, deleteOpera, restoreOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
@@ -112,6 +112,7 @@ export default function OperePage() {
   const [isSearching, setIsSearching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [catalogView, setCatalogView] = useState<'active' | 'removed'>('active')
   const [filters, setFilters] = useState<FieldFilter[]>([])
   const [incompleteMode, setIncompleteMode] = useState(
     () => searchParams?.get('incomplete') === '1'
@@ -127,17 +128,15 @@ export default function OperePage() {
   // Delete confirmation states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [operaToDelete, setOperaToDelete] = useState<Opera | null>(null)
-  const [deleteCheckStatus, setDeleteCheckStatus] = useState<'idle' | 'checking' | 'can_delete' | 'has_partecipazioni' | 'has_individuazioni'>('idle')
-  const [partecipazioniCount, setPartecipazioniCount] = useState(0)
+  const [deleteCheckStatus, setDeleteCheckStatus] = useState<'idle' | 'checking' | 'can_delete'>('idle')
   const [individuazioniCount, setIndividuazioniCount] = useState(0)
-  const [deleteIndividuazioniToo, setDeleteIndividuazioniToo] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
   const { startExport } = useExportProcess()
 
   useEffect(() => {
     fetchOpere()
-  }, [searchQuery, typeFilter, filters, incompleteMode])
+  }, [searchQuery, typeFilter, filters, incompleteMode, catalogView])
 
   useEffect(() => {
     if (searchParams?.get('incomplete') === '1') {
@@ -219,6 +218,12 @@ export default function OperePage() {
       let query = supabase
         .from('opere')
         .select('*')
+      if (catalogView === 'active') {
+        query = query.is('deleted_at', null)
+      } else {
+        query = query.not('deleted_at', 'is', null)
+      }
+      query = query
         .order('anno_produzione', { ascending: false })
         .limit(100)
 
@@ -417,25 +422,8 @@ export default function OperePage() {
     setOperaToDelete(opera)
     setDeleteCheckStatus('checking')
     setIndividuazioniCount(0)
-    setDeleteIndividuazioniToo(false)
     setShowDeleteDialog(true)
 
-    // Check if opera has participations
-    const { count, error } = await getPartecipazioniCountByOperaId(opera.id)
-
-    if (error) {
-      console.error('Error checking partecipazioni:', error)
-      setDeleteCheckStatus('idle')
-      return
-    }
-
-    if (count > 0) {
-      setPartecipazioniCount(count)
-      setDeleteCheckStatus('has_partecipazioni')
-      return
-    }
-
-    // No partecipazioni: check for residual individuazioni (blocked by FK opera_id RESTRICT)
     const { data: indData, error: indError } = await getIndividuazioniByOperaId(opera.id)
     if (indError) {
       console.error('Error checking individuazioni:', indError)
@@ -443,27 +431,14 @@ export default function OperePage() {
       setDeleteCheckStatus('can_delete')
       return
     }
-    const indCount = indData?.length ?? 0
-    setIndividuazioniCount(indCount)
-    setDeleteCheckStatus(indCount > 0 ? 'has_individuazioni' : 'can_delete')
+    setIndividuazioniCount(indData?.length ?? 0)
+    setDeleteCheckStatus('can_delete')
   }
 
   const handleDeleteOpera = async () => {
     if (!operaToDelete) return
 
     setIsDeleting(true)
-
-    // If there are residual individuazioni and user confirmed deletion, remove them first
-    if (deleteIndividuazioniToo && individuazioniCount > 0) {
-      const { error: indError } = await deleteIndividuazioniByOperaId(operaToDelete.id)
-      if (indError) {
-        console.error('Error deleting individuazioni:', indError)
-        notifyError('Eliminazione individuazioni collegate non riuscita', indError)
-        setIsDeleting(false)
-        return
-      }
-    }
-
     const { error } = await deleteOpera(operaToDelete.id)
 
     if (error) {
@@ -473,25 +448,30 @@ export default function OperePage() {
       return
     }
 
-    notifySuccess('Opera eliminata')
-
-    // Refresh list and close dialog
+    notifySuccess('Opera rimossa dal catalogo. Lo storico e le individuazioni restano.')
     await fetchOpere()
     setShowDeleteDialog(false)
     setOperaToDelete(null)
     setDeleteCheckStatus('idle')
     setIndividuazioniCount(0)
-    setDeleteIndividuazioniToo(false)
     setIsDeleting(false)
+  }
+
+  const handleRestoreOpera = async (opera: Opera) => {
+    const { error } = await restoreOpera(opera.id)
+    if (error) {
+      notifyError('Ripristino opera non riuscito', error)
+      return
+    }
+    notifySuccess('Opera ripristinata')
+    await fetchOpere()
   }
 
   const closeDeleteDialog = () => {
     setShowDeleteDialog(false)
     setOperaToDelete(null)
     setDeleteCheckStatus('idle')
-    setPartecipazioniCount(0)
     setIndividuazioniCount(0)
-    setDeleteIndividuazioniToo(false)
   }
 
   const onSubmit = async (values: z.infer<typeof schema>) => {
@@ -627,6 +607,22 @@ export default function OperePage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Opere</h1>
           <p className="text-gray-600">Gestione del catalogo opere</p>
+          <div className="mt-2 flex gap-2">
+            <Button
+              variant={catalogView === 'active' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCatalogView('active')}
+            >
+              Catalogo
+            </Button>
+            <Button
+              variant={catalogView === 'removed' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setCatalogView('removed')}
+            >
+              Rimosse
+            </Button>
+          </div>
           <div className="mt-2 flex gap-2 lg:hidden">
             <Button variant="outline" onClick={exportData}>
               <Download className="h-4 w-4 mr-2" />
@@ -838,10 +834,17 @@ export default function OperePage() {
                             <Edit className="h-4 w-4 mr-2" />
                             Modifica
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Elimina
-                          </DropdownMenuItem>
+                          {catalogView === 'removed' ? (
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleRestoreOpera(opera) }}>
+                              <RotateCcw className="h-4 w-4 mr-2" />
+                              Ripristina
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Rimuovi
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -910,10 +913,17 @@ export default function OperePage() {
                           <Edit className="h-4 w-4 mr-2" />
                           Modifica
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Elimina
-                        </DropdownMenuItem>
+                        {catalogView === 'removed' ? (
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleRestoreOpera(opera) }}>
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            Ripristina
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Rimuovi
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -1259,11 +1269,11 @@ export default function OperePage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-red-500" />
-              Conferma Eliminazione
+              Rimuovi dal catalogo
             </DialogTitle>
             <DialogDescription>
               {operaToDelete && (
-                <>Stai per eliminare l&apos;opera <strong>&quot;{operaToDelete.titolo}&quot;</strong></>
+                <>Stai per rimuovere l&apos;opera <strong>&quot;{operaToDelete.titolo}&quot;</strong>. Puoi ripristinarla in seguito dalla vista Rimosse.</>
               )}
             </DialogDescription>
           </DialogHeader>
@@ -1272,63 +1282,24 @@ export default function OperePage() {
             {deleteCheckStatus === 'checking' && (
               <div className="flex items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Verifica partecipazioni in corso...
-              </div>
-            )}
-
-            {deleteCheckStatus === 'has_partecipazioni' && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-yellow-800">Impossibile eliminare</p>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      Questa opera ha <strong>{partecipazioniCount} partecipazion{partecipazioniCount === 1 ? 'e' : 'i'}</strong> associate. 
-                      Rimuovi prima tutte le partecipazioni dalla pagina di dettaglio dell&apos;opera.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {deleteCheckStatus === 'has_individuazioni' && (
-              <div className="space-y-3">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-sm text-red-700">
-                    Questa azione è irreversibile. Tutti i dati dell&apos;opera verranno eliminati permanentemente.
-                  </p>
-                </div>
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium text-orange-800">Presenti individuazioni storiche</p>
-                      <p className="text-sm text-orange-700 mt-1">
-                        Quest&apos;opera è presente in{' '}
-                        <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> di campagne precedenti.
-                        Le individuazioni verranno mantenute con tutti i dati dello snapshot, ma perderanno il collegamento all&apos;opera nel catalogo.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 pl-1">
-                  <Checkbox
-                    id="delete-individuazioni"
-                    checked={deleteIndividuazioniToo}
-                    onCheckedChange={(v) => setDeleteIndividuazioniToo(!!v)}
-                  />
-                  <label htmlFor="delete-individuazioni" className="text-sm text-gray-700 cursor-pointer leading-snug">
-                    Elimina anche le <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> residue (opzionale)
-                  </label>
-                </div>
+                Verifica in corso...
               </div>
             )}
 
             {deleteCheckStatus === 'can_delete' && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-700">
-                  Questa azione è irreversibile. Tutti i dati dell&apos;opera verranno eliminati permanentemente, inclusi eventuali episodi associati.
-                </p>
+              <div className="space-y-3">
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <p className="text-sm text-amber-800">
+                    L&apos;opera esce dal matching e dalle liste attive. Episodi e partecipazioni collegate vengono rimossi insieme. Le individuazioni già generate restano nello storico.
+                  </p>
+                </div>
+                {individuazioniCount > 0 && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <p className="text-sm text-orange-800">
+                      Quest&apos;opera compare in <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> di campagne precedenti. Non verranno cancellate.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1337,7 +1308,7 @@ export default function OperePage() {
             <Button variant="outline" onClick={closeDeleteDialog}>
               Annulla
             </Button>
-            {(deleteCheckStatus === 'can_delete' || deleteCheckStatus === 'has_individuazioni') && (
+            {deleteCheckStatus === 'can_delete' && (
               <Button
                 variant="destructive"
                 onClick={handleDeleteOpera}
@@ -1346,12 +1317,12 @@ export default function OperePage() {
                 {isDeleting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Eliminazione...
+                    Rimozione...
                   </>
                 ) : (
                   <>
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Elimina Opera
+                    Rimuovi opera
                   </>
                 )}
               </Button>
