@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useAuth, AVAILABLE_ROLES, UserRole } from '@/shared/contexts/auth-context'
-import { rolesAssignableBy } from '@/shared/lib/auth-permissions'
+import { rolesAssignableBy, rolesInvitableBy } from '@/shared/lib/auth-permissions'
 import { deriveArtistaInviteStatus } from '@/features/artisti/lib/artista-invite-status'
 import { supabase } from '@/shared/lib/supabase-client'
 import { useRouter } from 'next/navigation'
@@ -84,6 +84,10 @@ export default function UtentiPage() {
     () => AVAILABLE_ROLES.filter((role) => assignableRoles.has(role.value)),
     [assignableRoles]
   )
+  const inviteRoleOptions = useMemo(
+    () => AVAILABLE_ROLES.filter((role) => rolesInvitableBy(userRole).includes(role.value)),
+    [userRole]
+  )
 
   function canEditUserRole(target: UserData): boolean {
     if (!canEditRoles) return false
@@ -110,6 +114,7 @@ export default function UtentiPage() {
   // State for invite dialog
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRole, setInviteRole] = useState<UserRole>('artista')
   const [inviteArtistaSearch, setInviteArtistaSearch] = useState('')
   const [inviteArtistaResults, setInviteArtistaResults] = useState<any[]>([])
   const [selectedArtista, setSelectedArtista] = useState<any>(null)
@@ -236,8 +241,19 @@ export default function UtentiPage() {
     }
   }
 
+  function resetInviteForm() {
+    setInviteEmail('')
+    setInviteRole('artista')
+    setSelectedArtista(null)
+    setInviteArtistaSearch('')
+    setInviteArtistaResults([])
+    setInviteError(null)
+    setInviteSuccess(false)
+  }
+
   async function handleInvite() {
-    if (!inviteEmail || !selectedArtista) return
+    if (!inviteEmail) return
+    if (inviteRole === 'artista' && !selectedArtista) return
     setInviting(true)
     setInviteError(null)
 
@@ -256,7 +272,8 @@ export default function UtentiPage() {
         },
         body: JSON.stringify({
           email: inviteEmail,
-          artista_id: selectedArtista.id,
+          ruolo: inviteRole,
+          ...(inviteRole === 'artista' ? { artista_id: selectedArtista.id } : {}),
         }),
       })
 
@@ -270,11 +287,7 @@ export default function UtentiPage() {
       fetchUsers()
       setTimeout(() => {
         setInviteDialogOpen(false)
-        setInviteSuccess(false)
-        setInviteEmail('')
-        setSelectedArtista(null)
-        setInviteArtistaSearch('')
-        setInviteArtistaResults([])
+        resetInviteForm()
       }, 2000)
     } catch (err: any) {
       setInviteError(err.message)
@@ -502,18 +515,13 @@ export default function UtentiPage() {
         <div className="flex items-center gap-2">
           <Button
             onClick={() => {
+              resetInviteForm()
               setInviteDialogOpen(true)
-              setInviteError(null)
-              setInviteSuccess(false)
-              setInviteEmail('')
-              setSelectedArtista(null)
-              setInviteArtistaSearch('')
-              setInviteArtistaResults([])
             }}
             disabled={loading}
           >
             <Mail className="h-4 w-4 mr-2" />
-            Invita Artista
+            Invita Utente
           </Button>
           <Button onClick={fetchUsers} variant="outline" disabled={loading}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -718,7 +726,7 @@ export default function UtentiPage() {
                             Collegato
                           </Badge>
                         )}
-                        {userData.ruolo === 'artista' && !userData.last_sign_in_at && (
+                        {!userData.last_sign_in_at && (
                           <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-200">
                             In attesa
                           </Badge>
@@ -772,23 +780,21 @@ export default function UtentiPage() {
                               <Pencil className="h-4 w-4 mr-2" />
                               Modifica Email
                             </DropdownMenuItem>
-                            {userData.ruolo === 'artista' && (
-                              <DropdownMenuItem
-                                onClick={() => handleResendInvite(userData)}
-                                disabled={resendingInvite === userData.id}
-                              >
-                                {resendingInvite === userData.id
-                                  ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                  : <RefreshCw className="h-4 w-4 mr-2" />
-                                }
-                                {deriveArtistaInviteStatus({
-                                  id: userData.id,
-                                  email: userData.email,
-                                  invited_at: userData.invited_at,
-                                  last_sign_in_at: userData.last_sign_in_at,
-                                }).accessActionLabel}
-                              </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem
+                              onClick={() => handleResendInvite(userData)}
+                              disabled={resendingInvite === userData.id}
+                            >
+                              {resendingInvite === userData.id
+                                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                : <RefreshCw className="h-4 w-4 mr-2" />
+                              }
+                              {deriveArtistaInviteStatus({
+                                id: userData.id,
+                                email: userData.email,
+                                invited_at: userData.invited_at,
+                                last_sign_in_at: userData.last_sign_in_at,
+                              }).accessActionLabel}
+                            </DropdownMenuItem>
                             {isAdmin && (
                               <>
                                 <DropdownMenuSeparator />
@@ -898,16 +904,16 @@ export default function UtentiPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Invite Artist Dialog */}
+      {/* Invite User Dialog */}
       <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
-              Invita Artista
+              Invita Utente
             </DialogTitle>
             <DialogDescription>
-              Invia un invito via email per creare un account artista collegato a un record esistente.
+              Invia un invito via email per creare un nuovo account. Per gli artisti è necessario collegare un record esistente.
             </DialogDescription>
           </DialogHeader>
 
@@ -915,17 +921,47 @@ export default function UtentiPage() {
             <div className="py-6 text-center">
               <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-3" />
               <p className="text-lg font-medium">Invito inviato!</p>
-              <p className="text-sm text-gray-500 mt-1">L&apos;artista ricevera un&apos;email con il link per completare la registrazione.</p>
+              <p className="text-sm text-gray-500 mt-1">L&apos;utente riceverà un&apos;email con il link per completare la registrazione.</p>
             </div>
           ) : (
             <>
               <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Ruolo</label>
+                  <Select
+                    value={inviteRole}
+                    onValueChange={(value) => {
+                      const next = value as UserRole
+                      setInviteRole(next)
+                      if (next !== 'artista') {
+                        setSelectedArtista(null)
+                        setInviteArtistaSearch('')
+                        setInviteArtistaResults([])
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {inviteRoleOptions.map((role) => (
+                        <SelectItem key={role.value} value={role.value}>
+                          <div className="flex items-center gap-2">
+                            {getRoleIcon(role.value)}
+                            {role.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 {/* Email */}
                 <div>
                   <label className="text-sm font-medium text-gray-700">Email</label>
                   <Input
                     type="email"
-                    placeholder="artista@email.com"
+                    placeholder="utente@email.com"
                     value={inviteEmail}
                     onChange={e => setInviteEmail(e.target.value)}
                     className="mt-1"
@@ -933,8 +969,9 @@ export default function UtentiPage() {
                 </div>
 
                 {/* Artista search */}
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Artista da collegare</label>
+                {inviteRole === 'artista' && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Artista da collegare</label>
                   {selectedArtista ? (
                     <div className="mt-1 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <div>
@@ -996,7 +1033,8 @@ export default function UtentiPage() {
                       )}
                     </>
                   )}
-                </div>
+                  </div>
+                )}
 
                 {emailMismatch && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
@@ -1019,7 +1057,7 @@ export default function UtentiPage() {
                 </Button>
                 <Button
                   onClick={handleInvite}
-                  disabled={inviting || !inviteEmail || !selectedArtista}
+                  disabled={inviting || !inviteEmail || (inviteRole === 'artista' && !selectedArtista)}
                 >
                   {inviting ? (
                     <>

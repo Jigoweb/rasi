@@ -4,6 +4,7 @@ import {
   validateRoleChange,
   mergeUserMetadataWithRole,
 } from './role-update'
+import { validateUserInvite } from './invite'
 import { findUserByArtistaId } from './find-by-artista'
 import {
   resolveAuthInviteOrigin,
@@ -145,12 +146,16 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/users
- * Invita un artista via email, collegandolo a un record artisti esistente
- * Body: { email: string, artista_id: string }
+ * Invita un utente via email.
+ * Body: { email: string, ruolo?: UserRole, artista_id?: string }
+ * - artista: artista_id obbligatorio, collegato a un record artisti esistente
+ * - admin/operatore: solo email
+ * Admin può invitare admin, operatore e artista.
+ * Operatore può invitare operatore e artista.
  */
 export async function POST(req: NextRequest) {
   try {
-    const { isAdmin, userId: requestingUserId, error } = await verifyAdminUser(req)
+    const { isAdmin, error } = await verifyAdminUser(req)
 
     // verifyAdminUser restituisce error solo se non è admin/operatore
     // isAdmin=false + no error = è un operatore (canManageUsers=true)
@@ -159,7 +164,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { email, artista_id, action, userId: targetUserId } = body
+    const { email, artista_id, ruolo, action, userId: targetUserId } = body
     const inviteRedirectTo = buildAuthInviteRedirectUrl(
       resolveAuthInviteOrigin(
         process.env.NEXT_PUBLIC_SITE_URL,
@@ -211,59 +216,72 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, method: resend.method })
     }
 
-    if (!email || !artista_id) {
+    const validation = validateUserInvite({
+      actorIsAdmin: isAdmin,
+      email,
+      ruolo,
+      artista_id,
+    })
+
+    if (!validation.ok) {
       return NextResponse.json(
-        { success: false, error: 'email e artista_id sono obbligatori' },
-        { status: 400 }
+        { success: false, error: validation.error },
+        { status: validation.status }
       )
     }
 
     const adminClient = getSupabaseAdmin()
-
-    // Verifica che l'artista_id esista nella tabella artisti
-    const { data: artista, error: artistaError } = await adminClient
-      .from('artisti')
-      .select('id, nome, cognome, codice_ipn')
-      .eq('id', artista_id)
-      .single()
-
-    if (artistaError || !artista) {
-      return NextResponse.json(
-        { success: false, error: 'Record artista non trovato' },
-        { status: 404 }
-      )
-    }
-
-    // Verifica che nessun altro utente abbia già questo artista_id
     const { data: { users: existingUsers } } = await adminClient.auth.admin.listUsers()
-    const alreadyLinked = existingUsers.find(
-      u => u.user_metadata?.artista_id === artista_id
-    )
 
-    if (alreadyLinked) {
-      return NextResponse.json(
-        { success: false, error: `Questo artista è già collegato all'utente ${alreadyLinked.email}` },
-        { status: 409 }
-      )
-    }
-
-    // Verifica che l'email non sia già registrata
-    const existingEmail = existingUsers.find(u => u.email === email)
+    const existingEmail = existingUsers.find(u => u.email === validation.email)
     if (existingEmail) {
       return NextResponse.json(
-        { success: false, error: `L'email ${email} è già registrata nel sistema` },
+        { success: false, error: `L'email ${validation.email} è già registrata nel sistema` },
         { status: 409 }
       )
     }
 
-    // Invia invito via Supabase Auth
+    let artistaNome: string | null = null
+
+    if (validation.ruolo === 'artista' && validation.artistaId) {
+      const { data: artista, error: artistaError } = await adminClient
+        .from('artisti')
+        .select('id, nome, cognome, codice_ipn')
+        .eq('id', validation.artistaId)
+        .single()
+
+      if (artistaError || !artista) {
+        return NextResponse.json(
+          { success: false, error: 'Record artista non trovato' },
+          { status: 404 }
+        )
+      }
+
+      const alreadyLinked = existingUsers.find(
+        u => u.user_metadata?.artista_id === validation.artistaId
+      )
+
+      if (alreadyLinked) {
+        return NextResponse.json(
+          { success: false, error: `Questo artista è già collegato all'utente ${alreadyLinked.email}` },
+          { status: 409 }
+        )
+      }
+
+      artistaNome = `${artista.nome} ${artista.cognome}`
+    }
+
+    const inviteMetadata: Record<string, unknown> = {
+      ruolo: validation.ruolo,
+    }
+    if (validation.artistaId) {
+      inviteMetadata.artista_id = validation.artistaId
+    }
+
     const { data: invitedUser, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
-      email,
+      validation.email,
       {
-        data: {
-          ruolo: 'artista',
-          artista_id: artista_id
-        },
+        data: inviteMetadata,
         redirectTo: inviteRedirectTo
       }
     )
@@ -278,9 +296,9 @@ export async function POST(req: NextRequest) {
       data: {
         id: invitedUser.user.id,
         email: invitedUser.user.email,
-        ruolo: 'artista',
-        artista_id,
-        artista_nome: `${artista.nome} ${artista.cognome}`,
+        ruolo: validation.ruolo,
+        artista_id: validation.artistaId,
+        artista_nome: artistaNome,
       }
     })
 

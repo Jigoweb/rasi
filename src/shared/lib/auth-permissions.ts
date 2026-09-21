@@ -49,6 +49,20 @@ export function rolesAssignableBy(actorRole: UserRole): UserRole[] {
   return []
 }
 
+/**
+ * Ruoli che l'attore può assegnare in un invito email.
+ * Più stretto di rolesAssignableBy: collecting non è invitabile.
+ */
+export function rolesInvitableBy(actorRole: UserRole): UserRole[] {
+  if (actorRole === 'admin') {
+    return ['admin', 'operatore', 'artista']
+  }
+  if (actorRole === 'operatore') {
+    return ['operatore', 'artista']
+  }
+  return []
+}
+
 export function canActorChangeTargetRole(
   actorRole: UserRole,
   targetCurrentRole: UserRole,

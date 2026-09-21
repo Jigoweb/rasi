@@ -2,6 +2,7 @@ import {
   resolveUserRole,
   getRolePermissions,
   rolesAssignableBy,
+  rolesInvitableBy,
   canActorChangeTargetRole,
   mergeUserMetadataWithRole,
 } from './auth-permissions'
@@ -86,6 +87,28 @@ describe('auth-permissions', () => {
     it('non-managers assign nothing', () => {
       expect(rolesAssignableBy('artista')).toEqual([])
       expect(rolesAssignableBy('collecting')).toEqual([])
+    })
+  })
+
+  describe('rolesInvitableBy', () => {
+    it('admin can invite admin, operatore and artista', () => {
+      expect(rolesInvitableBy('admin')).toEqual([
+        'admin',
+        'operatore',
+        'artista',
+      ])
+    })
+
+    it('operatore can invite other operatori and artisti', () => {
+      expect(rolesInvitableBy('operatore')).toEqual([
+        'operatore',
+        'artista',
+      ])
+    })
+
+    it('non-managers invite nothing', () => {
+      expect(rolesInvitableBy('artista')).toEqual([])
+      expect(rolesInvitableBy('collecting')).toEqual([])
     })
   })
 
