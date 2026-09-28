@@ -8,6 +8,10 @@ import {
   type DataHealthPolicySummary,
   type ResolvedDataHealthField,
 } from './data-health-policy.service'
+import {
+  describeProgrammazioniHealthError,
+  toProgrammazioniHealthError,
+} from '../utils/health-error'
 
 export interface CampagnaProgrammazionePayload {
   emittente_id: string
@@ -871,18 +875,20 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
         .not('errori_processamento', 'is', null),
     ])
 
-    // Check for errors
-    const errors = [
-      campagnaRes.error,
-      totalRes.error,
-      processedRes.error,
-      unprocessedRes.error,
-      errorsRes.error,
-    ].filter(Boolean)
+    if (campagnaRes.error) {
+      console.error('[getProgrammazioniHealth] Campagna query error:', campagnaRes.error)
+      return { data: null, error: toProgrammazioniHealthError(campagnaRes.error, 'campagna') }
+    }
 
-    if (errors.length > 0) {
-      console.error('[getProgrammazioniHealth] Query errors:', errors)
-      return { data: null, error: errors[0] }
+    const countError = totalRes.error || processedRes.error || unprocessedRes.error || errorsRes.error
+    if (countError) {
+      console.error('[getProgrammazioniHealth] Count query errors:', {
+        total: totalRes.error,
+        processed: processedRes.error,
+        unprocessed: unprocessedRes.error,
+        errors: errorsRes.error,
+      })
+      return { data: null, error: toProgrammazioniHealthError(countError, 'conteggi') }
     }
 
     const total = totalRes.count || 0
@@ -892,7 +898,7 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
     const fieldMetricErrors = fieldMetrics.filter(metric => metric.error).map(metric => metric.error)
     if (fieldMetricErrors.length > 0) {
       console.error('[getProgrammazioniHealth] Field metric errors:', fieldMetricErrors)
-      return { data: null, error: fieldMetricErrors[0] }
+      return { data: null, error: toProgrammazioniHealthError(fieldMetricErrors[0], 'campi') }
     }
 
     let date_min: string | undefined = undefined
@@ -918,7 +924,7 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
 
     if (minDateRes.error || maxDateRes.error) {
       const rangeError = minDateRes.error || maxDateRes.error
-      date_range_error = rangeError?.message ?? 'Periodo non disponibile'
+      date_range_error = describeProgrammazioniHealthError(rangeError, 'periodo')
       console.warn('[getProgrammazioniHealth] Date range unavailable:', rangeError)
     } else {
       date_min = ((minDateRes.data?.[0] as any)?.data_trasmissione as string | undefined) ?? undefined
@@ -945,9 +951,9 @@ export const getProgrammazioniHealth = async (campagnaId: string) => {
     return { data: health, error: null }
   } catch (error: any) {
     console.error('[getProgrammazioniHealth] Unexpected error:', error)
-    return { 
-      data: null, 
-      error: error instanceof Error ? error : new Error(String(error))
+    return {
+      data: null,
+      error: toProgrammazioniHealthError(error, 'conteggi'),
     }
   }
 }

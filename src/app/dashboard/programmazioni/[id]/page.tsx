@@ -11,6 +11,8 @@ import {
   type ProgrammazioniTableColumnKey,
 } from '@/features/programmazioni/services/data-health-policy.service'
 import { formatProgrammazioneYears } from '@/features/programmazioni/utils/year-display'
+import { describeProgrammazioniHealthError } from '@/features/programmazioni/utils/health-error'
+import { getErrorMessage } from '@/shared/lib/toast'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -136,28 +138,26 @@ export default function CampagnaDettaglioPage() {
     try {
       const { data, error } = await getProgrammazioniHealth(campagnaId)
       if (error) {
-        const errorMessage = error instanceof Error 
-          ? error.message 
-          : typeof error === 'object' && error !== null
-          ? JSON.stringify(error)
-          : String(error)
+        const errorMessage = getErrorMessage(
+          error,
+          describeProgrammazioniHealthError(error, 'conteggi')
+        )
         console.error('Errore caricamento health:', errorMessage, error)
         setHealthError(errorMessage)
         setHealth(null)
         return
       }
-    setHealth(data || null)
+      setHealth(data || null)
     } catch (error) {
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : typeof error === 'object' && error !== null
-        ? JSON.stringify(error)
-        : String(error)
+      const errorMessage = getErrorMessage(
+        error,
+        describeProgrammazioniHealthError(error, 'conteggi')
+      )
       console.error('Errore caricamento health:', errorMessage, error)
       setHealthError(errorMessage)
       setHealth(null)
     } finally {
-    setLoadingHealth(false)
+      setLoadingHealth(false)
     }
   }, [campagnaId])
 

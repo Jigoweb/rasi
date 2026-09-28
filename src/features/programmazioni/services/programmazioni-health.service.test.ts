@@ -83,7 +83,7 @@ describe('getProgrammazioniHealth', () => {
       processed: 3,
       unprocessed: 7,
       errors_count: 1,
-      date_range_error: 'statement timeout',
+      date_range_error: 'Timeout sul calcolo del periodo di copertura. Riprova tra poco.',
     })
     expect(data?.policy.preset).toBe('svod')
     expect(data?.field_metrics.map(metric => metric.key)).not.toContain('data_trasmissione')
@@ -130,5 +130,32 @@ describe('getProgrammazioniHealth', () => {
       const calls = query.or.mock.calls as unknown as Array<[string]>
       return calls.some(call => call[0] === 'titolo.is.null,titolo.eq.')
     })).toBe(true)
+  })
+
+  it('returns a targeted timeout message for blank HEAD count errors', async () => {
+    queuedResponses.push(
+      {
+        data: {
+          emittenti: {
+            nome: 'RTI NON LINEARI',
+            tipo: 'streaming',
+            configurazione: {},
+          },
+        },
+        error: null,
+      },
+      { count: null, error: { message: '' } },
+      { count: null, error: { message: '' } },
+      { count: null, error: { message: '' } },
+      { count: null, error: { message: '' } }
+    )
+
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const { data, error } = await getProgrammazioniHealth('campagna-1')
+    errorSpy.mockRestore()
+
+    expect(data).toBeNull()
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toMatch(/Timeout sui conteggi/i)
   })
 })
