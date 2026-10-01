@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/shared/lib/supabase-client'
+import { getPostPasswordDestination } from '@/features/auth/lib/post-password-destination'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -69,9 +70,11 @@ export default function ImpostaPasswordPage() {
       const { error: updateError } = await supabase.auth.updateUser({ password })
       if (updateError) throw updateError
 
+      const { data: { session } } = await supabase.auth.getSession()
+      const destination = getPostPasswordDestination(session?.user.user_metadata?.ruolo)
+
       setSuccess(true)
-      // Dopo 2 secondi reindirizza al profilo artista
-      setTimeout(() => router.replace('/dashboard/profilo'), 2000)
+      setTimeout(() => router.replace(destination), 2000)
     } catch (err: any) {
       setError(err.message ?? 'Errore durante il salvataggio della password.')
     } finally {
@@ -116,7 +119,7 @@ export default function ImpostaPasswordPage() {
               <CheckCircle2 className="h-14 w-14 text-green-500" />
               <p className="text-lg font-semibold text-gray-900">Account configurato!</p>
               <p className="text-sm text-gray-500">
-                Stai per essere reindirizzato alla tua area personale…
+                Stai per essere reindirizzato alla piattaforma…
               </p>
             </div>
           ) : (

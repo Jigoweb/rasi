@@ -178,9 +178,10 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
+# Source of truth for the production Invite template (already applied on Auth).
+# Uncomment to use this file with local `supabase start`.
 # [auth.email.template.invite]
-# subject = "You have been invited"
+# subject = "Sei stato invitato a RASI"
 # content_path = "./supabase/templates/invite.html"
 
 [auth.sms]

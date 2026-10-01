@@ -1,0 +1,64 @@
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff;">
+  
+  <!-- Header -->
+  <div style="background: #1d4ed8; padding: 32px 40px; text-align: center; border-radius: 8px 8px 0 0;">
+    <h1 style="color: #ffffff; margin: 0; font-size: 28px; letter-spacing: 2px;">RASI</h1>
+    <p style="color: #bfdbfe; margin: 8px 0 0; font-size: 13px;">
+      Rete Artisti Spettacolo per l'Innovazione
+    </p>
+  </div>
+
+  <!-- Body -->
+  <div style="padding: 40px; background: #f9fafb; border: 1px solid #e5e7eb; border-top: none;">
+    <h2 style="color: #111827; margin: 0 0 16px;">Benvenuto nella piattaforma RASI</h2>
+    <p style="color: #374151; line-height: 1.6; margin: 0 0 16px;">
+      Sei stato invitato a RASI come
+      {{ if eq .Data.ruolo "operatore" }}<strong>Operatore</strong>
+      {{ else if eq .Data.ruolo "admin" }}<strong>Amministratore</strong>
+      {{ else }}<strong>Artista</strong>{{ end }}.
+    </p>
+    {{ if eq .Data.ruolo "artista" }}
+    <p style="color: #374151; line-height: 1.6; margin: 0 0 16px;">
+      Attraverso la tua area personale potrai consultare il tuo repertorio,
+      le trasmissioni rilevate e i tuoi compensi.
+    </p>
+    {{ else }}
+    <p style="color: #374151; line-height: 1.6; margin: 0 0 16px;">
+      Potrai accedere alla dashboard operativa per gestire catalogo, programmazioni
+      e attività della piattaforma.
+    </p>
+    {{ end }}
+    <p style="color: #374151; line-height: 1.6; margin: 0 0 24px;">
+      Clicca sul pulsante qui sotto per completare la registrazione e impostare la tua password.
+    </p>
+
+    <!-- CTA Button -->
+    <div style="text-align: center; margin: 32px 0;">
+      <a href="{{ .ConfirmationURL }}"
+         style="background: #1d4ed8; color: #ffffff; padding: 14px 32px; border-radius: 6px;
+                text-decoration: none; font-size: 16px; font-weight: 600; display: inline-block;">
+        Accetta l'invito e registrati
+      </a>
+    </div>
+
+    <p style="color: #6b7280; font-size: 13px; line-height: 1.5; margin: 24px 0 0;">
+      Se non riesci a cliccare il pulsante, copia e incolla questo link nel browser:<br>
+      <a href="{{ .ConfirmationURL }}" style="color: #1d4ed8; word-break: break-all;">
+        {{ .ConfirmationURL }}
+      </a>
+    </p>
+  </div>
+
+  <!-- Footer -->
+  <div style="padding: 20px 40px; background: #f3f4f6; border: 1px solid #e5e7eb; 
+              border-top: none; border-radius: 0 0 8px 8px; text-align: center;">
+    <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+      Hai ricevuto questa email perché sei stato invitato alla piattaforma RASI.<br>
+      Se ritieni di aver ricevuto questa email per errore, puoi ignorarla.
+    </p>
+    <p style="color: #9ca3af; font-size: 12px; margin: 8px 0 0;">
+      © RASI – Rete Artisti Spettacolo per l'Innovazione
+    </p>
+  </div>
+
+</div>
