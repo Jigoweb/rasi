@@ -1,0 +1,16 @@
+Pacchetto documenti — 11 settembre 2026
+
+A  Algoritmo di individuazione.pdf
+    Descrizione generale (fasi, pesi, eccezioni, criticità).
+    Da far revisionare come documento di riferimento.
+
+B  Report casistiche Sky e proposta.pdf
+    FRINGE, HAWAII FIVE-0, YELLOWSTONE e modifica proposta.
+
+C  Differenze Noco catalogo attuale.pdf
+    Confronto Banca dati Rasi vs catalogo in uso.
+
+   Repertorio Noco mancante per artista.csv
+    Elenco per artista a supporto del documento C.
+
+I tre PDF sono il materiale da inviare. Il CSV è facoltativo in allegato.
