@@ -4,6 +4,8 @@ export type ArtistaFieldFilter =
   | { field: 'nome_arte' | 'codice_fiscale' | 'imdb_nconst' | 'data_nascita' | 'luogo_nascita' | 'territorio'; hasValue: boolean }
   | { field: 'stato'; value: 'attivo' | 'sospeso' | 'cessato' }
   | { field: 'tipologia'; value: 'AIE' | 'PRODUTTORE' }
+  | { field: 'ambito'; value: 'musica' | 'cinema' | 'entrambi' }
+  | { field: 'ambito'; hasValue: boolean }
 
 /** Same OR used by dashboard Data Health incomplete artisti count */
 export const ARTISTI_INCOMPLETE_OR =
@@ -38,6 +40,11 @@ export const getArtisti = async (filters?: {
         query = query.eq('stato', f.value)
       } else if (f.field === 'tipologia' && 'value' in f) {
         query = query.eq('tipologia', f.value)
+      } else if (f.field === 'ambito' && 'value' in f) {
+        query = query.eq('ambito', f.value)
+      } else if (f.field === 'ambito' && 'hasValue' in f) {
+        if (f.hasValue) query = query.not('ambito', 'is', null)
+        else query = query.is('ambito', null)
       } else if ('hasValue' in f) {
         const hasValue = f.hasValue
         switch (f.field) {

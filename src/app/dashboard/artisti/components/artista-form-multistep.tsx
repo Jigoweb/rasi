@@ -64,6 +64,7 @@ const artistaSchema = z.object({
   data_inizio_mandato: z.string().optional().or(z.literal('')),
   data_fine_mandato: z.string().optional().or(z.literal('')),
   is_rasi: z.boolean().optional(),
+  ambito: z.union([z.enum(['musica', 'cinema', 'entrambi']), z.literal('')]).optional(),
   
   // Contatti (salvati come JSONB in 'contatti')
   email: z.string().email().optional().or(z.literal('')),
@@ -158,6 +159,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       data_inizio_mandato: toDateInput(artista?.data_inizio_mandato) || new Date().toISOString().split('T')[0],
       data_fine_mandato: toDateInput(artista?.data_fine_mandato) || '',
       is_rasi: artista?.is_rasi ?? true,
+      ambito: artista?.ambito || '',
       email: (artista?.contatti as any)?.email || '',
       telefono: (artista?.contatti as any)?.number || (artista?.contatti as any)?.telefono || '',
       indirizzo_via: (artista?.indirizzo as any)?.via || '',
@@ -210,10 +212,10 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
     }
   }, [artista, dirittiData.diritti.length, form])
 
-  // Reset data_fine_mandato quando lo stato cambia da "cessato" a altro
+  // Reset data_fine_mandato solo quando lo stato torna ad "attivo"
   const stato = form.watch('stato')
   useEffect(() => {
-    if (stato !== 'cessato') {
+    if (stato === 'attivo') {
       form.setValue('data_fine_mandato', '')
     }
   }, [stato, form])
@@ -266,6 +268,9 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       data_inizio_mandato: data.data_inizio_mandato || new Date().toISOString().split('T')[0],
       data_fine_mandato: data.data_fine_mandato || null,
       is_rasi: data.is_rasi ?? true,
+      ambito: (data.ambito === 'musica' || data.ambito === 'cinema' || data.ambito === 'entrambi')
+        ? data.ambito
+        : null,
       contatti: (data.email || data.telefono) ? {
         email: data.email || '',
         number: data.telefono || '',
@@ -450,6 +455,35 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
           </FormItem>
         )}
       />
+      <FormField
+        key="ambito"
+        control={form.control}
+        name="ambito"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Ambito</FormLabel>
+            <Select
+              onValueChange={field.onChange}
+              value={field.value || undefined}
+            >
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona ambito" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                <SelectItem value="musica">Musica</SelectItem>
+                <SelectItem value="cinema">Cinema</SelectItem>
+                <SelectItem value="entrambi">Entrambi</SelectItem>
+              </SelectContent>
+            </Select>
+            <FormDescription>
+              Distingue artisti musica, cinema/video o entrambi
+            </FormDescription>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FormField
           key="stato"
@@ -518,7 +552,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
           name="data_fine_mandato"
           render={({ field }) => {
             const stato = form.watch('stato')
-            const isDisabled = stato !== 'cessato'
+            const isDisabled = stato !== 'cessato' && stato !== 'sospeso'
             
             return (
               <FormItem>
@@ -532,6 +566,9 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
                     className={isDisabled ? 'opacity-50 cursor-not-allowed' : ''}
                   />
                 </FormControl>
+                <FormDescription>
+                  Disponibile per artisti cessati o sospesi
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )
@@ -903,9 +940,14 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
     // Dati professionali valorizzati
     const datiProfessionali = [
       { label: 'Rappresentato da RASI', value: formData.is_rasi ? 'Sì' : 'No' },
+      hasValue(formData.ambito) && {
+        label: 'Ambito',
+        value: formData.ambito === 'musica' ? 'Musica' : formData.ambito === 'cinema' ? 'Cinema' : 'Entrambi',
+      },
       hasValue(formData.stato) && { label: 'Stato', value: formData.stato },
       hasValue(formData.tipologia) && { label: 'Tipologia', value: formData.tipologia },
       hasValue(formData.data_inizio_mandato) && { label: 'Data Inizio Mandato', value: formData.data_inizio_mandato },
+      hasValue(formData.data_fine_mandato) && { label: 'Data Fine Mandato', value: formData.data_fine_mandato },
       hasValue(formData.imdb_nconst) && { label: 'IMDB nconst', value: formData.imdb_nconst },
     ].filter(Boolean) as { label: string; value: string }[]
     

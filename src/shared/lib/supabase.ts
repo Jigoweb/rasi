@@ -37,6 +37,7 @@ export type Database = {
           imdb_nconst: string | null
           indirizzo: Json | null
           is_rasi: boolean
+          ambito: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita: string | null
           nome: string
           nome_arte: string | null
@@ -68,6 +69,7 @@ export type Database = {
           imdb_nconst?: string | null
           indirizzo?: Json | null
           is_rasi?: boolean
+          ambito?: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita?: string | null
           nome: string
           nome_arte?: string | null
@@ -99,6 +101,7 @@ export type Database = {
           imdb_nconst?: string | null
           indirizzo?: Json | null
           is_rasi?: boolean
+          ambito?: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita?: string | null
           nome?: string
           nome_arte?: string | null
@@ -1373,6 +1376,7 @@ export type Database = {
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
+      ambito_artista: "musica" | "cinema" | "entrambi"
       categoria_ruolo: "recitazione" | "doppiaggio" | "direzione" | "tecnico"
       fascia_oraria:
         | "prima_serata"
@@ -1539,6 +1543,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ambito_artista: ["musica", "cinema", "entrambi"],
       categoria_ruolo: ["recitazione", "doppiaggio", "direzione", "tecnico"],
       fascia_oraria: [
         "prima_serata",

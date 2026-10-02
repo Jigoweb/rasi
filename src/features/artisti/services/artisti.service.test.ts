@@ -9,6 +9,9 @@ const mockEq: jest.Mock = jest.fn()
 const mockInsert: jest.Mock = jest.fn()
 const mockUpdate: jest.Mock = jest.fn()
 const mockOr: jest.Mock = jest.fn()
+const mockNot: jest.Mock = jest.fn()
+const mockIs: jest.Mock = jest.fn()
+const mockNeq: jest.Mock = jest.fn()
 
 // Mock Supabase client
 jest.mock('@/shared/lib/supabase-client', () => ({
@@ -29,15 +32,32 @@ describe('Artisti Service', () => {
     mockEq.mockClear()
     mockSelect.mockClear()
     mockOr.mockClear()
+    mockNot.mockClear()
+    mockIs.mockClear()
+    mockNeq.mockClear()
     ;(supabase.from as jest.Mock).mockClear()
   })
 
   beforeEach(() => {
-    mockEq.mockReturnValue({ single: mockSingle, order: mockOrder, select: mockSelect, or: mockOr })
-    mockSelect.mockReturnValue({ order: mockOrder, eq: mockEq, single: mockSingle, or: mockOr })
+    const chain = {
+      single: mockSingle,
+      order: mockOrder,
+      select: mockSelect,
+      or: mockOr,
+      eq: mockEq,
+      not: mockNot,
+      is: mockIs,
+      neq: mockNeq,
+    }
+    mockEq.mockReturnValue(chain)
+    mockSelect.mockReturnValue(chain)
     mockInsert.mockReturnValue({ select: mockSelect })
     mockUpdate.mockReturnValue({ eq: mockEq, select: mockSelect })
-    mockOr.mockReturnValue({ order: mockOrder, eq: mockEq, or: mockOr })
+    mockOr.mockReturnValue(chain)
+    mockNot.mockReturnValue(chain)
+    mockIs.mockReturnValue(chain)
+    mockNeq.mockReturnValue(chain)
+    mockOrder.mockResolvedValue({ data: [], error: null })
   })
 
   describe('getArtisti', () => {
@@ -60,6 +80,34 @@ describe('Artisti Service', () => {
       await getArtisti({ incomplete: true })
 
       expect(mockOr).toHaveBeenCalledWith(ARTISTI_INCOMPLETE_OR)
+    })
+
+    it('filters by ambito value', async () => {
+      mockOrder.mockReturnValue({
+        eq: mockEq,
+        or: mockOr,
+        not: mockNot,
+        is: mockIs,
+      })
+      mockEq.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ fieldFilters: [{ field: 'ambito', value: 'musica' }] })
+
+      expect(mockEq).toHaveBeenCalledWith('ambito', 'musica')
+    })
+
+    it('filters by ambito not valorizzato', async () => {
+      mockOrder.mockReturnValue({
+        eq: mockEq,
+        or: mockOr,
+        not: mockNot,
+        is: mockIs,
+      })
+      mockIs.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ fieldFilters: [{ field: 'ambito', hasValue: false }] })
+
+      expect(mockIs).toHaveBeenCalledWith('ambito', null)
     })
   })
 

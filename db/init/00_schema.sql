@@ -31,6 +31,7 @@ CREATE TYPE stato_ripartizione AS ENUM ('pianificata', 'calcolata', 'approvata',
 CREATE TYPE ruolo_utente       AS ENUM ('admin', 'operatore', 'artista', 'readonly');
 CREATE TYPE territorio_enum    AS ENUM ('WW', 'WW-', 'ITA', 'ITA+');
 CREATE TYPE tipologia_enum     AS ENUM ('AIE', 'PRODUTTORE');
+CREATE TYPE ambito_artista     AS ENUM ('musica', 'cinema', 'entrambi');
 
 -- ====================================
 -- FUNZIONI HELPER
@@ -129,6 +130,7 @@ CREATE TABLE artisti (
     -- Diritti e metadati
     diritti_attivi                   JSONB,
     is_rasi                          BOOLEAN NOT NULL DEFAULT true,
+    ambito                           ambito_artista,
 
     -- Codici esterni
     imdb_nconst                      VARCHAR,

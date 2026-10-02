@@ -22,6 +22,12 @@ import { ArtistaFormMultistep } from '@/app/dashboard/artisti/components/artista
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 import { ArtistaInviteHeader } from '@/app/dashboard/artisti/[id]/components/artista-invite-header'
+import {
+  AMBITO_LABELS,
+  parseDirittiAttivi,
+  shouldShowFineMandato,
+  type AmbitoArtista,
+} from '@/features/artisti/lib/artista-display'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -192,11 +198,25 @@ export default function ArtistaProfiloPage() {
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Attivo</Badge>
       case 'sospeso':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Sospeso</Badge>
-      case 'inattivo':
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Inattivo</Badge>
+      case 'cessato':
+        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Cessato</Badge>
       default:
         return <Badge variant="outline">Sconosciuto</Badge>
     }
+  }
+
+  const getAmbitoBadge = (ambito: AmbitoArtista | null) => {
+    if (!ambito) return null
+    const styles: Record<AmbitoArtista, string> = {
+      musica: 'bg-purple-50 text-purple-700 border-purple-200',
+      cinema: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      entrambi: 'bg-slate-50 text-slate-700 border-slate-200',
+    }
+    return (
+      <Badge variant="outline" className={styles[ambito]}>
+        {AMBITO_LABELS[ambito]}
+      </Badge>
+    )
   }
 
   const getValidationBadge = (stato: string | null) => {
@@ -424,6 +444,7 @@ export default function ArtistaProfiloPage() {
               {artista.nome} {artista.cognome}
             </h1>
             {getStatusBadge(artista.stato)}
+            {getAmbitoBadge(artista.ambito)}
           </div>
           {artista.nome_arte && (
             <p className="text-lg text-muted-foreground">({artista.nome_arte})</p>
@@ -495,6 +516,46 @@ export default function ArtistaProfiloPage() {
               <div className="font-medium">{formatDate(artista.data_inizio_mandato)}</div>
             </div>
 
+            {shouldShowFineMandato(artista.stato) && (
+              <div className="space-y-2">
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Data Fine Mandato
+                </div>
+                <div className="font-medium">{formatDate(artista.data_fine_mandato)}</div>
+              </div>
+            )}
+
+            {artista.ambito && (
+              <div className="space-y-2">
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Clapperboard className="mr-2 h-4 w-4" />
+                  Ambito
+                </div>
+                <div className="font-medium">{getAmbitoBadge(artista.ambito)}</div>
+              </div>
+            )}
+
+            {artista.territorio && (
+              <div className="space-y-2">
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Hash className="mr-2 h-4 w-4" />
+                  Territorio
+                </div>
+                <div className="font-medium">{artista.territorio}</div>
+              </div>
+            )}
+
+            {artista.codice_paese && (
+              <div className="space-y-2">
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Hash className="mr-2 h-4 w-4" />
+                  Codici Paese
+                </div>
+                <div className="font-medium font-mono text-sm">{artista.codice_paese}</div>
+              </div>
+            )}
+
             <div className="space-y-2 sm:col-span-2 lg:col-span-1">
               <div className="flex items-center text-sm text-muted-foreground">
                 <Clock className="mr-2 h-4 w-4" />
@@ -503,6 +564,19 @@ export default function ArtistaProfiloPage() {
               <div className="font-medium">{formatDate(artista.updated_at)}</div>
             </div>
           </div>
+
+          {parseDirittiAttivi(artista.diritti_attivi).length > 0 && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="text-sm font-semibold mb-3">Diritti Attivi</h3>
+              <div className="flex flex-wrap gap-2">
+                {parseDirittiAttivi(artista.diritti_attivi).map((diritto) => (
+                  <Badge key={diritto} variant="outline" className="text-xs">
+                    {diritto}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
           
           {/* Contatti e Indirizzo */}
           {((artista.contatti as any)?.email || (artista.contatti as any)?.number || artista.indirizzo) && (

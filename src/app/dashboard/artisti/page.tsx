@@ -16,6 +16,14 @@ import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, AlertTriangle, Loade
 import { SearchInput } from '@/shared/components/search-input'
 import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
 import { ArtistaFormMultistep } from './components/artista-form-multistep'
+import {
+  AMBITO_LABELS,
+  formatAmbitoLabel,
+  formatDirittiCompact,
+  parseDirittiAttivi,
+  shouldShowFineMandato,
+  type AmbitoArtista,
+} from '@/features/artisti/lib/artista-display'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -28,6 +36,7 @@ const ARTISTI_FIELD_LABELS: Record<string, string> = {
   territorio: 'Territorio',
   stato: 'Stato',
   tipologia: 'Tipologia (AIE/Produttore)',
+  ambito: 'Ambito',
 }
 
 function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => void }) {
@@ -36,6 +45,7 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
   const [hasValue, setHasValue] = useState<boolean>(true)
   const [statoValue, setStatoValue] = useState<string>('')
   const [tipologiaValue, setTipologiaValue] = useState<string>('')
+  const [ambitoValue, setAmbitoValue] = useState<string>('')
 
   const hasValueFields = ['nome_arte', 'codice_fiscale', 'imdb_nconst', 'data_nascita', 'luogo_nascita', 'territorio'] as const
   type HasValueField = (typeof hasValueFields)[number]
@@ -46,6 +56,14 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
       onAdd({ field: 'stato', value: statoValue as 'attivo' | 'sospeso' | 'cessato' })
     } else if (field === 'tipologia' && tipologiaValue) {
       onAdd({ field: 'tipologia', value: tipologiaValue as 'AIE' | 'PRODUTTORE' })
+    } else if (field === 'ambito') {
+      if (ambitoValue === 'null') {
+        onAdd({ field: 'ambito', hasValue: false })
+      } else if (ambitoValue) {
+        onAdd({ field: 'ambito', value: ambitoValue as AmbitoArtista })
+      } else {
+        return
+      }
     } else if (hasValueFields.includes(field as HasValueField)) {
       onAdd({ field: field as HasValueField, hasValue })
     }
@@ -53,6 +71,7 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
     setField('')
     setStatoValue('')
     setTipologiaValue('')
+    setAmbitoValue('')
     setHasValue(true)
   }
 
@@ -67,7 +86,7 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
       <PopoverContent className="w-72" align="end">
         <div className="space-y-4">
           <h4 className="font-medium text-sm">Filtra per campo</h4>
-          <Select value={field} onValueChange={(v) => { setField(v); setStatoValue(''); setTipologiaValue('') }}>
+          <Select value={field} onValueChange={(v) => { setField(v); setStatoValue(''); setTipologiaValue(''); setAmbitoValue('') }}>
             <SelectTrigger>
               <SelectValue placeholder="Seleziona campo" />
             </SelectTrigger>
@@ -80,6 +99,7 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
               <SelectItem value="territorio">Territorio</SelectItem>
               <SelectItem value="stato">Stato</SelectItem>
               <SelectItem value="tipologia">Tipologia (AIE/Produttore)</SelectItem>
+              <SelectItem value="ambito">Ambito</SelectItem>
             </SelectContent>
           </Select>
           {field === 'stato' ? (
@@ -103,6 +123,18 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
                 <SelectItem value="PRODUTTORE">Produttore</SelectItem>
               </SelectContent>
             </Select>
+          ) : field === 'ambito' ? (
+            <Select value={ambitoValue} onValueChange={setAmbitoValue}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona ambito" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="musica">Musica</SelectItem>
+                <SelectItem value="cinema">Cinema</SelectItem>
+                <SelectItem value="entrambi">Entrambi</SelectItem>
+                <SelectItem value="null">Non valorizzato</SelectItem>
+              </SelectContent>
+            </Select>
           ) : field ? (
             <Select value={hasValue ? 'si' : 'no'} onValueChange={(v) => setHasValue(v === 'si')}>
               <SelectTrigger>
@@ -116,7 +148,10 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
           ) : null}
           <Button
             onClick={handleAdd}
-            disabled={!field || (field === 'stato' ? !statoValue : field === 'tipologia' ? !tipologiaValue : false)}
+            disabled={
+              !field ||
+              (field === 'stato' ? !statoValue : field === 'tipologia' ? !tipologiaValue : field === 'ambito' ? !ambitoValue : false)
+            }
             className="w-full"
           >
             Aggiungi
@@ -231,8 +266,49 @@ export default function ArtistiPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const getAmbitoBadge = (ambito: AmbitoArtista | null) => {
+    if (!ambito) return <span className="text-muted-foreground">—</span>
+    const styles: Record<AmbitoArtista, string> = {
+      musica: 'bg-purple-50 text-purple-700 border-purple-200',
+      cinema: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      entrambi: 'bg-slate-50 text-slate-700 border-slate-200',
+    }
+    return (
+      <Badge variant="outline" className={styles[ambito]}>
+        {AMBITO_LABELS[ambito]}
+      </Badge>
+    )
+  }
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '—'
     return new Date(dateString).toLocaleDateString('it-IT')
+  }
+
+  const renderDirittiCell = (diritti: Artista['diritti_attivi']) => {
+    const { labels, remaining, total } = formatDirittiCompact(diritti, 1)
+    if (total === 0) return <span className="text-muted-foreground">—</span>
+    const allLabels = parseDirittiAttivi(diritti).join('; ')
+    return (
+      <span className="text-xs" title={allLabels}>
+        {labels[0]}
+        {remaining > 0 ? ` +${remaining}` : ''}
+      </span>
+    )
+  }
+
+  const filterChipLabel = (f: ArtistaFieldFilter): string => {
+    if (f.field === 'ambito') {
+      if ('value' in f) return `Ambito: ${AMBITO_LABELS[f.value]}`
+      return `Ambito: ${f.hasValue ? 'Valorizzato' : 'Non valorizzato'}`
+    }
+    if ('value' in f) {
+      if (f.field === 'stato') {
+        return `Stato: ${f.value === 'attivo' ? 'Attivo' : f.value === 'sospeso' ? 'Sospeso' : 'Cessato'}`
+      }
+      return `${ARTISTI_FIELD_LABELS[f.field]}: ${f.value}`
+    }
+    return `${ARTISTI_FIELD_LABELS[f.field]}: ${f.hasValue ? 'Valorizzato' : 'Non valorizzato'}`
   }
 
   const exportData = () => {
@@ -246,7 +322,7 @@ export default function ArtistiPage() {
     const headers = [
       'Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Ragione Sociale',
       'Codice Fiscale', 'Partita IVA', 'Forma Giuridica',
-      'RASI', 'Tipologia', 'Stato',
+      'RASI', 'Tipologia', 'Ambito', 'Stato',
       'Data Nascita', 'Luogo Nascita',
       'Codice Paese', 'Territorio',
       'Data Inizio Mandato', 'Data Fine Mandato',
@@ -275,6 +351,7 @@ export default function ArtistiPage() {
         csvCell(a.forma_giuridica),
         csvCell((a.is_rasi ?? true) ? 'Sì' : 'No'),
         csvCell(a.tipologia),
+        csvCell(formatAmbitoLabel(a.ambito)),
         csvCell(a.stato),
         csvCell(a.data_nascita),
         csvCell(a.luogo_nascita),
@@ -290,7 +367,7 @@ export default function ArtistiPage() {
         csvCell(indirizzo?.cap),
         csvCell(indirizzo?.citta),
         csvCell(indirizzo?.provincia),
-        csvCell(Array.isArray(diritti) ? diritti.join('; ') : ''),
+        csvCell(parseDirittiAttivi(diritti).join('; ')),
         csvCell(a.componente_stabile_gruppo_orchestra),
         csvCell(codiciEst && typeof codiciEst === 'object'
           ? Object.entries(codiciEst).map(([k, v]) => `${k}:${v}`).join('; ')
@@ -481,9 +558,7 @@ export default function ArtistiPage() {
                   onClick={() => removeFilter(f.field)}
                   className="h-8"
                 >
-                  {'value' in f
-                    ? `${ARTISTI_FIELD_LABELS[f.field]}: ${f.field === 'stato' ? (f.value === 'attivo' ? 'Attivo' : f.value === 'sospeso' ? 'Sospeso' : 'Cessato') : f.value}`
-                    : `${ARTISTI_FIELD_LABELS[f.field]}: ${f.hasValue ? 'Valorizzato' : 'Non valorizzato'}`}
+                  {filterChipLabel(f)}
                   <X className="h-3 w-3 ml-2" />
                 </Button>
               ))}
@@ -534,9 +609,12 @@ export default function ArtistiPage() {
                     <TableHead>Codice IPN</TableHead>
                     <TableHead>Nome Completo</TableHead>
                     <TableHead>Tipologia</TableHead>
-                    <TableHead>Codice Fiscale</TableHead>
+                    <TableHead>Ambito</TableHead>
                     <TableHead>Stato</TableHead>
-                    <TableHead>Data Nascita</TableHead>
+                    <TableHead>Fine Mandato</TableHead>
+                    <TableHead>Territorio</TableHead>
+                    <TableHead>Paesi</TableHead>
+                    <TableHead>Diritti</TableHead>
                     <TableHead>Data Inizio Mandato</TableHead>
                     <TableHead className="text-right sticky right-0 bg-background z-10 w-[1%]">Azioni</TableHead>
                   </TableRow>
@@ -544,7 +622,7 @@ export default function ArtistiPage() {
                 <TableBody>
                   {artisti.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={11} className="text-center py-8 text-gray-500">
                         Nessun artista trovato con i criteri di ricerca attuali
                       </TableCell>
                     </TableRow>
@@ -575,14 +653,25 @@ export default function ArtistiPage() {
                         <TableCell>
                           {getRasiBadge(artista.is_rasi ?? true)}
                         </TableCell>
-                        <TableCell className="font-mono text-sm">
-                          {artista.codice_fiscale || '-'}
+                        <TableCell>
+                          {getAmbitoBadge(artista.ambito)}
                         </TableCell>
                         <TableCell>
                           {getStatusBadge(artista.stato)}
                         </TableCell>
                         <TableCell>
-                          {artista.data_nascita ? formatDate(artista.data_nascita) : '-'}
+                          {shouldShowFineMandato(artista.stato)
+                            ? formatDate(artista.data_fine_mandato)
+                            : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {artista.territorio || '—'}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs max-w-[120px] truncate" title={artista.codice_paese || undefined}>
+                          {artista.codice_paese || '—'}
+                        </TableCell>
+                        <TableCell>
+                          {renderDirittiCell(artista.diritti_attivi)}
                         </TableCell>
                         <TableCell>
                           {formatDate(artista.data_inizio_mandato)}
@@ -651,6 +740,7 @@ export default function ArtistiPage() {
                               {artista.codice_ipn}
                             </span>
                             {getRasiBadge(artista.is_rasi ?? true)}
+                            {getAmbitoBadge(artista.ambito)}
                             {getStatusBadge(artista.stato)}
                           </div>
                           <h3 className="font-medium text-lg">
@@ -662,11 +752,19 @@ export default function ArtistiPage() {
                             </p>
                           )}
                           <div className="space-y-1 text-sm text-gray-600">
-                            {artista.codice_fiscale && (
-                              <p className="font-mono">{artista.codice_fiscale}</p>
+                            {artista.territorio && (
+                              <p>Territorio: {artista.territorio}{artista.codice_paese ? ` (${artista.codice_paese})` : ''}</p>
                             )}
-                            {artista.data_nascita && (
-                              <p>Nato il {formatDate(artista.data_nascita)}</p>
+                            {shouldShowFineMandato(artista.stato) && (
+                              <p>Fine mandato: {formatDate(artista.data_fine_mandato)}</p>
+                            )}
+                            {parseDirittiAttivi(artista.diritti_attivi).length > 0 && (
+                              <p title={parseDirittiAttivi(artista.diritti_attivi).join('; ')}>
+                                Diritti: {formatDirittiCompact(artista.diritti_attivi, 2).labels.join(', ')}
+                                {formatDirittiCompact(artista.diritti_attivi, 2).remaining > 0
+                                  ? ` +${formatDirittiCompact(artista.diritti_attivi, 2).remaining}`
+                                  : ''}
+                              </p>
                             )}
                             <p>Mandato iniziato il {formatDate(artista.data_inizio_mandato)}</p>
                           </div>

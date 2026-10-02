@@ -43,6 +43,9 @@ DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_artisti_is_rasi') THEN
         CREATE INDEX idx_artisti_is_rasi ON artisti(is_rasi);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_artisti_ambito') THEN
+        CREATE INDEX idx_artisti_ambito ON artisti(ambito);
+    END IF;
 END $$;
 
 -- ====================================
