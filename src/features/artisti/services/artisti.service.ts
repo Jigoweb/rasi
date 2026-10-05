@@ -1,7 +1,11 @@
+import { codicePaeseTokenOr } from '@/features/artisti/lib/artista-display'
 import { supabase } from '@/shared/lib/supabase-client'
 
 export type ArtistaFieldFilter =
-  | { field: 'nome_arte' | 'codice_fiscale' | 'imdb_nconst' | 'data_nascita' | 'luogo_nascita' | 'territorio'; hasValue: boolean }
+  | { field: 'nome_arte' | 'codice_fiscale' | 'imdb_nconst' | 'data_nascita' | 'luogo_nascita'; hasValue: boolean }
+  | { field: 'territorio'; value: 'WW' | 'WW-' | 'ITA' | 'ITA+' }
+  | { field: 'diritti'; value: string }
+  | { field: 'codice_paese'; value: string }
   | { field: 'stato'; value: 'attivo' | 'sospeso' | 'cessato' }
   | { field: 'tipologia'; value: 'AIE' | 'PRODUTTORE' }
   | { field: 'ambito'; value: 'musica' | 'cinema' | 'entrambi' }
@@ -45,6 +49,12 @@ export const getArtisti = async (filters?: {
       } else if (f.field === 'ambito' && 'hasValue' in f) {
         if (f.hasValue) query = query.not('ambito', 'is', null)
         else query = query.is('ambito', null)
+      } else if (f.field === 'territorio' && 'value' in f) {
+        query = query.eq('territorio', f.value)
+      } else if (f.field === 'diritti' && 'value' in f) {
+        query = query.contains('diritti_attivi', [f.value])
+      } else if (f.field === 'codice_paese' && 'value' in f) {
+        query = query.or(codicePaeseTokenOr(f.value))
       } else if ('hasValue' in f) {
         const hasValue = f.hasValue
         switch (f.field) {
@@ -68,10 +78,6 @@ export const getArtisti = async (filters?: {
             if (hasValue) query = query.not('luogo_nascita', 'is', null).neq('luogo_nascita', '')
             else query = query.or('luogo_nascita.is.null,luogo_nascita.eq.')
             break
-          case 'territorio':
-            if (hasValue) query = query.not('territorio', 'is', null)
-            else query = query.is('territorio', null)
-            break
         }
       }
     }
@@ -91,7 +97,7 @@ export const getArtisti = async (filters?: {
       // For each term, add an OR group. 
       // Since PostgREST/Supabase chains filters with AND by default, 
       // calling .or() multiple times results in: (Group1) AND (Group2) AND ...
-      query = query.or(`nome.ilike.%${term}%,cognome.ilike.%${term}%,codice_ipn.ilike.%${term}%,codice_fiscale.ilike.%${term}%`)
+      query = query.or(`nome.ilike.%${term}%,cognome.ilike.%${term}%,nome_arte.ilike.%${term}%,codice_ipn.ilike.%${term}%,codice_fiscale.ilike.%${term}%`)
     })
   }
 

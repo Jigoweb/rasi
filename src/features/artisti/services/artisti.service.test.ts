@@ -12,6 +12,7 @@ const mockOr: jest.Mock = jest.fn()
 const mockNot: jest.Mock = jest.fn()
 const mockIs: jest.Mock = jest.fn()
 const mockNeq: jest.Mock = jest.fn()
+const mockContains: jest.Mock = jest.fn()
 
 // Mock Supabase client
 jest.mock('@/shared/lib/supabase-client', () => ({
@@ -35,6 +36,7 @@ describe('Artisti Service', () => {
     mockNot.mockClear()
     mockIs.mockClear()
     mockNeq.mockClear()
+    mockContains.mockClear()
     ;(supabase.from as jest.Mock).mockClear()
   })
 
@@ -48,6 +50,7 @@ describe('Artisti Service', () => {
       not: mockNot,
       is: mockIs,
       neq: mockNeq,
+      contains: mockContains,
     }
     mockEq.mockReturnValue(chain)
     mockSelect.mockReturnValue(chain)
@@ -57,6 +60,7 @@ describe('Artisti Service', () => {
     mockNot.mockReturnValue(chain)
     mockIs.mockReturnValue(chain)
     mockNeq.mockReturnValue(chain)
+    mockContains.mockReturnValue(chain)
     mockOrder.mockResolvedValue({ data: [], error: null })
   })
 
@@ -108,6 +112,53 @@ describe('Artisti Service', () => {
       await getArtisti({ fieldFilters: [{ field: 'ambito', hasValue: false }] })
 
       expect(mockIs).toHaveBeenCalledWith('ambito', null)
+    })
+
+    it('filters territorio by the selected value', async () => {
+      mockOrder.mockReturnValue({
+        eq: mockEq,
+        or: mockOr,
+        not: mockNot,
+        is: mockIs,
+        contains: mockContains,
+      })
+      mockEq.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ fieldFilters: [{ field: 'territorio', value: 'ITA+' }] })
+
+      expect(mockEq).toHaveBeenCalledWith('territorio', 'ITA+')
+    })
+
+    it('filters diritti by the article stored on the artist', async () => {
+      mockOrder.mockReturnValue({
+        eq: mockEq,
+        or: mockOr,
+        not: mockNot,
+        is: mockIs,
+        contains: mockContains,
+      })
+      mockContains.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ fieldFilters: [{ field: 'diritti', value: 'Art. 73 - AU - BR BROADCASTING' }] })
+
+      expect(mockContains).toHaveBeenCalledWith('diritti_attivi', ['Art. 73 - AU - BR BROADCASTING'])
+    })
+
+    it('filters paese by a slash-separated token', async () => {
+      mockOrder.mockReturnValue({
+        eq: mockEq,
+        or: mockOr,
+        not: mockNot,
+        is: mockIs,
+        contains: mockContains,
+      })
+      mockOr.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ fieldFilters: [{ field: 'codice_paese', value: 'FRA' }] })
+
+      expect(mockOr).toHaveBeenCalledWith(
+        'codice_paese.eq.FRA,codice_paese.like.FRA/%,codice_paese.like.%/FRA,codice_paese.like.%/FRA/%',
+      )
     })
   })
 

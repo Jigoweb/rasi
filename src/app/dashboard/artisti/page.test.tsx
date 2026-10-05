@@ -21,8 +21,8 @@ jest.mock('@/features/artisti/services/artisti.service', () => ({
 }));
 
 const mockArtisti = [
-  { id: '1', nome: 'Mario', cognome: 'Rossi', codice_artista: 'A001', nome_arte: 'Mario', stato: 'attivo', 'dat-iscrizione': '2023-01-15T00:00:00.000Z', 'dat-nascita': '1980-05-20', codice_fiscale: 'RSSMRA80M20H501U', data_inizio_mandato: '2023-01-15T00:00:00.000Z', is_rasi: true },
-  { id: '2', nome: 'Luigi', cognome: 'Verdi', codice_artista: 'A002', nome_arte: 'Gigi', stato: 'sospeso', 'dat-iscrizione': '2022-11-30T00:00:00.000Z', 'dat-nascita': '1992-02-10', codice_fiscale: 'VRDLGU92B10H501Z', data_inizio_mandato: '2022-11-30T00:00:00.000Z', is_rasi: true },
+  { id: '1', nome: 'Mario', cognome: 'Rossi', codice_artista: 'A001', nome_arte: 'Mario', stato: 'attivo', 'dat-iscrizione': '2023-01-15T00:00:00.000Z', 'dat-nascita': '1980-05-20', codice_fiscale: 'RSSMRA80M20H501U', data_inizio_mandato: '2023-01-15T00:00:00.000Z', is_rasi: true, ambito: null, diritti_attivi: ['Art. 73 - AU - BR BROADCASTING'] },
+  { id: '2', nome: 'Luigi', cognome: 'Verdi', codice_artista: 'A002', nome_arte: 'Gigi', stato: 'sospeso', 'dat-iscrizione': '2022-11-30T00:00:00.000Z', 'dat-nascita': '1992-02-10', codice_fiscale: 'VRDLGU92B10H501Z', data_inizio_mandato: '2022-11-30T00:00:00.000Z', is_rasi: true, ambito: 'cinema', diritti_attivi: null },
   { id: '3', nome: 'Anna', cognome: 'Bianchi', codice_artista: 'A003', nome_arte: 'Annetta', stato: 'inattivo', 'dat-iscrizione': '2024-03-10T00:00:00.000Z', 'dat-nascita': '1988-09-05', codice_fiscale: 'BNCFBA88P05H501A', data_inizio_mandato: '2024-03-10T00:00:00.000Z', is_rasi: false },
 ];
 
@@ -48,6 +48,10 @@ describe('ArtistiPage', () => {
       expect(screen.getAllByText('Mario Rossi').length).toBeGreaterThan(0)
       expect(screen.getAllByText('Luigi Verdi').length).toBeGreaterThan(0)
       expect(screen.getAllByText('Anna Bianchi').length).toBeGreaterThan(0)
+      expect(screen.getAllByText("Nome d'arte").length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Gigi').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Musica').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Audiovisivo').length).toBeGreaterThan(0)
     })
   });
 

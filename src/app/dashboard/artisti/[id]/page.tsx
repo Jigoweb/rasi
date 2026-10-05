@@ -25,6 +25,7 @@ import { ArtistaInviteHeader } from '@/app/dashboard/artisti/[id]/components/art
 import {
   AMBITO_LABELS,
   parseDirittiAttivi,
+  resolveAmbito,
   shouldShowFineMandato,
   type AmbitoArtista,
 } from '@/features/artisti/lib/artista-display'
@@ -444,11 +445,8 @@ export default function ArtistaProfiloPage() {
               {artista.nome} {artista.cognome}
             </h1>
             {getStatusBadge(artista.stato)}
-            {getAmbitoBadge(artista.ambito)}
+            {getAmbitoBadge(resolveAmbito(artista.ambito, artista.diritti_attivi))}
           </div>
-          {artista.nome_arte && (
-            <p className="text-lg text-muted-foreground">({artista.nome_arte})</p>
-          )}
         </div>
         <div className="flex flex-col sm:items-end gap-2">
           <ArtistaInviteHeader
@@ -480,6 +478,30 @@ export default function ArtistaProfiloPage() {
         </CardHeader>
         <CardContent className="px-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <User className="mr-2 h-4 w-4" />
+                Nome
+              </div>
+              <div className="font-medium">{artista.nome}</div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <User className="mr-2 h-4 w-4" />
+                Cognome
+              </div>
+              <div className="font-medium">{artista.cognome}</div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <User className="mr-2 h-4 w-4" />
+                Nome d&apos;arte
+              </div>
+              <div className="font-medium">{artista.nome_arte || '—'}</div>
+            </div>
+
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground">
                 <Hash className="mr-2 h-4 w-4" />
@@ -526,15 +548,15 @@ export default function ArtistaProfiloPage() {
               </div>
             )}
 
-            {artista.ambito && (
-              <div className="space-y-2">
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Clapperboard className="mr-2 h-4 w-4" />
-                  Ambito
-                </div>
-                <div className="font-medium">{getAmbitoBadge(artista.ambito)}</div>
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <Clapperboard className="mr-2 h-4 w-4" />
+                Ambito
               </div>
-            )}
+              <div className="font-medium">
+                {getAmbitoBadge(resolveAmbito(artista.ambito, artista.diritti_attivi)) ?? '—'}
+              </div>
+            </div>
 
             {artista.territorio && (
               <div className="space-y-2">
