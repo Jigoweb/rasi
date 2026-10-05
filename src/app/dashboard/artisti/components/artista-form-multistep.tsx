@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Database } from '@/shared/lib/supabase'
+import { AMBITO_LABELS, deriveAmbitoFromDiritti, type AmbitoArtista } from '@/features/artisti/lib/artista-display'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -270,7 +271,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       is_rasi: data.is_rasi ?? true,
       ambito: (data.ambito === 'musica' || data.ambito === 'cinema' || data.ambito === 'entrambi')
         ? data.ambito
-        : null,
+        : deriveAmbitoFromDiritti(data.diritti_attivi ?? null),
       contatti: (data.email || data.telefono) ? {
         email: data.email || '',
         number: data.telefono || '',
@@ -472,13 +473,13 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                <SelectItem value="musica">Musica</SelectItem>
-                <SelectItem value="cinema">Cinema</SelectItem>
-                <SelectItem value="entrambi">Entrambi</SelectItem>
+                {(Object.keys(AMBITO_LABELS) as AmbitoArtista[]).map((value) => (
+                  <SelectItem key={value} value={value}>{AMBITO_LABELS[value]}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <FormDescription>
-              Distingue artisti musica, cinema/video o entrambi
+              Musica, audiovisivo o interdisciplinare. Se lasciato vuoto, si ricava dai diritti AU/AV al salvataggio.
             </FormDescription>
             <FormMessage />
           </FormItem>
@@ -930,8 +931,9 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
     // Dati anagrafici valorizzati
     const datiAnagrafici = [
       hasValue(formData.codice_ipn) && { label: 'Codice IPN', value: formData.codice_ipn },
-      (hasValue(formData.nome) || hasValue(formData.cognome)) && { label: 'Nome', value: `${formData.nome || ''} ${formData.cognome || ''}`.trim() },
-      hasValue(formData.nome_arte) && { label: "Nome d'Arte", value: formData.nome_arte },
+      hasValue(formData.nome) && { label: 'Nome', value: formData.nome },
+      hasValue(formData.cognome) && { label: 'Cognome', value: formData.cognome },
+      hasValue(formData.nome_arte) && { label: "Nome d'arte", value: formData.nome_arte },
       hasValue(formData.codice_fiscale) && { label: 'Codice Fiscale', value: formData.codice_fiscale },
       hasValue(formData.data_nascita) && { label: 'Data Nascita', value: formData.data_nascita },
       hasValue(formData.luogo_nascita) && { label: 'Luogo Nascita', value: formData.luogo_nascita },
@@ -942,7 +944,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       { label: 'Rappresentato da RASI', value: formData.is_rasi ? 'Sì' : 'No' },
       hasValue(formData.ambito) && {
         label: 'Ambito',
-        value: formData.ambito === 'musica' ? 'Musica' : formData.ambito === 'cinema' ? 'Cinema' : 'Entrambi',
+        value: AMBITO_LABELS[formData.ambito as AmbitoArtista] ?? formData.ambito,
       },
       hasValue(formData.stato) && { label: 'Stato', value: formData.stato },
       hasValue(formData.tipologia) && { label: 'Tipologia', value: formData.tipologia },

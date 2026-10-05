@@ -57,6 +57,12 @@ npm --prefix server run typecheck
 npm --prefix server test
 ```
 
+## Cast esterno IMDb
+
+Sulla scheda opera il cast non RASI si salva in `cast_esterno` (nome libero, personaggio, primarietà primario/comprimario). Non crea una scheda artista. Il pulsante «Scarica cast da IMDb» riusa `/api/imdb/title/:id/credits`, che legge OMDb.
+
+Serve `OMDB_API_KEY` (chiave gratuita su https://www.omdbapi.com/apikey.aspx). OMDb non è l’API ufficiale IMDb: restituisce solo gli attori in evidenza, senza personaggio e senza nconst, e li marca tutti come primari. La primarietà si corregge in scheda e resta salvata (non viene riscaricata a ogni apertura). Il cast completo, comprimari inclusi, richiede un piano IMDb a pagamento non configurato in questo progetto: quei nomi si aggiungono a mano.
+
 ## Documentation
 
 - `docs/README.md`: documentation index.

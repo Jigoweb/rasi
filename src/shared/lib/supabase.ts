@@ -116,6 +116,53 @@ export type Database = {
         }
         Relationships: []
       }
+      cast_esterno: {
+        Row: {
+          created_at: string | null
+          fonte: string
+          id: string
+          imdb_nconst: string | null
+          nome: string
+          opera_id: string
+          ordine: number
+          personaggio: string | null
+          primarieta: Database["public"]["Enums"]["primarieta_cast"]
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          fonte?: string
+          id?: string
+          imdb_nconst?: string | null
+          nome: string
+          opera_id: string
+          ordine?: number
+          personaggio?: string | null
+          primarieta?: Database["public"]["Enums"]["primarieta_cast"]
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          fonte?: string
+          id?: string
+          imdb_nconst?: string | null
+          nome?: string
+          opera_id?: string
+          ordine?: number
+          personaggio?: string | null
+          primarieta?: Database["public"]["Enums"]["primarieta_cast"]
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cast_esterno_opera_id_fkey"
+            columns: ["opera_id"]
+            isOneToOne: false
+            referencedRelation: "opere"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bandi_news: {
         Row: {
           content: string | null
@@ -1221,6 +1268,10 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["ruolo_utente"]
       }
+      replace_cast_esterno: {
+        Args: { p_opera_id: string; p_rows: Json }
+        Returns: undefined
+      }
       init_campagna_individuazione: {
         Args: {
           p_campagne_programmazione_id: string
@@ -1377,6 +1428,7 @@ export type Database = {
     }
     Enums: {
       ambito_artista: "musica" | "cinema" | "entrambi"
+      primarieta_cast: "primario" | "comprimario"
       categoria_ruolo: "recitazione" | "doppiaggio" | "direzione" | "tecnico"
       fascia_oraria:
         | "prima_serata"
@@ -1544,6 +1596,7 @@ export const Constants = {
   public: {
     Enums: {
       ambito_artista: ["musica", "cinema", "entrambi"],
+      primarieta_cast: ["primario", "comprimario"],
       categoria_ruolo: ["recitazione", "doppiaggio", "direzione", "tecnico"],
       fascia_oraria: [
         "prima_serata",

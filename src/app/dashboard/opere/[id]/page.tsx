@@ -28,6 +28,7 @@ import { Label } from '@/shared/components/ui/label'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
+import { CastEsternoPanel } from './components/cast-esterno-panel'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -1411,6 +1412,8 @@ export default function OperaDetailPage() {
           </CardContent>
         </Card>
       )}
+
+      <CastEsternoPanel operaId={operaId} imdbTconst={opera.imdb_tconst} />
 
       {/* Partecipazioni Section */}
       <Card className="py-0 gap-0">

@@ -41,7 +41,9 @@ export async function getTitleById(id: string) {
 }
 
 export async function getTitleCredits(id: string) {
-  const { ok, data } = await fetchJson<{ 
+  const { ok, status, data } = await fetchJson<{ 
+    error?: string
+    message?: string
     result: { 
       cast: Array<{ 
         id: string; 
@@ -49,12 +51,14 @@ export async function getTitleCredits(id: string) {
         character: string; 
         category?: string;
         categoryLabel?: string;
+        categoryGroup?: string;
         isStar?: boolean;
+        castRole?: string | null;
       }>;
       grouped?: any;
     } 
   }>(`/api/imdb/title/${encodeURIComponent(id)}/credits`)
-  return { ok, result: data?.result }
+  return { ok, status, error: data?.error, message: data?.message, result: data?.result }
 }
 
 export function mapImdbToOpera(imdb: {
