@@ -1,0 +1,51 @@
+anno,artista,titolo,canale,righe_excel,bucket,motivo,nota_correzione,classificazione_aggiornata
+2016,REMAR WILLIAM JAMES,THE SHANNARA CHRONICLES 1,SKY ATLANTIC,462,D,cast presente; blocco mandato (dal 2023),WILLIAM JAMES REMAR = REMAR WILLIAM JAMES; opera_id fixture era errato,sì
+2017,REMAR WILLIAM JAMES,THE SHANNARA CHRONICLES 1,SKY ATLANTIC,458,D,cast presente; blocco mandato (dal 2023),WILLIAM JAMES REMAR = REMAR WILLIAM JAMES; opera_id fixture era errato,sì
+2019,REMAR WILLIAM JAMES,DEXTER 2,SKY ATLANTIC,248,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2018,REMAR WILLIAM JAMES,THE SHANNARA CHRONICLES 1,SKY ATLANTIC+1,242,D,cast presente; blocco mandato (dal 2023),WILLIAM JAMES REMAR = REMAR WILLIAM JAMES; opera_id fixture era errato,sì
+2017,DAVITIAN KENNETH,S.W.A.T. - SQUADRA SPECIALE ANTICRIMINE,SKY CINEMA MAX COLLECTION,184,C,opera assente o non riconciliata in catalogo,,no
+2019,REMAR WILLIAM JAMES,CITY ON A HILL 1,SKY ATLANTIC,164,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2019,SINGH MOSE,VIKINGS 5,SKY ATLANTIC,160,A+D,cast presente; blocco mandato (dal 2021),Matcher trova SINGH; campagna non persiste per mandato,sì
+2019,REMAR WILLIAM JAMES,THE SHANNARA CHRONICLES 1,SKY ATLANTIC,152,D,cast presente; blocco mandato (dal 2023),WILLIAM JAMES REMAR = REMAR WILLIAM JAMES; opera_id fixture era errato,sì
+2016,AUTUORO CRISTIAN,MA TU DI CHE SEGNO 6?,SKY CINEMA UNO,150,B,cast assente in catalogo (sull'opera collegata),,no
+2016,DAVITIAN KENNETH,A MAN APART,SKY CINEMA UNO,142,A,episodio/serie non matchata (spesso anche mandato),,no
+2018,REMAR WILLIAM JAMES,DEXTER 1,SKY ATLANTIC+1,140,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2016,ZUCCA MARIO,Spongebob - Fuori Dall'acqua,SKY CINEMA UNO,137,D,cast presente; match non persistito / da verificare,Cast ZUCCA presente,sì
+2019,REMAR WILLIAM JAMES,DEXTER 3,SKY ATLANTIC,136,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2017,BACKUS CHRISTOPHER,MOTHERS AND DAUGHTERS,SKY CINEMA+1,124,D,cast presente; blocco mandato (dal 2023),Matcher trova BACKUS/SORVINO; non persistito,sì
+2017,SORVINO MIRA,MOTHERS AND DAUGHTERS,SKY CINEMA+1,124,D,cast presente; blocco mandato (dal 2023),Matcher trova BACKUS/SORVINO; non persistito,sì
+2018,SINGH MOSE,Vikings 4,SKY ATLANTIC +1,124,A+D,cast presente; blocco mandato (dal 2021),Matcher trova SINGH; campagna non persiste per mandato,sì
+2019,SORVINO MIRA,L'ULTIMA DISCESA,SKY CINEMA POP UP 2,122,D,film/cast ok o parziale ma non in output campagna,,no
+2019,REMAR WILLIAM JAMES,DEXTER 5,SKY ATLANTIC,120,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2019,REMAR WILLIAM JAMES,DEXTER 6,SKY ATLANTIC,120,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2016,CASTELLUCCIO FEDERICO,The Sopranos 4,Sky Atlantic,116,A+D,cast presente; blocco mandato (dal 2021),Cast su I SOPRANO OK,sì
+2019,SPANG MARIATANITA,QUANTO BASTA,SKY CINEMA UNO,110,D,cast presente; blocco mandato (dal 2021),,sì
+2019,SORVINO MIRA,Exposed - Nell'ombra Di Un Delitto,SKY CINEMA UNO,108,D,film/cast ok o parziale ma non in output campagna,,no
+2018,CASTELNUOVO FRANCESCO,Rio,SKY CINEMA UNO,102,C,opera assente o non riconciliata in catalogo,,no
+2019,DAVITIAN KENNETH,S.W.A.T. - Squadra Speciale Anticrimine,SKY CINEMA UNO,100,C,opera assente o non riconciliata in catalogo,,no
+2015,CASTELLUCCIO FEDERICO,The Sopranos 3,Sky Atlantic,98,A+D,cast presente; blocco mandato (dal 2021),Cast su I SOPRANO OK,sì
+2015,DAVITIAN KENNETH,Una Notte In Giallo,SKY CINEMA COMEDY,98,C,opera assente o non riconciliata in catalogo,,no
+2016,YOUNGS JOHN SMEALLIE,SWEETWATER,SKY CINEMA UNO,92,B,cast assente in catalogo (sull'opera collegata),,no
+2019,REMAR WILLIAM JAMES,DEXTER 4,SKY ATLANTIC,92,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2016,REMAR WILLIAM JAMES,BLADE: TRINITY,SKY CINEMA MAX+1,90,D,cast presente; blocco mandato (dal 2023),Cast REMAR presente sull'opera,sì
+2016,REMAR WILLIAM JAMES,DUPLEX,TV8,88,D,cast presente; blocco mandato (dal 2023),Cast REMAR presente sull'opera,sì
+2018,TANO ROCCO,Amore Oggi,SKY CINEMA COMEDY,84,D,film/cast ok o parziale ma non in output campagna,,no
+2019,CASTELNUOVO FRANCESCO,RIO,SKY CINEMA HITS/COLLECTION,84,C,opera assente o non riconciliata in catalogo,,no
+2015,REMAR WILLIAM JAMES,DJANGO UNCHAINED,SKY CINEMA MAX,82,D,cast presente; blocco mandato (dal 2023),Cast REMAR presente sull'opera,sì
+2016,ORLANDO ILARIA,THE CALLING,SKY CINEMA UNO,81,D,film/cast ok o parziale ma non in output campagna,,no
+2017,CASTELLUCCIO FEDERICO,The Sopranos 4,Sky Atlantic,80,A+D,cast presente; blocco mandato (dal 2021),Cast su I SOPRANO OK,sì
+2016,CASTELLUCCIO FEDERICO,The Sopranos 3,Sky Atlantic,78,A+D,cast presente; blocco mandato (dal 2021),Cast su I SOPRANO OK,sì
+2017,CASTELLUCCIO FEDERICO,The Sopranos 3,Sky Atlantic,78,A+D,cast presente; blocco mandato (dal 2021),Cast su I SOPRANO OK,sì
+2015,REMAR WILLIAM JAMES,Le Verità Nascoste,SKY CINEMA MAX,76,D,film/cast ok o parziale ma non in output campagna,,no
+2016,YOUNGS JOHN SMEALLIE,BERMUDA TENTACLES,SKY CINEMA MAX +1,76,D,film/cast ok o parziale ma non in output campagna,,no
+2019,AUTUORO CRISTIAN,MA TU DI CHE SEGNO 6?,SKY CINEMA UNO,76,B,cast assente in catalogo (sull'opera collegata),,no
+2016,FARGAS JUAN ANTONIO,STARSKY & HUTCH,Sky Atlantic Rocks,74,A,episodio/serie non matchata (spesso anche mandato),,no
+2018,REMAR WILLIAM JAMES,48 HRS.,SKY CINEMA MAX COLLECTION,74,D,film/cast ok o parziale ma non in output campagna,,no
+2017,REMAR WILLIAM JAMES,BLADE: TRINITY,SKY CINEMA MAX COLLECTION,72,D,cast presente; blocco mandato (dal 2023),Cast REMAR presente sull'opera,sì
+2018,DAVITIAN KENNETH,S.W.A.T. - Squadra Speciale Anticrimine,SKY CINEMA ACTION,72,C,opera assente o non riconciliata in catalogo,,no
+2019,REMAR WILLIAM JAMES,DEXTER 1,SKY ATLANTIC,72,A+D,cast presente; mandato + possibile gap episodio,Cast REMAR su opera OK; mandato post-2019,sì
+2016,CROCCOLO CARLO,Tre Uomini E Una Gamba,SKY CINEMA UNO,71,C,opera assente o non riconciliata in catalogo,,no
+2015,CASTELLUCCIO FEDERICO,The Sopranos 4,Sky Atlantic,70,A+D,cast presente; blocco mandato (dal 2021),Cast su I SOPRANO OK,sì
+2017,MCNAMARA WILLIAM WEST,CHASERS,SKY CINEMA CLASSICS,68,D,film/cast ok o parziale ma non in output campagna,,no
+2016,PARE MICHAEL,COOL DOG,SKY CINEMA FAMILY +1,66,D,film/cast ok o parziale ma non in output campagna,,no
+2015,MONITILLO RICCARDO MONITILLO ROCCO RICCARDO,Ti Ricordi Di Me?,SKY CINEMA PASSION,65,D,artista esiste (nome cella mal formattato),In anagrafica: MONITILLO ROCCO RICCARDO,sì
