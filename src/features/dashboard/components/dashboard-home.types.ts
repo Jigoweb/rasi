@@ -10,11 +10,15 @@ export type AttentionItem = {
 }
 
 export type ActivityFeedItem = {
+  id?: string
   tipo: string
   label: string
   dettaglio: string
   timestamp: string
   href?: string
+  /** Display name/email of the user who performed the change. */
+  utente?: string | null
+  utenteId?: string | null
 }
 
 export type DashboardKpiValues = {
@@ -36,6 +40,19 @@ export function tempoRelativo(isoString: string): string {
   if (giorni < 30) return `${giorni} giorn${giorni === 1 ? 'o' : 'i'} fa`
   const mesi = Math.floor(giorni / 30)
   return `${mesi} mes${mesi === 1 ? 'e' : 'i'} fa`
+}
+
+/** Absolute Italian datetime for activity timestamps (date + time). */
+export function formatOraAttivita(isoString: string): string {
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString('it-IT', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 export function formatImportoEur(value: number): string {
