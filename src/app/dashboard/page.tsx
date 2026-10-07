@@ -21,10 +21,13 @@ import {
   loadDashboardPrimaryData,
   loadDashboardRpcData,
   loadDashboardSecondaryData,
-  type AttivitaItem,
   type DashboardStats,
   type Metric,
 } from '@/features/dashboard/services/dashboard-data.service'
+import {
+  loadActivityFeed,
+  type AttivitaItem,
+} from '@/features/dashboard/services/dashboard-activity.service'
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -145,9 +148,14 @@ export default function DashboardPage() {
           setTotalArtisti(snapshot.primary.totalArtisti)
           setTotalOpere(snapshot.primary.totalOpere)
           setIndividuazioniTotal(snapshot.primary.individuazioniTotal)
-          setAttivitaRecenti(snapshot.secondary.attivitaRecenti)
           setLoading(false)
           applyHealth(snapshot.health)
+
+          void loadActivityFeed(supabase as any, { limit: 5 })
+            .then(items => {
+              if (!cancelled) setAttivitaRecenti(items)
+            })
+            .catch(error => console.error('Error fetching activity feed:', error))
           return
         } catch (rpcError) {
           console.warn('Dashboard metrics RPC unavailable, falling back to client loaders:', rpcError)
