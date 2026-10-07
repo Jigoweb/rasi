@@ -7,7 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/sha
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { getTitleCredits } from '@/features/opere/services/external/imdb.service'
-import { mapImdbCreditsToCast, type CastEsternoInput, type PrimarietaCast } from '@/features/opere/lib/cast-esterno'
+import { mapImdbCreditsToCast, type CastEsternoInput, type RuoloCast } from '@/features/opere/lib/cast-esterno'
+import { RUOLO_CAST_LABEL, RUOLI_CAST, ruoloDaPrimarieta } from '@/features/opere/lib/ruolo-cast'
 import {
   createCastEsterno,
   deleteCastEsterno,
@@ -18,20 +19,43 @@ import {
 } from '@/features/opere/services/cast-esterno.service'
 import { Download, Loader2, Plus, Trash2, Users } from 'lucide-react'
 
-const PRIMARIETA_LABEL: Record<PrimarietaCast, string> = {
-  primario: 'Primario',
-  comprimario: 'Comprimario',
-}
-
 function emptyDraft(): CastEsternoInput {
   return {
     nome: '',
     personaggio: null,
-    primarieta: 'comprimario',
+    ruolo: 'attore_primario',
     imdb_nconst: null,
     fonte: 'manuale',
     ordine: 0,
   }
+}
+
+function ruoloOf(row: { ruolo?: string | null; primarieta?: string | null }): RuoloCast {
+  if (row.ruolo && RUOLI_CAST.includes(row.ruolo as RuoloCast)) return row.ruolo as RuoloCast
+  return ruoloDaPrimarieta(row.primarieta === 'primario' ? 'primario' : 'comprimario')
+}
+
+function RuoloCastSelect({
+  value,
+  onChange,
+  label,
+}: {
+  value: RuoloCast
+  onChange: (value: RuoloCast) => void
+  label: string
+}) {
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as RuoloCast)}>
+      <SelectTrigger className="w-full sm:w-[240px]" aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {RUOLI_CAST.map((ruolo) => (
+          <SelectItem key={ruolo} value={ruolo}>{RUOLO_CAST_LABEL[ruolo]}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
 }
 
 export function CastEsternoPanel({
@@ -119,9 +143,9 @@ export function CastEsternoPanel({
     await reload()
   }
 
-  const changePrimarieta = async (row: CastEsternoRow, primarieta: PrimarietaCast) => {
-    setRows((current) => current.map((item) => (item.id === row.id ? { ...item, primarieta } : item)))
-    const { error: updateError } = await updateCastEsterno(row.id, { primarieta })
+  const changeRuolo = async (row: CastEsternoRow, ruolo: RuoloCast) => {
+    setRows((current) => current.map((item) => (item.id === row.id ? { ...item, ruolo } : item)))
+    const { error: updateError } = await updateCastEsterno(row.id, { ruolo })
     if (updateError) {
       setError(updateError.message)
       await reload()
@@ -149,7 +173,7 @@ export function CastEsternoPanel({
               Cast esterno
             </CardTitle>
             <CardDescription>
-              Nomi non presenti in anagrafica RASI. Primario e comprimario restano salvati su questa opera.
+              Nomi non presenti in anagrafica RASI. Per ogni nome si sceglie attore o doppiatore, primario o comprimario, e la scelta resta su questa opera.
             </CardDescription>
           </div>
           <Button
@@ -167,7 +191,7 @@ export function CastEsternoPanel({
       <CardContent className="px-4 space-y-4">
         <p className="text-xs text-muted-foreground">
           Il download usa OMDb (chiave gratuita <span className="font-mono">OMDB_API_KEY</span>): solo gli attori in evidenza, senza personaggio e senza codice persona.
-          OMDb li propone tutti come primari; la primarietà si corregge qui e non viene riscaricata da sola.
+          OMDb li propone come attori primari; il ruolo (attore o doppiatore, primario o comprimario) si corregge qui e non viene riscaricato da solo.
           Il cast completo IMDb (comprimari) non è incluso in quel piano: aggiungilo a mano.
         </p>
         {!imdbTconst && (
@@ -186,7 +210,7 @@ export function CastEsternoPanel({
             </div>
             <div className="space-y-2">
               {draft.map((row, index) => (
-                <div key={`${row.nome}-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_180px_auto] gap-2 items-center">
+                <div key={`${row.nome}-${index}`} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_240px_auto] gap-2 items-center">
                   <Input
                     value={row.nome}
                     aria-label={`Nome ${index + 1}`}
@@ -198,18 +222,11 @@ export function CastEsternoPanel({
                     aria-label={`Personaggio ${index + 1}`}
                     onChange={(event) => setDraft((current) => current?.map((item, i) => i === index ? { ...item, personaggio: event.target.value || null } : item) ?? null)}
                   />
-                  <Select
-                    value={row.primarieta}
-                    onValueChange={(value) => setDraft((current) => current?.map((item, i) => i === index ? { ...item, primarieta: value as PrimarietaCast } : item) ?? null)}
-                  >
-                    <SelectTrigger aria-label={`Primarietà ${index + 1}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="primario">Primario</SelectItem>
-                      <SelectItem value="comprimario">Comprimario</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <RuoloCastSelect
+                    value={row.ruolo}
+                    label={`Ruolo ${index + 1}`}
+                    onChange={(ruolo) => setDraft((current) => current?.map((item, i) => i === index ? { ...item, ruolo } : item) ?? null)}
+                  />
                   <Button
                     variant="ghost"
                     size="sm"
@@ -240,15 +257,11 @@ export function CastEsternoPanel({
                   </div>
                 </div>
                 <Badge variant="outline">{row.fonte === 'imdb' ? 'IMDb' : 'Manuale'}</Badge>
-                <Select value={row.primarieta} onValueChange={(value) => changePrimarieta(row, value as PrimarietaCast)}>
-                  <SelectTrigger className="w-full sm:w-[180px]" aria-label={`Primarietà di ${row.nome}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="primario">{PRIMARIETA_LABEL.primario}</SelectItem>
-                    <SelectItem value="comprimario">{PRIMARIETA_LABEL.comprimario}</SelectItem>
-                  </SelectContent>
-                </Select>
+                <RuoloCastSelect
+                  value={ruoloOf(row)}
+                  label={`Ruolo di ${row.nome}`}
+                  onChange={(ruolo) => changeRuolo(row, ruolo)}
+                />
                 <Button variant="ghost" size="sm" aria-label={`Elimina ${row.nome}`} onClick={() => removeRow(row.id)} disabled={busy}>
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -257,7 +270,7 @@ export function CastEsternoPanel({
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_180px_auto] gap-2 items-end border-t pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_240px_auto] gap-2 items-end border-t pt-4">
           <Input
             value={manual.nome}
             placeholder="Nome"
@@ -270,18 +283,11 @@ export function CastEsternoPanel({
             aria-label="Personaggio cast esterno"
             onChange={(event) => setManual((current) => ({ ...current, personaggio: event.target.value || null }))}
           />
-          <Select
-            value={manual.primarieta}
-            onValueChange={(value) => setManual((current) => ({ ...current, primarieta: value as PrimarietaCast }))}
-          >
-            <SelectTrigger aria-label="Primarietà nuovo cast">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="primario">Primario</SelectItem>
-              <SelectItem value="comprimario">Comprimario</SelectItem>
-            </SelectContent>
-          </Select>
+          <RuoloCastSelect
+            value={manual.ruolo}
+            label="Ruolo nuovo cast"
+            onChange={(ruolo) => setManual((current) => ({ ...current, ruolo }))}
+          />
           <Button onClick={addManual} disabled={busy || !manual.nome.trim()}>
             <Plus className="h-4 w-4 mr-2" />
             Aggiungi

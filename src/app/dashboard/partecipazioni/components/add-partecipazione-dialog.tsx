@@ -15,6 +15,7 @@ import { getRuoliTipologie } from '@/features/opere/services/opere.service'
 import { createPartecipazioniMultiple, checkPartecipazioniDuplicate } from '@/features/opere/services/opere.service'
 import { Alert, AlertDescription } from '@/shared/components/ui/alert'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { idRuoloCastPredefinito, ruoliCastInScheda } from '@/features/opere/lib/ruolo-cast'
 
 interface Opera {
   id: string
@@ -36,6 +37,7 @@ interface Artista {
 interface Ruolo {
   id: string
   nome: string
+  codice?: string | null
   descrizione: string | null
 }
 
@@ -160,6 +162,13 @@ export function AddPartecipazioneDialog({
     return mode === 'from-artista' ? opere : artisti
   }, [mode, opere, artisti])
 
+  const ruoliVisibili = useMemo(() => {
+    if (mode === 'from-opera') return ruoliCastInScheda(ruoli)
+    return ruoli.map((ruolo) => ({ ...ruolo, label: ruolo.nome }))
+  }, [mode, ruoli])
+
+  const ruoloPredefinito = mode === 'from-opera' ? idRuoloCastPredefinito(ruoli) : (ruoli[0]?.id || '')
+
   const toggleItem = (id: string) => {
     setSelectedItems(prev => {
       const newMap = new Map(prev)
@@ -171,7 +180,7 @@ export function AddPartecipazioneDialog({
           return newSet
         })
       } else {
-        const defaultRuolo = ruoli.length > 0 ? ruoli[0].id : ''
+        const defaultRuolo = ruoloPredefinito
         newMap.set(id, {
           id,
           ruolo_id: defaultRuolo,
@@ -217,7 +226,7 @@ export function AddPartecipazioneDialog({
       if (item) {
         const episodi = item.episodi || []
         const episodioIndex = episodi.findIndex(ep => ep.episodio_id === episodioId)
-        const ruoloId = item.ruolo_id || ruoli[0]?.id || ''
+        const ruoloId = item.ruolo_id || ruoloPredefinito
 
         if (episodioIndex >= 0) {
           episodi.splice(episodioIndex, 1)
@@ -505,9 +514,9 @@ export function AddPartecipazioneDialog({
                                   <SelectValue placeholder="Seleziona ruolo" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {ruoli.map((ruolo) => (
+                                  {ruoliVisibili.map((ruolo) => (
                                     <SelectItem key={ruolo.id} value={ruolo.id}>
-                                      {ruolo.nome}
+                                      {ruolo.label}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -560,7 +569,7 @@ export function AddPartecipazioneDialog({
                                       ) || false
                                       const epRuolo = selectedData?.episodi?.find(
                                         e => e.episodio_id === ep.id
-                                      )?.ruolo_id || (selectedData?.ruolo_id || ruoli[0]?.id || '')
+                                      )?.ruolo_id || (selectedData?.ruolo_id || ruoloPredefinito)
 
                                       return (
                                         <div
@@ -584,13 +593,13 @@ export function AddPartecipazioneDialog({
                                               value={epRuolo}
                                               onValueChange={(value) => updateEpisodioRuolo(item.id, ep.id, value)}
                                             >
-                                              <SelectTrigger className="w-[180px]">
+                                              <SelectTrigger className="w-[240px]">
                                                 <SelectValue />
                                               </SelectTrigger>
                                               <SelectContent>
-                                                {ruoli.map((ruolo) => (
+                                                {ruoliVisibili.map((ruolo) => (
                                                   <SelectItem key={ruolo.id} value={ruolo.id}>
-                                                    {ruolo.nome}
+                                                    {ruolo.label}
                                                   </SelectItem>
                                                 ))}
                                               </SelectContent>

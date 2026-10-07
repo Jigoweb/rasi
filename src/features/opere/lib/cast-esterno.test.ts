@@ -1,4 +1,4 @@
-import { mapImdbCreditsToCast, primarietaFromCredit } from './cast-esterno'
+import { mapImdbCreditsToCast, ruoloFromCredit } from './cast-esterno'
 
 describe('cast esterno', () => {
   it('keeps only cast members and preserves primary vs supporting', () => {
@@ -12,7 +12,7 @@ describe('cast esterno', () => {
       {
         nome: 'Colin Firth',
         personaggio: 'Harry',
-        primarieta: 'primario',
+        ruolo: 'attore_primario',
         imdb_nconst: 'nm123',
         fonte: 'imdb',
         ordine: 0,
@@ -20,7 +20,7 @@ describe('cast esterno', () => {
       {
         nome: 'Extra',
         personaggio: null,
-        primarieta: 'comprimario',
+        ruolo: 'attore_comprimario',
         imdb_nconst: null,
         fonte: 'imdb',
         ordine: 1,
@@ -29,6 +29,6 @@ describe('cast esterno', () => {
   })
 
   it('defaults unmarked credits to comprimario', () => {
-    expect(primarietaFromCredit({ name: 'Qualcuno' })).toBe('comprimario')
+    expect(ruoloFromCredit({ name: 'Qualcuno' })).toBe('attore_comprimario')
   })
 })
