@@ -59,9 +59,9 @@ npm --prefix server test
 
 ## Cast esterno IMDb
 
-Sulla scheda opera il cast non RASI si salva in `cast_esterno` (nome libero, personaggio, primarietà primario/comprimario). Non crea una scheda artista. Il pulsante «Scarica cast da IMDb» riusa `/api/imdb/title/:id/credits`, che legge OMDb.
+Sulla scheda opera il cast non RASI si salva in `cast_esterno` (nome libero, personaggio, ruolo). Non crea una scheda artista. Per ogni nome, RASI o non RASI, il ruolo in scheda è uno tra Attore primario, Attore comprimario, Doppiatore primario e Doppiatore comprimario. I ruoli RASI restano le righe già presenti in `ruoli_tipologie` (in produzione `RUO_1`–`RUO_4`); in interfaccia compaiono con queste etichette. Il pulsante «Scarica cast da IMDb» riusa `/api/imdb/title/:id/credits`, che legge OMDb.
 
-Serve `OMDB_API_KEY` (chiave gratuita su https://www.omdbapi.com/apikey.aspx). OMDb non è l’API ufficiale IMDb: restituisce solo gli attori in evidenza, senza personaggio e senza nconst, e li marca tutti come primari. La primarietà si corregge in scheda e resta salvata (non viene riscaricata a ogni apertura). Il cast completo, comprimari inclusi, richiede un piano IMDb a pagamento non configurato in questo progetto: quei nomi si aggiungono a mano.
+Serve `OMDB_API_KEY` (chiave gratuita su https://www.omdbapi.com/apikey.aspx). OMDb non è l’API ufficiale IMDb: restituisce solo gli attori in evidenza, senza personaggio e senza nconst, e li propone come attori primari. Il ruolo si corregge in scheda e resta salvato (non viene riscaricato a ogni apertura). Il cast completo, comprimari inclusi, richiede un piano IMDb a pagamento non configurato in questo progetto: quei nomi si aggiungono a mano. La colonna `cast_esterno.ruolo` arriva con la migration `20261007160000_ruolo_cast_esterno.sql`.
 
 ## Documentation
 

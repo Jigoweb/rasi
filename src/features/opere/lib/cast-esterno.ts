@@ -1,4 +1,6 @@
-export type PrimarietaCast = 'primario' | 'comprimario'
+import { primarietaDiRuolo, type RuoloCast } from './ruolo-cast'
+
+export type { RuoloCast }
 export type FonteCastEsterno = 'imdb' | 'manuale'
 
 export interface ImdbCastCredit {
@@ -13,16 +15,21 @@ export interface ImdbCastCredit {
 export interface CastEsternoInput {
   nome: string
   personaggio: string | null
-  primarieta: PrimarietaCast
+  ruolo: RuoloCast
   imdb_nconst: string | null
   fonte: FonteCastEsterno
   ordine: number
 }
 
-export function primarietaFromCredit(credit: ImdbCastCredit): PrimarietaCast {
-  if (credit.castRole === 'Comprimario') return 'comprimario'
-  if (credit.isStar || credit.castRole === 'Primario') return 'primario'
-  return 'comprimario'
+export function ruoloFromCredit(credit: ImdbCastCredit): RuoloCast {
+  if (credit.castRole === 'Comprimario') return 'attore_comprimario'
+  if (credit.isStar || credit.castRole === 'Primario') return 'attore_primario'
+  return 'attore_comprimario'
+}
+
+/** @deprecated usa ruoloFromCredit */
+export function primarietaFromCredit(credit: ImdbCastCredit): 'primario' | 'comprimario' {
+  return primarietaDiRuolo(ruoloFromCredit(credit))
 }
 
 /** Attori IMDb/OMDb → righe salvabili. Esclude regia e sceneggiatura. */
@@ -32,7 +39,7 @@ export function mapImdbCreditsToCast(credits: ImdbCastCredit[]): CastEsternoInpu
     .map((credit, index) => ({
       nome: credit.name!.trim(),
       personaggio: credit.character?.trim() || null,
-      primarieta: primarietaFromCredit(credit),
+      ruolo: ruoloFromCredit(credit),
       imdb_nconst: credit.id?.trim() || null,
       fonte: 'imdb' as const,
       ordine: index,

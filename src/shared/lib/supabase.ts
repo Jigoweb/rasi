@@ -127,6 +127,7 @@ export type Database = {
           ordine: number
           personaggio: string | null
           primarieta: Database["public"]["Enums"]["primarieta_cast"]
+          ruolo: Database["public"]["Enums"]["ruolo_cast"]
           updated_at: string | null
         }
         Insert: {
@@ -139,6 +140,7 @@ export type Database = {
           ordine?: number
           personaggio?: string | null
           primarieta?: Database["public"]["Enums"]["primarieta_cast"]
+          ruolo?: Database["public"]["Enums"]["ruolo_cast"]
           updated_at?: string | null
         }
         Update: {
@@ -151,6 +153,7 @@ export type Database = {
           ordine?: number
           personaggio?: string | null
           primarieta?: Database["public"]["Enums"]["primarieta_cast"]
+          ruolo?: Database["public"]["Enums"]["ruolo_cast"]
           updated_at?: string | null
         }
         Relationships: [
@@ -1429,6 +1432,11 @@ export type Database = {
     Enums: {
       ambito_artista: "musica" | "cinema" | "entrambi"
       primarieta_cast: "primario" | "comprimario"
+      ruolo_cast:
+        | "attore_primario"
+        | "attore_comprimario"
+        | "doppiatore_primario"
+        | "doppiatore_comprimario"
       categoria_ruolo: "recitazione" | "doppiaggio" | "direzione" | "tecnico"
       fascia_oraria:
         | "prima_serata"
@@ -1597,6 +1605,12 @@ export const Constants = {
     Enums: {
       ambito_artista: ["musica", "cinema", "entrambi"],
       primarieta_cast: ["primario", "comprimario"],
+      ruolo_cast: [
+        "attore_primario",
+        "attore_comprimario",
+        "doppiatore_primario",
+        "doppiatore_comprimario",
+      ],
       categoria_ruolo: ["recitazione", "doppiaggio", "direzione", "tecnico"],
       fascia_oraria: [
         "prima_serata",

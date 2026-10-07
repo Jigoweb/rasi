@@ -185,7 +185,7 @@ export const formatOpereForExport = (rows: any[]) => {
 export const getRuoliTipologie = async () => {
   const { data, error } = await supabase
     .from('ruoli_tipologie')
-    .select('id, nome, descrizione, categoria')
+    .select('id, codice, nome, descrizione, categoria')
     .order('nome', { ascending: true })
 
   return { data, error }
@@ -344,7 +344,7 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
       episodio_id,
       ruolo_id,
       artisti ( id, nome, cognome, nome_arte ),
-      ruoli_tipologie ( id, nome, descrizione ),
+      ruoli_tipologie ( id, codice, nome, descrizione ),
       episodi ( id, numero_stagione, numero_episodio, titolo_episodio )
     `)
     .eq('opera_id', operaId)

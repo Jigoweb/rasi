@@ -1,4 +1,5 @@
 import type { CastEsternoInput } from '@/features/opere/lib/cast-esterno'
+import { primarietaDiRuolo } from '@/features/opere/lib/ruolo-cast'
 import { supabase } from '@/shared/lib/supabase-client'
 import type { Database, Json } from '@/shared/lib/supabase'
 
@@ -30,7 +31,8 @@ export const createCastEsterno = async (operaId: string, row: CastEsternoInput) 
       opera_id: operaId,
       nome: row.nome,
       personaggio: row.personaggio,
-      primarieta: row.primarieta,
+      ruolo: row.ruolo,
+      primarieta: primarietaDiRuolo(row.ruolo),
       imdb_nconst: row.imdb_nconst,
       fonte: row.fonte,
       ordine: row.ordine,
@@ -43,11 +45,14 @@ export const createCastEsterno = async (operaId: string, row: CastEsternoInput) 
 
 export const updateCastEsterno = async (
   id: string,
-  patch: Partial<Pick<CastEsternoRow, 'nome' | 'personaggio' | 'primarieta' | 'ordine'>>,
+  patch: Partial<Pick<CastEsternoRow, 'nome' | 'personaggio' | 'ruolo' | 'ordine'>>,
 ) => {
   const { data, error } = await supabase
     .from('cast_esterno')
-    .update(patch)
+    .update({
+      ...patch,
+      ...(patch.ruolo ? { primarieta: primarietaDiRuolo(patch.ruolo) } : {}),
+    })
     .eq('id', id)
     .select('*')
     .single()

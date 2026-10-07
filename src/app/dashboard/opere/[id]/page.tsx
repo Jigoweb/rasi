@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -29,6 +29,7 @@ import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/componen
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
+import { etichettaRuoloCast, opzioniModificaRuoloCast } from '@/features/opere/lib/ruolo-cast'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -84,7 +85,7 @@ export default function OperaDetailPage() {
   }
 
   // Partecipazioni Edit/Delete State
-  const [ruoli, setRuoli] = useState<{ id: string; nome: string; descrizione: string | null; categoria: string | null }[]>([])
+  const [ruoli, setRuoli] = useState<{ id: string; codice?: string | null; nome: string; descrizione: string | null; categoria: string | null }[]>([])
   const [showEditPartecipazioneDialog, setShowEditPartecipazioneDialog] = useState(false)
   const [showDeletePartecipazioneDialog, setShowDeletePartecipazioneDialog] = useState(false)
   const [selectedPartecipazione, setSelectedPartecipazione] = useState<any>(null)
@@ -93,6 +94,10 @@ export default function OperaDetailPage() {
     personaggio: '',
     note: ''
   })
+  const ruoliModifica = useMemo(
+    () => opzioniModificaRuoloCast(ruoli, editPartecipazioneForm.ruolo_id),
+    [ruoli, editPartecipazioneForm.ruolo_id],
+  )
   const [isSavingPartecipazione, setIsSavingPartecipazione] = useState(false)
   const [isDeletingPartecipazione, setIsDeletingPartecipazione] = useState(false)
   const [partecipazioneIndividuazioni, setPartecipazioneIndividuazioni] = useState<{ id: string; campagna_individuazioni_id: string; campagne_individuazione?: { nome: string } | null }[]>([])
@@ -296,6 +301,7 @@ export default function OperaDetailPage() {
         p.artisti?.cognome?.toLowerCase().includes(query) ||
         p.artisti?.nome_arte?.toLowerCase().includes(query) ||
         p.ruoli_tipologie?.nome?.toLowerCase().includes(query) ||
+        etichettaRuoloCast(p.ruoli_tipologie).toLowerCase().includes(query) ||
         p.personaggio?.toLowerCase().includes(query) ||
         p.note?.toLowerCase().includes(query) ||
         p.episodi?.titolo_episodio?.toLowerCase().includes(query)
@@ -1452,7 +1458,7 @@ export default function OperaDetailPage() {
                 <SelectItem value="all">Tutti i ruoli</SelectItem>
                 {ruoli.map((ruolo) => (
                   <SelectItem key={ruolo.id} value={ruolo.id}>
-                    {ruolo.nome}
+                    {etichettaRuoloCast(ruolo)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1575,7 +1581,7 @@ export default function OperaDetailPage() {
                               {p.artisti ? `${p.artisti.nome} ${p.artisti.cognome}` : '—'}
                             </Link>
                             <Badge className="bg-primary/10 text-primary border-0 hover:bg-primary/10 text-xs">
-                              {p.ruoli_tipologie?.nome || 'Ruolo'}
+                              {etichettaRuoloCast(p.ruoli_tipologie)}
                             </Badge>
                           </div>
                           
@@ -2354,9 +2360,9 @@ export default function OperaDetailPage() {
                   <SelectValue placeholder="Seleziona ruolo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ruoli.map((ruolo) => (
+                  {ruoliModifica.map((ruolo) => (
                     <SelectItem key={ruolo.id} value={ruolo.id}>
-                      {ruolo.nome}
+                      {ruolo.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2412,7 +2418,7 @@ export default function OperaDetailPage() {
           <div className="py-4 space-y-4">
             <div className="p-4 bg-muted rounded-md space-y-2">
               <p><strong>Artista:</strong> {selectedPartecipazione?.artisti?.nome} {selectedPartecipazione?.artisti?.cognome}</p>
-              <p><strong>Ruolo:</strong> {selectedPartecipazione?.ruoli_tipologie?.nome}</p>
+              <p><strong>Ruolo:</strong> {etichettaRuoloCast(selectedPartecipazione?.ruoli_tipologie)}</p>
               {selectedPartecipazione?.personaggio && (
                 <p><strong>Personaggio:</strong> {selectedPartecipazione.personaggio}</p>
               )}
@@ -2481,7 +2487,7 @@ export default function OperaDetailPage() {
                   <div key={p.id} className="text-sm flex items-center gap-2">
                     <User className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate">{p.artisti?.nome} {p.artisti?.cognome}</span>
-                    <span className="text-muted-foreground">({p.ruoli_tipologie?.nome})</span>
+                    <span className="text-muted-foreground">({etichettaRuoloCast(p.ruoli_tipologie)})</span>
                   </div>
                 ))
               }
