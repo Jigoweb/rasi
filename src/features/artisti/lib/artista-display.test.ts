@@ -97,6 +97,8 @@ describe('artista-display', () => {
     it('is true for cessato and sospeso', () => {
       expect(shouldShowFineMandato('cessato')).toBe(true)
       expect(shouldShowFineMandato('sospeso')).toBe(true)
+      expect(shouldShowFineMandato('deceduto')).toBe(true)
+      expect(shouldShowFineMandato('minorenne')).toBe(false)
       expect(shouldShowFineMandato('attivo')).toBe(false)
       expect(shouldShowFineMandato(null)).toBe(false)
     })

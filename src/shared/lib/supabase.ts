@@ -39,6 +39,11 @@ export type Database = {
           is_rasi: boolean
           ambito: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita: string | null
+          data_decesso: string | null
+          documento_tipo: string | null
+          documento_numero: string | null
+          documento_data_rilascio: string | null
+          documento_data_scadenza: string | null
           nome: string
           nome_arte: string | null
           partita_iva: number | null
@@ -71,6 +76,11 @@ export type Database = {
           is_rasi?: boolean
           ambito?: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita?: string | null
+          data_decesso?: string | null
+          documento_tipo?: string | null
+          documento_numero?: string | null
+          documento_data_rilascio?: string | null
+          documento_data_scadenza?: string | null
           nome: string
           nome_arte?: string | null
           partita_iva?: number | null
@@ -103,6 +113,11 @@ export type Database = {
           is_rasi?: boolean
           ambito?: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita?: string | null
+          data_decesso?: string | null
+          documento_tipo?: string | null
+          documento_numero?: string | null
+          documento_data_rilascio?: string | null
+          documento_data_scadenza?: string | null
           nome?: string
           nome_arte?: string | null
           partita_iva?: number | null
@@ -116,9 +131,143 @@ export type Database = {
         }
         Relationships: []
       }
+      alert_prese_visione: {
+        Row: {
+          alert_key: string
+          entity_id: string
+          presa_da: string | null
+          presa_il: string
+        }
+        Insert: {
+          alert_key: string
+          entity_id: string
+          presa_da?: string | null
+          presa_il?: string
+        }
+        Update: {
+          alert_key?: string
+          entity_id?: string
+          presa_da?: string | null
+          presa_il?: string
+        }
+        Relationships: []
+      }
+      artisti_note: {
+        Row: {
+          artista_id: string
+          created_at: string | null
+          note: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          artista_id: string
+          created_at?: string | null
+          note?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          artista_id?: string
+          created_at?: string | null
+          note?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artisti_note_artista_id_fkey"
+            columns: ["artista_id"]
+            isOneToOne: true
+            referencedRelation: "artisti"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      artisti_referenti: {
+        Row: {
+          artista_id: string
+          codice_fiscale: string | null
+          cognome: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          indirizzo: string | null
+          nome: string
+          note: string | null
+          quota_percentuale: number | null
+          relazione: string | null
+          telefono: string | null
+          tipo: "tutore" | "erede"
+          updated_at: string | null
+        }
+        Insert: {
+          artista_id: string
+          codice_fiscale?: string | null
+          cognome?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          indirizzo?: string | null
+          nome: string
+          note?: string | null
+          quota_percentuale?: number | null
+          relazione?: string | null
+          telefono?: string | null
+          tipo: "tutore" | "erede"
+          updated_at?: string | null
+        }
+        Update: {
+          artista_id?: string
+          codice_fiscale?: string | null
+          cognome?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          indirizzo?: string | null
+          nome?: string
+          note?: string | null
+          quota_percentuale?: number | null
+          relazione?: string | null
+          telefono?: string | null
+          tipo?: "tutore" | "erede"
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artisti_referenti_artista_id_fkey"
+            columns: ["artista_id"]
+            isOneToOne: false
+            referencedRelation: "artisti"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_log: {
+        Row: {
+          artista_id: string | null
+          azione: "INSERT" | "UPDATE" | "DELETE" | "LOGIN"
+          campi_modificati: string[] | null
+          id: number
+          new_data: Json | null
+          occurred_at: string
+          old_data: Json | null
+          opera_id: string | null
+          record_id: string | null
+          record_label: string | null
+          tabella: string
+          user_email: string | null
+          user_id: string | null
+          user_ruolo: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       cast_esterno: {
         Row: {
           created_at: string | null
+          episodio_id: string | null
           fonte: string
           id: string
           imdb_nconst: string | null
@@ -131,6 +280,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          episodio_id?: string | null
           fonte?: string
           id?: string
           imdb_nconst?: string | null
@@ -143,6 +293,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          episodio_id?: string | null
           fonte?: string
           id?: string
           imdb_nconst?: string | null
@@ -154,6 +305,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cast_esterno_episodio_id_fkey"
+            columns: ["episodio_id"]
+            isOneToOne: false
+            referencedRelation: "episodi"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cast_esterno_opera_id_fkey"
             columns: ["opera_id"]
@@ -1269,9 +1427,53 @@ export type Database = {
         Returns: Database["public"]["Enums"]["ruolo_utente"]
       }
       replace_cast_esterno: {
-        Args: { p_opera_id: string; p_rows: Json }
+        Args: { p_opera_id: string; p_rows: Json; p_episodio_id?: string | null }
         Returns: undefined
       }
+      cerca_cast_esterno_per_artista: {
+        Args: { p_artista_id: string }
+        Returns: {
+          cast_id: string
+          opera_id: string
+          opera_titolo: string
+          opera_tipo: string
+          opera_anno: number | null
+          episodio_id: string | null
+          numero_stagione: number | null
+          numero_episodio: number | null
+          titolo_episodio: string | null
+          nome: string
+          personaggio: string | null
+          primarieta: string
+          corrispondenza: string
+        }[]
+      }
+      cast_esterno_artisti_corrispondenti: {
+        Args: { p_opera_id: string }
+        Returns: {
+          cast_id: string
+          artista_id: string
+          artista_nome: string
+        }[]
+      }
+      converti_cast_esterno_in_partecipazioni: {
+        Args: { p_artista_id: string; p_items: Json }
+        Returns: number
+      }
+      get_alert_scadenze: {
+        Args: { p_oggi?: string; p_giorni_documento?: number }
+        Returns: {
+          alert_key: string
+          tipo: string
+          severita: string
+          entity_type: string
+          entity_id: string
+          titolo: string
+          dettaglio: string
+          data_riferimento: string
+        }[]
+      }
+      nome_persona_key: { Args: { p_nome: string }; Returns: string }
       init_campagna_individuazione: {
         Args: {
           p_campagne_programmazione_id: string
@@ -1452,7 +1654,12 @@ export type Database = {
         | "error"
                | "in_review"
       stato_individuazione: "individuato" | "validato" | "respinto" | "dubbioso"
-      stato_iscrizione: "attivo" | "sospeso" | "cessato"
+      stato_iscrizione:
+        | "attivo"
+        | "sospeso"
+        | "cessato"
+        | "minorenne"
+        | "deceduto"
       stato_ripartizione:
         | "pianificata"
         | "calcolata"
@@ -1461,7 +1668,7 @@ export type Database = {
       stato_validazione: "da_validare" | "validato" | "respinto"
       territorio_enum: "WW" | "WW-" | "ITA" | "ITA+"
       tipo_emittente: "tv_generalista" | "tv_tematica" | "streaming" | "pay_tv"
-      tipo_opera: "film" | "serie_tv" | "animazione"
+      tipo_opera: "film" | "serie_tv" | "animazione" | "musicale"
       tipo_trasmissione: "prima_visione" | "replica" | "ripetizione"
       tipologia_enum: "AIE" | "PRODUTTORE"
     }
@@ -1622,7 +1829,7 @@ export const Constants = {
         "in_review",
       ],
       stato_individuazione: ["individuato", "validato", "respinto", "dubbioso"],
-      stato_iscrizione: ["attivo", "sospeso", "cessato"],
+      stato_iscrizione: ["attivo", "sospeso", "cessato", "minorenne", "deceduto"],
       stato_ripartizione: [
         "pianificata",
         "calcolata",
@@ -1632,7 +1839,7 @@ export const Constants = {
       stato_validazione: ["da_validare", "validato", "respinto"],
       territorio_enum: ["WW", "WW-", "ITA", "ITA+"],
       tipo_emittente: ["tv_generalista", "tv_tematica", "streaming", "pay_tv"],
-      tipo_opera: ["film", "serie_tv", "animazione"],
+      tipo_opera: ["film", "serie_tv", "animazione", "musicale"],
       tipo_trasmissione: ["prima_visione", "replica", "ripetizione"],
       tipologia_enum: ["AIE", "PRODUTTORE"],
     },

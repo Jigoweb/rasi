@@ -8,20 +8,26 @@ import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
+import { ArtistaStatoBadge } from '@/features/artisti/components/artista-stato-badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
-import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User, MoreHorizontal, Edit, Trash2, Loader2, Tv, Clapperboard, PenTool, ExternalLink, Theater, CheckSquare, Square, X, Pencil, Plus, Search } from 'lucide-react'
+import { ArrowLeft, Film, Hash, FileText, Calendar, Clock, User, MoreHorizontal, Edit, Trash2, Loader2, Tv, Clapperboard, PenTool, ExternalLink, Theater, CheckSquare, Square, X, Pencil, Plus, Search, MapPin, IdCard, AlertTriangle, History } from 'lucide-react'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import Link from 'next/link'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
+import { useAuth } from '@/shared/contexts/auth-context'
 import { ArtistaFormMultistep } from '@/app/dashboard/artisti/components/artista-form-multistep'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 import { ArtistaInviteHeader } from '@/app/dashboard/artisti/[id]/components/artista-invite-header'
+import { ArtistaNotePanel } from '@/app/dashboard/artisti/[id]/components/artista-note-panel'
+import { ArtistaReferentiPanel } from '@/app/dashboard/artisti/[id]/components/artista-referenti-panel'
+import { ArtistaCastEsternoMatchPanel } from '@/app/dashboard/artisti/[id]/components/artista-cast-esterno-match-panel'
+import { computeArtistaAlerts, etaAnni } from '@/features/artisti/lib/artista-alerts'
 import {
   AMBITO_LABELS,
   parseDirittiAttivi,
@@ -72,6 +78,7 @@ interface Partecipazione {
 export default function ArtistaProfiloPage() {
   const params = useParams()
   const artistaId = params.id as string
+  const { isAdmin } = useAuth()
 
   const [artista, setArtista] = useState<Artista | null>(null)
   const [partecipazioni, setPartecipazioni] = useState<Partecipazione[]>([])
@@ -192,19 +199,7 @@ export default function ArtistaProfiloPage() {
     }
   }, [showBulkDeleteDialog, selectedIds])
 
-  const getStatusBadge = (stato: string | null) => {
-    if (!stato) return null
-    switch (stato) {
-      case 'attivo':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Attivo</Badge>
-      case 'sospeso':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Sospeso</Badge>
-      case 'cessato':
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Cessato</Badge>
-      default:
-        return <Badge variant="outline">Sconosciuto</Badge>
-    }
-  }
+  const getStatusBadge = (stato: string | null) => <ArtistaStatoBadge stato={stato} />
 
   const getAmbitoBadge = (ambito: AmbitoArtista | null) => {
     if (!ambito) return null
@@ -428,6 +423,8 @@ export default function ArtistaProfiloPage() {
     )
   }
 
+  const alerts = computeArtistaAlerts(artista)
+
   return (
     <div className="container mx-auto p-6 space-y-4 lg:space-y-6">
       <DashboardBreadcrumbs
@@ -447,6 +444,26 @@ export default function ArtistaProfiloPage() {
             {getStatusBadge(artista.stato)}
             {getAmbitoBadge(resolveAmbito(artista.ambito, artista.diritti_attivi))}
           </div>
+          {alerts.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {alerts.map((alert) => (
+                <Badge
+                  key={alert.tipo}
+                  variant="outline"
+                  className={
+                    alert.severita === 'high'
+                      ? 'bg-red-50 text-red-700 border-red-200'
+                      : alert.severita === 'medium'
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                  }
+                >
+                  <AlertTriangle className="mr-1 h-3 w-3" />
+                  {alert.label}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex flex-col sm:items-end gap-2">
           <ArtistaInviteHeader
@@ -460,6 +477,14 @@ export default function ArtistaProfiloPage() {
                 Torna agli artisti
               </Link>
             </Button>
+            {isAdmin && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/dashboard/registro-attivita?artista=${artista.id}`}>
+                  <History className="mr-2 h-4 w-4" />
+                  Storico
+                </Link>
+              </Button>
+            )}
             <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
               <Pencil className="mr-2 h-4 w-4" />
               Modifica
@@ -526,9 +551,51 @@ export default function ArtistaProfiloPage() {
                   <Calendar className="mr-2 h-4 w-4" />
                   Data di Nascita
                 </div>
-                <div className="font-medium">{formatDate(artista.data_nascita)}</div>
+                <div className="font-medium">
+                  {formatDate(artista.data_nascita)}
+                  {artista.stato !== 'deceduto' && etaAnni(artista.data_nascita) != null && (
+                    <span className="text-muted-foreground font-normal"> ({etaAnni(artista.data_nascita)} anni)</span>
+                  )}
+                </div>
               </div>
             )}
+
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <MapPin className="mr-2 h-4 w-4" />
+                Luogo di Nascita
+              </div>
+              <div className="font-medium">{artista.luogo_nascita || '—'}</div>
+            </div>
+
+            {(artista.stato === 'deceduto' || artista.data_decesso) && (
+              <div className="space-y-2">
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Data di Decesso
+                </div>
+                <div className="font-medium">{artista.data_decesso ? formatDate(artista.data_decesso) : '—'}</div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <IdCard className="mr-2 h-4 w-4" />
+                Documento d&apos;identità
+              </div>
+              <div className="font-medium">
+                {artista.documento_tipo || artista.documento_numero || artista.documento_data_scadenza ? (
+                  <>
+                    {[artista.documento_tipo, artista.documento_numero].filter(Boolean).join(' n. ') || 'Documento'}
+                    <div className="text-sm font-normal text-muted-foreground">
+                      {artista.documento_data_rilascio && `Rilasciato il ${formatDate(artista.documento_data_rilascio)}`}
+                      {artista.documento_data_rilascio && artista.documento_data_scadenza && ' · '}
+                      {artista.documento_data_scadenza && `Scade il ${formatDate(artista.documento_data_scadenza)}`}
+                    </div>
+                  </>
+                ) : '—'}
+              </div>
+            </div>
 
             <div className="space-y-2">
               <div className="flex items-center text-sm text-muted-foreground">
@@ -646,6 +713,12 @@ export default function ArtistaProfiloPage() {
         </CardContent>
       </Card>
 
+      <ArtistaReferentiPanel artistaId={artista.id} stato={artista.stato} />
+
+      <ArtistaNotePanel artistaId={artista.id} />
+
+      <ArtistaCastEsternoMatchPanel artistaId={artista.id} ruoli={ruoli} onConverted={fetchArtistaData} />
+
       {/* Opere e Partecipazioni */}
       <Card className="py-0 gap-0">
         <CardHeader className="py-4">
@@ -687,6 +760,7 @@ export default function ArtistaProfiloPage() {
                   <SelectItem value="film">Film</SelectItem>
                   <SelectItem value="serie_tv">Serie TV</SelectItem>
                   <SelectItem value="animazione">Animazione</SelectItem>
+                  <SelectItem value="musicale">Opera musicale</SelectItem>
                 </SelectContent>
             </Select>
             

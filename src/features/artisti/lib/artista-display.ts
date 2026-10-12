@@ -102,5 +102,31 @@ export function formatDirittiCompact(diritti: Json | null | undefined, maxVisibl
 }
 
 export function shouldShowFineMandato(stato: string | null | undefined): boolean {
-  return stato === 'cessato' || stato === 'sospeso'
+  return stato === 'cessato' || stato === 'sospeso' || stato === 'deceduto'
+}
+
+export type StatoIscrizione = Database['public']['Enums']['stato_iscrizione']
+
+export const STATO_LABELS: Record<StatoIscrizione, string> = {
+  attivo: 'Attivo',
+  minorenne: 'Minorenne',
+  sospeso: 'Sospeso',
+  cessato: 'Cessato',
+  deceduto: 'Deceduto',
+}
+
+export const STATO_OPTIONS = Object.keys(STATO_LABELS) as StatoIscrizione[]
+
+export function formatStatoLabel(stato: string | null | undefined): string {
+  if (!stato) return '—'
+  return STATO_LABELS[stato as StatoIscrizione] ?? stato
+}
+
+export type TipoReferente = 'tutore' | 'erede'
+
+/** Minorenne → tutori legali, deceduto → eredi. */
+export function tipoReferentePerStato(stato: string | null | undefined): TipoReferente | null {
+  if (stato === 'minorenne') return 'tutore'
+  if (stato === 'deceduto') return 'erede'
+  return null
 }

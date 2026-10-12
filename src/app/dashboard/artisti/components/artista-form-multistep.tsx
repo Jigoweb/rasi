@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Database } from '@/shared/lib/supabase'
-import { AMBITO_LABELS, deriveAmbitoFromDiritti, type AmbitoArtista } from '@/features/artisti/lib/artista-display'
+import { AMBITO_LABELS, STATO_LABELS, STATO_OPTIONS, deriveAmbitoFromDiritti, formatStatoLabel, shouldShowFineMandato, type AmbitoArtista } from '@/features/artisti/lib/artista-display'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -57,6 +57,12 @@ const artistaSchema = z.object({
   codice_fiscale: z.string().max(16, 'Max 16 caratteri').optional().or(z.literal('')),
   data_nascita: z.string().optional().or(z.literal('')),
   luogo_nascita: z.string().optional().or(z.literal('')),
+
+  // Documento d'identità
+  documento_tipo: z.string().optional().or(z.literal('')),
+  documento_numero: z.string().optional().or(z.literal('')),
+  documento_data_rilascio: z.string().optional().or(z.literal('')),
+  documento_data_scadenza: z.string().optional().or(z.literal('')),
   
   // Dati professionali
   territorio: z.string().optional().or(z.literal('ITA')),
@@ -64,6 +70,7 @@ const artistaSchema = z.object({
   stato: z.string().optional().or(z.literal('attivo')),
   data_inizio_mandato: z.string().optional().or(z.literal('')),
   data_fine_mandato: z.string().optional().or(z.literal('')),
+  data_decesso: z.string().optional().or(z.literal('')),
   is_rasi: z.boolean().optional(),
   ambito: z.union([z.enum(['musica', 'cinema', 'entrambi']), z.literal('')]).optional(),
   
@@ -154,11 +161,16 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codice_fiscale: artista?.codice_fiscale || '',
       data_nascita: toDateInput(artista?.data_nascita),
       luogo_nascita: artista?.luogo_nascita || '',
+      documento_tipo: artista?.documento_tipo || '',
+      documento_numero: artista?.documento_numero || '',
+      documento_data_rilascio: toDateInput(artista?.documento_data_rilascio),
+      documento_data_scadenza: toDateInput(artista?.documento_data_scadenza),
       territorio: artista?.territorio || 'ITA',
       tipologia: artista?.tipologia || '',
       stato: artista?.stato || 'attivo',
       data_inizio_mandato: toDateInput(artista?.data_inizio_mandato) || new Date().toISOString().split('T')[0],
       data_fine_mandato: toDateInput(artista?.data_fine_mandato) || '',
+      data_decesso: toDateInput(artista?.data_decesso) || '',
       is_rasi: artista?.is_rasi ?? true,
       ambito: artista?.ambito || '',
       email: (artista?.contatti as any)?.email || '',
@@ -213,11 +225,14 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
     }
   }, [artista, dirittiData.diritti.length, form])
 
-  // Reset data_fine_mandato solo quando lo stato torna ad "attivo"
+  // Reset data_fine_mandato quando lo stato torna attivo/minorenne; data_decesso solo per i deceduti
   const stato = form.watch('stato')
   useEffect(() => {
-    if (stato === 'attivo') {
+    if (stato === 'attivo' || stato === 'minorenne') {
       form.setValue('data_fine_mandato', '')
+    }
+    if (stato !== 'deceduto') {
+      form.setValue('data_decesso', '')
     }
   }, [stato, form])
 
@@ -263,11 +278,16 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codice_fiscale: data.codice_fiscale || null,
       data_nascita: data.data_nascita || null,
       luogo_nascita: data.luogo_nascita || null,
+      documento_tipo: data.documento_tipo || null,
+      documento_numero: data.documento_numero || null,
+      documento_data_rilascio: data.documento_data_rilascio || null,
+      documento_data_scadenza: data.documento_data_scadenza || null,
       territorio: (data.territorio as Database['public']['Enums']['territorio_enum'] | null | undefined) || 'ITA',
       tipologia: (data.tipologia as Database['public']['Enums']['tipologia_enum'] | null | undefined) || null,
       stato: (data.stato as Database['public']['Enums']['stato_iscrizione'] | null | undefined) || 'attivo',
       data_inizio_mandato: data.data_inizio_mandato || new Date().toISOString().split('T')[0],
       data_fine_mandato: data.data_fine_mandato || null,
+      data_decesso: data.stato === 'deceduto' ? data.data_decesso || null : null,
       is_rasi: data.is_rasi ?? true,
       ambito: (data.ambito === 'musica' || data.ambito === 'cinema' || data.ambito === 'entrambi')
         ? data.ambito
@@ -430,6 +450,81 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
           )}
         />
       </div>
+      <div className="space-y-4 rounded-md border p-4">
+        <div>
+          <h3 className="text-sm font-semibold">Documento d&apos;identità</h3>
+          <p className="text-xs text-muted-foreground">La scadenza genera un alert in dashboard 60 giorni prima.</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            key="documento_tipo"
+            control={form.control}
+            name="documento_tipo"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tipo documento</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || undefined}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona tipo" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="Carta d'identità">Carta d&apos;identità</SelectItem>
+                    <SelectItem value="Passaporto">Passaporto</SelectItem>
+                    <SelectItem value="Patente">Patente</SelectItem>
+                    <SelectItem value="Permesso di soggiorno">Permesso di soggiorno</SelectItem>
+                    <SelectItem value="Altro">Altro</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="documento_numero"
+            control={form.control}
+            name="documento_numero"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Numero documento</FormLabel>
+                <FormControl>
+                  <Input {...field} value={field.value || ''} placeholder="CA00000AA" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="documento_data_rilascio"
+            control={form.control}
+            name="documento_data_rilascio"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Data di rilascio</FormLabel>
+                <FormControl>
+                  <Input type="date" {...field} value={field.value || ''} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            key="documento_data_scadenza"
+            control={form.control}
+            name="documento_data_scadenza"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Data di scadenza</FormLabel>
+                <FormControl>
+                  <Input type="date" {...field} value={field.value || ''} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+      </div>
     </div>
   )
 
@@ -500,9 +595,9 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="attivo">Attivo</SelectItem>
-                  <SelectItem value="sospeso">Sospeso</SelectItem>
-                  <SelectItem value="cessato">Cessato</SelectItem>
+                  {STATO_OPTIONS.map((value) => (
+                    <SelectItem key={value} value={value}>{STATO_LABELS[value]}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -553,7 +648,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
           name="data_fine_mandato"
           render={({ field }) => {
             const stato = form.watch('stato')
-            const isDisabled = stato !== 'cessato' && stato !== 'sospeso'
+            const isDisabled = !shouldShowFineMandato(stato)
             
             return (
               <FormItem>
@@ -568,7 +663,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
                   />
                 </FormControl>
                 <FormDescription>
-                  Disponibile per artisti cessati o sospesi
+                  Disponibile per artisti cessati, sospesi o deceduti
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -576,6 +671,28 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
           }}
         />
       </div>
+      {stato === 'deceduto' && (
+        <FormField
+          key="data_decesso"
+          control={form.control}
+          name="data_decesso"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Data di decesso</FormLabel>
+              <FormControl>
+                <Input type="date" {...field} value={field.value || ''} />
+              </FormControl>
+              <FormDescription>Gli eredi si indicano nella scheda artista dopo il salvataggio.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+      {stato === 'minorenne' && (
+        <p className="text-sm text-muted-foreground rounded-md border border-sky-200 bg-sky-50 p-3">
+          I tutori legali si indicano nella scheda artista dopo il salvataggio. Un mese prima dei 18 anni la dashboard mostra un alert.
+        </p>
+      )}
       <FormField
         key="imdb_nconst"
         control={form.control}
@@ -937,6 +1054,10 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       hasValue(formData.codice_fiscale) && { label: 'Codice Fiscale', value: formData.codice_fiscale },
       hasValue(formData.data_nascita) && { label: 'Data Nascita', value: formData.data_nascita },
       hasValue(formData.luogo_nascita) && { label: 'Luogo Nascita', value: formData.luogo_nascita },
+      hasValue(formData.documento_tipo) && { label: 'Documento', value: formData.documento_tipo },
+      hasValue(formData.documento_numero) && { label: 'Numero documento', value: formData.documento_numero },
+      hasValue(formData.documento_data_rilascio) && { label: 'Rilasciato il', value: formData.documento_data_rilascio },
+      hasValue(formData.documento_data_scadenza) && { label: 'Scadenza documento', value: formData.documento_data_scadenza },
     ].filter(Boolean) as { label: string; value: string }[]
     
     // Dati professionali valorizzati
@@ -946,7 +1067,8 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
         label: 'Ambito',
         value: AMBITO_LABELS[formData.ambito as AmbitoArtista] ?? formData.ambito,
       },
-      hasValue(formData.stato) && { label: 'Stato', value: formData.stato },
+      hasValue(formData.stato) && { label: 'Stato', value: formatStatoLabel(formData.stato) },
+      hasValue(formData.data_decesso) && { label: 'Data Decesso', value: formData.data_decesso },
       hasValue(formData.tipologia) && { label: 'Tipologia', value: formData.tipologia },
       hasValue(formData.data_inizio_mandato) && { label: 'Data Inizio Mandato', value: formData.data_inizio_mandato },
       hasValue(formData.data_fine_mandato) && { label: 'Data Fine Mandato', value: formData.data_fine_mandato },
