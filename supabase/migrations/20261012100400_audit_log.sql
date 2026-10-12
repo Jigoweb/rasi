@@ -33,13 +33,13 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_opera ON public.audit_log(opera_id, occ
 
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "audit_log_select_policy" ON public.audit_log;
 CREATE POLICY "audit_log_select_policy" ON public.audit_log
   FOR SELECT
   USING (get_user_role() = 'admin');
 
 -- Solo lettura dall'API: le righe le scrive il trigger (SECURITY DEFINER).
-REVOKE ALL ON public.audit_log FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.audit_log FROM anon, authenticated;
+REVOKE ALL ON public.audit_log FROM anon;
 GRANT SELECT ON public.audit_log TO authenticated;
 GRANT SELECT ON public.audit_log TO service_role;
 
@@ -198,9 +198,8 @@ DECLARE
 BEGIN
   FOREACH v_table IN ARRAY v_full LOOP
     IF to_regclass('public.' || v_table) IS NOT NULL THEN
-      EXECUTE format('DROP TRIGGER IF EXISTS audit_log_trigger ON public.%I', v_table);
       EXECUTE format(
-        'CREATE TRIGGER audit_log_trigger AFTER INSERT OR UPDATE OR DELETE ON public.%I '
+        'CREATE OR REPLACE TRIGGER audit_log_trigger AFTER INSERT OR UPDATE OR DELETE ON public.%I '
         'FOR EACH ROW EXECUTE FUNCTION public.audit_log_row_change()',
         v_table
       );
@@ -208,8 +207,7 @@ BEGIN
   END LOOP;
 
   IF to_regclass('public.individuazioni') IS NOT NULL THEN
-    DROP TRIGGER IF EXISTS audit_log_trigger ON public.individuazioni;
-    CREATE TRIGGER audit_log_trigger
+    CREATE OR REPLACE TRIGGER audit_log_trigger
       AFTER UPDATE ON public.individuazioni
       FOR EACH ROW EXECUTE FUNCTION public.audit_log_row_change('solo_update_utente');
   END IF;
@@ -268,8 +266,7 @@ $$;
 
 DO $$
 BEGIN
-  DROP TRIGGER IF EXISTS audit_log_auth_users_trigger ON auth.users;
-  CREATE TRIGGER audit_log_auth_users_trigger
+  CREATE OR REPLACE TRIGGER audit_log_auth_users_trigger
     AFTER INSERT OR UPDATE OF last_sign_in_at, raw_user_meta_data OR DELETE ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.audit_log_auth_user_change();
 EXCEPTION

@@ -18,12 +18,10 @@ CREATE TABLE IF NOT EXISTS public.alert_prese_visione (
 
 ALTER TABLE public.alert_prese_visione ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "alert_prese_visione_select_policy" ON public.alert_prese_visione;
 CREATE POLICY "alert_prese_visione_select_policy" ON public.alert_prese_visione
   FOR SELECT
   USING (get_user_role() IN ('admin', 'operatore', 'readonly'));
 
-DROP POLICY IF EXISTS "alert_prese_visione_write_policy" ON public.alert_prese_visione;
 CREATE POLICY "alert_prese_visione_write_policy" ON public.alert_prese_visione
   FOR ALL
   USING (get_user_role() IN ('admin', 'operatore'))

@@ -19,9 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_artisti_data_nascita
   WHERE data_nascita IS NOT NULL;
 
 -- I minorenni restano mandati attivi: il ruolo readonly deve vederli.
-DROP POLICY IF EXISTS "artisti_select_policy" ON public.artisti;
-CREATE POLICY "artisti_select_policy" ON public.artisti
-  FOR SELECT
+ALTER POLICY "artisti_select_policy" ON public.artisti
   USING (
     get_user_role() IN ('admin', 'operatore')
     OR (get_user_role() = 'artista' AND id = get_user_artista_id())
@@ -48,24 +46,20 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS update_artisti_note_updated_at ON public.artisti_note;
-CREATE TRIGGER update_artisti_note_updated_at
+CREATE OR REPLACE TRIGGER update_artisti_note_updated_at
   BEFORE UPDATE ON public.artisti_note
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-DROP TRIGGER IF EXISTS set_artisti_note_updated_by ON public.artisti_note;
-CREATE TRIGGER set_artisti_note_updated_by
+CREATE OR REPLACE TRIGGER set_artisti_note_updated_by
   BEFORE INSERT OR UPDATE ON public.artisti_note
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_by_auth_uid();
 
 ALTER TABLE public.artisti_note ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "artisti_note_select_policy" ON public.artisti_note;
 CREATE POLICY "artisti_note_select_policy" ON public.artisti_note
   FOR SELECT
   USING (get_user_role() IN ('admin', 'operatore', 'readonly'));
 
-DROP POLICY IF EXISTS "artisti_note_write_policy" ON public.artisti_note;
 CREATE POLICY "artisti_note_write_policy" ON public.artisti_note
   FOR ALL
   USING (get_user_role() IN ('admin', 'operatore'))
@@ -96,19 +90,16 @@ CREATE TABLE IF NOT EXISTS public.artisti_referenti (
 
 CREATE INDEX IF NOT EXISTS idx_artisti_referenti_artista ON public.artisti_referenti(artista_id);
 
-DROP TRIGGER IF EXISTS update_artisti_referenti_updated_at ON public.artisti_referenti;
-CREATE TRIGGER update_artisti_referenti_updated_at
+CREATE OR REPLACE TRIGGER update_artisti_referenti_updated_at
   BEFORE UPDATE ON public.artisti_referenti
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 ALTER TABLE public.artisti_referenti ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "artisti_referenti_select_policy" ON public.artisti_referenti;
 CREATE POLICY "artisti_referenti_select_policy" ON public.artisti_referenti
   FOR SELECT
   USING (get_user_role() IN ('admin', 'operatore', 'readonly'));
 
-DROP POLICY IF EXISTS "artisti_referenti_write_policy" ON public.artisti_referenti;
 CREATE POLICY "artisti_referenti_write_policy" ON public.artisti_referenti
   FOR ALL
   USING (get_user_role() IN ('admin', 'operatore'))

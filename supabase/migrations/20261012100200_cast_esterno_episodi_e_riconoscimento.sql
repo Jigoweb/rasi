@@ -47,12 +47,10 @@ CREATE INDEX IF NOT EXISTS idx_artisti_nome_arte_key
   ON public.artisti (public.nome_persona_key(nome_arte::text))
   WHERE nome_arte IS NOT NULL;
 
-DROP FUNCTION IF EXISTS public.replace_cast_esterno(uuid, jsonb);
-
 CREATE OR REPLACE FUNCTION public.replace_cast_esterno(
   p_opera_id uuid,
   p_rows jsonb,
-  p_episodio_id uuid DEFAULT NULL
+  p_episodio_id uuid
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -97,6 +95,18 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.replace_cast_esterno(uuid, jsonb, uuid) TO authenticated, service_role;
+
+-- Firma storica a 2 argomenti: ora sostituisce solo il cast dell'intera opera,
+-- non più anche quello dei singoli episodi. (Nessun DEFAULT sulla firma a 3
+-- argomenti per evitare chiamate ambigue tra le due.)
+CREATE OR REPLACE FUNCTION public.replace_cast_esterno(p_opera_id uuid, p_rows jsonb)
+RETURNS void
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+  SELECT public.replace_cast_esterno(p_opera_id, p_rows, NULL::uuid)
+$$;
 
 -- Righe di cast esterno che corrispondono a un artista (nome, nome d'arte o nconst IMDb).
 CREATE OR REPLACE FUNCTION public.cerca_cast_esterno_per_artista(p_artista_id uuid)
