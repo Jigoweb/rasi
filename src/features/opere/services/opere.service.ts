@@ -1,4 +1,5 @@
 import { supabase } from '@/shared/lib/supabase-client'
+import type { TipoOpera } from '@/shared/lib/opere-utils'
 import { OPERE_INCOMPLETE_OR } from './opere-health'
 
 export { OPERE_INCOMPLETE_OR } from './opere-health'
@@ -210,7 +211,7 @@ export const getOpere = async (filters?: {
   }
 
   if (filters?.tipo && filters.tipo !== 'all') {
-    query = query.eq('tipo', filters.tipo as 'film' | 'serie_tv' | 'animazione')
+    query = query.eq('tipo', filters.tipo as TipoOpera)
   }
 
   if (filters?.incomplete) {

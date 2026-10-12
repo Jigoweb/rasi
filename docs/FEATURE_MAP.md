@@ -143,3 +143,51 @@ Rischi:
 - Non introdurre endpoint senza `requireAuth`, salvo `/health`.
 - Non fare query job non scoped per `created_by` quando il dato torna al browser.
 - Non bloccare `app.listen` sulla recovery.
+
+## Scheda Artista: anagrafica estesa e cast esterno
+
+Responsabilità:
+
+- Stati `minorenne` (con tutori legali) e `deceduto` (con eredi e data di decesso).
+- Documento d'identità con data di scadenza; note interne visibili solo allo staff (`artisti_note`).
+- Proposta di conversione del cast esterno in partecipazioni quando il nome coincide con l'artista
+  (`nome_persona_key`: minuscole, senza accenti, token ordinati; oppure stesso nconst IMDb).
+- Cast esterno per singolo episodio (`cast_esterno.episodio_id`, NULL = tutta l'opera/serie).
+
+Entry point:
+
+- `src/app/dashboard/artisti/[id]/components/artista-*-panel.tsx`
+- `src/app/dashboard/opere/[id]/components/cast-esterno-panel.tsx`
+- `src/features/artisti/lib/artista-alerts.ts`
+- `src/features/artisti/services/artista-scheda.service.ts`
+- `supabase/migrations/20261012100100_artisti_documento_note_referenti.sql`
+- `supabase/migrations/20261012100200_cast_esterno_episodi_e_riconoscimento.sql`
+
+Rischi:
+
+- La riga `artisti` è leggibile/modificabile dall'artista: dati riservati allo staff vanno in tabelle separate.
+- La conversione cast → partecipazione cancella la riga di cast esterno: resta traccia nel registro attività.
+
+## Alert scadenze e Registro attività
+
+Responsabilità:
+
+- `get_alert_scadenze`: documenti (60 giorni), 18 anni (un mese prima), 80 anni, opere AV 50 anni / musicali 70 anni.
+  "Presa visione" in `alert_prese_visione`.
+- `audit_log`: trigger su tutte le tabelle anagrafiche/operative, accessi e cambi ruolo su `auth.users`.
+  Solo lettura per admin, nessuna scadenza. Esclusi per volume `programmazioni` e `ripartizioni`;
+  di `individuazioni` solo gli UPDATE fatti da un utente.
+
+Entry point:
+
+- `src/features/dashboard/components/DashboardScadenzeAlert.tsx`
+- `src/features/dashboard/services/alert-scadenze.service.ts`
+- `src/app/dashboard/registro-attivita/page.tsx`
+- `src/features/registro-attivita/*`
+- `supabase/migrations/20261012100300_alert_scadenze.sql`
+- `supabase/migrations/20261012100400_audit_log.sql`
+
+Rischi:
+
+- Una nuova tabella va aggiunta esplicitamente alla lista dei trigger `audit_log_trigger`.
+- Gli UPDATE senza utente (worker, service role) non vengono registrati.

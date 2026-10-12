@@ -17,14 +17,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle, Music } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
-import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
 type Opera = Database['public']['Tables']['opere']['Row']
@@ -160,7 +160,7 @@ export default function OperePage() {
   const applyFiltersToQuery = (query: ReturnType<typeof supabase.from>) => {
     let q = query
     if (typeFilter !== 'all') {
-      q = q.eq('tipo', typeFilter as 'film' | 'serie_tv' | 'animazione')
+      q = q.eq('tipo', typeFilter as TipoOpera)
     }
     for (const f of filters) {
       const hasValue = f.hasValue
@@ -279,6 +279,13 @@ export default function OperePage() {
             Animazione
           </Badge>
         )
+      case 'musicale':
+        return (
+          <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+            <Music className="h-3 w-3 mr-1" />
+            Opera musicale
+          </Badge>
+        )
       default:
         return (
           <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
@@ -340,7 +347,7 @@ export default function OperePage() {
     titolo: z.string().min(1, 'Titolo obbligatorio'),
     titolo_originale: z.string().optional().or(z.literal('')),
     alias_titoli: z.string().optional().or(z.literal('')), // Comma-separated, will be converted to array
-    tipo: z.enum(['film', 'serie_tv', 'animazione'], {
+    tipo: z.enum(['film', 'serie_tv', 'animazione', 'musicale'], {
       required_error: 'Tipo obbligatorio'
     }),
     has_episodes: z.boolean().optional(),
@@ -671,6 +678,7 @@ export default function OperePage() {
                 <SelectItem value="film">Film</SelectItem>
                 <SelectItem value="serie_tv">Serie TV</SelectItem>
                 <SelectItem value="animazione">Animazione</SelectItem>
+                <SelectItem value="musicale">Opera musicale</SelectItem>
               </SelectContent>
             </Select>
             <FilterPopover onAdd={addFilter} />
@@ -709,7 +717,7 @@ export default function OperePage() {
               )}
               {typeFilter !== 'all' && (
                 <Button variant="outline" size="sm" onClick={() => setTypeFilter('all')} className="h-8">
-                  Tipo: {typeFilter === 'serie_tv' ? 'Serie TV' : typeFilter === 'animazione' ? 'Animazione' : typeFilter}
+                  Tipo: {TIPO_OPERA_LABELS[typeFilter] ?? typeFilter}
                   <X className="h-3 w-3 ml-2" />
                 </Button>
               )}
@@ -1142,6 +1150,7 @@ export default function OperePage() {
                             <SelectItem value="film">Film</SelectItem>
                             <SelectItem value="serie_tv">Serie TV</SelectItem>
                             <SelectItem value="animazione">Animazione</SelectItem>
+                            <SelectItem value="musicale">Opera musicale</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

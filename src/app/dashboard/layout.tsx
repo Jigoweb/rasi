@@ -22,7 +22,8 @@ import {
   X,
   Sparkles,
   Shield,
-  Globe
+  Globe,
+  History
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -57,6 +58,7 @@ export default function DashboardLayout({
 
   // Menu item SOLO per admin
   const adminOnlyMenuItems = [
+    { name: 'Registro attività', href: '/dashboard/registro-attivita', icon: History },
     { name: 'Sito Pubblico', href: '/dashboard/cms/pages', icon: Globe },
   ]
 

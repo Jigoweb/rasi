@@ -1,15 +1,16 @@
 /**
  * Utility per la logica opere/episodi.
- * Separa "tipo opera" (film, serie_tv, animazione) da "ha episodi".
+ * Separa "tipo opera" (film, serie_tv, animazione, musicale) da "ha episodi".
  */
 
 export const TIPO_OPERA_LABELS: Record<string, string> = {
   film: 'Film',
   serie_tv: 'Serie TV',
   animazione: 'Animazione',
+  musicale: 'Opera musicale',
 } as const
 
-export type TipoOpera = 'film' | 'serie_tv' | 'animazione'
+export type TipoOpera = 'film' | 'serie_tv' | 'animazione' | 'musicale'
 
 export type TipoOperaValues = typeof TIPO_OPERA_LABELS
 

@@ -1,4 +1,4 @@
-import { codicePaeseTokenOr } from '@/features/artisti/lib/artista-display'
+import { codicePaeseTokenOr, type StatoIscrizione } from '@/features/artisti/lib/artista-display'
 import { supabase } from '@/shared/lib/supabase-client'
 
 export type ArtistaFieldFilter =
@@ -6,7 +6,7 @@ export type ArtistaFieldFilter =
   | { field: 'territorio'; value: 'WW' | 'WW-' | 'ITA' | 'ITA+' }
   | { field: 'diritti'; value: string }
   | { field: 'codice_paese'; value: string }
-  | { field: 'stato'; value: 'attivo' | 'sospeso' | 'cessato' }
+  | { field: 'stato'; value: StatoIscrizione }
   | { field: 'tipologia'; value: 'AIE' | 'PRODUTTORE' }
   | { field: 'ambito'; value: 'musica' | 'cinema' | 'entrambi' }
   | { field: 'ambito'; hasValue: boolean }
