@@ -30,6 +30,8 @@ import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
+import { listCastEsterno } from '@/features/opere/services/cast-esterno.service'
+import { buildCastExportRows, castExportFileName } from '@/features/opere/lib/cast-export'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -55,6 +57,7 @@ export default function OperaDetailPage() {
   const [imdbCreditsGrouped, setImdbCreditsGrouped] = useState<any>(null)
   const [loadingImdbCredits, setLoadingImdbCredits] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [isExportingCast, setIsExportingCast] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [pendingImdbTconst, setPendingImdbTconst] = useState<string | null>(null) // IMDb ID selezionato ma non ancora salvato
   const [isUpdatingTipo, setIsUpdatingTipo] = useState(false)
@@ -376,6 +379,33 @@ export default function OperaDetailPage() {
       alert('Errore durante l\'eliminazione: ' + (e?.message || 'Errore sconosciuto'))
     } finally {
       setIsBulkDeletingPartecipazioni(false)
+    }
+  }
+
+  // Excel con il cast inserito dagli operatori: partecipazioni RASI + cast esterno
+  const handleExportCastExcel = async () => {
+    if (!opera) return
+    setIsExportingCast(true)
+    try {
+      const { data: castEsterno, error: castError } = await listCastEsterno(operaId)
+      if (castError) throw castError
+      const rows = buildCastExportRows(partecipazioni, castEsterno ?? [], episodi)
+      if (rows.length === 0) {
+        toast.info('Nessun cast inserito per quest\'opera')
+        return
+      }
+      const XLSX = await import('xlsx')
+      const worksheet = XLSX.utils.json_to_sheet(rows)
+      worksheet['!cols'] = Object.keys(rows[0]).map((key) => ({
+        wch: Math.min(40, Math.max(key.length, ...rows.map((row) => String(row[key as keyof typeof row] ?? '').length)) + 2),
+      }))
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Cast')
+      XLSX.writeFile(workbook, castExportFileName(opera.titolo), { bookType: 'xlsx' })
+    } catch (e: any) {
+      toast.error(e?.message || 'Errore durante l\'esportazione del cast')
+    } finally {
+      setIsExportingCast(false)
     }
   }
 
@@ -1500,6 +1530,16 @@ export default function OperaDetailPage() {
             
             {/* Bottoni azioni */}
             <div className="flex gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCastExcel}
+                disabled={isExportingCast}
+                title="Partecipazioni RASI e cast esterno di quest'opera, con episodio"
+              >
+                {isExportingCast ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                Scarica cast (Excel)
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
