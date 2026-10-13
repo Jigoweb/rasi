@@ -344,7 +344,7 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
       opera_id,
       episodio_id,
       ruolo_id,
-      artisti ( id, nome, cognome, nome_arte ),
+      artisti ( id, nome, cognome, nome_arte, codice_ipn ),
       ruoli_tipologie ( id, nome, descrizione ),
       episodi ( id, numero_stagione, numero_episodio, titolo_episodio )
     `)
