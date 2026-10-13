@@ -584,6 +584,20 @@ export const getIndividuazioneRuntimeMode = (): 'worker' | 'legacy-serverless' =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
+/**
+ * Rende leggibili all'operatore gli errori tecnici del database restituiti dal
+ * worker, mantenendo il testo originale come dettaglio per l'assistenza.
+ */
+export const humanizeIndividuazioneError = (message: string | null | undefined): string | undefined => {
+  if (!message) return undefined
+  if (/statement timeout/i.test(message)) {
+    return 'Il database ha impiegato troppo tempo a rispondere. Riprova tra qualche minuto: ' +
+      "se l'individuazione era già avviata usa «Riprendi», il lavoro già fatto non va perso. " +
+      `(Dettaglio tecnico: ${message})`
+  }
+  return message
+}
+
 export const mapWorkerJobToProgress = (job: WorkerJobSnapshot): BatchProcessingProgress => ({
   phase: job.fase || 'processing',
   programmazioni_totali: job.programmazioni_totali ?? 0,
@@ -591,7 +605,7 @@ export const mapWorkerJobToProgress = (job: WorkerJobSnapshot): BatchProcessingP
   individuazioni_create: job.individuazioni_create ?? 0,
   current_chunk: job.current_chunk ?? 0,
   total_chunks: job.total_chunks ?? 0,
-  error: job.error ?? undefined,
+  error: humanizeIndividuazioneError(job.error),
 })
 
 export const mapCompletedWorkerJob = (
@@ -616,7 +630,7 @@ export const mapTerminalWorkerJobError = (
   job: WorkerJobSnapshot
 ): FinalizeCampagnaResponse | null => {
   if (job.stato !== 'error' && job.stato !== 'cancelled') return null
-  return { success: false, error: job.error || 'Job terminato con errore' }
+  return { success: false, error: humanizeIndividuazioneError(job.error) || 'Job terminato con errore' }
 }
 
 /** Cerca il job attivo (queued/running) più recente per una campagna. */

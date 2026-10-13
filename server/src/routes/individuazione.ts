@@ -75,6 +75,13 @@ individuazioneRouter.post('/start', requireAuth, async (req, res) => {
       tipo: 'individuazione',
       campagne_programmazione_id,
       created_by: req.userId ?? null,
+      opzioni: {
+        soglia_titolo: typeof soglia_titolo === 'number' && soglia_titolo > 0 ? soglia_titolo : 0.7,
+        artista_ids: Array.isArray(artista_ids) ? artista_ids : null,
+        mandato_override_artist_ids: Array.isArray(mandato_override_artist_ids)
+          ? mandato_override_artist_ids
+          : null,
+      },
     })
 
     // Fire-and-forget: non attendiamo il completamento del job.
