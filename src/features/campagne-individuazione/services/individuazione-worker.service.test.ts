@@ -2,6 +2,7 @@ import {
   findActiveWorkerJob,
   getIndividuazioneRuntimeMode,
   getWorkerUrl,
+  humanizeIndividuazioneError,
   initCampagnaIndividuazione,
   mapCompletedWorkerJob,
   mapTerminalWorkerJobError,
@@ -105,6 +106,17 @@ describe('individuazione worker service helpers', () => {
       error: 'Job terminato con errore',
     })
     expect(mapTerminalWorkerJobError(baseWorkerJob({ stato: 'running' }))).toBeNull()
+  })
+
+  it('explains database statement timeouts instead of showing the raw Postgres message', () => {
+    const raw = 'canceling statement due to statement timeout'
+    const terminal = mapTerminalWorkerJobError(baseWorkerJob({ stato: 'error', error: raw }))
+
+    expect(terminal?.error).toContain('Il database ha impiegato troppo tempo a rispondere')
+    expect(terminal?.error).toContain('Riprendi')
+    expect(terminal?.error).toContain(raw)
+    expect(mapWorkerJobToProgress(baseWorkerJob({ stato: 'error', error: raw })).error).toBe(terminal?.error)
+    expect(humanizeIndividuazioneError(null)).toBeUndefined()
   })
 
   it('maps nullable worker progress numbers to zero and null error to undefined', () => {

@@ -48,6 +48,26 @@ Vedi `.env.example`. Su Railway vanno impostate nel servizio:
 4. Il `railway.json` definisce start command (`npm start`) e healthcheck (`/health`).
 5. Esegui la migration `supabase/migrations/20260611120000_campaign_jobs.sql`
    sul database (Supabase) prima del primo avvio.
+6. Applica sempre le migration del worker **prima** del deploy del codice che
+   le usa (es. `get_campagna_programmazioni_batch`, `campaign_jobs.opzioni`).
+
+### Deploy con individuazioni in corso
+
+Ogni deploy riavvia il container. Alla ricezione di `SIGTERM` il worker rimette
+in coda (`stato = 'queued'`, `interrotto_at` valorizzato) i job di
+individuazione che stava eseguendo; il worker successivo, dopo 60 secondi, li
+riprende da solo sulla stessa riga `campaign_jobs`, con le stesse opzioni del
+run. Il browser che faceva polling vede il job ripartire senza azioni
+dell'operatore.
+
+Se il processo viene ucciso senza `SIGTERM` (crash, OOM) il job resta
+`running`: dopo 30 minuti senza avanzamento il recovery lo chiude in errore e
+l'operatore usa **Riprendi**. Per dare tempo alla marcatura, imposta su Railway
+`RAILWAY_DEPLOYMENT_DRAINING_SECONDS` (es. `15`).
+
+Ogni RPC passa da PostgREST con lo `statement_timeout` di 8s del ruolo
+`authenticator`: le query del loop non devono crescere con la dimensione
+della campagna (selezione lotti a cursore, totale da `programmazioni_count`).
 
 ## Endpoint
 
