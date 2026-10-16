@@ -34,6 +34,7 @@ export const createCastEsterno = async (operaId: string, row: CastEsternoInput, 
       nome: row.nome,
       personaggio: row.personaggio,
       primarieta: row.primarieta,
+      ruolo: row.ruolo,
       imdb_nconst: row.imdb_nconst,
       fonte: row.fonte,
       ordine: row.ordine,
@@ -46,7 +47,7 @@ export const createCastEsterno = async (operaId: string, row: CastEsternoInput, 
 
 export const updateCastEsterno = async (
   id: string,
-  patch: Partial<Pick<CastEsternoRow, 'nome' | 'personaggio' | 'primarieta' | 'ordine' | 'episodio_id'>>,
+  patch: Partial<Pick<CastEsternoRow, 'nome' | 'personaggio' | 'primarieta' | 'ruolo' | 'ordine' | 'episodio_id'>>,
 ) => {
   const { data, error } = await supabase
     .from('cast_esterno')

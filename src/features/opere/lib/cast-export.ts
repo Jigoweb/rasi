@@ -1,3 +1,5 @@
+import { formatRuoloPrimarieta } from './cast-esterno'
+
 /** Righe Excel del cast di un'opera: partecipazioni RASI + cast esterno inserito dagli operatori. */
 
 type EpisodioExport = {
@@ -18,6 +20,7 @@ export type CastEsternoExport = {
   nome: string
   personaggio: string | null
   primarieta: string
+  ruolo?: string | null
   episodio_id: string | null
 }
 
@@ -29,15 +32,12 @@ export type CastExportRow = {
   "Nome d'arte": string
   'Codice IPN': string
   Ruolo: string
-  'Primario/Comprimario': string
   Personaggio: string
   Stagione: number | ''
   Episodio: number | ''
   'Titolo episodio': string
   Note: string
 }
-
-const PRIMARIETA_LABEL: Record<string, string> = { primario: 'Primario', comprimario: 'Comprimario' }
 
 function episodioFields(episodio: EpisodioExport): Pick<CastExportRow, 'Stagione' | 'Episodio' | 'Titolo episodio'> {
   return {
@@ -60,7 +60,6 @@ export function buildCastExportRows(
     "Nome d'arte": p.artisti?.nome_arte ?? '',
     'Codice IPN': p.artisti?.codice_ipn ?? '',
     Ruolo: p.ruoli_tipologie?.nome ?? '',
-    'Primario/Comprimario': '',
     Personaggio: p.personaggio ?? '',
     ...episodioFields(p.episodi),
     Note: p.note ?? '',
@@ -71,8 +70,7 @@ export function buildCastExportRows(
     Nome: c.nome,
     "Nome d'arte": '',
     'Codice IPN': '',
-    Ruolo: '',
-    'Primario/Comprimario': PRIMARIETA_LABEL[c.primarieta] ?? c.primarieta,
+    Ruolo: formatRuoloPrimarieta(c.ruolo, c.primarieta),
     Personaggio: c.personaggio ?? '',
     ...episodioFields(c.episodio_id ? episodiById.get(c.episodio_id) ?? null : null),
     Note: '',

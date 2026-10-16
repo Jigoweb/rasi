@@ -15,10 +15,14 @@ import { getTitleCredits } from '@/features/opere/services/external/imdb.service
 import {
   formatEpisodioLabel,
   groupCastByEpisodio,
+  fromRuoloPrimarieta,
   mapImdbCreditsToCast,
+  RUOLO_PRIMARIETA_OPTIONS,
+  toRuoloPrimarieta,
   type CastEsternoInput,
   type EpisodioRef,
   type PrimarietaCast,
+  type RuoloCast,
 } from '@/features/opere/lib/cast-esterno'
 import {
   createCastEsterno,
@@ -31,11 +35,6 @@ import {
 } from '@/features/opere/services/cast-esterno.service'
 import { Download, Edit, Loader2, MoreHorizontal, Plus, Trash2, Tv, UserCheck, Users } from 'lucide-react'
 
-const PRIMARIETA_LABEL: Record<PrimarietaCast, string> = {
-  primario: 'Primario',
-  comprimario: 'Comprimario',
-}
-
 /** Valore Select per "intera opera/serie" (Radix non accetta value vuoto). */
 const SERIE_SCOPE = '__serie__'
 const ALL_SCOPE = '__all__'
@@ -47,6 +46,7 @@ type EditState = {
   nome: string
   personaggio: string
   primarieta: PrimarietaCast
+  ruolo: RuoloCast
   episodioScope: string
 }
 
@@ -57,6 +57,7 @@ function emptyDraft(): CastEsternoInput {
     nome: '',
     personaggio: null,
     primarieta: 'comprimario',
+    ruolo: 'attore',
     imdb_nconst: null,
     fonte: 'manuale',
     ordine: 0,
@@ -225,6 +226,7 @@ export function CastEsternoPanel({
       nome: row.nome,
       personaggio: row.personaggio ?? '',
       primarieta: row.primarieta,
+      ruolo: row.ruolo === 'doppiatore' ? 'doppiatore' : 'attore',
       episodioScope: row.episodio_id ?? SERIE_SCOPE,
     })
   }
@@ -242,6 +244,7 @@ export function CastEsternoPanel({
       nome,
       personaggio: editing.personaggio.trim() || null,
       primarieta: editing.primarieta,
+      ruolo: editing.ruolo,
       ...(hasEpisodi ? { episodio_id: scopeToEpisodioId(editing.episodioScope) } : {}),
     })
     setBusy(false)
@@ -253,9 +256,10 @@ export function CastEsternoPanel({
     await reload()
   }
 
-  const changePrimarieta = async (row: CastEsternoRow, primarieta: PrimarietaCast) => {
-    setRows((current) => current.map((item) => (item.id === row.id ? { ...item, primarieta } : item)))
-    const { error: updateError } = await updateCastEsterno(row.id, { primarieta })
+  const changeRuoloPrimarieta = async (row: CastEsternoRow, value: string) => {
+    const patch = fromRuoloPrimarieta(value)
+    setRows((current) => current.map((item) => (item.id === row.id ? { ...item, ...patch } : item)))
+    const { error: updateError } = await updateCastEsterno(row.id, patch)
     if (updateError) {
       setError(updateError.message)
       await reload()
@@ -300,13 +304,14 @@ export function CastEsternoPanel({
           )}
         </div>
         <Badge variant="outline">{row.fonte === 'imdb' ? 'IMDb' : 'Manuale'}</Badge>
-        <Select value={row.primarieta} onValueChange={(value) => changePrimarieta(row, value as PrimarietaCast)}>
-          <SelectTrigger className="w-full sm:w-[160px]" aria-label={`Primarietà di ${row.nome}`}>
+        <Select value={toRuoloPrimarieta(row.ruolo, row.primarieta)} onValueChange={(value) => changeRuoloPrimarieta(row, value)}>
+          <SelectTrigger className="w-full sm:w-[200px]" aria-label={`Ruolo di ${row.nome}`}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="primario">{PRIMARIETA_LABEL.primario}</SelectItem>
-            <SelectItem value="comprimario">{PRIMARIETA_LABEL.comprimario}</SelectItem>
+            {RUOLO_PRIMARIETA_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <DropdownMenu>
@@ -400,7 +405,7 @@ export function CastEsternoPanel({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm font-medium">
                 Anteprima da IMDb ({draft.rows.length}) per {draftTarget}.
-                {' '}Il salvataggio sostituisce il cast esterno già presente in questo ambito.
+                {' '}Il salvataggio sostituisce il cast esterno già presente in questo ambito. I nomi da IMDb entrano come attori: i doppiatori si correggono dopo.
               </p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setDraft(null)} disabled={busy}>Annulla</Button>
@@ -429,8 +434,8 @@ export function CastEsternoPanel({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="primario">Primario</SelectItem>
-                      <SelectItem value="comprimario">Comprimario</SelectItem>
+                      <SelectItem value="primario">Attore primario</SelectItem>
+                      <SelectItem value="comprimario">Attore comprimario</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -484,15 +489,16 @@ export function CastEsternoPanel({
             onChange={(event) => setManual((current) => ({ ...current, personaggio: event.target.value || null }))}
           />
           <Select
-            value={manual.primarieta}
-            onValueChange={(value) => setManual((current) => ({ ...current, primarieta: value as PrimarietaCast }))}
+            value={toRuoloPrimarieta(manual.ruolo, manual.primarieta)}
+            onValueChange={(value) => setManual((current) => ({ ...current, ...fromRuoloPrimarieta(value) }))}
           >
-            <SelectTrigger aria-label="Primarietà nuovo cast">
+            <SelectTrigger aria-label="Ruolo nuovo cast">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="primario">Primario</SelectItem>
-              <SelectItem value="comprimario">Comprimario</SelectItem>
+              {RUOLO_PRIMARIETA_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
             </SelectContent>
           </Select>
           {hasEpisodi && (
@@ -520,7 +526,7 @@ export function CastEsternoPanel({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Modifica cast esterno</DialogTitle>
-            <DialogDescription>Correggi nome, personaggio, primarietà{hasEpisodi ? ' o episodio' : ''}.</DialogDescription>
+            <DialogDescription>Correggi nome, personaggio, ruolo{hasEpisodi ? ' o episodio' : ''}.</DialogDescription>
           </DialogHeader>
           {editing && (
             <div className="space-y-4 py-2">
@@ -541,17 +547,18 @@ export function CastEsternoPanel({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="cast-edit-primarieta">Primarietà</Label>
+                <Label htmlFor="cast-edit-primarieta">Ruolo</Label>
                 <Select
-                  value={editing.primarieta}
-                  onValueChange={(value) => setEditing({ ...editing, primarieta: value as PrimarietaCast })}
+                  value={toRuoloPrimarieta(editing.ruolo, editing.primarieta)}
+                  onValueChange={(value) => setEditing({ ...editing, ...fromRuoloPrimarieta(value) })}
                 >
                   <SelectTrigger id="cast-edit-primarieta">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="primario">Primario</SelectItem>
-                    <SelectItem value="comprimario">Comprimario</SelectItem>
+                    {RUOLO_PRIMARIETA_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
                   </SelectContent>
                 </Select>
               </div>

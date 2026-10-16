@@ -276,6 +276,7 @@ export type Database = {
           ordine: number
           personaggio: string | null
           primarieta: Database["public"]["Enums"]["primarieta_cast"]
+          ruolo: string
           updated_at: string | null
         }
         Insert: {
@@ -289,6 +290,7 @@ export type Database = {
           ordine?: number
           personaggio?: string | null
           primarieta?: Database["public"]["Enums"]["primarieta_cast"]
+          ruolo?: string
           updated_at?: string | null
         }
         Update: {
@@ -302,6 +304,7 @@ export type Database = {
           ordine?: number
           personaggio?: string | null
           primarieta?: Database["public"]["Enums"]["primarieta_cast"]
+          ruolo?: string
           updated_at?: string | null
         }
         Relationships: [
