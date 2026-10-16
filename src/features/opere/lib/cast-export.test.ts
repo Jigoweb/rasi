@@ -13,7 +13,7 @@ describe('buildCastExportRows', () => {
         },
       ],
       [
-        { nome: 'Anna Verdi', personaggio: null, primarieta: 'comprimario', episodio_id: 'e2' },
+        { nome: 'Anna Verdi', personaggio: null, primarieta: 'comprimario', ruolo: 'doppiatore', episodio_id: 'e2' },
         { nome: 'Luca Neri', personaggio: 'Il capo', primarieta: 'primario', episodio_id: null },
       ],
       [{ id: 'e2', numero_stagione: 1, numero_episodio: 2, titolo_episodio: 'Due' }],
@@ -24,7 +24,8 @@ describe('buildCastExportRows', () => {
       ['RASI', 'Mario Rossi', 1, 2],
       ['Esterno', 'Anna Verdi', 1, 2],
     ])
-    expect(rows[0]['Primario/Comprimario']).toBe('Primario')
+    expect(rows[0].Ruolo).toBe('Attore primario')
+    expect(rows[2].Ruolo).toBe('Doppiatore comprimario')
     expect(rows[1]).toEqual(expect.objectContaining({ 'Codice IPN': 'IPN1', Ruolo: 'Protagonista', Note: 'nota' }))
   })
 })

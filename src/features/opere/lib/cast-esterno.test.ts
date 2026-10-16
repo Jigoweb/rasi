@@ -1,6 +1,9 @@
 import {
   formatEpisodioLabel,
+  formatRuoloPrimarieta,
+  fromRuoloPrimarieta,
   groupCastByEpisodio,
+  toRuoloPrimarieta,
   mapImdbCreditsToCast,
   primarietaFromCredit,
   suggestRuoloPerPrimarieta,
@@ -19,6 +22,7 @@ describe('cast esterno', () => {
         nome: 'Colin Firth',
         personaggio: 'Harry',
         primarieta: 'primario',
+        ruolo: 'attore',
         imdb_nconst: 'nm123',
         fonte: 'imdb',
         ordine: 0,
@@ -27,6 +31,7 @@ describe('cast esterno', () => {
         nome: 'Extra',
         personaggio: null,
         primarieta: 'comprimario',
+        ruolo: 'attore',
         imdb_nconst: null,
         fonte: 'imdb',
         ordine: 1,
@@ -54,6 +59,16 @@ describe('suggestRuoloPerPrimarieta', () => {
     expect(suggestRuoloPerPrimarieta('comprimario', ruoli)).toBe('cp')
   })
 
+  it('maps doppiatori to dubbing roles only', () => {
+    const conDoppiaggio = [
+      ...ruoli,
+      { id: 'dc', nome: 'Doppiatore comprimario', categoria: 'doppiaggio' },
+    ]
+    expect(suggestRuoloPerPrimarieta('primario', conDoppiaggio, 'doppiatore')).toBe('dop')
+    expect(suggestRuoloPerPrimarieta('comprimario', conDoppiaggio, 'doppiatore')).toBe('dc')
+    expect(suggestRuoloPerPrimarieta('comprimario', ruoli, 'doppiatore')).toBeNull()
+  })
+
   it('returns null when nothing matches', () => {
     expect(suggestRuoloPerPrimarieta('primario', [{ id: 'x', nome: 'Regia', categoria: 'direzione' }])).toBeNull()
   })
@@ -77,5 +92,14 @@ describe('groupCastByEpisodio', () => {
     expect(groups.map((group) => group.episodio?.id ?? null)).toEqual([null, 'e1', 'e2'])
     expect(formatEpisodioLabel(groups[1].episodio)).toBe('S1E1 – Pilota')
     expect(formatEpisodioLabel(null)).toBe('Tutta la serie')
+  })
+})
+
+describe('ruolo e primarietà', () => {
+  it('round-trips the combined select value', () => {
+    expect(toRuoloPrimarieta('doppiatore', 'primario')).toBe('doppiatore:primario')
+    expect(toRuoloPrimarieta(null, 'comprimario')).toBe('attore:comprimario')
+    expect(fromRuoloPrimarieta('doppiatore:comprimario')).toEqual({ ruolo: 'doppiatore', primarieta: 'comprimario' })
+    expect(formatRuoloPrimarieta('attore', 'primario')).toBe('Attore primario')
   })
 })

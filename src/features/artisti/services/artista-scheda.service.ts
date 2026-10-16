@@ -9,7 +9,7 @@ export type ArtistaReferenteInput = Omit<
 > & { tipo: TipoReferente }
 
 export type CastEsternoCorrispondente =
-  Database['public']['Functions']['cerca_cast_esterno_per_artista']['Returns'][number]
+  Database['public']['Functions']['cerca_cast_esterno_per_artista']['Returns'][number] & { ruolo: string }
 
 export const getArtistaNote = async (artistaId: string) => {
   const { data, error } = await supabase
@@ -78,8 +78,20 @@ export const cercaCastEsternoPerArtista = async (artistaId: string) => {
   const { data, error } = await supabase.rpc('cerca_cast_esterno_per_artista', {
     p_artista_id: artistaId,
   })
+  const rows = data ?? []
+  if (error || rows.length === 0) return { data: [] as CastEsternoCorrispondente[], error }
 
-  return { data: (data ?? []) as CastEsternoCorrispondente[], error }
+  // Attore o doppiatore: serve per proporre il ruolo RASI giusto.
+  const { data: ruoli } = await supabase
+    .from('cast_esterno')
+    .select('id, ruolo')
+    .in('id', rows.map((row) => row.cast_id))
+  const ruoloById = new Map((ruoli ?? []).map((row) => [row.id, row.ruolo]))
+
+  return {
+    data: rows.map((row) => ({ ...row, ruolo: ruoloById.get(row.cast_id) ?? 'attore' })),
+    error: null,
+  }
 }
 
 /** Converte le righe confermate in partecipazioni RASI. Ritorna quante ne ha create. */

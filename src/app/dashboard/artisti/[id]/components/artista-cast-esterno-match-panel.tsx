@@ -8,7 +8,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { formatEpisodioLabel, suggestRuoloPerPrimarieta, type RuoloOption } from '@/features/opere/lib/cast-esterno'
+import { formatEpisodioLabel, formatRuoloPrimarieta, suggestRuoloPerPrimarieta, type RuoloOption } from '@/features/opere/lib/cast-esterno'
 import {
   cercaCastEsternoPerArtista,
   convertiCastEsternoInPartecipazioni,
@@ -56,7 +56,7 @@ export function ArtistaCastEsternoMatchPanel({
       const next = { ...current }
       for (const row of matches) {
         if (!next[row.cast_id]) {
-          const suggested = suggestRuoloPerPrimarieta(row.primarieta, ruoli)
+          const suggested = suggestRuoloPerPrimarieta(row.primarieta, ruoli, row.ruolo)
           if (suggested) next[row.cast_id] = suggested
         }
       }
@@ -141,7 +141,7 @@ export function ArtistaCastEsternoMatchPanel({
                   {` · scritto «${row.nome}»`}
                 </div>
               </div>
-              <Badge variant="outline">{row.primarieta === 'primario' ? 'Primario' : 'Comprimario'}</Badge>
+              <Badge variant="outline">{formatRuoloPrimarieta(row.ruolo, row.primarieta)}</Badge>
               {row.corrispondenza === 'imdb' && <Badge variant="secondary">IMDb</Badge>}
               <Select
                 value={ruoloByCast[row.cast_id] ?? ''}

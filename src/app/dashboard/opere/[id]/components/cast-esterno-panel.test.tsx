@@ -28,6 +28,7 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   nome: 'Mario Rossi',
   personaggio: 'Il medico',
   primarieta: 'primario',
+  ruolo: 'attore',
   imdb_nconst: null,
   fonte: 'manuale',
   ordine: 0,
@@ -75,6 +76,7 @@ describe('CastEsternoPanel', () => {
         nome: 'Mario Bianchi',
         personaggio: 'Il dottore',
         primarieta: 'primario',
+        ruolo: 'attore',
       })
     })
   })

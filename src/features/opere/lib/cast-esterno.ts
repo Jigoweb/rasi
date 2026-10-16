@@ -1,4 +1,33 @@
 export type PrimarietaCast = 'primario' | 'comprimario'
+export type RuoloCast = 'attore' | 'doppiatore'
+/** Valore unico per le select: "attore:primario", "doppiatore:comprimario"… */
+export type RuoloPrimarieta = `${RuoloCast}:${PrimarietaCast}`
+
+export const RUOLO_PRIMARIETA_OPTIONS: { value: RuoloPrimarieta; label: string }[] = [
+  { value: 'attore:primario', label: 'Attore primario' },
+  { value: 'attore:comprimario', label: 'Attore comprimario' },
+  { value: 'doppiatore:primario', label: 'Doppiatore primario' },
+  { value: 'doppiatore:comprimario', label: 'Doppiatore comprimario' },
+]
+
+export function toRuoloPrimarieta(ruolo: string | null | undefined, primarieta: string): RuoloPrimarieta {
+  const r: RuoloCast = ruolo === 'doppiatore' ? 'doppiatore' : 'attore'
+  const p: PrimarietaCast = primarieta === 'primario' ? 'primario' : 'comprimario'
+  return `${r}:${p}`
+}
+
+export function fromRuoloPrimarieta(value: string): { ruolo: RuoloCast; primarieta: PrimarietaCast } {
+  const [ruolo, primarieta] = value.split(':')
+  return {
+    ruolo: ruolo === 'doppiatore' ? 'doppiatore' : 'attore',
+    primarieta: primarieta === 'primario' ? 'primario' : 'comprimario',
+  }
+}
+
+export function formatRuoloPrimarieta(ruolo: string | null | undefined, primarieta: string): string {
+  const value = toRuoloPrimarieta(ruolo, primarieta)
+  return RUOLO_PRIMARIETA_OPTIONS.find((option) => option.value === value)?.label ?? value
+}
 export type FonteCastEsterno = 'imdb' | 'manuale'
 
 export interface ImdbCastCredit {
@@ -14,6 +43,7 @@ export interface CastEsternoInput {
   nome: string
   personaggio: string | null
   primarieta: PrimarietaCast
+  ruolo: RuoloCast
   imdb_nconst: string | null
   fonte: FonteCastEsterno
   ordine: number
@@ -33,6 +63,7 @@ export function mapImdbCreditsToCast(credits: ImdbCastCredit[]): CastEsternoInpu
       nome: credit.name!.trim(),
       personaggio: credit.character?.trim() || null,
       primarieta: primarietaFromCredit(credit),
+      ruolo: 'attore' as const,
       imdb_nconst: credit.id?.trim() || null,
       fonte: 'imdb' as const,
       ordine: index,
@@ -50,7 +81,20 @@ export interface RuoloOption {
  * primario → "Protagonista…" (o un ruolo "primario" che non sia comprimario),
  * comprimario → "Comprimario…". Nessuna corrispondenza → l'operatore sceglie.
  */
-export function suggestRuoloPerPrimarieta(primarieta: string, ruoli: RuoloOption[]): string | null {
+export function suggestRuoloPerPrimarieta(
+  primarieta: string,
+  ruoli: RuoloOption[],
+  ruoloCast: string = 'attore',
+): string | null {
+  if (ruoloCast === 'doppiatore') {
+    // Solo ruoli di doppiaggio: un doppiatore non va proposto come protagonista.
+    const doppiaggio = ruoli.filter((ruolo) => ruolo.categoria === 'doppiaggio' || /doppi/i.test(ruolo.nome))
+    const find = (pattern: RegExp, exclude?: RegExp) =>
+      doppiaggio.find((ruolo) => pattern.test(ruolo.nome) && !(exclude && exclude.test(ruolo.nome)))?.id ?? null
+    if (primarieta === 'primario') return find(/primari|protagonist|principal/i, /comprimari/i)
+    return find(/comprimari|secondari/i)
+  }
+
   const recitazione = ruoli.filter((ruolo) => !ruolo.categoria || ruolo.categoria === 'recitazione')
   const pool = recitazione.length > 0 ? recitazione : ruoli
   const byName = (pattern: RegExp, exclude?: RegExp) =>
