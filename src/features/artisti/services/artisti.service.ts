@@ -110,6 +110,15 @@ export const getArtisti = async (filters?: {
   return { data, error }
 }
 
+/** Codici paese grezzi di tutti gli artisti, per il menu del filtro (senza gli altri filtri della lista). */
+export const getCodiciPaeseArtisti = async () => {
+  const { data, error } = await supabase
+    .from('artisti')
+    .select('codice_paese')
+
+  return { data, error }
+}
+
 /**
  * Fetches a single artist by their ID.
  * @param id - The ID of the artist to fetch.

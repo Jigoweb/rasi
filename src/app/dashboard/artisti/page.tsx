@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getArtisti, getPartecipazioniCountByArtistaId, deleteArtista, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
+import { getArtisti, getCodiciPaeseArtisti, getPartecipazioniCountByArtistaId, deleteArtista, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
@@ -24,9 +24,12 @@ import {
   TERRITORIO_OPTIONS,
   formatAmbitoLabel,
   formatDirittiCompact,
+  formatPaeseOption,
+  paesiOptionsInUso,
   parseDirittiAttivi,
   resolveAmbito,
   shouldShowFineMandato,
+  type PaeseCatalogo,
   type AmbitoArtista,
   STATO_LABELS,
   STATO_OPTIONS,
@@ -53,13 +56,19 @@ const ARTISTI_FIELD_LABELS: Record<string, string> = {
 }
 
 const DIRITTI_OPTIONS = dirittiCatalog.diritti.map((d) => d.nome)
-const PAESI_OPTIONS = [
+const PAESI_CATALOGO: PaeseCatalogo[] = [
   ...paesiCatalog.paesi,
   { codice: 'EU', nome: 'Europa (EU)' },
   { codice: 'EUROPA', nome: 'Europa' },
 ]
 
-function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => void }) {
+function ArtistiFilterPopover({
+  onAdd,
+  paesiOptions,
+}: {
+  onAdd: (f: ArtistaFieldFilter) => void
+  paesiOptions: PaeseCatalogo[]
+}) {
   const [open, setOpen] = useState(false)
   const [field, setField] = useState<string>('')
   const [hasValue, setHasValue] = useState<boolean>(true)
@@ -198,16 +207,20 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
               </SelectContent>
             </Select>
           ) : field === 'codice_paese' ? (
-            <Select value={paeseValue} onValueChange={setPaeseValue}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona paese" />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {PAESI_OPTIONS.map((paese) => (
-                  <SelectItem key={paese.codice} value={paese.codice}>{paese.nome} ({paese.codice})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            paesiOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nessun paese in anagrafica</p>
+            ) : (
+              <Select value={paeseValue} onValueChange={setPaeseValue}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona paese" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {paesiOptions.map((paese) => (
+                    <SelectItem key={paese.codice} value={paese.codice}>{formatPaeseOption(paese)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )
           ) : field ? (
             <Select value={hasValue ? 'si' : 'no'} onValueChange={(v) => setHasValue(v === 'si')}>
               <SelectTrigger>
@@ -245,6 +258,7 @@ export default function ArtistiPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [artisti, setArtisti] = useState<Artista[]>([])
+  const [paesiInUso, setPaesiInUso] = useState<PaeseCatalogo[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [tipologiaFilter, setTipologiaFilter] = useState<'all' | true | false>('all')
@@ -267,9 +281,19 @@ export default function ArtistiPage() {
   const [partecipazioniCount, setPartecipazioniCount] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
   
+  const loadPaesiInUso = useCallback(async () => {
+    const { data, error } = await getCodiciPaeseArtisti()
+    if (error || !data) return
+    setPaesiInUso(paesiOptionsInUso(data.map((row) => row.codice_paese), PAESI_CATALOGO))
+  }, [])
+
   useEffect(() => {
     fetchArtisti()
   }, [searchQuery, tipologiaFilter, filters, incompleteMode])
+
+  useEffect(() => {
+    loadPaesiInUso()
+  }, [loadPaesiInUso])
 
   useEffect(() => {
     if (searchParams?.get('incomplete') === '1') {
@@ -377,8 +401,8 @@ export default function ArtistiPage() {
     }
     if (f.field === 'diritti' && 'value' in f) return `Diritti: ${f.value}`
     if (f.field === 'codice_paese' && 'value' in f) {
-      const paese = PAESI_OPTIONS.find((p) => p.codice === f.value)
-      return `Paese: ${paese ? `${paese.nome} (${paese.codice})` : f.value}`
+      const paese = paesiInUso.find((p) => p.codice === f.value)
+      return `Paese: ${paese ? formatPaeseOption(paese) : f.value}`
     }
     if ('value' in f) {
       if (f.field === 'stato') {
@@ -521,6 +545,7 @@ export default function ArtistiPage() {
     
     // Refresh list and close dialog
     await fetchArtisti()
+    await loadPaesiInUso()
     setShowDeleteDialog(false)
     setArtistToDelete(null)
     setDeleteCheckStatus('idle')
@@ -588,7 +613,7 @@ export default function ArtistiPage() {
                 <SelectItem value="false">Esterni</SelectItem>
               </SelectContent>
             </Select>
-            <ArtistiFilterPopover onAdd={addFilter} />
+            <ArtistiFilterPopover onAdd={addFilter} paesiOptions={paesiInUso} />
             <Button
               variant="outline"
               onClick={() => {
@@ -1038,6 +1063,7 @@ export default function ArtistiPage() {
                   }
                   setSubmitStatus('success')
                   await fetchArtisti()
+                  await loadPaesiInUso()
                 } catch (e) {
                   console.error(e)
                   setSubmitError(e instanceof Error ? e.message : 'Errore sconosciuto')

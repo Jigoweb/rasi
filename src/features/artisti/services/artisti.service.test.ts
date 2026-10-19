@@ -1,5 +1,5 @@
 import { supabase } from '@/shared/lib/supabase-client'
-import { getArtisti, getArtistaById, getPartecipazioniByArtistaId, createArtista, updateArtista, ARTISTI_INCOMPLETE_OR } from './artisti.service'
+import { getArtisti, getArtistaById, getCodiciPaeseArtisti, getPartecipazioniByArtistaId, createArtista, updateArtista, ARTISTI_INCOMPLETE_OR } from './artisti.service'
 import type { TablesInsert, TablesUpdate } from '@/shared/lib/supabase'
 
 const mockSingle: jest.Mock = jest.fn()
@@ -159,6 +159,18 @@ describe('Artisti Service', () => {
       expect(mockOr).toHaveBeenCalledWith(
         'codice_paese.eq.FRA,codice_paese.like.FRA/%,codice_paese.like.%/FRA,codice_paese.like.%/FRA/%',
       )
+    })
+  })
+
+  describe('getCodiciPaeseArtisti', () => {
+    it('reads only codice_paese so the filter menu can list codes in use', async () => {
+      mockSelect.mockResolvedValueOnce({ data: [{ codice_paese: 'FRA/ES' }], error: null })
+
+      const { data } = await getCodiciPaeseArtisti()
+
+      expect(supabase.from).toHaveBeenCalledWith('artisti')
+      expect(mockSelect).toHaveBeenCalledWith('codice_paese')
+      expect(data).toEqual([{ codice_paese: 'FRA/ES' }])
     })
   })
 
