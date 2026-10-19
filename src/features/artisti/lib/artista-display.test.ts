@@ -3,6 +3,8 @@ import {
   deriveAmbitoFromDiritti,
   formatAmbitoLabel,
   formatDirittiCompact,
+  formatPaeseOption,
+  paesiOptionsInUso,
   parseDirittiAttivi,
   resolveAmbito,
   shouldShowFineMandato,
@@ -90,6 +92,34 @@ describe('artista-display', () => {
 
     it('rejects codes that could widen the like pattern', () => {
       expect(() => codicePaeseTokenOr('FR%')).toThrow('codice_paese_non_valido')
+    })
+  })
+
+  describe('paesiOptionsInUso', () => {
+    const catalogo = [
+      { codice: 'FRA', nome: 'Francia' },
+      { codice: 'DEU', nome: 'Germania' },
+      { codice: 'ESP', nome: 'Spagna' },
+      { codice: 'EU', nome: 'Europa (EU)' },
+      { codice: 'EUROPA', nome: 'Europa' },
+    ]
+
+    it('keeps only tokens stored in codice_paese, including those in the middle of a list', () => {
+      expect(paesiOptionsInUso(['ROU/FRA/ES', '  eu/jp ', null, ''], catalogo).map((p) => p.codice))
+        .toEqual(['ES', 'EU', 'FRA', 'JP', 'ROU'])
+    })
+
+    it('uses the catalog label and still lists codes the catalog does not know', () => {
+      const options = paesiOptionsInUso(['FRA/ES', 'EUROPA'], catalogo)
+      expect(options).toEqual([
+        { codice: 'ES', nome: 'ES' },
+        { codice: 'EUROPA', nome: 'Europa' },
+        { codice: 'FRA', nome: 'Francia' },
+      ])
+      expect(formatPaeseOption(options[0])).toBe('ES')
+      expect(formatPaeseOption(options[1])).toBe('Europa (EUROPA)')
+      expect(formatPaeseOption(options[2])).toBe('Francia (FRA)')
+      expect(options.map((p) => p.codice)).not.toContain('DEU')
     })
   })
 

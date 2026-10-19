@@ -72,6 +72,42 @@ export function codicePaeseTokenOr(code: string): string {
   return tokens.flatMap(paeseTokenClauses).join(',')
 }
 
+export type PaeseCatalogo = { codice: string; nome: string }
+
+/**
+ * Codici paese presenti in `codice_paese` (token separati da `/`),
+ * con il nome del catalogo quando esiste. I codici assenti dal catalogo restano selezionabili.
+ */
+export function paesiOptionsInUso(
+  valori: Array<string | null | undefined>,
+  catalogo: PaeseCatalogo[],
+): PaeseCatalogo[] {
+  const nomi = new Map<string, string>()
+  for (const voce of catalogo) {
+    const codice = voce.codice.trim().toUpperCase()
+    if (!codice || nomi.has(codice)) continue
+    nomi.set(codice, voce.nome)
+  }
+
+  const presenti = new Set<string>()
+  for (const valore of valori) {
+    if (!valore) continue
+    for (const parte of valore.split('/')) {
+      const codice = parte.trim().toUpperCase()
+      if (codice) presenti.add(codice)
+    }
+  }
+
+  return [...presenti]
+    .map((codice) => ({ codice, nome: nomi.get(codice) ?? codice }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'it') || a.codice.localeCompare(b.codice, 'it'))
+}
+
+export function formatPaeseOption(paese: PaeseCatalogo): string {
+  if (paese.nome === paese.codice) return paese.codice
+  return `${paese.nome} (${paese.codice})`
+}
+
 export function formatAmbitoLabel(ambito: AmbitoArtista | null | undefined): string {
   if (!ambito) return '—'
   return AMBITO_LABELS[ambito] ?? ambito
