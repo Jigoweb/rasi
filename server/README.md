@@ -45,7 +45,19 @@ Vedi `.env.example`. Su Railway vanno impostate nel servizio:
 1. Railway → New Service → from GitHub repo `jigoweb/rasi`.
 2. Settings → **Root Directory = `server`** (così builda solo questa cartella).
 3. Aggiungi le variabili d'ambiente sopra.
-4. Il `railway.json` definisce start command (`npm start`) e healthcheck (`/health`).
+4. Imposta nei Settings del servizio gli stessi valori di `server/railway.json`:
+   - **Start Command** `./node_modules/.bin/tsx src/index.ts`: Node deve
+     ricevere direttamente il `SIGTERM`. Con `npm start` npm inoltra il
+     segnale a `sh -c`, che muore senza passarlo al worker (vedi sotto);
+   - **Watch Paths** `/server/**`: le modifiche solo frontend non riavviano
+     il worker (i pattern partono dalla radice del repo anche con Root
+     Directory `server`);
+   - **Healthcheck Path** `/health`.
+
+   Railway non legge `server/railway.json` da solo: con Root Directory
+   `server` il file di configurazione va indicato con percorso assoluto
+   (`/server/railway.json`), e Config as Code è deprecato. Il file resta come
+   riferimento versionato ed è verificato da `src/test/shutdown.test.ts`.
 5. Esegui la migration `supabase/migrations/20260611120000_campaign_jobs.sql`
    sul database (Supabase) prima del primo avvio.
 6. Applica sempre le migration del worker **prima** del deploy del codice che
@@ -59,6 +71,11 @@ individuazione che stava eseguendo; il worker successivo, dopo 60 secondi, li
 riprende da solo sulla stessa riga `campaign_jobs`, con le stesse opzioni del
 run. Il browser che faceva polling vede il job ripartire senza azioni
 dell'operatore.
+
+Il gestore funziona solo se il `SIGTERM` arriva a Node: per questo lo start
+command non deve passare da npm/yarn/pnpm. Il 19/10 un'individuazione di IRIS
+2024 è rimasta `running` dopo un deploy proprio perché il servizio partiva
+con `npm start`.
 
 Se il processo viene ucciso senza `SIGTERM` (crash, OOM) il job resta
 `running`: dopo 30 minuti senza avanzamento il recovery lo chiude in errore e
