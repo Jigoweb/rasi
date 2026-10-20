@@ -32,7 +32,7 @@ CREATE TRIGGER opera_aliases_normalize
   FOR EACH ROW
   EXECUTE FUNCTION public.trg_alias_normalize();
 
--- Backfill strict norm for existing rows (historical aliases from 20260525143201)
+-- Backfill strict norm for existing rows (historical aliases from 20260526123945)
 UPDATE public.opera_aliases
 SET alias_titolo_norm_strict = public.build_match_key_strict(alias_titolo, alias_anno)
 WHERE alias_titolo_norm_strict IS NULL;
