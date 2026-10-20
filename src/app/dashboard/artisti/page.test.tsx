@@ -13,6 +13,7 @@ jest.mock('next/navigation', () => ({
 // Mock ArtistiService
 jest.mock('@/features/artisti/services/artisti.service', () => ({
   getArtisti: jest.fn(),
+  getCodiciPaeseArtisti: jest.fn(),
   getPartecipazioniCountByArtistaId: jest.fn(),
   deleteArtista: jest.fn(),
   createArtista: jest.fn(),
@@ -36,6 +37,10 @@ describe('ArtistiPage', () => {
     (useRouter as jest.Mock).mockReturnValue({ push, replace });
     (useSearchParams as jest.Mock).mockReturnValue(new URLSearchParams());
     (ArtistiService.getArtisti as jest.Mock).mockResolvedValue({ data: mockArtisti, error: null });
+    (ArtistiService.getCodiciPaeseArtisti as jest.Mock).mockResolvedValue({
+      data: [{ codice_paese: 'ROU/FRA/ES' }, { codice_paese: 'EU/JP' }, { codice_paese: null }],
+      error: null,
+    });
   });
 
   afterEach(() => {
@@ -95,6 +100,13 @@ describe('ArtistiPage', () => {
 
     await waitFor(() => {
       expect(screen.getAllByText('Mario Rossi').length).toBeGreaterThan(0)
+    })
+  });
+
+  it('loads country codes used by artisti for the Paese filter', async () => {
+    render(<ArtistiPage />);
+    await waitFor(() => {
+      expect(ArtistiService.getCodiciPaeseArtisti).toHaveBeenCalled()
     })
   });
 

@@ -9,6 +9,7 @@ import { DashboardAttentionQueue } from '@/features/dashboard/components/Dashboa
 import { DashboardDataHealthCard } from '@/features/dashboard/components/DashboardDataHealthCard'
 import { DashboardExportFooter } from '@/features/dashboard/components/DashboardExportFooter'
 import { DashboardKpiStrip } from '@/features/dashboard/components/DashboardKpiStrip'
+import { DashboardScadenzeAlert } from '@/features/dashboard/components/DashboardScadenzeAlert'
 import type { AttentionItem } from '@/features/dashboard/components/dashboard-home.types'
 import { countMetricsByImpact } from '@/features/dashboard/services/catalog-health-impact'
 import {
@@ -225,6 +226,8 @@ export default function DashboardPage() {
       />
 
       <DashboardAttentionQueue items={attentionItems} loading={attentionLoading || healthLoading} />
+
+      <DashboardScadenzeAlert />
 
       <DashboardActivityFeed items={attivitaRecenti} loading={loading} />
 

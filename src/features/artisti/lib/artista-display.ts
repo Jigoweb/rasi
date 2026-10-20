@@ -72,6 +72,42 @@ export function codicePaeseTokenOr(code: string): string {
   return tokens.flatMap(paeseTokenClauses).join(',')
 }
 
+export type PaeseCatalogo = { codice: string; nome: string }
+
+/**
+ * Codici paese presenti in `codice_paese` (token separati da `/`),
+ * con il nome del catalogo quando esiste. I codici assenti dal catalogo restano selezionabili.
+ */
+export function paesiOptionsInUso(
+  valori: Array<string | null | undefined>,
+  catalogo: PaeseCatalogo[],
+): PaeseCatalogo[] {
+  const nomi = new Map<string, string>()
+  for (const voce of catalogo) {
+    const codice = voce.codice.trim().toUpperCase()
+    if (!codice || nomi.has(codice)) continue
+    nomi.set(codice, voce.nome)
+  }
+
+  const presenti = new Set<string>()
+  for (const valore of valori) {
+    if (!valore) continue
+    for (const parte of valore.split('/')) {
+      const codice = parte.trim().toUpperCase()
+      if (codice) presenti.add(codice)
+    }
+  }
+
+  return [...presenti]
+    .map((codice) => ({ codice, nome: nomi.get(codice) ?? codice }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'it') || a.codice.localeCompare(b.codice, 'it'))
+}
+
+export function formatPaeseOption(paese: PaeseCatalogo): string {
+  if (paese.nome === paese.codice) return paese.codice
+  return `${paese.nome} (${paese.codice})`
+}
+
 export function formatAmbitoLabel(ambito: AmbitoArtista | null | undefined): string {
   if (!ambito) return '—'
   return AMBITO_LABELS[ambito] ?? ambito
@@ -102,5 +138,31 @@ export function formatDirittiCompact(diritti: Json | null | undefined, maxVisibl
 }
 
 export function shouldShowFineMandato(stato: string | null | undefined): boolean {
-  return stato === 'cessato' || stato === 'sospeso'
+  return stato === 'cessato' || stato === 'sospeso' || stato === 'deceduto'
+}
+
+export type StatoIscrizione = Database['public']['Enums']['stato_iscrizione']
+
+export const STATO_LABELS: Record<StatoIscrizione, string> = {
+  attivo: 'Attivo',
+  minorenne: 'Minorenne',
+  sospeso: 'Sospeso',
+  cessato: 'Cessato',
+  deceduto: 'Deceduto',
+}
+
+export const STATO_OPTIONS = Object.keys(STATO_LABELS) as StatoIscrizione[]
+
+export function formatStatoLabel(stato: string | null | undefined): string {
+  if (!stato) return '—'
+  return STATO_LABELS[stato as StatoIscrizione] ?? stato
+}
+
+export type TipoReferente = 'tutore' | 'erede'
+
+/** Minorenne → tutori legali, deceduto → eredi. */
+export function tipoReferentePerStato(stato: string | null | undefined): TipoReferente | null {
+  if (stato === 'minorenne') return 'tutore'
+  if (stato === 'deceduto') return 'erede'
+  return null
 }

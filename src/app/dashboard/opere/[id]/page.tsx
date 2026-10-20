@@ -18,7 +18,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
-import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, MoreHorizontal, Edit, Trash2, Clock, Building2 } from 'lucide-react'
+import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Building2 } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/shared/components/ui/dropdown-menu'
 import { Textarea } from '@/shared/components/ui/textarea'
@@ -26,15 +26,19 @@ import { DialogFooter } from '@/shared/components/ui/dialog'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Label } from '@/shared/components/ui/label'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
-import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
+import { useAuth } from '@/shared/contexts/auth-context'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
+import { listCastEsterno } from '@/features/opere/services/cast-esterno.service'
+import { buildCastExportRows, castExportFileName } from '@/features/opere/lib/cast-export'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
 export default function OperaDetailPage() {
   const params = useParams()
   const operaId = params.id as string
+  const { isAdmin } = useAuth()
 
   const [opera, setOpera] = useState<Opera | null>(null)
   const [partecipazioni, setPartecipazioni] = useState<any[]>([])
@@ -53,6 +57,7 @@ export default function OperaDetailPage() {
   const [imdbCreditsGrouped, setImdbCreditsGrouped] = useState<any>(null)
   const [loadingImdbCredits, setLoadingImdbCredits] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
+  const [isExportingCast, setIsExportingCast] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [pendingImdbTconst, setPendingImdbTconst] = useState<string | null>(null) // IMDb ID selezionato ma non ancora salvato
   const [isUpdatingTipo, setIsUpdatingTipo] = useState(false)
@@ -108,6 +113,8 @@ export default function OperaDetailPage() {
   const [partecipazioniSearchQuery, setPartecipazioniSearchQuery] = useState('')
   const [partecipazioniFilterTipo, setPartecipazioniFilterTipo] = useState<string>('')
   const [partecipazioniFilterRuolo, setPartecipazioniFilterRuolo] = useState<string>('')
+  // '' = tutti, '__serie__' = partecipazioni senza episodio, altrimenti id episodio
+  const [partecipazioniFilterEpisodio, setPartecipazioniFilterEpisodio] = useState<string>('')
 
   // Episodi Edit State
   const [showEditEpisodioDialog, setShowEditEpisodioDialog] = useState(false)
@@ -311,6 +318,13 @@ export default function OperaDetailPage() {
     if (partecipazioniFilterRuolo && p.ruoli_tipologie?.id !== partecipazioniFilterRuolo) {
       return false
     }
+
+    if (partecipazioniFilterEpisodio === '__serie__' && p.episodio_id) {
+      return false
+    }
+    if (partecipazioniFilterEpisodio && partecipazioniFilterEpisodio !== '__serie__' && p.episodio_id !== partecipazioniFilterEpisodio) {
+      return false
+    }
     
     return true
   })
@@ -365,6 +379,33 @@ export default function OperaDetailPage() {
       alert('Errore durante l\'eliminazione: ' + (e?.message || 'Errore sconosciuto'))
     } finally {
       setIsBulkDeletingPartecipazioni(false)
+    }
+  }
+
+  // Excel con il cast inserito dagli operatori: partecipazioni RASI + cast esterno
+  const handleExportCastExcel = async () => {
+    if (!opera) return
+    setIsExportingCast(true)
+    try {
+      const { data: castEsterno, error: castError } = await listCastEsterno(operaId)
+      if (castError) throw castError
+      const rows = buildCastExportRows(partecipazioni, castEsterno ?? [], episodi)
+      if (rows.length === 0) {
+        toast.info('Nessun cast inserito per quest\'opera')
+        return
+      }
+      const XLSX = await import('xlsx')
+      const worksheet = XLSX.utils.json_to_sheet(rows)
+      worksheet['!cols'] = Object.keys(rows[0]).map((key) => ({
+        wch: Math.min(40, Math.max(key.length, ...rows.map((row) => String(row[key as keyof typeof row] ?? '').length)) + 2),
+      }))
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Cast')
+      XLSX.writeFile(workbook, castExportFileName(opera.titolo), { bookType: 'xlsx' })
+    } catch (e: any) {
+      toast.error(e?.message || 'Errore durante l\'esportazione del cast')
+    } finally {
+      setIsExportingCast(false)
     }
   }
 
@@ -795,14 +836,16 @@ export default function OperaDetailPage() {
         return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200"><Tv className="mr-1 h-3 w-3" />Serie TV</Badge>
       case 'animazione':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><PenTool className="mr-1 h-3 w-3" />Animazione</Badge>
+      case 'musicale':
+        return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200"><Music className="mr-1 h-3 w-3" />Opera musicale</Badge>
       default:
         return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">{tipo}</Badge>
     }
   }
 
-  const TIPO_LABELS: Record<string, string> = { film: 'Film', serie_tv: 'Serie TV', animazione: 'Animazione' }
+  const TIPO_LABELS: Record<string, string> = TIPO_OPERA_LABELS
 
-  const handleTipoChange = async (newTipo: 'film' | 'serie_tv' | 'animazione') => {
+  const handleTipoChange = async (newTipo: TipoOpera) => {
     if (!opera || newTipo === opera.tipo || isUpdatingTipo) return
     const prevTipo = opera.tipo
     setIsUpdatingTipo(true)
@@ -834,7 +877,7 @@ export default function OperaDetailPage() {
   const schema = z.object({
     codice_opera: z.string().optional().or(z.literal('')),
     titolo: z.string().min(1, 'Titolo obbligatorio'),
-    tipo: z.enum(['film', 'serie_tv', 'animazione'], { required_error: 'Tipo obbligatorio' }),
+    tipo: z.enum(['film', 'serie_tv', 'animazione', 'musicale'], { required_error: 'Tipo obbligatorio' }),
     has_episodes: z.boolean().optional(),
     titolo_originale: z.string().optional().or(z.literal('')),
     alias_titoli: z.string().optional().or(z.literal('')),
@@ -987,6 +1030,14 @@ export default function OperaDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && (
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/registro-attivita?opera=${operaId}`}>
+                <History className="mr-2 h-4 w-4" />
+                Storico
+              </Link>
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -1004,10 +1055,11 @@ export default function OperaDetailPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Tipo opera</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuRadioGroup value={opera.tipo} onValueChange={(v) => handleTipoChange(v as 'film' | 'serie_tv' | 'animazione')}>
+              <DropdownMenuRadioGroup value={opera.tipo} onValueChange={(v) => handleTipoChange(v as TipoOpera)}>
                 <DropdownMenuRadioItem value="film"><Film className="mr-2 h-4 w-4" />Film</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="serie_tv"><Tv className="mr-2 h-4 w-4" />Serie TV</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="animazione"><PenTool className="mr-2 h-4 w-4" />Animazione</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="musicale"><Music className="mr-2 h-4 w-4" />Opera musicale</DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1413,7 +1465,7 @@ export default function OperaDetailPage() {
         </Card>
       )}
 
-      <CastEsternoPanel operaId={operaId} imdbTconst={opera.imdb_tconst} />
+      <CastEsternoPanel operaId={operaId} imdbTconst={opera.imdb_tconst} episodi={episodi} />
 
       {/* Partecipazioni Section */}
       <Card className="py-0 gap-0">
@@ -1457,9 +1509,37 @@ export default function OperaDetailPage() {
                 ))}
               </SelectContent>
             </Select>
+            {episodi.length > 0 && (
+              <Select value={partecipazioniFilterEpisodio || 'all'} onValueChange={(value) => setPartecipazioniFilterEpisodio(value === 'all' ? '' : value)}>
+                <SelectTrigger className="w-[240px]" aria-label="Filtra per episodio">
+                  <SelectValue placeholder="Episodio" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti gli episodi</SelectItem>
+                  <SelectItem value="__serie__">Senza episodio (tutta la serie)</SelectItem>
+                  {[...episodi]
+                    .sort((a, b) => (a.numero_stagione - b.numero_stagione) || (a.numero_episodio - b.numero_episodio))
+                    .map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        S{e.numero_stagione}E{e.numero_episodio}{e.titolo_episodio ? ` – ${e.titolo_episodio}` : ''}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
             
             {/* Bottoni azioni */}
             <div className="flex gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCastExcel}
+                disabled={isExportingCast}
+                title="Partecipazioni RASI e cast esterno di quest'opera, con episodio"
+              >
+                {isExportingCast ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                Scarica cast (Excel)
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -1877,6 +1957,7 @@ export default function OperaDetailPage() {
                             <SelectItem value="film">Film</SelectItem>
                             <SelectItem value="serie_tv">Serie TV</SelectItem>
                             <SelectItem value="animazione">Animazione</SelectItem>
+                            <SelectItem value="musicale">Opera musicale</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormMessage />

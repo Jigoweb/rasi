@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import { config } from './config.js'
+import { interruptActiveJobs, resumeInterruptedJobs } from './jobs/auto-resume.js'
 import { markStaleActiveJobsAsError, markStaleActiveUploadJobsAsError } from './jobs/recovery.js'
 import { individuazioneRouter } from './routes/individuazione.js'
 import { jobsRouter } from './routes/jobs.js'
@@ -27,7 +28,7 @@ app.use('/api/jobs', jobsRouter)
 app.use('/api/upload-programmazioni', uploadProgrammazioniRouter)
 app.use('/api/upload-jobs', uploadJobsRouter)
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`[rasi-worker] in ascolto sulla porta ${config.port}`)
 
   const runStaleRecovery = () => {
@@ -47,5 +48,47 @@ app.listen(config.port, () => {
 
   runStaleRecovery()
   // Periodico: i job upload possono bloccarsi senza riavvio del processo.
-  setInterval(runStaleRecovery, 5 * 60 * 1000)
+  const staleRecoveryTimer = setInterval(runStaleRecovery, 5 * 60 * 1000)
+
+  // Ripresa automatica dei job rimessi in coda da un deploy del worker.
+  const runAutoResume = () => {
+    void resumeInterruptedJobs()
+      .then((count) => {
+        if (count > 0) {
+          console.log(`[rasi-worker] ripresa automatica: ${count} individuazioni riavviate`)
+        }
+      })
+      .catch((error) => {
+        console.error('[rasi-worker] ripresa automatica fallita', error)
+      })
+  }
+  const autoResumeTimer = setInterval(runAutoResume, 60 * 1000)
+
+  // Deploy Railway: SIGTERM poco prima dello stop del container. I job in
+  // corso tornano in coda e il worker successivo li riprende da solo.
+  let shuttingDown = false
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    clearInterval(staleRecoveryTimer)
+    clearInterval(autoResumeTimer)
+    server.close()
+
+    // Codice di uscita convenzionale (128 + segnale): uno stop inatteso resta
+    // un fallimento per la restart policy ON_FAILURE di Railway.
+    const exitCode = signal === 'SIGINT' ? 130 : 143
+    const forceExit = setTimeout(() => process.exit(exitCode), 5000)
+    forceExit.unref()
+
+    void interruptActiveJobs()
+      .then((count) => {
+        console.log(`[rasi-worker] ${signal}: ${count} individuazioni rimesse in coda`)
+      })
+      .catch((error) => {
+        console.error(`[rasi-worker] ${signal}: messa in coda dei job fallita`, error)
+      })
+      .finally(() => process.exit(exitCode))
+  }
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
 })

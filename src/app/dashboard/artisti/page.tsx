@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getArtisti, getPartecipazioniCountByArtistaId, deleteArtista, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
+import { getArtisti, getCodiciPaeseArtisti, getPartecipazioniCountByArtistaId, deleteArtista, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
+import Link from 'next/link'
 import { Badge } from '@/shared/components/ui/badge'
+import { ArtistaStatoBadge } from '@/features/artisti/components/artista-stato-badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
@@ -15,16 +17,24 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, AlertTriangle, Loader2, Filter, X } from 'lucide-react'
 import { SearchInput } from '@/shared/components/search-input'
 import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
+import { cercaCastEsternoPerArtista } from '@/features/artisti/services/artista-scheda.service'
 import { ArtistaFormMultistep } from './components/artista-form-multistep'
 import {
   AMBITO_LABELS,
   TERRITORIO_OPTIONS,
   formatAmbitoLabel,
   formatDirittiCompact,
+  formatPaeseOption,
+  paesiOptionsInUso,
   parseDirittiAttivi,
   resolveAmbito,
   shouldShowFineMandato,
+  type PaeseCatalogo,
   type AmbitoArtista,
+  STATO_LABELS,
+  STATO_OPTIONS,
+  formatStatoLabel,
+  type StatoIscrizione,
 } from '@/features/artisti/lib/artista-display'
 import dirittiCatalog from '../../../../public/diritti-artisti.json'
 import paesiCatalog from '../../../../public/codici-paesi-iso3166-alpha3.json'
@@ -46,13 +56,19 @@ const ARTISTI_FIELD_LABELS: Record<string, string> = {
 }
 
 const DIRITTI_OPTIONS = dirittiCatalog.diritti.map((d) => d.nome)
-const PAESI_OPTIONS = [
+const PAESI_CATALOGO: PaeseCatalogo[] = [
   ...paesiCatalog.paesi,
   { codice: 'EU', nome: 'Europa (EU)' },
   { codice: 'EUROPA', nome: 'Europa' },
 ]
 
-function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => void }) {
+function ArtistiFilterPopover({
+  onAdd,
+  paesiOptions,
+}: {
+  onAdd: (f: ArtistaFieldFilter) => void
+  paesiOptions: PaeseCatalogo[]
+}) {
   const [open, setOpen] = useState(false)
   const [field, setField] = useState<string>('')
   const [hasValue, setHasValue] = useState<boolean>(true)
@@ -80,7 +96,7 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
   const handleAdd = () => {
     if (!field) return
     if (field === 'stato' && statoValue) {
-      onAdd({ field: 'stato', value: statoValue as 'attivo' | 'sospeso' | 'cessato' })
+      onAdd({ field: 'stato', value: statoValue as StatoIscrizione })
     } else if (field === 'tipologia' && tipologiaValue) {
       onAdd({ field: 'tipologia', value: tipologiaValue as 'AIE' | 'PRODUTTORE' })
     } else if (field === 'ambito') {
@@ -141,9 +157,9 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
                 <SelectValue placeholder="Seleziona stato" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="attivo">Attivo</SelectItem>
-                <SelectItem value="sospeso">Sospeso</SelectItem>
-                <SelectItem value="cessato">Cessato</SelectItem>
+                {STATO_OPTIONS.map((value) => (
+                  <SelectItem key={value} value={value}>{STATO_LABELS[value]}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           ) : field === 'tipologia' ? (
@@ -191,16 +207,20 @@ function ArtistiFilterPopover({ onAdd }: { onAdd: (f: ArtistaFieldFilter) => voi
               </SelectContent>
             </Select>
           ) : field === 'codice_paese' ? (
-            <Select value={paeseValue} onValueChange={setPaeseValue}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona paese" />
-              </SelectTrigger>
-              <SelectContent className="max-h-72">
-                {PAESI_OPTIONS.map((paese) => (
-                  <SelectItem key={paese.codice} value={paese.codice}>{paese.nome} ({paese.codice})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            paesiOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nessun paese in anagrafica</p>
+            ) : (
+              <Select value={paeseValue} onValueChange={setPaeseValue}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona paese" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {paesiOptions.map((paese) => (
+                    <SelectItem key={paese.codice} value={paese.codice}>{formatPaeseOption(paese)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )
           ) : field ? (
             <Select value={hasValue ? 'si' : 'no'} onValueChange={(v) => setHasValue(v === 'si')}>
               <SelectTrigger>
@@ -238,6 +258,7 @@ export default function ArtistiPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [artisti, setArtisti] = useState<Artista[]>([])
+  const [paesiInUso, setPaesiInUso] = useState<PaeseCatalogo[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [tipologiaFilter, setTipologiaFilter] = useState<'all' | true | false>('all')
@@ -251,6 +272,7 @@ export default function ArtistiPage() {
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [createdArtista, setCreatedArtista] = useState<{ id: string; opereInCast: number } | null>(null)
   
   // Delete confirmation states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
@@ -259,9 +281,19 @@ export default function ArtistiPage() {
   const [partecipazioniCount, setPartecipazioniCount] = useState(0)
   const [isDeleting, setIsDeleting] = useState(false)
   
+  const loadPaesiInUso = useCallback(async () => {
+    const { data, error } = await getCodiciPaeseArtisti()
+    if (error || !data) return
+    setPaesiInUso(paesiOptionsInUso(data.map((row) => row.codice_paese), PAESI_CATALOGO))
+  }, [])
+
   useEffect(() => {
     fetchArtisti()
   }, [searchQuery, tipologiaFilter, filters, incompleteMode])
+
+  useEffect(() => {
+    loadPaesiInUso()
+  }, [loadPaesiInUso])
 
   useEffect(() => {
     if (searchParams?.get('incomplete') === '1') {
@@ -316,19 +348,7 @@ export default function ArtistiPage() {
 
   const hasActiveFilters = searchQuery || tipologiaFilter !== 'all' || filters.length > 0 || incompleteMode
 
-  const getStatusBadge = (stato: string | null) => {
-    if (!stato) return null
-    switch (stato) {
-      case 'attivo':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Attivo</Badge>
-      case 'sospeso':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Sospeso</Badge>
-      case 'cessato':
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Cessato</Badge>
-      default:
-        return <Badge variant="outline">Sconosciuto</Badge>
-    }
-  }
+  const getStatusBadge = (stato: string | null) => <ArtistaStatoBadge stato={stato} />
 
   const getRasiBadge = (isRasi: boolean) => {
     if (isRasi) {
@@ -381,12 +401,12 @@ export default function ArtistiPage() {
     }
     if (f.field === 'diritti' && 'value' in f) return `Diritti: ${f.value}`
     if (f.field === 'codice_paese' && 'value' in f) {
-      const paese = PAESI_OPTIONS.find((p) => p.codice === f.value)
-      return `Paese: ${paese ? `${paese.nome} (${paese.codice})` : f.value}`
+      const paese = paesiInUso.find((p) => p.codice === f.value)
+      return `Paese: ${paese ? formatPaeseOption(paese) : f.value}`
     }
     if ('value' in f) {
       if (f.field === 'stato') {
-        return `Stato: ${f.value === 'attivo' ? 'Attivo' : f.value === 'sospeso' ? 'Sospeso' : 'Cessato'}`
+        return `Stato: ${formatStatoLabel(f.value)}`
       }
       return `${ARTISTI_FIELD_LABELS[f.field]}: ${f.value}`
     }
@@ -525,6 +545,7 @@ export default function ArtistiPage() {
     
     // Refresh list and close dialog
     await fetchArtisti()
+    await loadPaesiInUso()
     setShowDeleteDialog(false)
     setArtistToDelete(null)
     setDeleteCheckStatus('idle')
@@ -592,7 +613,7 @@ export default function ArtistiPage() {
                 <SelectItem value="false">Esterni</SelectItem>
               </SelectContent>
             </Select>
-            <ArtistiFilterPopover onAdd={addFilter} />
+            <ArtistiFilterPopover onAdd={addFilter} paesiOptions={paesiInUso} />
             <Button
               variant="outline"
               onClick={() => {
@@ -978,9 +999,23 @@ export default function ArtistiPage() {
                   ? 'Il nuovo artista è stato aggiunto al database.' 
                   : 'Le modifiche sono state salvate.'}
               </p>
-              <Button onClick={() => setShowForm(false)} className="mt-4">
-                Chiudi
-              </Button>
+              {formMode === 'create' && createdArtista && createdArtista.opereInCast > 0 && (
+                <p className="text-center text-sm rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+                  Il nome compare nel cast esterno di {createdArtista.opereInCast}{' '}
+                  {createdArtista.opereInCast === 1 ? 'opera' : 'opere'}. Apri la scheda per confermare e
+                  convertirlo in partecipazioni RASI.
+                </p>
+              )}
+              <div className="mt-4 flex gap-2">
+                {formMode === 'create' && createdArtista && (
+                  <Button variant={createdArtista.opereInCast > 0 ? 'default' : 'outline'} asChild>
+                    <Link href={`/dashboard/artisti/${createdArtista.id}`}>Apri scheda</Link>
+                  </Button>
+                )}
+                <Button variant={formMode === 'create' && createdArtista?.opereInCast ? 'outline' : 'default'} onClick={() => setShowForm(false)}>
+                  Chiudi
+                </Button>
+              </div>
             </div>
           ) : submitStatus === 'error' ? (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -1012,14 +1047,23 @@ export default function ArtistiPage() {
                 setSubmitStatus('loading')
                 try {
                   if (formMode === 'create') {
-                    const { error } = await createArtista(data)
+                    const { data: created, error } = await createArtista(data)
                     if (error) throw error
+                    setCreatedArtista(null)
+                    if (created) {
+                      const { data: matches } = await cercaCastEsternoPerArtista(created.id)
+                      setCreatedArtista({
+                        id: created.id,
+                        opereInCast: new Set(matches.map((row) => row.opera_id)).size,
+                      })
+                    }
                   } else if (selectedArtist) {
                     const { error } = await updateArtista(selectedArtist.id, data)
                     if (error) throw error
                   }
                   setSubmitStatus('success')
                   await fetchArtisti()
+                  await loadPaesiInUso()
                 } catch (e) {
                   console.error(e)
                   setSubmitError(e instanceof Error ? e.message : 'Errore sconosciuto')

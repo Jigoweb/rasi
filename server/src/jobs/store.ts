@@ -21,17 +21,29 @@ export interface CampaignJob {
   created_by: string | null
   created_at: string
   updated_at: string
+  opzioni?: IndividuazioneJobOpzioni | null
+  interrotto_at?: string | null
+}
+
+/** Opzioni di un run di individuazione, riusate da "Riprendi" e dalla ripresa automatica. */
+export interface IndividuazioneJobOpzioni {
+  soglia_titolo: number
+  artista_ids: string[] | null
+  mandato_override_artist_ids: string[] | null
 }
 
 export type NewJob = {
   tipo: CampaignJob['tipo']
   campagne_programmazione_id: string
   created_by: string | null
+  opzioni?: IndividuazioneJobOpzioni | null
 }
 
 const TABLE = 'campaign_jobs'
 const STALE_JOB_ERROR =
   'Job interrotto dal riavvio del worker. Usa Riprendi per continuare.'
+export const INTERRUPTED_DURING_INIT_ERROR =
+  "Job interrotto dal riavvio del worker durante l'avvio. Rilancia l'individuazione."
 const CAMPAIGN_OPERATOR_ROLES = new Set(['admin', 'operatore'])
 
 export async function createJob(input: NewJob): Promise<CampaignJob> {
@@ -43,6 +55,7 @@ export async function createJob(input: NewJob): Promise<CampaignJob> {
       fase: 'init',
       campagne_programmazione_id: input.campagne_programmazione_id,
       created_by: input.created_by,
+      ...(input.opzioni ? { opzioni: input.opzioni } : {}),
     })
     .select('*')
     .single()
@@ -174,5 +187,109 @@ export async function markStaleActiveJobAsError(
     .select('id')
 
   if (error) throw new Error(`markStaleActiveJobAsError: ${error.message}`)
+  return ((data as Array<Pick<CampaignJob, 'id'>> | null) ?? []).length > 0
+}
+
+/** Legge le opzioni di un job, ignorando valori malformati. */
+export function parseJobOpzioni(raw: unknown): IndividuazioneJobOpzioni | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const value = raw as Record<string, unknown>
+  const soglia = typeof value.soglia_titolo === 'number' ? value.soglia_titolo : Number(value.soglia_titolo)
+  const toIds = (ids: unknown): string[] | null =>
+    Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : null
+
+  return {
+    soglia_titolo: Number.isFinite(soglia) && soglia > 0 ? soglia : 0.7,
+    artista_ids: toIds(value.artista_ids),
+    mandato_override_artist_ids: toIds(value.mandato_override_artist_ids),
+  }
+}
+
+/**
+ * Ultimo job che ha lavorato su un run di individuazione: da qui "Riprendi"
+ * eredita opzioni e contatori invece di ripartire senza filtri e da zero.
+ */
+export async function getLatestJobForCampagnaIndividuazione(
+  campagneIndividuazioneId: string
+): Promise<CampaignJob | null> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .select('*')
+    .eq('campagne_individuazione_id', campagneIndividuazioneId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw new Error(`getLatestJobForCampagnaIndividuazione: ${error.message}`)
+  return (data as CampaignJob) ?? null
+}
+
+/**
+ * Rimette in coda un job interrotto da SIGTERM: resta 'queued' (la UI continua
+ * il polling) e il worker successivo lo riprende sulla stessa riga.
+ */
+export async function markJobInterrupted(jobId: string, now = new Date()): Promise<void> {
+  const { error } = await supabaseService
+    .from(TABLE)
+    .update({
+      stato: 'queued',
+      interrotto_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq('id', jobId)
+    .in('stato', ['queued', 'running'])
+
+  if (error) throw new Error(`markJobInterrupted: ${error.message}`)
+}
+
+/** Chiude in errore un job interrotto che non si può riprendere da solo. */
+export async function markJobAsError(jobId: string, message: string, now = new Date()): Promise<void> {
+  const { error } = await supabaseService
+    .from(TABLE)
+    .update({
+      stato: 'error',
+      fase: 'error',
+      error: message,
+      interrotto_at: null,
+      updated_at: now.toISOString(),
+    })
+    .eq('id', jobId)
+    .in('stato', ['queued', 'running'])
+
+  if (error) throw new Error(`markJobAsError: ${error.message}`)
+}
+
+/** Job di individuazione rimessi in coda da uno spegnimento prima di `cutoffIso`. */
+export async function findInterruptedJobs(cutoffIso: string): Promise<CampaignJob[]> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .select('*')
+    .eq('tipo', 'individuazione')
+    .eq('stato', 'queued')
+    .not('interrotto_at', 'is', null)
+    .lt('interrotto_at', cutoffIso)
+
+  if (error) throw new Error(`findInterruptedJobs: ${error.message}`)
+  return (data as CampaignJob[]) ?? []
+}
+
+/**
+ * Presa in carico atomica di un job interrotto: solo un worker la ottiene
+ * anche se due container (deploy sovrapposti) controllano insieme.
+ */
+export async function claimInterruptedJob(jobId: string, now = new Date()): Promise<boolean> {
+  const { data, error } = await supabaseService
+    .from(TABLE)
+    .update({
+      stato: 'running',
+      interrotto_at: null,
+      updated_at: now.toISOString(),
+    })
+    .eq('id', jobId)
+    .eq('stato', 'queued')
+    .not('interrotto_at', 'is', null)
+    .select('id')
+
+  if (error) throw new Error(`claimInterruptedJob: ${error.message}`)
   return ((data as Array<Pick<CampaignJob, 'id'>> | null) ?? []).length > 0
 }
