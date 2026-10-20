@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { formatRuoloPrimarieta } from '@/features/opere/lib/cast-esterno'
 import type { ActivityFeedItem } from '../components/dashboard-home.types'
 
 export type ActivityTipo =
   | 'artista'
   | 'opera'
+  | 'partecipazione'
+  | 'cast_esterno'
   | 'campagna_individuazione'
   | 'campagna_programmazione'
 
@@ -75,6 +78,81 @@ export function buildOperaActivity(row: {
     timestamp: updated && row.updated_at ? row.updated_at : row.created_at,
     href: `/dashboard/opere/${row.id}`,
     utenteId: updated ? (row.updated_by ?? row.created_by ?? null) : (row.created_by ?? null),
+  }
+}
+
+type NamedRelation = { nome?: string | null; cognome?: string | null; titolo?: string | null; id?: string | null }
+
+function relationOne<T>(value: T | T[] | null | undefined): T | null {
+  if (!value) return null
+  return Array.isArray(value) ? (value[0] ?? null) : value
+}
+
+function joinDettaglio(parts: Array<string | null | undefined>): string {
+  const text = parts.map(part => part?.trim()).filter(Boolean).join(' — ')
+  return text || 'Senza nome'
+}
+
+export function buildPartecipazioneActivity(row: {
+  id: string
+  opera_id?: string | null
+  created_at: string | null
+  updated_at?: string | null
+  created_by?: string | null
+  updated_by?: string | null
+  artisti?: NamedRelation | NamedRelation[] | null
+  opere?: NamedRelation | NamedRelation[] | null
+}): RawActivityRow | null {
+  if (!row.id || !row.created_at) return null
+  const opera = relationOne(row.opere)
+  const operaId = row.opera_id || opera?.id
+  if (!operaId) return null
+
+  const updated = isLikelyUpdate(row.created_at, row.updated_at)
+  const artista = relationOne(row.artisti)
+  const nome = [artista?.nome, artista?.cognome].filter(Boolean).join(' ').trim()
+
+  return {
+    id: row.id,
+    tipo: 'partecipazione',
+    label: updated ? 'Partecipazione aggiornata' : 'Nuova partecipazione',
+    dettaglio: joinDettaglio([nome || 'Artista', opera?.titolo]),
+    timestamp: updated && row.updated_at ? row.updated_at : row.created_at,
+    href: `/dashboard/opere/${operaId}`,
+    utenteId: updated ? (row.updated_by ?? row.created_by ?? null) : (row.created_by ?? null),
+  }
+}
+
+export function buildCastEsternoActivity(row: {
+  id: string
+  nome: string | null
+  ruolo?: string | null
+  primarieta?: string | null
+  opera_id?: string | null
+  created_at: string | null
+  updated_at?: string | null
+  opere?: NamedRelation | NamedRelation[] | null
+}): RawActivityRow | null {
+  if (!row.id || !row.created_at) return null
+  const opera = relationOne(row.opere)
+  const operaId = row.opera_id || opera?.id
+  if (!operaId) return null
+
+  const updated = isLikelyUpdate(row.created_at, row.updated_at)
+  const ruolo =
+    row.ruolo || row.primarieta
+      ? formatRuoloPrimarieta(row.ruolo, row.primarieta || 'comprimario')
+      : null
+
+  return {
+    id: row.id,
+    tipo: 'cast_esterno',
+    label: updated ? 'Cast esterno aggiornato' : 'Cast esterno aggiunto',
+    dettaglio: joinDettaglio([row.nome, ruolo, opera?.titolo]),
+    timestamp: updated && row.updated_at ? row.updated_at : row.created_at,
+    href: `/dashboard/opere/${operaId}`,
+    // cast_esterno non ha created_by / updated_by.
+    utenteId: null,
   }
 }
 
@@ -167,34 +245,47 @@ export async function loadActivityFeed(
   const limit = options.limit ?? 5
   const perSourceLimit = options.perSourceLimit ?? Math.max(limit, 10)
 
-  const [ultArtisti, ultOpere, ultCampagneInd, ultCampagneProg] = await Promise.all([
-    supabase
-      .from('artisti')
-      .select('id, nome, cognome, created_at, updated_at, created_by, updated_by')
-      .order('updated_at', { ascending: false })
-      .limit(perSourceLimit),
-    supabase
-      .from('opere')
-      .select('id, titolo, created_at, updated_at, created_by, updated_by')
-      .order('updated_at', { ascending: false })
-      .limit(perSourceLimit),
-    supabase
-      .from('campagne_individuazione')
-      .select('id, nome, updated_at, created_by, stato')
-      .eq('stato', 'completata')
-      .order('updated_at', { ascending: false })
-      .limit(perSourceLimit),
-    (supabase as any)
-      .from('campagne_programmazione')
-      .select('id, nome, created_at, created_by')
-      .order('created_at', { ascending: false })
-      .limit(perSourceLimit),
-  ])
+  const [ultArtisti, ultOpere, ultPartecipazioni, ultCastEsterno, ultCampagneInd, ultCampagneProg] =
+    await Promise.all([
+      supabase
+        .from('artisti')
+        .select('id, nome, cognome, created_at, updated_at, created_by, updated_by')
+        .order('updated_at', { ascending: false })
+        .limit(perSourceLimit),
+      supabase
+        .from('opere')
+        .select('id, titolo, created_at, updated_at, created_by, updated_by')
+        .order('updated_at', { ascending: false })
+        .limit(perSourceLimit),
+      supabase
+        .from('partecipazioni')
+        .select('id, opera_id, created_at, updated_at, created_by, updated_by, artisti(nome, cognome), opere(id, titolo)')
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(perSourceLimit),
+      supabase
+        .from('cast_esterno')
+        .select('id, nome, ruolo, primarieta, opera_id, created_at, updated_at, opere(titolo)')
+        .order('updated_at', { ascending: false, nullsFirst: false })
+        .limit(perSourceLimit),
+      supabase
+        .from('campagne_individuazione')
+        .select('id, nome, updated_at, created_by, stato')
+        .eq('stato', 'completata')
+        .order('updated_at', { ascending: false })
+        .limit(perSourceLimit),
+      (supabase as any)
+        .from('campagne_programmazione')
+        .select('id, nome, created_at, created_by')
+        .order('created_at', { ascending: false })
+        .limit(perSourceLimit),
+    ])
 
   const raw = mergeAndSortActivities(
     [
       ...(ultArtisti.data || []).map(buildArtistaActivity),
       ...(ultOpere.data || []).map(buildOperaActivity),
+      ...(ultPartecipazioni.data || []).map(buildPartecipazioneActivity),
+      ...(ultCastEsterno.data || []).map(buildCastEsternoActivity),
       ...(ultCampagneInd.data || []).map(buildCampagnaIndividuazioneActivity),
       ...(ultCampagneProg.data || []).map(buildCampagnaProgrammazioneActivity),
     ].filter((row): row is RawActivityRow => row != null),

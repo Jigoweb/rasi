@@ -27,7 +27,7 @@ export function DashboardActivityHistory({
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Storico attività</h1>
           <p className="text-gray-600 text-sm lg:text-base">
-            Cronologia delle operazioni con orario, utente e collegamento alla scheda modificata
+            Cronologia di artisti, opere, partecipazioni, cast esterno e campagne, con orario, utente e collegamento alla scheda
           </p>
         </div>
       </div>
