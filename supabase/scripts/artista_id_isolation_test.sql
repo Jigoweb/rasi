@@ -89,8 +89,14 @@ BEGIN
   )
   VALUES (v_camp_rip, 'Ripartizione isolamento', DATE '2026-01-01', DATE '2026-12-31', 100);
 
-  INSERT INTO public.ripartizioni (campagna_ripartizione_id, artista_id, importo_lordo, importo_netto)
-  VALUES (v_camp_rip, v_art_a, 10, 8), (v_camp_rip, v_art_b, 20, 16);
+  -- chk_importi: importo_netto = lordo - trattenuta_collecting - COALESCE(altre_trattenute, 0)
+  INSERT INTO public.ripartizioni (
+    campagna_ripartizione_id, artista_id,
+    importo_lordo, trattenuta_collecting, altre_trattenute, importo_netto
+  )
+  VALUES
+    (v_camp_rip, v_art_a, 10, 0, 0, 10),
+    (v_camp_rip, v_art_b, 20, 0, 0, 20);
 
   INSERT INTO auth.users (
     instance_id, id, aud, role, email,
