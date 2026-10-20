@@ -24,7 +24,7 @@
 --
 -- Dry-run: supabase/scripts/artista_id_app_metadata_report.sql
 -- Isolamento: supabase/scripts/artista_id_isolation_test.sql
--- Rollback: supabase/rollback/20261020205939_artista_id_app_metadata.sql
+-- Rollback: supabase/rollback/20261020212235_artista_id_app_metadata.sql
 --
 -- Unica transazione (il runner Supabase avvolge il file; da psql usare -1).
 -- Ordine: asserzione, backfill, strip, funzione, policy.

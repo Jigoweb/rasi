@@ -1,5 +1,5 @@
 -- Report read-only sul ruolo Auth. Non modifica dati e non stampa email.
--- Eseguirlo PRIMA della migration 20261020075909_role_app_metadata.sql
+-- Eseguirlo PRIMA della migration 20261020123230_role_app_metadata.sql
 -- e di nuovo DOPO, come verifica.
 --
 -- Ruoli attesi: admin, operatore, artista, readonly, collecting.

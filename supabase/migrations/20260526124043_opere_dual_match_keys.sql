@@ -1,14 +1,14 @@
 -- B.1 — opere dual match keys.
--- Replaces single opere.match_key (created in 20260525143158) with strict + loose
+-- Replaces single opere.match_key (created in 20260526123906) with strict + loose
 -- variants. Both columns are auto-populated by a trigger that calls
--- build_match_key_strict() and build_match_key() from migration 20260525143158.
+-- build_match_key_strict() and build_match_key() from migration 20260526123906.
 -- 7K row backfill is fast (<5s).
 
 ALTER TABLE public.opere
   ADD COLUMN IF NOT EXISTS match_key_strict text,
   ADD COLUMN IF NOT EXISTS match_key_loose text;
 
--- Drop old single-key trigger + function (created in 20260525143158)
+-- Drop old single-key trigger + function (created in 20260526123906)
 DROP TRIGGER IF EXISTS opere_match_key_sync ON public.opere;
 DROP FUNCTION IF EXISTS public.trg_opere_sync_match_key();
 
