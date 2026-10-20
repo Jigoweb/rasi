@@ -63,6 +63,45 @@ export function mergeAppMetadataWithRole(
   }
 }
 
+const ARTISTA_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Legge artista_id da app_metadata (auth.users.raw_app_meta_data).
+ * Unica fonte autoritativa. user_metadata è scrivibile dal client e va ignorato.
+ * Assente o non UUID → null (nessun dato artista).
+ */
+export function readAppMetadataArtistaId(appMetadata: unknown): string | null {
+  if (!appMetadata || typeof appMetadata !== 'object') return null
+  const value = (appMetadata as Record<string, unknown>).artista_id
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return ARTISTA_ID_RE.test(trimmed) ? trimmed : null
+}
+
+/**
+ * Merge di ruolo e collegamento artista in app_metadata.
+ * Non sovrascrive le altre chiavi (provider, e il ruolo resta quello passato).
+ * Fuori dal ruolo artista la chiave artista_id viene tolta (scollegamento).
+ * artistaId null con ruolo artista conserva un collegamento già presente.
+ */
+export function mergeAppMetadataWithArtistaLink(
+  existing: Record<string, unknown> | null | undefined,
+  ruolo: string,
+  artistaId: string | null
+): Record<string, unknown> {
+  const merged = mergeAppMetadataWithRole(existing, ruolo)
+  if (ruolo === 'artista' && artistaId) {
+    return { ...merged, artista_id: artistaId }
+  }
+  if (ruolo !== 'artista') {
+    const next = { ...merged }
+    delete next.artista_id
+    return next
+  }
+  return merged
+}
+
 export function getRolePermissions(role: UserRole): RolePermissions {
   return {
     isAdmin: role === 'admin',

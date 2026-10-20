@@ -8,6 +8,7 @@ declare global {
     interface Request {
       userId?: string
       userRole?: string | null
+      artistaId?: string | null
     }
   }
 }
@@ -30,6 +31,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
     req.userId = user.id
     req.userRole = user.role
+    req.artistaId = user.artistaId
     next()
   } catch (error: any) {
     return res.status(401).json({ success: false, error: 'Errore verifica token' })

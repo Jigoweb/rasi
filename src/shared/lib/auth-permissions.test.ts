@@ -5,6 +5,8 @@ import {
   rolesInvitableBy,
   canActorChangeTargetRole,
   mergeAppMetadataWithRole,
+  mergeAppMetadataWithArtistaLink,
+  readAppMetadataArtistaId,
   readAuthoritativeUserRole,
 } from './auth-permissions'
 
@@ -168,6 +170,75 @@ describe('auth-permissions', () => {
       })
       expect(mergeAppMetadataWithRole(undefined, 'admin')).toEqual({
         ruolo: 'admin',
+      })
+    })
+  })
+
+  describe('readAppMetadataArtistaId', () => {
+    it('reads app_metadata and ignores a client-written user_metadata artista_id', () => {
+      expect(
+        readAppMetadataArtistaId({
+          ruolo: 'artista',
+          artista_id: '11111111-1111-4111-8111-111111111111',
+        })
+      ).toBe('11111111-1111-4111-8111-111111111111')
+    })
+
+    it('returns null when artista_id is missing or not a uuid', () => {
+      expect(readAppMetadataArtistaId(undefined)).toBeNull()
+      expect(readAppMetadataArtistaId({ ruolo: 'artista' })).toBeNull()
+      expect(readAppMetadataArtistaId({ artista_id: 'not-a-uuid' })).toBeNull()
+      expect(readAppMetadataArtistaId({ artista_id: '' })).toBeNull()
+    })
+  })
+
+  describe('mergeAppMetadataWithArtistaLink', () => {
+    it('sets artista_id without dropping ruolo or provider', () => {
+      expect(
+        mergeAppMetadataWithArtistaLink(
+          { ruolo: 'collecting', provider: 'email' },
+          'artista',
+          '11111111-1111-4111-8111-111111111111'
+        )
+      ).toEqual({
+        ruolo: 'artista',
+        provider: 'email',
+        artista_id: '11111111-1111-4111-8111-111111111111',
+      })
+    })
+
+    it('drops artista_id when the role leaves artista', () => {
+      expect(
+        mergeAppMetadataWithArtistaLink(
+          {
+            ruolo: 'artista',
+            provider: 'email',
+            artista_id: '11111111-1111-4111-8111-111111111111',
+          },
+          'operatore',
+          null
+        )
+      ).toEqual({
+        ruolo: 'operatore',
+        provider: 'email',
+      })
+    })
+
+    it('keeps an existing link when the role stays artista and no new id is passed', () => {
+      expect(
+        mergeAppMetadataWithArtistaLink(
+          {
+            ruolo: 'artista',
+            provider: 'email',
+            artista_id: '11111111-1111-4111-8111-111111111111',
+          },
+          'artista',
+          null
+        )
+      ).toEqual({
+        ruolo: 'artista',
+        provider: 'email',
+        artista_id: '11111111-1111-4111-8111-111111111111',
       })
     })
   })

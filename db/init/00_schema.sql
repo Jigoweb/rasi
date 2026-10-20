@@ -99,12 +99,33 @@ BEGIN
 END;
 $$;
 
+-- STABLE: auth.uid() non cambia durante una query → caching per RLS.
+-- Fonte autoritativa: raw_app_meta_data.artista_id (server-only).
+-- Nessun fallback su raw_user_meta_data: è scrivibile dal client.
+-- Valore assente o non UUID → NULL (fail-closed, nessuna riga artista).
 CREATE OR REPLACE FUNCTION get_user_artista_id()
-RETURNS UUID AS $$
+RETURNS uuid
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_id text;
 BEGIN
-    RETURN (SELECT raw_user_meta_data->>'artista_id' FROM auth.users WHERE id = auth.uid())::UUID;
+    SELECT NULLIF(u.raw_app_meta_data ->> 'artista_id', '')
+      INTO v_id
+    FROM auth.users u
+    WHERE u.id = auth.uid();
+
+    IF v_id IS NULL
+       OR v_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN v_id::uuid;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$;
 
 -- ====================================
 -- TABELLE PRINCIPALI
