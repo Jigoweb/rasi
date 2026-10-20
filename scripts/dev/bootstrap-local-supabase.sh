@@ -85,8 +85,21 @@ SRK="$(supabase status -o env 2>/dev/null | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"
 SRK="${SRK:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}"
 curl -s -X POST "$API_URL/auth/v1/admin/users" \
   -H "apikey: $SRK" -H "Authorization: Bearer $SRK" -H "Content-Type: application/json" \
-  -d "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\",\"email_confirm\":true,\"user_metadata\":{\"ruolo\":\"admin\",\"nome\":\"Operatore Demo\"}}" \
+  -d "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\",\"email_confirm\":true,\"app_metadata\":{\"ruolo\":\"admin\"},\"user_metadata\":{\"nome\":\"Operatore Demo\"}}" \
   | grep -qE '"id"|email_exists|already been registered' \
   && echo "   test user ready" || echo "   WARN: could not confirm test user creation"
+
+echo ">> Ensuring test user role lives in app_metadata"
+psql_run -v ON_ERROR_STOP=1 <<SQL
+UPDATE auth.users
+SET raw_app_meta_data = jsonb_set(
+  COALESCE(raw_app_meta_data, '{}'::jsonb),
+  '{ruolo}',
+  '"admin"'::jsonb,
+  true
+)
+WHERE email = '${TEST_EMAIL}'
+  AND COALESCE(raw_app_meta_data->>'ruolo', '') = '';
+SQL
 
 echo ">> Done. Login: $TEST_EMAIL / $TEST_PASSWORD"

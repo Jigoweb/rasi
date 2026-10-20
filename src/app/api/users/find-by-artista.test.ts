@@ -7,14 +7,16 @@ describe('findUserByArtistaId', () => {
       email: 'admin@example.com',
       invited_at: null,
       last_sign_in_at: '2026-01-01T00:00:00Z',
-      user_metadata: { ruolo: 'admin' },
+      app_metadata: { ruolo: 'admin' },
+      user_metadata: { ruolo: 'operatore' },
     },
     {
       id: 'u-art',
       email: 'art@example.com',
       invited_at: '2026-01-02T00:00:00Z',
       last_sign_in_at: null,
-      user_metadata: { ruolo: 'artista', artista_id: 'art-1' },
+      app_metadata: { ruolo: 'artista' },
+      user_metadata: { ruolo: 'operatore', artista_id: 'art-1' },
     },
   ]
 
@@ -30,5 +32,9 @@ describe('findUserByArtistaId', () => {
       invited_at: '2026-01-02T00:00:00Z',
       last_sign_in_at: null,
     })
+  })
+
+  it('does not escalate when user_metadata.ruolo is operatore', () => {
+    expect(findUserByArtistaId(users, 'art-1')?.ruolo).toBe('artista')
   })
 })

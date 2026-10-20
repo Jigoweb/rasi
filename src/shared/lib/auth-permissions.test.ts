@@ -4,7 +4,8 @@ import {
   rolesAssignableBy,
   rolesInvitableBy,
   canActorChangeTargetRole,
-  mergeUserMetadataWithRole,
+  mergeAppMetadataWithRole,
+  readAuthoritativeUserRole,
 } from './auth-permissions'
 
 describe('auth-permissions', () => {
@@ -147,27 +148,52 @@ describe('auth-permissions', () => {
     })
   })
 
-  describe('mergeUserMetadataWithRole', () => {
-    it('preserves existing metadata including artista_id', () => {
+  describe('mergeAppMetadataWithRole', () => {
+    it('preserves provider keys and sets ruolo', () => {
       expect(
-        mergeUserMetadataWithRole(
-          { ruolo: 'artista', artista_id: 'uuid-1', extra: 'keep' },
+        mergeAppMetadataWithRole(
+          { ruolo: 'artista', provider: 'email', providers: ['email'] },
           'operatore'
         )
       ).toEqual({
         ruolo: 'operatore',
-        artista_id: 'uuid-1',
-        extra: 'keep',
+        provider: 'email',
+        providers: ['email'],
       })
     })
 
     it('handles null/undefined existing metadata', () => {
-      expect(mergeUserMetadataWithRole(null, 'artista')).toEqual({
+      expect(mergeAppMetadataWithRole(null, 'artista')).toEqual({
         ruolo: 'artista',
       })
-      expect(mergeUserMetadataWithRole(undefined, 'admin')).toEqual({
+      expect(mergeAppMetadataWithRole(undefined, 'admin')).toEqual({
         ruolo: 'admin',
       })
+    })
+  })
+
+  describe('readAuthoritativeUserRole', () => {
+    it('reads app_metadata and ignores a client-written user_metadata role', () => {
+      expect(
+        readAuthoritativeUserRole({
+          app_metadata: { ruolo: 'artista', provider: 'email' },
+          user_metadata: { ruolo: 'operatore', artista_id: 'uuid-1' },
+        })
+      ).toBe('artista')
+    })
+
+    it('does not escalate to admin when user_metadata is rewritten and app_metadata has no role', () => {
+      expect(
+        readAuthoritativeUserRole({
+          app_metadata: { provider: 'email' },
+          user_metadata: { ruolo: 'admin' },
+        })
+      ).toBeNull()
+    })
+
+    it('fail-closes for a missing user', () => {
+      expect(readAuthoritativeUserRole(null)).toBeNull()
+      expect(readAuthoritativeUserRole(undefined)).toBeNull()
     })
   })
 })

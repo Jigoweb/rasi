@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { readAppMetadataRole } from '@/shared/lib/auth-permissions'
 import { supabaseServer } from '@/shared/lib/supabase-server'
 
 const AUTH_REQUIRED_ERROR = 'Autenticazione richiesta'
@@ -80,7 +81,7 @@ export const requireCampagneIndividuazioneAuth = async (
     return {
       authenticated: true,
       userId: user.id,
-      userRole: typeof user.user_metadata?.ruolo === 'string' ? user.user_metadata.ruolo : null,
+      userRole: readAppMetadataRole(user.app_metadata),
     }
   } catch {
     return { authenticated: false, response: authRequiredResponse() }

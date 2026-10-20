@@ -1,10 +1,11 @@
 import {
+  appMetadataForResend,
   buildAuthInviteRedirectUrl,
   isAlreadyRegisteredInviteError,
-  mergeArtistAccessMetadata,
   resolveAuthInviteOrigin,
   resolveResendAccessMethod,
   sendResendAccessEmail,
+  userMetadataWithoutRole,
 } from './resend-access'
 
 describe('resolveResendAccessMethod', () => {
@@ -62,26 +63,33 @@ describe('resolveAuthInviteOrigin', () => {
   })
 })
 
-describe('mergeArtistAccessMetadata', () => {
-  it('preserves ruolo artista and artista_id', () => {
+describe('access metadata for resend', () => {
+  it('keeps artista_id and drops ruolo from user_metadata', () => {
     expect(
-      mergeArtistAccessMetadata({
-        ruolo: 'artista',
+      userMetadataWithoutRole({
+        ruolo: 'operatore',
         artista_id: '991c5dd5-8f08-4985-a973-6081ff68242a',
         extra: 'keep',
       })
     ).toEqual({
-      ruolo: 'artista',
       artista_id: '991c5dd5-8f08-4985-a973-6081ff68242a',
       extra: 'keep',
     })
   })
 
-  it('defaults ruolo to artista when missing', () => {
-    expect(mergeArtistAccessMetadata({ artista_id: 'art-1' })).toEqual({
-      artista_id: 'art-1',
+  it('rewrites the existing app_metadata role and ignores user_metadata', () => {
+    expect(
+      appMetadataForResend({
+        app_metadata: { ruolo: 'artista', provider: 'email' },
+      })
+    ).toEqual({
       ruolo: 'artista',
+      provider: 'email',
     })
+  })
+
+  it('does not invent a role from user_metadata when app_metadata.ruolo is missing', () => {
+    expect(appMetadataForResend({ app_metadata: { provider: 'email' } })).toBeNull()
   })
 })
 
@@ -91,7 +99,8 @@ describe('sendResendAccessEmail', () => {
     email: 'pending-artist@example.com',
     email_confirmed_at: null,
     last_sign_in_at: null,
-    user_metadata: { ruolo: 'artista', artista_id: 'art-pending' },
+    app_metadata: { ruolo: 'artista', provider: 'email' },
+    user_metadata: { ruolo: 'operatore', artista_id: 'art-pending' },
   }
 
   const registeredQaUser = {
@@ -99,8 +108,9 @@ describe('sendResendAccessEmail', () => {
     email: 'artist-registered@example.com',
     email_confirmed_at: '2026-03-01T00:00:00Z',
     last_sign_in_at: null,
+    app_metadata: { ruolo: 'artista', provider: 'email' },
     user_metadata: {
-      ruolo: 'artista',
+      ruolo: 'operatore',
       artista_id: '991c5dd5-8f08-4985-a973-6081ff68242a',
     },
   }
@@ -116,13 +126,13 @@ describe('sendResendAccessEmail', () => {
     const resetPasswordForEmail = jest.fn().mockResolvedValue({
       error: overrides?.recoveryError ?? null,
     })
-    const updateUserMetadata = jest.fn().mockResolvedValue({
+    const updateUserAccess = jest.fn().mockResolvedValue({
       error: overrides?.updateError ?? null,
     })
-    return { inviteUserByEmail, resetPasswordForEmail, updateUserMetadata }
+    return { inviteUserByEmail, resetPasswordForEmail, updateUserAccess }
   }
 
-  it('resends a first-time invite without calling recovery', async () => {
+  it('resends a first-time invite without copying ruolo into user_metadata', async () => {
     const auth = mockAuth()
     const result = await sendResendAccessEmail(
       pendingUser,
@@ -131,13 +141,17 @@ describe('sendResendAccessEmail', () => {
     )
 
     expect(result).toEqual({ ok: true, method: 'invite' })
+    expect(auth.updateUserAccess).toHaveBeenCalledWith(pendingUser.id, {
+      app_metadata: { ruolo: 'artista', provider: 'email' },
+    })
     expect(auth.inviteUserByEmail).toHaveBeenCalledWith(
       'pending-artist@example.com',
       {
-        data: { ruolo: 'artista', artista_id: 'art-pending' },
+        data: { artista_id: 'art-pending' },
         redirectTo: 'https://rasi.example/auth/callback?invite=true',
       }
     )
+    expect(auth.inviteUserByEmail.mock.calls[0][1].data).not.toHaveProperty('ruolo')
     expect(auth.resetPasswordForEmail).not.toHaveBeenCalled()
   })
 
@@ -155,10 +169,25 @@ describe('sendResendAccessEmail', () => {
       'artist-registered@example.com',
       { redirectTo: 'https://rasi.example/auth/callback?invite=true' }
     )
-    expect(auth.updateUserMetadata).toHaveBeenCalledWith(
+    expect(auth.updateUserAccess).toHaveBeenCalledWith(
       registeredQaUser.id,
-      registeredQaUser.user_metadata
+      { app_metadata: { ruolo: 'artista', provider: 'email' } }
     )
+  })
+
+  it('does not write an escalated user_metadata role into app_metadata', async () => {
+    const auth = mockAuth()
+    await sendResendAccessEmail(
+      {
+        ...registeredQaUser,
+        app_metadata: { provider: 'email' },
+        user_metadata: { ruolo: 'admin', artista_id: 'art-1' },
+      },
+      'https://rasi.example',
+      auth
+    )
+
+    expect(auth.updateUserAccess).not.toHaveBeenCalled()
   })
 
   it('falls back to recovery if invite rejects an already registered email', async () => {

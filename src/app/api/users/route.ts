@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import {
   validateRoleChange,
-  mergeUserMetadataWithRole,
+  mergeAppMetadataWithRole,
 } from './role-update'
+import {
+  readAppMetadataRole,
+  readAuthoritativeUserRole,
+  resolveUserRole,
+  VALID_USER_ROLES,
+} from '@/shared/lib/auth-permissions'
 import { validateUserInvite } from './invite'
 import { findUserByArtistaId } from './find-by-artista'
 import {
@@ -60,7 +66,7 @@ async function verifyAdminUser(req: NextRequest): Promise<{ isAdmin: boolean; us
     return { isAdmin: false, error: 'Token non valido o utente non trovato' }
   }
 
-  const userRole = user.user_metadata?.ruolo
+  const userRole = readAuthoritativeUserRole(user)
   const canManageUsers = userRole === 'admin' || userRole === 'operatore'
   
   if (!canManageUsers) {
@@ -108,15 +114,9 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Map users to a cleaner format
-    // Ruoli validi: admin, operatore, collecting, artista
-    const validRoles = ['admin', 'operatore', 'collecting', 'artista']
+    // Ruolo solo da app_metadata. Assente o non valido → collecting (fail-closed).
     const mappedUsers = users.map(u => {
-      let ruolo = u.user_metadata?.ruolo
-      // Mappa ruoli vecchi o mancanti a 'artista' (default)
-      if (!ruolo || !validRoles.includes(ruolo)) {
-        ruolo = 'artista'
-      }
+      const ruolo = resolveUserRole(readAppMetadataRole(u.app_metadata))
       // Un utente si considera "verificato" solo se ha effettivamente
       // accettato l'invito/confermato la mail (last_sign_in_at presente),
       // oppure se non è un invitato (nessun invited_at).
@@ -188,6 +188,7 @@ export async function POST(req: NextRequest) {
           email: targetUser.email,
           email_confirmed_at: targetUser.email_confirmed_at,
           last_sign_in_at: targetUser.last_sign_in_at,
+          app_metadata: (targetUser.app_metadata ?? null) as Record<string, unknown> | null,
           user_metadata: (targetUser.user_metadata ?? null) as Record<string, unknown> | null,
         },
         resolveAuthInviteOrigin(
@@ -199,10 +200,8 @@ export async function POST(req: NextRequest) {
             adminClient.auth.admin.inviteUserByEmail(targetEmail, options),
           resetPasswordForEmail: (targetEmail, options) =>
             adminClient.auth.resetPasswordForEmail(targetEmail, options),
-          updateUserMetadata: async (userId, metadata) => {
-            const { error } = await adminClient.auth.admin.updateUserById(userId, {
-              user_metadata: metadata,
-            })
+          updateUserAccess: async (userId, attributes) => {
+            const { error } = await adminClient.auth.admin.updateUserById(userId, attributes)
             return { error }
           },
         }
@@ -271,24 +270,45 @@ export async function POST(req: NextRequest) {
       artistaNome = `${artista.nome} ${artista.cognome}`
     }
 
-    const inviteMetadata: Record<string, unknown> = {
-      ruolo: validation.ruolo,
-    }
+    // inviteUserByEmail scrive `data` in user_metadata. Il ruolo va solo in app_metadata.
+    const inviteUserMetadata: Record<string, unknown> = {}
     if (validation.artistaId) {
-      inviteMetadata.artista_id = validation.artistaId
+      inviteUserMetadata.artista_id = validation.artistaId
     }
 
     const { data: invitedUser, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
       validation.email,
       {
-        data: inviteMetadata,
+        data: inviteUserMetadata,
         redirectTo: inviteRedirectTo
       }
     )
 
-    if (inviteError) {
+    if (inviteError || !invitedUser?.user) {
       console.error('Errore inviteUserByEmail:', inviteError)
-      return NextResponse.json({ success: false, error: inviteError.message }, { status: 500 })
+      return NextResponse.json({ success: false, error: inviteError?.message || 'Invito non riuscito' }, { status: 500 })
+    }
+
+    const { error: roleError } = await adminClient.auth.admin.updateUserById(
+      invitedUser.user.id,
+      {
+        app_metadata: mergeAppMetadataWithRole(
+          invitedUser.user.app_metadata as Record<string, unknown> | undefined,
+          validation.ruolo
+        ),
+      }
+    )
+
+    if (roleError) {
+      console.error('Errore assegnazione app_metadata.ruolo:', roleError)
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invito creato ma il ruolo non è stato salvato in app_metadata. Riassegna il ruolo prima che l’utente acceda.',
+          data: { id: invitedUser.user.id, email: invitedUser.user.email },
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({
@@ -342,7 +362,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     const adminClient = getSupabaseAdmin()
-    const updates: Record<string, unknown> = {}
+    const updates: {
+      app_metadata?: Record<string, unknown>
+      email?: string
+    } = {}
 
     if (ruolo) {
       const { data: { user: targetUser }, error: getUserError } =
@@ -352,11 +375,22 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Utente non trovato' }, { status: 404 })
       }
 
+      const currentRole = readAppMetadataRole(targetUser.app_metadata)
+      if (!currentRole || !(VALID_USER_ROLES as readonly string[]).includes(currentRole)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Ruolo autoritativo assente in app_metadata. Eseguire il backfill prima di modificare i ruoli.',
+          },
+          { status: 409 }
+        )
+      }
+
       const validation = validateRoleChange({
         actorIsAdmin: isAdmin,
         actorUserId,
         targetUserId: userId,
-        targetCurrentRole: targetUser.user_metadata?.ruolo,
+        targetCurrentRole: currentRole,
         newRole: ruolo,
       })
 
@@ -367,8 +401,8 @@ export async function PATCH(req: NextRequest) {
         )
       }
 
-      updates.user_metadata = mergeUserMetadataWithRole(
-        targetUser.user_metadata as Record<string, unknown> | undefined,
+      updates.app_metadata = mergeAppMetadataWithRole(
+        targetUser.app_metadata as Record<string, unknown> | undefined,
         validation.ruolo
       )
     }
@@ -390,7 +424,7 @@ export async function PATCH(req: NextRequest) {
       data: {
         id: updatedUser.user.id,
         email: updatedUser.user.email,
-        ruolo: updatedUser.user.user_metadata?.ruolo || 'artista',
+        ruolo: readAppMetadataRole(updatedUser.user.app_metadata) || 'collecting',
       }
     })
 

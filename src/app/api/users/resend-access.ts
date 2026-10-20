@@ -1,3 +1,8 @@
+import {
+  mergeAppMetadataWithRole,
+  readAppMetadataRole,
+} from '@/shared/lib/auth-permissions'
+
 export type ResendAccessMethod = 'invite' | 'recovery'
 
 export type AuthUserForResend = {
@@ -5,6 +10,7 @@ export type AuthUserForResend = {
   email?: string | null
   email_confirmed_at?: string | null
   last_sign_in_at?: string | null
+  app_metadata?: Record<string, unknown> | null
   user_metadata?: Record<string, unknown> | null
 }
 
@@ -17,9 +23,12 @@ export type ResendAccessAuth = {
     email: string,
     options: { redirectTo?: string }
   ) => Promise<{ error: { message: string } | null }>
-  updateUserMetadata: (
+  updateUserAccess: (
     userId: string,
-    metadata: Record<string, unknown>
+    attributes: {
+      app_metadata?: Record<string, unknown>
+      user_metadata?: Record<string, unknown>
+    }
   ) => Promise<{ error: { message: string } | null }>
 }
 
@@ -56,23 +65,33 @@ export function buildAuthInviteRedirectUrl(origin: string): string {
   return `${origin.replace(/\/$/, '')}/auth/callback?invite=true`
 }
 
-export function mergeArtistAccessMetadata(
+/**
+ * Metadata utente da reinviare nell'invito. Il ruolo non viene copiato:
+ * inviteUserByEmail scrive `data` in user_metadata, che il client può cambiare.
+ */
+export function userMetadataWithoutRole(
   existing: Record<string, unknown> | null | undefined
 ): Record<string, unknown> {
-  const ruolo =
-    typeof existing?.ruolo === 'string' && existing.ruolo
-      ? existing.ruolo
-      : 'artista'
+  if (!existing) return {}
+  const rest = { ...existing }
+  delete rest.ruolo
+  return rest
+}
 
-  return {
-    ...(existing ?? {}),
-    ruolo,
-  }
+/**
+ * Ruolo da riscrivere in app_metadata durante il reinvio.
+ * Se app_metadata.ruolo manca, non si usa user_metadata e non si assegna un default.
+ */
+export function appMetadataForResend(user: Pick<AuthUserForResend, 'app_metadata'>): Record<string, unknown> | null {
+  const ruolo = readAppMetadataRole(user.app_metadata)
+  if (!ruolo) return null
+  return mergeAppMetadataWithRole(user.app_metadata, ruolo)
 }
 
 /**
  * Reinvia accesso al portale: invite per utenti mai confermati,
  * recovery (reset password) per utenti Auth già registrati.
+ * Il ruolo resta in app_metadata; user_metadata non riceve `ruolo`.
  */
 export async function sendResendAccessEmail(
   user: AuthUserForResend,
@@ -85,16 +104,21 @@ export async function sendResendAccessEmail(
 
   const method = resolveResendAccessMethod(user)
   const redirectTo = buildAuthInviteRedirectUrl(origin)
-  const metadata = mergeArtistAccessMetadata(user.user_metadata)
+  const appMetadata = appMetadataForResend(user)
+  const inviteData = userMetadataWithoutRole(user.user_metadata)
 
-  const { error: updateError } = await auth.updateUserMetadata(user.id, metadata)
-  if (updateError) {
-    return { ok: false, status: 500, error: updateError.message }
+  if (appMetadata) {
+    const { error: updateError } = await auth.updateUserAccess(user.id, {
+      app_metadata: appMetadata,
+    })
+    if (updateError) {
+      return { ok: false, status: 500, error: updateError.message }
+    }
   }
 
   if (method === 'invite') {
     const { error } = await auth.inviteUserByEmail(user.email, {
-      data: metadata,
+      data: inviteData,
       redirectTo,
     })
     if (!error) {

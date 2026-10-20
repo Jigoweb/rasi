@@ -46,10 +46,12 @@ const AuthContext = createContext<AuthContextType>({
 
 /**
  * Estrae il ruolo dall'utente Supabase.
- * Il ruolo è memorizzato in raw_user_meta_data.ruolo
+ * Fonte autoritativa: app_metadata.ruolo (raw_app_meta_data).
+ * getUser() legge il record Auth, non il claim JWT, quindi il ruolo
+ * è aggiornato anche prima del refresh del token.
  */
 function getUserRole(user: User | null): UserRole {
-  return resolveUserRole(user?.user_metadata?.ruolo)
+  return resolveUserRole(user?.app_metadata?.ruolo)
 }
 
 /**
@@ -71,24 +73,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { isAdmin, isOperatore, isArtista, canManageUsers, canEditRoles } = permissions
 
   useEffect(() => {
+    let cancelled = false
+    let request = 0
+
+    const applyFreshUser = async () => {
+      const current = ++request
+      const { data: { session } } = await supabase.auth.getSession()
+      if (cancelled || current !== request) return
+      if (!session) {
+        setUser(null)
+        return
+      }
+      // getUser legge il record Auth (app_metadata aggiornato), non il claim JWT.
+      const { data: { user: freshUser } } = await supabase.auth.getUser()
+      if (cancelled || current !== request) return
+      setUser(freshUser ?? null)
+    }
+
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
-        setUser(session?.user || null)
+        await applyFreshUser()
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     initializeAuth()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user || null)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        request += 1
+        setUser(null)
+        return
+      }
+      // getUser fuori dal callback: dentro onAuthStateChange può deadlockare.
+      setTimeout(() => {
+        void applyFreshUser()
+      }, 0)
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, [router])
 
   const signOut = async () => {
