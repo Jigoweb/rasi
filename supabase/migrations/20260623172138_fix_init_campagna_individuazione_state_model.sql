@@ -1,0 +1,4 @@
+-- NO-OP. Storia gia applicata in produzione (20260623172138 fix_init_campagna_individuazione_state_model).
+-- Lo SQL originale non e nel repo. Questo file non riesegue nulla.
+-- init_campagna_individuazione e ridefinita dalle migration successive gia nel repo.
+-- Vedi supabase/scripts/migration_repair_plan.md.

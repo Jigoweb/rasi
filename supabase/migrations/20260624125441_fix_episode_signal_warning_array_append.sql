@@ -1,0 +1,5 @@
+-- NO-OP. Storia gia applicata in produzione come 20260624125441.
+-- Lo SQL vero resta in 20260624145500_fix_episode_signal_warning_array_append.sql,
+-- dopo 20260624142500_episode_normalization_matching_fallback.sql.
+-- Spostare lo SQL vero su questo timestamp lo farebbe sovrascrivere dal fallback.
+-- Vedi supabase/scripts/migration_repair_plan.md.
