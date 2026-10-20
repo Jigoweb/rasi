@@ -23,6 +23,18 @@ describe("resolveMiddlewareRedirect", () => {
     expect(resolveMiddlewareRedirect("/dashboard/opere", { ruolo: "artista" })).toBe(
       "/dashboard/profilo"
     );
+    expect(
+      resolveMiddlewareRedirect("/dashboard/opere", {
+        ruolo: "artista",
+        artistaId: null,
+      })
+    ).toBe("/dashboard/profilo");
+    expect(
+      resolveMiddlewareRedirect("/dashboard/profilo", {
+        ruolo: "artista",
+        artistaId: "11111111-1111-4111-8111-111111111111",
+      })
+    ).toBeNull();
   });
 
   it("does not intercept other public routes", () => {

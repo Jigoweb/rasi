@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { WebSocketLikeConstructor } from '@supabase/realtime-js'
 import WebSocket from 'ws'
-import { readAppMetadataRole } from './auth-role.js'
+import { readAppMetadataArtistaId, readAppMetadataRole } from './auth-role.js'
 import { config } from './config.js'
 
 const wsTransport = WebSocket as unknown as WebSocketLikeConstructor
@@ -41,6 +41,7 @@ const supabaseAnon = createClient(config.supabaseUrl, config.supabaseAnonKey, {
 export type VerifiedUser = {
   id: string
   role: string | null
+  artistaId: string | null
 }
 
 export async function verifyToken(token: string): Promise<VerifiedUser | null> {
@@ -52,5 +53,6 @@ export async function verifyToken(token: string): Promise<VerifiedUser | null> {
   return {
     id: user.id,
     role: readAppMetadataRole(user.app_metadata),
+    artistaId: readAppMetadataArtistaId(user.app_metadata),
   }
 }

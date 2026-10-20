@@ -81,6 +81,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authent
 SQL
 
 echo ">> Creating confirmed admin test user ($TEST_EMAIL)"
+# Ruolo e, per gli artisti, artista_id vivono solo in app_metadata.
+# Questo utente admin non ha un artista collegato: user_metadata resta anagrafica.
 SRK="$(supabase status -o env 2>/dev/null | sed -n 's/^SERVICE_ROLE_KEY="\(.*\)"$/\1/p')"
 SRK="${SRK:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU}"
 curl -s -X POST "$API_URL/auth/v1/admin/users" \

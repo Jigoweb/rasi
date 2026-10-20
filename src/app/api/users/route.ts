@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { validateRoleChange } from './role-update'
 import {
-  validateRoleChange,
-  mergeAppMetadataWithRole,
-} from './role-update'
-import {
+  mergeAppMetadataWithArtistaLink,
+  readAppMetadataArtistaId,
   readAppMetadataRole,
   readAuthoritativeUserRole,
   resolveUserRole,
@@ -125,7 +124,7 @@ export async function GET(req: NextRequest) {
         id: u.id,
         email: u.email,
         ruolo,
-        artista_id: u.user_metadata?.artista_id || null,
+        artista_id: readAppMetadataArtistaId(u.app_metadata),
         email_verified: u.email_confirmed_at !== null && !isPendingInvite,
         invited_at: u.invited_at || null,
         created_at: u.created_at,
@@ -257,7 +256,7 @@ export async function POST(req: NextRequest) {
       }
 
       const alreadyLinked = existingUsers.find(
-        u => u.user_metadata?.artista_id === validation.artistaId
+        u => readAppMetadataArtistaId(u.app_metadata) === validation.artistaId
       )
 
       if (alreadyLinked) {
@@ -270,16 +269,12 @@ export async function POST(req: NextRequest) {
       artistaNome = `${artista.nome} ${artista.cognome}`
     }
 
-    // inviteUserByEmail scrive `data` in user_metadata. Il ruolo va solo in app_metadata.
-    const inviteUserMetadata: Record<string, unknown> = {}
-    if (validation.artistaId) {
-      inviteUserMetadata.artista_id = validation.artistaId
-    }
-
+    // inviteUserByEmail scrive `data` in user_metadata. Né ruolo né artista_id
+    // finiscono lì: entrambi vanno in app_metadata con un merge che non cancella
+    // le altre chiavi (provider).
     const { data: invitedUser, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
       validation.email,
       {
-        data: inviteUserMetadata,
         redirectTo: inviteRedirectTo
       }
     )
@@ -292,9 +287,10 @@ export async function POST(req: NextRequest) {
     const { error: roleError } = await adminClient.auth.admin.updateUserById(
       invitedUser.user.id,
       {
-        app_metadata: mergeAppMetadataWithRole(
+        app_metadata: mergeAppMetadataWithArtistaLink(
           invitedUser.user.app_metadata as Record<string, unknown> | undefined,
-          validation.ruolo
+          validation.ruolo,
+          validation.artistaId
         ),
       }
     )
@@ -304,7 +300,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Invito creato ma il ruolo non è stato salvato in app_metadata. Riassegna il ruolo prima che l’utente acceda.',
+          error: 'Invito creato ma ruolo o artista_id non sono stati salvati in app_metadata. Riassegna il collegamento prima che l’utente acceda.',
           data: { id: invitedUser.user.id, email: invitedUser.user.email },
         },
         { status: 500 }
@@ -401,9 +397,12 @@ export async function PATCH(req: NextRequest) {
         )
       }
 
-      updates.app_metadata = mergeAppMetadataWithRole(
+      updates.app_metadata = mergeAppMetadataWithArtistaLink(
         targetUser.app_metadata as Record<string, unknown> | undefined,
-        validation.ruolo
+        validation.ruolo,
+        validation.ruolo === 'artista'
+          ? readAppMetadataArtistaId(targetUser.app_metadata)
+          : null
       )
     }
 

@@ -64,7 +64,7 @@ describe('resolveAuthInviteOrigin', () => {
 })
 
 describe('access metadata for resend', () => {
-  it('keeps artista_id and drops ruolo from user_metadata', () => {
+  it('drops ruolo and artista_id from user_metadata', () => {
     expect(
       userMetadataWithoutRole({
         ruolo: 'operatore',
@@ -72,7 +72,6 @@ describe('access metadata for resend', () => {
         extra: 'keep',
       })
     ).toEqual({
-      artista_id: '991c5dd5-8f08-4985-a973-6081ff68242a',
       extra: 'keep',
     })
   })
@@ -80,11 +79,12 @@ describe('access metadata for resend', () => {
   it('rewrites the existing app_metadata role and ignores user_metadata', () => {
     expect(
       appMetadataForResend({
-        app_metadata: { ruolo: 'artista', provider: 'email' },
+        app_metadata: { ruolo: 'artista', provider: 'email', artista_id: '11111111-1111-4111-8111-111111111111' },
       })
     ).toEqual({
       ruolo: 'artista',
       provider: 'email',
+      artista_id: '11111111-1111-4111-8111-111111111111',
     })
   })
 
@@ -147,7 +147,7 @@ describe('sendResendAccessEmail', () => {
     expect(auth.inviteUserByEmail).toHaveBeenCalledWith(
       'pending-artist@example.com',
       {
-        data: { artista_id: 'art-pending' },
+        data: {},
         redirectTo: 'https://rasi.example/auth/callback?invite=true',
       }
     )

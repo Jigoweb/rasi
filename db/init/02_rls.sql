@@ -120,18 +120,22 @@ CREATE POLICY "partecipazioni_select_policy" ON partecipazioni
             )
         )
         OR
-        -- Gli utenti pubblici vedono solo le partecipazioni di opere/artisti validati
+        -- Gli utenti che non sono artisti vedono le partecipazioni di opere/artisti validati.
+        -- Il ruolo artista non entra in questo ramo: vede solo le proprie righe.
         (
-            EXISTS (
-                SELECT 1 FROM opere o 
-                WHERE o.id = partecipazioni.opera_id 
-                AND o.stato_validazione = 'validato'::stato_validazione
-            )
-            OR
-            EXISTS (
-                SELECT 1 FROM artisti a 
-                WHERE a.id = partecipazioni.artista_id 
-                AND a.stato_validazione = 'validato'::stato_validazione
+            get_user_role() IS DISTINCT FROM 'artista'::ruolo_utente
+            AND (
+                EXISTS (
+                    SELECT 1 FROM opere o 
+                    WHERE o.id = partecipazioni.opera_id 
+                    AND o.stato_validazione = 'validato'::stato_validazione
+                )
+                OR
+                EXISTS (
+                    SELECT 1 FROM artisti a 
+                    WHERE a.id = partecipazioni.artista_id 
+                    AND a.stato_validazione = 'validato'::stato_validazione
+                )
             )
         )
     );
@@ -226,9 +230,11 @@ CREATE POLICY "individuazioni_select_policy" ON individuazioni
             )
         )
         OR
-        -- Gli utenti pubblici vedono solo le individuazioni di opere validati
+        -- Gli utenti che non sono artisti vedono le individuazioni di opere validate.
+        -- Il ruolo artista non entra in questo ramo: vede solo le opere in cui partecipa.
         (
-            stato = ANY (ARRAY['validato'::stato_individuazione, 'individuato'::stato_individuazione])
+            get_user_role() IS DISTINCT FROM 'artista'::ruolo_utente
+            AND stato = ANY (ARRAY['validato'::stato_individuazione, 'individuato'::stato_individuazione])
             AND EXISTS (
                 SELECT 1 FROM opere o 
                 WHERE o.id = individuazioni.opera_id 

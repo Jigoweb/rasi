@@ -1,5 +1,7 @@
 export type MiddlewareUser = {
   ruolo?: string | null;
+  /** Da app_metadata.artista_id. Assente → null, nessun dato artista. */
+  artistaId?: string | null;
 } | null;
 
 export function resolveMiddlewareRedirect(

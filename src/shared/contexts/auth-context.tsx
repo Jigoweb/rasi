@@ -8,6 +8,7 @@ import {
   type UserRole,
   resolveUserRole,
   getRolePermissions,
+  readAppMetadataArtistaId,
 } from '@/shared/lib/auth-permissions'
 
 export type { UserRole }
@@ -56,10 +57,11 @@ function getUserRole(user: User | null): UserRole {
 
 /**
  * Estrae l'artista_id dall'utente Supabase.
- * L'artista_id è memorizzato in raw_user_meta_data.artista_id
+ * Fonte autoritativa: app_metadata.artista_id (raw_app_meta_data).
+ * Nessun fallback su user_metadata. Assente → null.
  */
 function getUserArtistaId(user: User | null): string | null {
-  return user?.user_metadata?.artista_id || null
+  return readAppMetadataArtistaId(user?.app_metadata)
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

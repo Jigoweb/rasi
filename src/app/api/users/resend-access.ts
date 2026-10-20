@@ -66,8 +66,9 @@ export function buildAuthInviteRedirectUrl(origin: string): string {
 }
 
 /**
- * Metadata utente da reinviare nell'invito. Il ruolo non viene copiato:
- * inviteUserByEmail scrive `data` in user_metadata, che il client può cambiare.
+ * Metadata utente da reinviare nell'invito.
+ * inviteUserByEmail scrive `data` in user_metadata, che il client può cambiare:
+ * ruolo e artista_id non vengono copiati. Il collegamento resta in app_metadata.
  */
 export function userMetadataWithoutRole(
   existing: Record<string, unknown> | null | undefined
@@ -75,6 +76,7 @@ export function userMetadataWithoutRole(
   if (!existing) return {}
   const rest = { ...existing }
   delete rest.ruolo
+  delete rest.artista_id
   return rest
 }
 
@@ -91,7 +93,7 @@ export function appMetadataForResend(user: Pick<AuthUserForResend, 'app_metadata
 /**
  * Reinvia accesso al portale: invite per utenti mai confermati,
  * recovery (reset password) per utenti Auth già registrati.
- * Il ruolo resta in app_metadata; user_metadata non riceve `ruolo`.
+ * Ruolo e artista_id restano in app_metadata; user_metadata non li riceve.
  */
 export async function sendResendAccessEmail(
   user: AuthUserForResend,
