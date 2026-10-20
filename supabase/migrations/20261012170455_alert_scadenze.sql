@@ -1,0 +1,5 @@
+-- NO-OP. Storia gia applicata in produzione come 20261012170455.
+-- Lo SQL vero resta in 20261012100300_alert_scadenze.sql, prima di
+-- 20261012100400_audit_log.sql, che aggancia il trigger su alert_prese_visione
+-- solo se la tabella esiste gia.
+-- Vedi supabase/scripts/migration_repair_plan.md.

@@ -1,0 +1,4 @@
+-- NO-OP. Storia gia applicata in produzione (20260922135117 drop_rasi_enc_chunks_scratch).
+-- Lo SQL originale non e nel repo e la relazione scratch non fa parte dello schema
+-- versionato. Questo file non rilancia il DROP.
+-- Vedi supabase/scripts/migration_repair_plan.md.
