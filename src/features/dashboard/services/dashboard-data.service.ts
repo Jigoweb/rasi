@@ -5,6 +5,12 @@ import {
   sortCatalogHealthMetrics,
   type CatalogHealthImpact,
 } from './catalog-health-impact'
+import {
+  loadActivityFeed,
+  type AttivitaItem,
+} from './dashboard-activity.service'
+
+export type { AttivitaItem }
 
 export interface DashboardStats {
   artisti_attivi: number
@@ -16,14 +22,6 @@ export interface DashboardStats {
   campagne_attive: number
   importo_distribuito: number
   tasso_matching: number
-}
-
-export interface AttivitaItem {
-  tipo: 'artista' | 'opera' | 'campagna_individuazione' | 'campagna_programmazione'
-  label: string
-  dettaglio: string
-  timestamp: string
-  href?: string
 }
 
 export interface StatsAggiuntive {
@@ -312,47 +310,7 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
     },
     countIndividuazioni: () => count((supabase as any).from('individuazioni').select('id', { count: 'exact', head: true })),
     countIndividuazioniValide: () => count((supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }).neq('stato', 'respinto')),
-    loadRecentActivities: async () => {
-      const [ultArtisti, ultOpere, ultCampagneInd, ultCampagneProg] = await Promise.all([
-        supabase.from('artisti').select('id, nome, cognome, created_at').order('created_at', { ascending: false }).limit(3),
-        supabase.from('opere').select('id, titolo, created_at').order('created_at', { ascending: false }).limit(3),
-        supabase.from('campagne_individuazione').select('id, nome, updated_at, stato').eq('stato', 'completata').order('updated_at', { ascending: false }).limit(3),
-        (supabase as any).from('campagne_programmazione').select('id, nome, created_at').order('created_at', { ascending: false }).limit(3),
-      ])
-
-      return [
-        ...(ultArtisti.data || []).map((a: any) => ({
-          tipo: 'artista' as const,
-          label: 'Nuovo artista registrato',
-          dettaglio: `${a.nome} ${a.cognome}`,
-          timestamp: a.created_at,
-          href: a.id ? `/dashboard/artisti/${a.id}` : undefined,
-        })),
-        ...(ultOpere.data || []).map((o: any) => ({
-          tipo: 'opera' as const,
-          label: 'Nuova opera catalogata',
-          dettaglio: o.titolo,
-          timestamp: o.created_at,
-          href: o.id ? `/dashboard/opere/${o.id}` : undefined,
-        })),
-        ...(ultCampagneInd.data || []).map((c: any) => ({
-          tipo: 'campagna_individuazione' as const,
-          label: 'Campagna completata',
-          dettaglio: c.nome,
-          timestamp: c.updated_at,
-          href: c.id ? `/dashboard/individuazioni/${c.id}` : undefined,
-        })),
-        ...(ultCampagneProg.data || []).map((c: any) => ({
-          tipo: 'campagna_programmazione' as const,
-          label: 'Nuova campagna programmazione',
-          dettaglio: c.nome,
-          timestamp: c.created_at,
-          href: c.id ? `/dashboard/programmazioni/${c.id}` : undefined,
-        })),
-      ]
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 5)
-    },
+    loadRecentActivities: () => loadActivityFeed(supabase, { limit: 5, perSourceLimit: 5 }),
     countPartecipazioni: () => count(supabase.from('partecipazioni').select('id', { count: 'exact', head: true })),
     countCampagneRipartizione: () => count(supabase.from('campagne_ripartizione').select('id', { count: 'exact', head: true })),
     loadUltimoDatoCaricato: async () => {
