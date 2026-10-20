@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveMiddlewareRedirect } from '@/features/public-site/middleware-policy'
+import { readAppMetadataRole } from '@/shared/lib/auth-permissions'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -31,7 +32,7 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const redirectTo = resolveMiddlewareRedirect(pathname, user
-    ? { ruolo: typeof user.user_metadata?.ruolo === 'string' ? user.user_metadata.ruolo : null }
+    ? { ruolo: readAppMetadataRole(user.app_metadata) }
     : null)
 
   if (redirectTo) {

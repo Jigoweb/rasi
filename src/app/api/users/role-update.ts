@@ -2,7 +2,7 @@ import {
   type UserRole,
   resolveUserRole,
   canActorChangeTargetRole,
-  mergeUserMetadataWithRole,
+  mergeAppMetadataWithRole,
   VALID_USER_ROLES,
 } from '@/shared/lib/auth-permissions'
 
@@ -58,4 +58,4 @@ export function validateRoleChange(
   return { ok: true, ruolo: newRole, actorRole }
 }
 
-export { mergeUserMetadataWithRole }
+export { mergeAppMetadataWithRole }

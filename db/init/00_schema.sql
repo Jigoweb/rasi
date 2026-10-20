@@ -72,16 +72,32 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- STABLE: auth.uid() non cambia durante una query → caching per RLS
+-- STABLE: auth.uid() non cambia durante una query → caching per RLS.
+-- Fonte autoritativa: raw_app_meta_data.ruolo (server-only).
+-- Nessun fallback su raw_user_meta_data: è scrivibile dal client.
+-- Ruolo assente o non previsto dall'enum → NULL (fail-closed, non readonly).
 CREATE OR REPLACE FUNCTION get_user_role()
-RETURNS ruolo_utente AS $$
+RETURNS ruolo_utente
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_ruolo text;
 BEGIN
-    RETURN COALESCE(
-        (SELECT raw_user_meta_data->>'ruolo' FROM auth.users WHERE id = auth.uid())::ruolo_utente,
-        'readonly'
-    );
+    SELECT u.raw_app_meta_data ->> 'ruolo'
+      INTO v_ruolo
+    FROM auth.users u
+    WHERE u.id = auth.uid();
+
+    IF v_ruolo IS NULL OR v_ruolo NOT IN ('admin', 'operatore', 'artista', 'readonly') THEN
+        RETURN NULL;
+    END IF;
+
+    RETURN v_ruolo::ruolo_utente;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$;
 
 CREATE OR REPLACE FUNCTION get_user_artista_id()
 RETURNS UUID AS $$

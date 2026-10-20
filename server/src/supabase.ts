@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { WebSocketLikeConstructor } from '@supabase/realtime-js'
 import WebSocket from 'ws'
+import { readAppMetadataRole } from './auth-role.js'
 import { config } from './config.js'
 
 const wsTransport = WebSocket as unknown as WebSocketLikeConstructor
@@ -50,6 +51,6 @@ export async function verifyToken(token: string): Promise<VerifiedUser | null> {
 
   return {
     id: user.id,
-    role: typeof user.user_metadata?.ruolo === 'string' ? user.user_metadata.ruolo : null,
+    role: readAppMetadataRole(user.app_metadata),
   }
 }

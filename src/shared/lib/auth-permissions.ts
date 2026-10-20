@@ -29,6 +29,40 @@ export function resolveUserRole(ruolo: unknown): UserRole {
   return 'collecting'
 }
 
+/**
+ * Legge il ruolo da app_metadata (colonna auth.users.raw_app_meta_data).
+ * È l'unica fonte autoritativa: user_metadata è scrivibile dal client
+ * con auth.updateUser({ data }) e non va usato per autorizzare.
+ * Ruolo assente → null. Nessun fallback.
+ */
+export function readAppMetadataRole(appMetadata: unknown): string | null {
+  if (!appMetadata || typeof appMetadata !== 'object') return null
+  const ruolo = (appMetadata as Record<string, unknown>).ruolo
+  return typeof ruolo === 'string' && ruolo.length > 0 ? ruolo : null
+}
+
+/**
+ * Ruolo usato per autorizzare. Ignora user_metadata anche se contiene
+ * ruolo=admin o ruolo=operatore.
+ */
+export function readAuthoritativeUserRole(user: {
+  app_metadata?: unknown
+  user_metadata?: unknown
+} | null | undefined): string | null {
+  return readAppMetadataRole(user?.app_metadata)
+}
+
+/** Merge del ruolo in app_metadata. Non tocca user_metadata. */
+export function mergeAppMetadataWithRole(
+  existing: Record<string, unknown> | null | undefined,
+  ruolo: string
+): Record<string, unknown> {
+  return {
+    ...(existing ?? {}),
+    ruolo,
+  }
+}
+
 export function getRolePermissions(role: UserRole): RolePermissions {
   return {
     isAdmin: role === 'admin',
@@ -93,12 +127,3 @@ export function canActorChangeTargetRole(
   return { ok: true }
 }
 
-export function mergeUserMetadataWithRole(
-  existing: Record<string, unknown> | null | undefined,
-  ruolo: UserRole
-): Record<string, unknown> {
-  return {
-    ...(existing ?? {}),
-    ruolo,
-  }
-}

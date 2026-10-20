@@ -1,6 +1,6 @@
 import {
   validateRoleChange,
-  mergeUserMetadataWithRole,
+  mergeAppMetadataWithRole,
 } from './role-update'
 
 describe('validateRoleChange', () => {
@@ -87,13 +87,13 @@ describe('validateRoleChange', () => {
   })
 })
 
-describe('mergeUserMetadataWithRole in role-update', () => {
-  it('preserves artista_id when changing role', () => {
+describe('mergeAppMetadataWithRole in role-update', () => {
+  it('sets ruolo in app_metadata without copying user fields', () => {
     expect(
-      mergeUserMetadataWithRole(
-        { ruolo: 'artista', artista_id: 'art-99' },
+      mergeAppMetadataWithRole(
+        { ruolo: 'artista', provider: 'email' },
         'operatore'
       )
-    ).toEqual({ ruolo: 'operatore', artista_id: 'art-99' })
+    ).toEqual({ ruolo: 'operatore', provider: 'email' })
   })
 })
