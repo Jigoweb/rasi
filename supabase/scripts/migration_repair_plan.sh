@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
-# Piano di allineamento della storia migration. Non applica SQL di schema.
+# Piano di allineamento della storia migration.
 # Legge supabase/scripts/migration_repair_plan.md prima di qualsiasi esecuzione.
+# Fase 1 non applica SQL di schema. Fase 2 applica un solo file, mai db push.
 #
 # Default: stampa i comandi e esce, senza rete e senza database.
 # Esecuzione, solo dopo il merge di #45 e dopo le query di pre-check:
 #   CONFIRM=apply-repair TARGET=local  ./supabase/scripts/migration_repair_plan.sh
 #   CONFIRM=apply-repair TARGET=linked ./supabase/scripts/migration_repair_plan.sh
 # TARGET=linked modifica schema_migrations del progetto collegato. Non è un db push.
-# Annullamento (stesso CONFIRM, inverte solo le righe toccate da questo script):
-#   CONFIRM=apply-repair TARGET=local  UNDO=1 ./supabase/scripts/migration_repair_plan.sh
+# Fase 1 (storia già in prod, inclusi i 3 PRESENT): CONFIRM=apply-repair
+# Fase 2 (solo 20261021100000, poi applied dei 6 + quel timestamp):
+#   CONFIRM=apply-missing-effects TARGET=local|linked
+# Non usare supabase db push: i 6 file vecchi partirebbero prima.
+# Annullamento storia (non rilancia DDL):
+#   CONFIRM=apply-repair TARGET=local UNDO=1
+#   CONFIRM=apply-missing-effects TARGET=local UNDO=1
+# Lo schema della fase 2 si annulla con supabase/rollback/20261021100000_apply_missing_prod_effects.sql
 set -euo pipefail
 
 CONFIRM="${CONFIRM:-}"
@@ -44,6 +51,7 @@ REVERT_COVERED_BY_LOCAL=(
 )
 
 # File locali il cui effetto è già in produzione. Non rieseguire lo SQL.
+# I tre in coda sono PRESENT alla verifica read-only del 2026-10-21.
 APPLY_LOCAL=(
   20260608120100 20260608120200 20260608120300 20260608120400
   20260608120500 20260608120600 20260619100000
@@ -51,20 +59,24 @@ APPLY_LOCAL=(
   20261002160000 20261007160000
   20261012100000 20261012100100 20261012100200 20261012100300
   20261012100400
-)
-
-# Pending: nessuno repair. Restano solo-locali finché un push reale, non questo script.
-PENDING_LOCAL=(
-  20260608120000
-  20260623140000
   20260623173000
   20260623180500
-  20260623220000
-  20260626170400
   20260630125200
+)
+
+# MISSING o PARTIAL il 2026-10-21. Si marcano applied solo DOPO
+# 20261021100000_apply_missing_prod_effects.sql. Un db push lancerebbe
+# prima questi sei file vecchi.
+APPLY_AFTER_EFFECTS=(
+  20260608120000
+  20260623140000
+  20260626170400
+  20260623220000
   20260811183000
   20260911160000
+  20261021100000
 )
+EFFECTS_FILE="supabase/migrations/20261021100000_apply_missing_prod_effects.sql"
 
 flag_for_target() {
   case "$TARGET" in
@@ -99,25 +111,44 @@ print_repairs() {
 }
 
 echo "migration repair plan (dry-run se CONFIRM non è apply-repair)"
-echo "UNDO=${UNDO}  pending lasciati stare: ${#PENDING_LOCAL[@]}"
+echo "UNDO=${UNDO}"
+echo
+echo "ATTENZIONE: non usare supabase db push per gli effetti mancanti."
+echo "I sei file vecchi (20260608120000, 20260623140000, 20260626170400,"
+echo "20260623220000, 20260811183000, 20260911160000) hanno timestamp"
+echo "precedente a 20261021100000: un push li eseguirebbe prima e"
+echo "riscriverebbe build_match_key_strict, la policy campaign_jobs e"
+echo "get_dashboard_metrics con corpi superati."
+echo "Ordine: repair della storia già in prod, poi SOLO ${EFFECTS_FILE},"
+echo "poi repair applied di quei sei più 20261021100000."
 echo
 echo "# pre-check"
 echo "supabase migration list"
 echo "# poi le query in supabase/scripts/migration_repair_plan.md"
 echo
-echo "# reverted: baseline ${#REVERT_BASELINE[@]} + coperti da file locale ${#REVERT_COVERED_BY_LOCAL[@]}"
+echo "# fase 1 — reverted: baseline ${#REVERT_BASELINE[@]} + coperti da file locale ${#REVERT_COVERED_BY_LOCAL[@]}"
 print_repairs reverted "${REVERT_BASELINE[@]}" "${REVERT_COVERED_BY_LOCAL[@]}"
 echo
-echo "# applied: ${#APPLY_LOCAL[@]} file locali già riflessi in produzione"
+echo "# fase 1 — applied: ${#APPLY_LOCAL[@]} già in produzione (inclusi 3 PRESENT del 2026-10-21)"
 print_repairs applied "${APPLY_LOCAL[@]}"
 echo
-echo "# non toccare (pending): ${PENDING_LOCAL[*]}"
-echo "# post-check: supabase migration list"
-echo "# atteso: tutte le coppie local/remote allineate, tranne i 9 pending solo-locali"
+query_flag=""
+if [[ -n "$TARGET" ]]; then
+  query_flag="$(flag_for_target)"
+fi
+echo "# fase 2 — applicare solo questo file, non db push:"
+echo "#   supabase db query --yes ${query_flag} -f ${EFFECTS_FILE}"
+echo "# fase 2 — dopo, applied dei 6 coperti + 20261021100000:"
+print_repairs applied "${APPLY_AFTER_EFFECTS[@]}"
+echo "# post-check: supabase migration list senza righe solo-locali"
+echo "# CONFIRM=apply-repair esegue solo la fase 1."
+echo "# CONFIRM=apply-missing-effects esegue la fase 2 (file singolo, poi i repair)."
 
-if [[ "$CONFIRM" != "apply-repair" ]]; then
+if [[ "$CONFIRM" != "apply-repair" && "$CONFIRM" != "apply-missing-effects" ]]; then
   echo
-  echo "Nessun comando eseguito. Per applicarlo: CONFIRM=apply-repair TARGET=local|linked"
+  echo "Nessun comando eseguito."
+  echo "Fase 1: CONFIRM=apply-repair TARGET=local|linked"
+  echo "Fase 2: CONFIRM=apply-missing-effects TARGET=local|linked"
   exit 0
 fi
 
@@ -143,11 +174,26 @@ run_one() {
   supabase migration repair --status "$status" "$version" --yes "$target_flag"
 }
 
-for version in "${REVERT_BASELINE[@]}" "${REVERT_COVERED_BY_LOCAL[@]}"; do
-  run_one reverted "$version"
-done
-for version in "${APPLY_LOCAL[@]}"; do
+if [[ "$CONFIRM" == "apply-repair" ]]; then
+  for version in "${REVERT_BASELINE[@]}" "${REVERT_COVERED_BY_LOCAL[@]}"; do
+    run_one reverted "$version"
+  done
+  for version in "${APPLY_LOCAL[@]}"; do
+    run_one applied "$version"
+  done
+  echo "Fase 1 fatta. La fase 2 non è partita: prima il solo ${EFFECTS_FILE}, poi CONFIRM=apply-missing-effects."
+  echo "supabase migration list ${target_flag}"
+  exit 0
+fi
+
+if [[ "$UNDO" == "1" ]]; then
+  echo "UNDO fase 2: marco reverted i sette timestamp. Non rieseguo SQL." >&2
+  echo "Per lo schema usa supabase/rollback/20261021100000_apply_missing_prod_effects.sql" >&2
+else
+  echo "Fase 2: applico solo ${EFFECTS_FILE}, poi marco applied i sei file coperti e 20261021100000." >&2
+  supabase db query --yes "$target_flag" -f "$EFFECTS_FILE"
+fi
+for version in "${APPLY_AFTER_EFFECTS[@]}"; do
   run_one applied "$version"
 done
-
-echo "Fatto. Esegui: supabase migration list ${target_flag}"
+echo "Fase 2 fatta. Esegui: supabase migration list ${target_flag}"
