@@ -1,6 +1,6 @@
 -- B.2 — programmazioni dual match keys (column + trigger, NO backfill in this file).
 -- 4M rows: ADD COLUMN with NULL default is a catalog-only change (fast).
--- The trigger handles new INSERTs; the backfill runs in migration 20260526143302.
+-- The trigger handles new INSERTs; the backfill runs in migration 20260526131409.
 
 ALTER TABLE public.programmazioni
   ADD COLUMN IF NOT EXISTS match_key_strict text,

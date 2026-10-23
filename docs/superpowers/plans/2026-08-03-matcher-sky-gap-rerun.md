@@ -1,6 +1,6 @@
 # Rilancio individuazioni dopo matcher SKY gap (A/D)
 
-Migration: `supabase/migrations/20260803120000_matcher_sky_gap_a_d.sql`  
+Migration: `supabase/migrations/20260803121140_matcher_sky_gap_a_d.sql`  
 (Applicata anche come `matcher_sky_gap_a_d_body` sul progetto remoto.)
 
 ## Cosa cambia al rilancio

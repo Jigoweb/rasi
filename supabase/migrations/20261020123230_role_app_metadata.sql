@@ -14,7 +14,7 @@
 -- presente in app_metadata. Non copia valori inattesi.
 --
 -- Dry-run (solo SELECT, senza email): supabase/scripts/role_app_metadata_report.sql
--- Rollback: supabase/rollback/20261020075909_role_app_metadata.sql
+-- Rollback: supabase/rollback/20261020123230_role_app_metadata.sql
 --
 -- Ordine: backfill prima del cambio funzione, nella stessa transazione.
 -- Il trigger di audit passa a raw_app_meta_data DOPO il backfill, così

@@ -58,7 +58,7 @@ Vedi `.env.example`. Su Railway vanno impostate nel servizio:
    `server` il file di configurazione va indicato con percorso assoluto
    (`/server/railway.json`), e Config as Code è deprecato. Il file resta come
    riferimento versionato ed è verificato da `src/test/shutdown.test.ts`.
-5. Esegui la migration `supabase/migrations/20260611120000_campaign_jobs.sql`
+5. Esegui la migration `supabase/migrations/20260611131254_campaign_jobs.sql`
    sul database (Supabase) prima del primo avvio.
 6. Applica sempre le migration del worker **prima** del deploy del codice che
    le usa (es. `get_campagna_programmazioni_batch`, `campaign_jobs.opzioni`).

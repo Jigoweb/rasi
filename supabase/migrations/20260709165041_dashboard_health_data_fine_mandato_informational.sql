@@ -1,0 +1,3 @@
+-- NO-OP. Storia gia applicata in produzione (20260709165041 dashboard_health_data_fine_mandato_informational).
+-- Lo SQL originale non e nel repo. Questo file non riesegue nulla.
+-- Vedi supabase/scripts/migration_repair_plan.md.
