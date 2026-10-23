@@ -17,6 +17,9 @@ const STAGIONE = 'Stagione non valida: inserire un numero intero maggiore di 0'
 const EPISODIO = 'Episodio non valido: inserire un numero intero maggiore di 0'
 const DURATA = 'Durata non valida: inserire i minuti come numero intero maggiore di 0, oppure lasciare vuoto'
 const DATA = 'Data prima messa in onda non valida: usare gg/mm/aaaa oppure una data Excel'
+const RIGA_VUOTA = 'Riga vuota'
+
+const DRAFT_FIELDS = ['stagione', 'episodio', 'titolo', 'durataMinuti', 'dataPrimaMessaInOnda'] as const
 
 export type EpisodioTemplateSource = {
   numero_stagione: number
@@ -24,6 +27,14 @@ export type EpisodioTemplateSource = {
   titolo_episodio: string | null
   durata_minuti: number | null
   data_prima_messa_in_onda: string | null
+}
+
+export type EpisodeDraft = {
+  stagione: string
+  episodio: string
+  titolo: string
+  durataMinuti: string
+  dataPrimaMessaInOnda: string
 }
 
 export type ClassifiedEpisodeRow = {
@@ -35,6 +46,11 @@ export type ClassifiedEpisodeRow = {
   titolo: string | null
   durataMinuti: number | null
   dataPrimaMessaInOnda: string | null
+  draft: EpisodeDraft
+}
+
+export type ReviewedEpisodeRow = ClassifiedEpisodeRow & {
+  included: boolean
 }
 
 export type EpisodiImportAlert = {
@@ -67,13 +83,26 @@ export type EpisodiImportStore = {
 
 export type EpisodiImportMode = 'preview' | 'confirm'
 
+export type EpisodiImportSummary = {
+  total: number
+  valid: number
+  skipped: number
+  excluded: number
+  imported: number
+}
+
+export type EpisodeKey = { numero_stagione: number; numero_episodio: number }
+
+export const EPISODI_CONFIRM_MAX_ROWS = 5000
+
 export type EpisodiImportResponse =
   | {
       ok: true
       mode: EpisodiImportMode
-      summary: { total: number; valid: number; skipped: number; imported: number }
-      rows: ClassifiedEpisodeRow[]
+      summary: EpisodiImportSummary
+      rows: ReviewedEpisodeRow[]
       alerts: EpisodiImportAlert[]
+      existingKeys: EpisodeKey[]
     }
   | { ok: false; status: number; error: string }
 
@@ -185,27 +214,188 @@ export function classifyEpisodiMatrix(
   if (!headerCheck.ok) return headerCheck
 
   const column = new Map(headers.map((header, index) => [header, index]))
-  const existingKeys = new Set(existing.map((episode) => episodeKey(episode.numero_stagione, episode.numero_episodio)))
-  const seen = new Map<string, number>()
-  const rows: ClassifiedEpisodeRow[] = []
-
+  const cells: EpisodeCell[] = []
   for (let index = 1; index < matrix.length; index += 1) {
     const source = matrix[index] ?? []
-    const raw = {
+    const cell = {
+      rowNumber: index + 1,
       stagione: source[column.get('Stagione') ?? -1],
       episodio: source[column.get('Episodio') ?? -1],
       titolo: source[column.get('Titolo') ?? -1],
       durata: source[column.get('Durata (minuti)') ?? -1],
       data: source[column.get('Data prima messa in onda') ?? -1],
     }
-    if ([raw.stagione, raw.episodio, raw.titolo, raw.durata, raw.data].every(cellIsEmpty)) continue
+    if ([cell.stagione, cell.episodio, cell.titolo, cell.durata, cell.data].every(cellIsEmpty)) continue
+    cells.push(cell)
+  }
+  return classifyEpisodeCells(cells, existing, false)
+}
 
-    const rowNumber = index + 1
-    const stagione = readPositiveInt(raw.stagione)
-    const episodio = readPositiveInt(raw.episodio)
-    const titolo = readTitle(raw.titolo)
-    const durata = readDuration(raw.durata)
-    const data = readDate(raw.data)
+export function revalidateEpisodeDrafts(
+  rows: Array<{ rowNumber: number; included: boolean; draft: EpisodeDraft }>,
+  existing: EpisodeKey[],
+): ReviewedEpisodeRow[] {
+  const ordered = [...rows].sort((left, right) => left.rowNumber - right.rowNumber)
+  const includedByRow = new Map(ordered.map((row) => [row.rowNumber, row.included === true]))
+  const classified = classifyEpisodeCells(
+    ordered.map((row) => ({
+      rowNumber: row.rowNumber,
+      stagione: row.draft.stagione,
+      episodio: row.draft.episodio,
+      titolo: row.draft.titolo,
+      durata: row.draft.durataMinuti,
+      data: row.draft.dataPrimaMessaInOnda,
+      draft: row.draft,
+    })),
+    existing,
+    true,
+  )
+  if (!classified.ok) return []
+  return classified.rows.map((row) => ({
+    ...row,
+    included: row.status === 'valid' && includedByRow.get(row.rowNumber) === true,
+  }))
+}
+
+export function parseConfirmEpisodeDrafts(
+  value: unknown,
+): { ok: true; rows: Array<{ rowNumber: number; included: boolean; draft: EpisodeDraft }> } | { ok: false; error: string } {
+  if (!Array.isArray(value)) return { ok: false, error: 'Elenco righe non valido.' }
+  if (value.length > EPISODI_CONFIRM_MAX_ROWS) {
+    return { ok: false, error: `Puoi confermare al massimo ${EPISODI_CONFIRM_MAX_ROWS} righe.` }
+  }
+  const seen = new Set<number>()
+  const rows: Array<{ rowNumber: number; included: boolean; draft: EpisodeDraft }> = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { ok: false, error: 'Elenco righe non valido.' }
+    }
+    const record = item as Record<string, unknown>
+    if (typeof record.rowNumber !== 'number' || !Number.isInteger(record.rowNumber) || record.rowNumber <= 0) {
+      return { ok: false, error: 'Numero di riga non valido.' }
+    }
+    if (seen.has(record.rowNumber)) {
+      return { ok: false, error: `Numero di riga duplicato: ${record.rowNumber}.` }
+    }
+    seen.add(record.rowNumber)
+    if ('included' in record && typeof record.included !== 'boolean') {
+      return { ok: false, error: `Inclusione non valida alla riga ${record.rowNumber}.` }
+    }
+    const draft = record.draft
+    if (!draft || typeof draft !== 'object' || Array.isArray(draft)) {
+      return { ok: false, error: `Valori non validi alla riga ${record.rowNumber}.` }
+    }
+    const fields = draft as Record<string, unknown>
+    const parsed = emptyDraft()
+    for (const name of DRAFT_FIELDS) {
+      if (typeof fields[name] !== 'string') {
+        return { ok: false, error: `Valori non validi alla riga ${record.rowNumber}.` }
+      }
+      parsed[name] = fields[name]
+    }
+    rows.push({
+      rowNumber: record.rowNumber,
+      included: record.included === true,
+      draft: parsed,
+    })
+  }
+  return { ok: true, rows }
+}
+
+export async function confirmEpisodiDrafts(input: {
+  store: EpisodiImportStore
+  operaId: string
+  rows: unknown
+}): Promise<EpisodiImportResponse> {
+  const parsed = parseConfirmEpisodeDrafts(input.rows)
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error }
+  const ready = await prepareOpera(input.store, input.operaId)
+  if (!ready.ok) return ready
+  const rows = revalidateEpisodeDrafts(parsed.rows, ready.existing)
+  const inserted = await insertReviewedRows(input.store, input.operaId, rows)
+  if (!inserted.ok) return inserted
+  return successResponse('confirm', rows, inserted.imported, ready.existing)
+}
+
+export async function runEpisodiImport(input: {
+  store: EpisodiImportStore
+  operaId: string
+  filename: string
+  bytes: Uint8Array
+  mode: EpisodiImportMode
+}): Promise<EpisodiImportResponse> {
+  if (input.bytes.byteLength > EPISODI_IMPORT_MAX_BYTES) {
+    return { ok: false, status: 400, error: 'Il file supera la dimensione massima di 5 MB.' }
+  }
+  const ready = await prepareOpera(input.store, input.operaId)
+  if (!ready.ok) return ready
+
+  const parsed = parseEpisodiFile(input.filename, input.bytes)
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error }
+
+  const classified = classifyEpisodiMatrix(parsed.matrix, ready.existing)
+  if (!classified.ok) return { ok: false, status: 400, error: classified.error }
+
+  const rows = withDefaultInclusion(classified.rows)
+  if (input.mode !== 'confirm') {
+    return successResponse('preview', rows, 0, ready.existing)
+  }
+  const inserted = await insertReviewedRows(input.store, input.operaId, rows)
+  if (!inserted.ok) return inserted
+  return successResponse('confirm', rows, inserted.imported, ready.existing)
+}
+
+type EpisodeCell = {
+  rowNumber: number
+  stagione: unknown
+  episodio: unknown
+  titolo: unknown
+  durata: unknown
+  data: unknown
+  draft?: EpisodeDraft
+}
+
+function classifyEpisodeCells(
+  cells: EpisodeCell[],
+  existing: EpisodeKey[],
+  keepEmpty: boolean,
+): ClassifyEpisodiResult {
+  const existingKeys = new Set(existing.map((episode) => episodeKey(episode.numero_stagione, episode.numero_episodio)))
+  const seen = new Map<string, number>()
+  const rows: ClassifiedEpisodeRow[] = []
+
+  for (const raw of cells) {
+    const empty = [raw.stagione, raw.episodio, raw.titolo, raw.durata, raw.data].every(cellIsEmpty)
+    if (empty && !keepEmpty) continue
+
+    const stagione = empty ? null : readPositiveInt(raw.stagione)
+    const episodio = empty ? null : readPositiveInt(raw.episodio)
+    const titolo = empty ? null : readTitle(raw.titolo)
+    const durata = empty ? null : readDuration(raw.durata)
+    const data = empty ? null : readDate(raw.data)
+    const draft = raw.draft ?? {
+      stagione: displayInt(raw.stagione, stagione),
+      episodio: displayInt(raw.episodio, episodio),
+      titolo: titolo ?? rawCellText(raw.titolo),
+      durataMinuti: displayInt(raw.durata, durata),
+      dataPrimaMessaInOnda: displayDate(raw.data, data),
+    }
+
+    if (empty) {
+      rows.push({
+        rowNumber: raw.rowNumber,
+        status: 'skipped',
+        message: RIGA_VUOTA,
+        stagione: null,
+        episodio: null,
+        titolo: null,
+        durataMinuti: null,
+        dataPrimaMessaInOnda: null,
+        draft,
+      })
+      continue
+    }
+
     const fieldErrors = [
       stagione === 'invalid' || stagione === null ? STAGIONE : null,
       episodio === 'invalid' || episodio === null ? EPISODIO : null,
@@ -226,17 +416,17 @@ export function classifyEpisodiMatrix(
     } else if (key && existingKeys.has(key)) {
       status = 'skipped'
       message = `Episodio già presente sull'opera (stagione ${parsedSeason}, episodio ${parsedEpisode}): riga ignorata, nessun aggiornamento`
-      seen.set(key, rowNumber)
+      seen.set(key, raw.rowNumber)
     } else if (fieldErrors.length > 0) {
       status = 'skipped'
       message = fieldErrors.join('; ')
-      if (key) seen.set(key, rowNumber)
+      if (key) seen.set(key, raw.rowNumber)
     } else if (key) {
-      seen.set(key, rowNumber)
+      seen.set(key, raw.rowNumber)
     }
 
     rows.push({
-      rowNumber,
+      rowNumber: raw.rowNumber,
       status,
       message,
       stagione: parsedSeason,
@@ -244,29 +434,33 @@ export function classifyEpisodiMatrix(
       titolo,
       durataMinuti: typeof durata === 'number' ? durata : null,
       dataPrimaMessaInOnda: typeof data === 'string' ? data : null,
+      draft,
     })
   }
 
   return {
     ok: true,
     rows,
-    alerts: rows
-      .filter((row) => row.status === 'skipped' && row.message)
-      .map((row) => ({ rowNumber: row.rowNumber, message: row.message as string })),
+    alerts: alertsFrom(rows),
   }
 }
 
-export async function runEpisodiImport(input: {
-  store: EpisodiImportStore
-  operaId: string
-  filename: string
-  bytes: Uint8Array
-  mode: EpisodiImportMode
-}): Promise<EpisodiImportResponse> {
-  if (!UUID_RE.test(input.operaId)) {
+function withDefaultInclusion(rows: ClassifiedEpisodeRow[]): ReviewedEpisodeRow[] {
+  return rows.map((row) => ({ ...row, included: row.status === 'valid' }))
+}
+
+function emptyDraft(): EpisodeDraft {
+  return { stagione: '', episodio: '', titolo: '', durataMinuti: '', dataPrimaMessaInOnda: '' }
+}
+
+async function prepareOpera(
+  store: EpisodiImportStore,
+  operaId: string,
+): Promise<{ ok: true; existing: EpisodeKey[] } | { ok: false; status: number; error: string }> {
+  if (!UUID_RE.test(operaId)) {
     return { ok: false, status: 400, error: 'Identificativo opera non valido.' }
   }
-  const opera = await input.store.getOpera(input.operaId)
+  const opera = await store.getOpera(operaId)
   if (!opera) return { ok: false, status: 404, error: 'Opera non trovata.' }
   if (!operaHaEpisodi({
     tipo: opera.tipo,
@@ -274,61 +468,67 @@ export async function runEpisodiImport(input: {
   })) {
     return { ok: false, status: 400, error: 'Questa opera non ha episodi: importazione non disponibile.' }
   }
-  if (input.bytes.byteLength > EPISODI_IMPORT_MAX_BYTES) {
-    return { ok: false, status: 400, error: 'Il file supera la dimensione massima di 5 MB.' }
-  }
+  return { ok: true, existing: await store.listEpisodeKeys(operaId) }
+}
 
-  const parsed = parseEpisodiFile(input.filename, input.bytes)
-  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error }
-
-  const existing = await input.store.listEpisodeKeys(input.operaId)
-  const classified = classifyEpisodiMatrix(parsed.matrix, existing)
-  if (!classified.ok) return { ok: false, status: 400, error: classified.error }
-
-  const rows = classified.rows.map((row) => ({ ...row }))
+async function insertReviewedRows(
+  store: EpisodiImportStore,
+  operaId: string,
+  rows: ReviewedEpisodeRow[],
+): Promise<{ ok: true; imported: number } | { ok: false; status: number; error: string }> {
   let imported = 0
-
-  if (input.mode === 'confirm') {
-    for (const row of rows) {
-      if (row.status !== 'valid' || row.stagione == null || row.episodio == null) continue
-      const outcome = await input.store.insertEpisode({
-        opera_id: input.operaId,
-        numero_stagione: row.stagione,
-        numero_episodio: row.episodio,
-        titolo_episodio: row.titolo,
-        durata_minuti: row.durataMinuti,
-        data_prima_messa_in_onda: row.dataPrimaMessaInOnda,
-      })
-      if (outcome.ok) {
-        imported += 1
-        continue
-      }
-      if (outcome.code === '42501' || /permission denied/i.test(outcome.message)) {
-        return { ok: false, status: 403, error: 'Accesso negato: non puoi inserire episodi su questa opera.' }
-      }
-      row.status = 'skipped'
-      row.message = outcome.code === '23505'
-        ? `Episodio già presente sull'opera (stagione ${row.stagione}, episodio ${row.episodio}): riga ignorata, nessun aggiornamento`
-        : `Importazione non riuscita: ${outcome.message}`
+  for (const row of rows) {
+    if (!row.included || row.status !== 'valid' || row.stagione == null || row.episodio == null) continue
+    const outcome = await store.insertEpisode({
+      opera_id: operaId,
+      numero_stagione: row.stagione,
+      numero_episodio: row.episodio,
+      titolo_episodio: row.titolo,
+      durata_minuti: row.durataMinuti,
+      data_prima_messa_in_onda: row.dataPrimaMessaInOnda,
+    })
+    if (outcome.ok) {
+      imported += 1
+      continue
     }
+    if (outcome.code === '42501' || /permission denied/i.test(outcome.message)) {
+      return { ok: false, status: 403, error: 'Accesso negato: non puoi inserire episodi su questa opera.' }
+    }
+    row.status = 'skipped'
+    row.included = false
+    row.message = outcome.code === '23505'
+      ? `Episodio già presente sull'opera (stagione ${row.stagione}, episodio ${row.episodio}): riga ignorata, nessun aggiornamento`
+      : `Importazione non riuscita: ${outcome.message}`
   }
+  return { ok: true, imported }
+}
 
-  const alerts = rows
-    .filter((row) => row.status === 'skipped' && row.message)
-    .map((row) => ({ rowNumber: row.rowNumber, message: row.message as string }))
-
+function successResponse(
+  mode: EpisodiImportMode,
+  rows: ReviewedEpisodeRow[],
+  imported: number,
+  existing: EpisodeKey[],
+): EpisodiImportResponse {
   return {
     ok: true,
-    mode: input.mode,
+    mode,
     summary: {
       total: rows.length,
       valid: rows.filter((row) => row.status === 'valid').length,
       skipped: rows.filter((row) => row.status === 'skipped').length,
-      imported: input.mode === 'preview' ? 0 : imported,
+      excluded: rows.filter((row) => row.status === 'valid' && !row.included).length,
+      imported,
     },
     rows,
-    alerts,
+    alerts: alertsFrom(rows),
+    existingKeys: existing,
   }
+}
+
+function alertsFrom(rows: Array<{ rowNumber: number; status: string; message: string | null }>): EpisodiImportAlert[] {
+  return rows
+    .filter((row) => row.status === 'skipped' && row.message)
+    .map((row) => ({ rowNumber: row.rowNumber, message: row.message as string }))
 }
 
 function sortEpisodes(episodes: EpisodioTemplateSource[]): EpisodioTemplateSource[] {
@@ -411,6 +611,27 @@ function headerError(headers: string[]): string {
   if (missing.length > 0) parts.push(`Mancano: ${missing.join(', ')}.`)
   if (unexpected.length > 0) parts.push(`Non previste: ${unexpected.join(', ')}.`)
   return parts.join(' ')
+}
+
+function displayInt(value: unknown, parsed: number | null | 'invalid'): string {
+  if (typeof parsed === 'number') return String(parsed)
+  return rawCellText(value)
+}
+
+function displayDate(value: unknown, parsed: string | null | 'invalid'): string {
+  if (parsed && parsed !== 'invalid') return isoToItalian(parsed)
+  return rawCellText(value)
+}
+
+function rawCellText(value: unknown): string {
+  if (value == null) return ''
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return ''
+    const iso = calendarIso(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate())
+    return iso === 'invalid' ? '' : isoToItalian(iso)
+  }
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
+  return String(value).trim()
 }
 
 function cellIsEmpty(value: unknown): boolean {
