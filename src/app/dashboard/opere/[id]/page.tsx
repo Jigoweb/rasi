@@ -30,6 +30,7 @@ import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
+import { EpisodiImportActions } from './components/episodi-import-actions'
 import { listCastEsterno } from '@/features/opere/services/cast-esterno.service'
 import { buildCastExportRows, castExportFileName } from '@/features/opere/lib/cast-export'
 
@@ -1305,10 +1306,18 @@ export default function OperaDetailPage() {
                   Titolo originale opera: {opera.titolo_originale ? <span className="italic">{opera.titolo_originale}</span> : 'Non indicato'}
                 </p>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
-                <Plus className="h-4 w-4 mr-2" />
-                Aggiungi episodio
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <EpisodiImportActions
+                  operaId={operaId}
+                  operaTitolo={opera.titolo}
+                  episodi={episodi}
+                  onImported={fetchData}
+                />
+                <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Aggiungi episodio
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
