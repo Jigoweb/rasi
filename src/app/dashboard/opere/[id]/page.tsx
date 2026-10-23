@@ -29,7 +29,9 @@ import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/componen
 import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { useAuth } from '@/shared/contexts/auth-context'
+import { canManageOperaCast } from '@/shared/lib/auth-permissions'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
+import { CastImportActions } from './components/cast-import-actions'
 import { EpisodiImportActions } from './components/episodi-import-actions'
 import { listCastEsterno } from '@/features/opere/services/cast-esterno.service'
 import { buildCastExportRows, castExportFileName } from '@/features/opere/lib/cast-export'
@@ -39,7 +41,8 @@ type Opera = Database['public']['Tables']['opere']['Row']
 export default function OperaDetailPage() {
   const params = useParams()
   const operaId = params.id as string
-  const { isAdmin } = useAuth()
+  const { isAdmin, userRole } = useAuth()
+  const canManageCast = canManageOperaCast(userRole)
 
   const [opera, setOpera] = useState<Opera | null>(null)
   const [partecipazioni, setPartecipazioni] = useState<any[]>([])
@@ -116,6 +119,7 @@ export default function OperaDetailPage() {
   const [partecipazioniFilterRuolo, setPartecipazioniFilterRuolo] = useState<string>('')
   // '' = tutti, '__serie__' = partecipazioni senza episodio, altrimenti id episodio
   const [partecipazioniFilterEpisodio, setPartecipazioniFilterEpisodio] = useState<string>('')
+  const [castRevision, setCastRevision] = useState(0)
 
   // Episodi Edit State
   const [showEditEpisodioDialog, setShowEditEpisodioDialog] = useState(false)
@@ -149,15 +153,17 @@ export default function OperaDetailPage() {
   })
   const [isSavingEpisodio, setIsSavingEpisodio] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      setLoading(true)
-      setError(null)
+      if (!options?.silent) {
+        setLoading(true)
+        setError(null)
+      }
 
       const { data: oData, error: oErr } = await getOperaById(operaId)
       if (oErr) {
         if (oErr.code === 'PGRST116') {
-          setError('Opera non trovata')
+          if (!options?.silent) setError('Opera non trovata')
           return
         }
         throw oErr
@@ -198,9 +204,9 @@ export default function OperaDetailPage() {
         setEpisodi([])
       }
     } catch (e) {
-      setError('Errore nel caricamento dei dati')
+      if (!options?.silent) setError('Errore nel caricamento dei dati')
     } finally {
-      setLoading(false)
+      if (!options?.silent) setLoading(false)
     }
   }, [operaId])
 
@@ -390,7 +396,15 @@ export default function OperaDetailPage() {
     try {
       const { data: castEsterno, error: castError } = await listCastEsterno(operaId)
       if (castError) throw castError
-      const rows = buildCastExportRows(partecipazioni, castEsterno ?? [], episodi)
+      const ruoliById = new Map(ruoli.map((ruolo) => [ruolo.id, ruolo.nome]))
+      const rows = buildCastExportRows(
+        partecipazioni,
+        (castEsterno ?? []).map((row) => ({
+          ...row,
+          ruoloNome: row.ruolo_id ? ruoliById.get(row.ruolo_id) ?? null : null,
+        })),
+        episodi,
+      )
       if (rows.length === 0) {
         toast.info('Nessun cast inserito per quest\'opera')
         return
@@ -1474,7 +1488,13 @@ export default function OperaDetailPage() {
         </Card>
       )}
 
-      <CastEsternoPanel operaId={operaId} imdbTconst={opera.imdb_tconst} episodi={episodi} />
+      <CastEsternoPanel
+        key={castRevision}
+        operaId={operaId}
+        imdbTconst={opera.imdb_tconst}
+        episodi={episodi}
+        ruoliTipologie={ruoli}
+      />
 
       {/* Partecipazioni Section */}
       <Card className="py-0 gap-0">
@@ -1538,7 +1558,16 @@ export default function OperaDetailPage() {
             )}
             
             {/* Bottoni azioni */}
-            <div className="flex gap-2 ml-auto">
+            <div className="flex gap-2 ml-auto flex-wrap">
+              {canManageCast && (
+                <CastImportActions
+                  operaId={operaId}
+                  onImported={() => {
+                    setCastRevision((revision) => revision + 1)
+                    void fetchData({ silent: true })
+                  }}
+                />
+              )}
               <Button
                 variant="outline"
                 size="sm"

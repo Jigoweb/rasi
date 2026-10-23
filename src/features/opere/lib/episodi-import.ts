@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
 import { readAuthoritativeUserRole } from '@/shared/lib/auth-permissions'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { readTabularMatrix, type TabularMatrixErrorCode } from '@/shared/lib/tabular-file'
 
 export const EPISODI_IMPORT_HEADERS = [
   'Stagione',
@@ -145,32 +146,20 @@ export function buildEpisodiTemplateCsv(episodes: EpisodioTemplateSource[]): str
   return `\uFEFF${csv}`
 }
 
+const EPISODI_MATRIX_ERRORS: Record<TabularMatrixErrorCode, string> = {
+  unsupported: 'Formato non supportato. Usa un file .xlsx o .csv.',
+  csv: 'CSV non leggibile.',
+  excel: 'Impossibile leggere il file Excel.',
+  'empty-workbook': 'Il file Excel non contiene fogli.',
+}
+
 export function parseEpisodiFile(
   filename: string,
   bytes: Uint8Array,
 ): { ok: true; matrix: unknown[][] } | { ok: false; error: string } {
-  const extension = fileExtension(filename)
-  if (extension === 'csv') {
-    const text = new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '')
-    return { ok: true, matrix: parseCsvMatrix(text) }
-  }
-  if (extension === 'xlsx') {
-    try {
-      const workbook = XLSX.read(bytes, { type: 'array', cellDates: false })
-      const sheetName = workbook.SheetNames[0]
-      if (!sheetName) return { ok: false, error: 'Il file Excel non contiene fogli.' }
-      const matrix = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
-        header: 1,
-        raw: true,
-        defval: null,
-        blankrows: true,
-      }) as unknown[][]
-      return { ok: true, matrix }
-    } catch {
-      return { ok: false, error: 'Impossibile leggere il file Excel.' }
-    }
-  }
-  return { ok: false, error: 'Formato non supportato. Usa un file .xlsx o .csv.' }
+  const matrix = readTabularMatrix(filename, bytes)
+  if (!matrix.ok) return { ok: false, error: EPISODI_MATRIX_ERRORS[matrix.code] }
+  return { ok: true, matrix: matrix.matrix }
 }
 
 export function classifyEpisodiMatrix(
@@ -347,45 +336,6 @@ function isoToExcelSerial(iso: string): number {
   const utc = Date.UTC(year, month - 1, day)
   const epoch = Date.UTC(1899, 11, 30)
   return Math.round((utc - epoch) / 86400000)
-}
-
-function fileExtension(filename: string): string {
-  const base = filename.split(/[/\\]/).pop() ?? filename
-  const match = base.toLowerCase().match(/\.([a-z0-9]+)$/)
-  return match?.[1] ?? ''
-}
-
-function parseCsvMatrix(text: string): unknown[][] {
-  const delimiter = chooseDelimiter(text)
-  const parsed = Papa.parse<unknown[]>(text, {
-    header: false,
-    skipEmptyLines: false,
-    delimiter,
-  })
-  return parsed.data
-}
-
-function chooseDelimiter(text: string): ',' | ';' | '\t' {
-  const candidates = [',', ';', '\t'] as const
-  for (const delimiter of candidates) {
-    const headers = headerCells(firstCsvRow(text, delimiter))
-    if (validateHeaders(headers).ok) return delimiter
-  }
-  let best: ',' | ';' | '\t' = ','
-  let bestCount = -1
-  for (const delimiter of candidates) {
-    const count = headerCells(firstCsvRow(text, delimiter)).length
-    if (count > bestCount) {
-      best = delimiter
-      bestCount = count
-    }
-  }
-  return best
-}
-
-function firstCsvRow(text: string, delimiter: string): unknown[] {
-  const parsed = Papa.parse<unknown[]>(text, { header: false, preview: 1, delimiter })
-  return parsed.data[0] ?? []
 }
 
 function headerCells(row: unknown[]): string[] {

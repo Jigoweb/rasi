@@ -266,6 +266,7 @@ export type Database = {
       }
       cast_esterno: {
         Row: {
+          codice_ipn: string | null
           created_at: string | null
           episodio_id: string | null
           fonte: string
@@ -277,9 +278,11 @@ export type Database = {
           personaggio: string | null
           primarieta: Database["public"]["Enums"]["primarieta_cast"]
           ruolo: string
+          ruolo_id: string | null
           updated_at: string | null
         }
         Insert: {
+          codice_ipn?: string | null
           created_at?: string | null
           episodio_id?: string | null
           fonte?: string
@@ -291,9 +294,11 @@ export type Database = {
           personaggio?: string | null
           primarieta?: Database["public"]["Enums"]["primarieta_cast"]
           ruolo?: string
+          ruolo_id?: string | null
           updated_at?: string | null
         }
         Update: {
+          codice_ipn?: string | null
           created_at?: string | null
           episodio_id?: string | null
           fonte?: string
@@ -305,6 +310,7 @@ export type Database = {
           personaggio?: string | null
           primarieta?: Database["public"]["Enums"]["primarieta_cast"]
           ruolo?: string
+          ruolo_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -320,6 +326,13 @@ export type Database = {
             columns: ["opera_id"]
             isOneToOne: false
             referencedRelation: "opere"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cast_esterno_ruolo_id_fkey"
+            columns: ["ruolo_id"]
+            isOneToOne: false
+            referencedRelation: "ruoli_tipologie"
             referencedColumns: ["id"]
           },
         ]

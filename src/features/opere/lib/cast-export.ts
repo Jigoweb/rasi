@@ -21,6 +21,8 @@ export type CastEsternoExport = {
   personaggio: string | null
   primarieta: string
   ruolo?: string | null
+  /** Nome di ruoli_tipologie, se la riga arriva dall'import template. */
+  ruoloNome?: string | null
   episodio_id: string | null
 }
 
@@ -70,7 +72,7 @@ export function buildCastExportRows(
     Nome: c.nome,
     "Nome d'arte": '',
     'Codice IPN': '',
-    Ruolo: formatRuoloPrimarieta(c.ruolo, c.primarieta),
+    Ruolo: c.ruoloNome || formatRuoloPrimarieta(c.ruolo, c.primarieta),
     Personaggio: c.personaggio ?? '',
     ...episodioFields(c.episodio_id ? episodiById.get(c.episodio_id) ?? null : null),
     Note: '',

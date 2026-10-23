@@ -20,6 +20,8 @@ describe('OperaDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Opera Test')).toBeInTheDocument()
     })
+    expect(screen.queryByRole('button', { name: 'Importa cast' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Scarica template cast' })).not.toBeInTheDocument()
   })
 })
 
