@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/shared/lib/supabase'
 import {
   canImportEpisodi,
+  confirmEpisodiDrafts,
   EPISODI_IMPORT_MAX_BYTES,
   runEpisodiImport,
   type EpisodeInsert,
@@ -22,6 +23,11 @@ export async function POST(
       return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status })
     }
 
+    const contentType = req.headers.get('content-type') ?? ''
+    if (contentType.toLowerCase().includes('application/json')) {
+      return confirmFromJson(req, auth.token, id)
+    }
+
     let form: FormData
     try {
       form = await req.formData()
@@ -31,7 +37,13 @@ export async function POST(
 
     const mode = form.get('mode')
     const file = form.get('file')
-    if (mode !== 'preview' && mode !== 'confirm') {
+    if (mode === 'confirm') {
+      return NextResponse.json(
+        { ok: false, error: 'La conferma usa le righe modificate in anteprima.' },
+        { status: 400 },
+      )
+    }
+    if (mode !== 'preview') {
       return NextResponse.json({ ok: false, error: 'Modalità non valida.' }, { status: 400 })
     }
     if (!(file instanceof File)) {
@@ -46,7 +58,7 @@ export async function POST(
       operaId: id,
       filename: file.name,
       bytes: new Uint8Array(await file.arrayBuffer()),
-      mode,
+      mode: 'preview',
     })
 
     if (!result.ok) {
@@ -57,6 +69,27 @@ export async function POST(
     console.error('Import episodi', error)
     return NextResponse.json({ ok: false, error: 'Importazione non riuscita.' }, { status: 500 })
   }
+}
+
+async function confirmFromJson(req: NextRequest, token: string, operaId: string) {
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ ok: false, error: 'Richiesta non valida.' }, { status: 400 })
+  }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || (body as { mode?: unknown }).mode !== 'confirm') {
+    return NextResponse.json({ ok: false, error: 'Modalità non valida.' }, { status: 400 })
+  }
+  const result = await confirmEpisodiDrafts({
+    store: createStore(token),
+    operaId,
+    rows: (body as { rows?: unknown }).rows,
+  })
+  if (!result.ok) {
+    return NextResponse.json({ ok: false, error: result.error }, { status: result.status })
+  }
+  return NextResponse.json(result)
 }
 
 async function authorize(
