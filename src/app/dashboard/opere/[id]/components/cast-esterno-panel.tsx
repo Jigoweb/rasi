@@ -72,10 +72,12 @@ export function CastEsternoPanel({
   operaId,
   imdbTconst,
   episodi = [],
+  ruoliTipologie = [],
 }: {
   operaId: string
   imdbTconst: string | null
   episodi?: CastEsternoEpisodio[]
+  ruoliTipologie?: { id: string; nome: string }[]
 }) {
   const hasEpisodi = episodi.length > 0
   const [rows, setRows] = useState<CastEsternoRow[]>([])
@@ -90,6 +92,7 @@ export function CastEsternoPanel({
   const [error, setError] = useState<string | null>(null)
 
   const episodiById = useMemo(() => new Map(episodi.map((episodio) => [episodio.id, episodio])), [episodi])
+  const ruoliById = useMemo(() => new Map(ruoliTipologie.map((ruolo) => [ruolo.id, ruolo.nome])), [ruoliTipologie])
 
   const episodioOptions = useMemo(
     () =>
@@ -286,6 +289,7 @@ export function CastEsternoPanel({
           <div className="text-sm text-muted-foreground truncate">
             {row.personaggio || 'Personaggio non indicato'}
             {row.imdb_nconst ? ` · ${row.imdb_nconst}` : ''}
+            {row.codice_ipn ? ` · IPN ${row.codice_ipn}` : ''}
           </div>
           {matches.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
@@ -304,6 +308,9 @@ export function CastEsternoPanel({
           )}
         </div>
         <Badge variant="outline">{row.fonte === 'imdb' ? 'IMDb' : 'Manuale'}</Badge>
+        {row.ruolo_id && ruoliById.get(row.ruolo_id) && (
+          <Badge variant="secondary">{ruoliById.get(row.ruolo_id)}</Badge>
+        )}
         <Select value={toRuoloPrimarieta(row.ruolo, row.primarieta)} onValueChange={(value) => changeRuoloPrimarieta(row, value)}>
           <SelectTrigger className="w-full sm:w-[200px]" aria-label={`Ruolo di ${row.nome}`}>
             <SelectValue />
