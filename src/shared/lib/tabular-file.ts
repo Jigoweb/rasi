@@ -14,6 +14,13 @@ export type TabularParseResult =
   | { ok: true; table: TabularTable }
   | { ok: false; error: string }
 
+/** Errori della lettura grezza, prima dell'interpretazione delle celle. */
+export type TabularMatrixErrorCode = 'unsupported' | 'csv' | 'excel' | 'empty-workbook'
+
+export type TabularMatrixResult =
+  | { ok: true; matrix: unknown[][] }
+  | { ok: false; code: TabularMatrixErrorCode }
+
 function stripBom(value: string): string {
   return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value
 }
@@ -94,7 +101,25 @@ export function detectCsvDelimiter(text: string): ',' | ';' | '\t' {
   return ','
 }
 
-function parseCsv(text: string): TabularParseResult {
+function asUint8Array(data: Buffer | Uint8Array): Uint8Array {
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+  }
+  return data
+}
+
+/**
+ * Matrice grezza di CSV/XLSX. Le celle Excel restano numeri (seriali data compresi):
+ * ogni import decide da solo come leggerle.
+ */
+export function readTabularMatrix(filename: string, data: Buffer | Uint8Array): TabularMatrixResult {
+  const lower = filename.trim().toLowerCase()
+  if (lower.endsWith('.csv')) return readCsvMatrix(Buffer.from(asUint8Array(data)).toString('utf8'))
+  if (lower.endsWith('.xlsx')) return readXlsxMatrix(asUint8Array(data))
+  return { ok: false, code: 'unsupported' }
+}
+
+function readCsvMatrix(text: string): TabularMatrixResult {
   const source = stripBom(text)
   const parsed = Papa.parse<unknown[]>(source, {
     header: false,
@@ -102,31 +127,37 @@ function parseCsv(text: string): TabularParseResult {
     delimiter: detectCsvDelimiter(source),
   })
   const fatal = parsed.errors.filter((error) => error.code !== 'UndetectableDelimiter')
-  if (fatal.length > 0) return { ok: false, error: 'CSV non leggibile' }
-  return recordsFromMatrix(parsed.data)
+  if (fatal.length > 0) return { ok: false, code: 'csv' }
+  return { ok: true, matrix: parsed.data }
 }
 
-function parseXlsx(data: Buffer): TabularParseResult {
+function readXlsxMatrix(data: Uint8Array): TabularMatrixResult {
   let workbook: XLSX.WorkBook
   try {
-    workbook = XLSX.read(data, { type: 'buffer', cellDates: false })
+    workbook = XLSX.read(data, { type: 'array', cellDates: false })
   } catch {
-    return { ok: false, error: 'File Excel non leggibile' }
+    return { ok: false, code: 'excel' }
   }
   const sheetName = workbook.SheetNames[0]
-  if (!sheetName) return { ok: false, error: 'Il file Excel non contiene fogli' }
+  if (!sheetName) return { ok: false, code: 'empty-workbook' }
   const matrix = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], {
     header: 1,
     raw: true,
-    defval: '',
+    defval: null,
     blankrows: true,
   })
-  return recordsFromMatrix(matrix)
+  return { ok: true, matrix }
 }
 
-export function parseTabularFile(filename: string, data: Buffer): TabularParseResult {
-  const lower = filename.trim().toLowerCase()
-  if (lower.endsWith('.csv')) return parseCsv(data.toString('utf8'))
-  if (lower.endsWith('.xlsx')) return parseXlsx(data)
-  return { ok: false, error: 'Formato non supportato. Usa .xlsx o .csv' }
+const CAST_MATRIX_ERRORS: Record<TabularMatrixErrorCode, string> = {
+  unsupported: 'Formato non supportato. Usa .xlsx o .csv',
+  csv: 'CSV non leggibile',
+  excel: 'File Excel non leggibile',
+  'empty-workbook': 'Il file Excel non contiene fogli',
+}
+
+export function parseTabularFile(filename: string, data: Buffer | Uint8Array): TabularParseResult {
+  const matrix = readTabularMatrix(filename, data)
+  if (!matrix.ok) return { ok: false, error: CAST_MATRIX_ERRORS[matrix.code] }
+  return recordsFromMatrix(matrix.matrix)
 }
