@@ -22,6 +22,12 @@ export const CAST_IMPORT_ALERTS = {
   artistNameAmbiguous: 'Più artisti RASI hanno lo stesso nome e cognome senza IPN',
   duplicateCast: 'Già presente nel cast con lo stesso ruolo',
   duplicateFile: 'Duplicato nel file',
+  duplicateManual:
+    'Duplicato: questa persona è già nel cast esterno senza ruolo. Di default si aggiorna quella riga con il ruolo del file, senza crearne una seconda.',
+  duplicateManualCreate:
+    'Duplicato: questa persona è già nel cast esterno senza ruolo. Hai scelto di creare una nuova riga.',
+  duplicateManualAmbiguous:
+    'Più persone del cast esterno senza ruolo hanno lo stesso nome in questo ambito: la riga non viene aggiornata in automatico.',
   migration: 'Cast esterno non disponibile: applica la migrazione con ruolo_id e codice_ipn prima di importare persone non RASI',
 } as const
 
@@ -78,10 +84,26 @@ export type CastExistingPartecipazione = {
 }
 
 export type CastExistingEsterno = {
+  id: string
   nome: string
   codice_ipn: string | null
   ruolo_id: string | null
   episodio_id: string | null
+}
+
+export type CastProposta = 'aggiorna' | 'crea'
+
+/** Riga modificata in anteprima. Stagione ed episodio restano testo, come nel file. */
+export type CastEditInput = {
+  rowNumber: number
+  nome: string
+  cognome: string
+  ipn: string
+  ruolo: string
+  stagione: string
+  episodio: string
+  included: boolean
+  proposta: CastProposta | null
 }
 
 export type CastImportContext = {
@@ -104,25 +126,34 @@ type RowFields = {
   episodio: number | null
 }
 
+type CastDecision = {
+  included: boolean
+  alert: string | null
+  proposta: CastProposta | null
+  castEsternoId: string | null
+}
+
 export type ClassifiedCastRow =
   | { status: 'ignored'; rowNumber: number }
-  | (RowFields & { status: 'skipped'; alert: string })
-  | (RowFields & {
-      status: 'valid'
-      action: 'partecipazione'
-      artistaId: string
-      ruoloId: string
-      episodioId: string | null
-      detail: string
-    })
-  | (RowFields & {
-      status: 'valid'
-      action: 'cast_esterno'
-      ruoloId: string
-      categoria: string | null
-      episodioId: string | null
-      detail: string
-    })
+  | (RowFields & CastDecision & { status: 'skipped' })
+  | (RowFields &
+      CastDecision & {
+        status: 'valid'
+        action: 'partecipazione'
+        artistaId: string
+        ruoloId: string
+        episodioId: string | null
+        detail: string
+      })
+  | (RowFields &
+      CastDecision & {
+        status: 'valid'
+        action: 'cast_esterno' | 'update_cast_esterno'
+        ruoloId: string
+        categoria: string | null
+        episodioId: string | null
+        detail: string
+      })
 
 export type CastImportPublicRow = {
   rowNumber: number
@@ -133,9 +164,13 @@ export type CastImportPublicRow = {
   stagione: number | null
   episodio: number | null
   status: 'valid' | 'skipped'
-  action: 'partecipazione' | 'cast_esterno' | null
+  action: 'partecipazione' | 'cast_esterno' | 'update_cast_esterno' | null
   alert: string | null
   detail: string | null
+  included: boolean
+  proposta: CastProposta | null
+  castEsternoId: string | null
+  flagged: boolean
 }
 
 export type InsertError = { code?: string; message: string } | null
@@ -183,7 +218,7 @@ function resolveRuolo(label: string, ruoli: CastRuolo[]): { ok: true; ruolo: Cas
   return { ok: false, alert: `${CAST_IMPORT_ALERTS.ruoloInactive}: ${cleanCell(label)}` }
 }
 
-function blankRow(record: Record<string, string>): boolean {
+function blankRow(record: CastValueRow): boolean {
   return CAST_TEMPLATE_COLUMNS.every((column) => cleanCell(record[column] ?? '') === '')
 }
 
@@ -216,18 +251,60 @@ function matchArtist(nome: string, cognome: string, ipn: string, artisti: CastAr
   return { kind: 'esterno' }
 }
 
-function skipped(fields: RowFields, alert: string): ClassifiedCastRow {
-  return { status: 'skipped', alert, ...fields }
+function rejected(fields: RowFields, alert: string): ClassifiedCastRow {
+  return { status: 'skipped', alert, included: false, proposta: null, castEsternoId: null, ...fields }
 }
+
+export type CastValueRow = { rowNumber: number } & Record<CastTemplateColumn, string>
 
 export function classifyCastImport(
   headers: string[],
   rows: Record<string, string>[],
   context: CastImportContext,
+  edits?: CastEditInput[],
 ): { ok: true; rows: ClassifiedCastRow[] } | { ok: false; error: string } {
   const headerError = validateCastHeaders(headers)
   if (headerError) return { ok: false, error: headerError }
+  return {
+    ok: true,
+    rows: classifyCastValues(
+      rows.map((record, index) => ({
+        rowNumber: index + 2,
+        Nome: record.Nome ?? '',
+        Cognome: record.Cognome ?? '',
+        IPN: record.IPN ?? '',
+        Ruolo: record.Ruolo ?? '',
+        Stagione: record.Stagione ?? '',
+        Episodio: record.Episodio ?? '',
+      })),
+      context,
+      edits,
+    ).rows,
+  }
+}
 
+function editFor(edits: CastEditInput[] | undefined, rowNumber: number): CastEditInput | undefined {
+  return edits?.find((edit) => edit.rowNumber === rowNumber)
+}
+
+function manualWithoutRole(
+  nome: string,
+  cognome: string,
+  episodioId: string | null,
+  context: CastImportContext,
+): CastExistingEsterno[] {
+  const name = externalNameKey(nome, cognome)
+  const scope = scopeKey(episodioId)
+  return context.castEsterno.filter(
+    (row) => !row.ruolo_id && normalizePersonName(row.nome) === name && scopeKey(row.episodio_id) === scope,
+  )
+}
+
+export function classifyCastValues(
+  values: CastValueRow[],
+  context: CastImportContext,
+  edits?: CastEditInput[],
+): { ok: true; rows: ClassifiedCastRow[] } {
   const partecipazioneKeys = new Set(
     context.partecipazioni.map((row) => `${row.artista_id}|${row.ruolo_id}|${scopeKey(row.episodio_id)}`),
   )
@@ -241,13 +318,14 @@ export function classifyCastImport(
   )
   const seenPartecipazioni = new Set<string>()
   const seenEsterni = new Set<string>()
+  const seenManual = new Set<string>()
   const classified: ClassifiedCastRow[] = []
 
-  rows.forEach((record, index) => {
-    const rowNumber = index + 2
+  for (const record of values) {
+    const rowNumber = record.rowNumber
     if (blankRow(record)) {
       classified.push({ status: 'ignored', rowNumber })
-      return
+      continue
     }
 
     const nome = cleanCell(record.Nome)
@@ -267,25 +345,27 @@ export function classifyCastImport(
       stagione: stagioneParsed.ok ? stagioneParsed.value : null,
       episodio: episodioParsed.ok ? episodioParsed.value : null,
     }
+    const choice = editFor(edits, rowNumber)
+    const wantsInclude = choice ? choice.included : true
 
     if (!normalizePersonName(nome) || !normalizePersonName(cognome)) {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.nameRequired))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.nameRequired))
+      continue
     }
     const ruolo = resolveRuolo(ruoloLabel, context.ruoli)
     if (!ruolo.ok) {
-      classified.push(skipped(fields, ruolo.alert))
-      return
+      classified.push(rejected(fields, ruolo.alert))
+      continue
     }
     if (!stagioneParsed.ok || !episodioParsed.ok) {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.seasonNumber))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.seasonNumber))
+      continue
     }
     const stagione = stagioneParsed.value
     const episodio = episodioParsed.value
     if ((stagione == null) !== (episodio == null)) {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.seasonPair))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.seasonPair))
+      continue
     }
 
     let episodioId: string | null = null
@@ -294,74 +374,113 @@ export function classifyCastImport(
         (item) => item.numero_stagione === stagione && item.numero_episodio === episodio,
       )
       if (found.length !== 1) {
-        classified.push(skipped(fields, `${CAST_IMPORT_ALERTS.episodeMissing} (stagione ${stagione}, episodio ${episodio})`))
-        return
+        classified.push(rejected(fields, `${CAST_IMPORT_ALERTS.episodeMissing} (stagione ${stagione}, episodio ${episodio})`))
+        continue
       }
       episodioId = found[0].id
     }
 
     const artist = matchArtist(nome, cognome, ipn, context.artisti)
     if (artist.kind === 'ipn-conflict') {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.ipnConflict))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.ipnConflict))
+      continue
     }
     if (artist.kind === 'ambiguous') {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.artistAmbiguous))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.artistAmbiguous))
+      continue
     }
     if (artist.kind === 'ambiguous-name') {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.artistNameAmbiguous))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.artistNameAmbiguous))
+      continue
     }
 
     if (artist.kind === 'rasi') {
       const key = `${artist.artist.id}|${ruolo.ruolo.id}|${scopeKey(episodioId)}`
       if (partecipazioneKeys.has(key)) {
-        classified.push(skipped(fields, CAST_IMPORT_ALERTS.duplicateCast))
-        return
+        classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateCast))
+        continue
       }
-      if (seenPartecipazioni.has(key)) {
-        classified.push(skipped(fields, CAST_IMPORT_ALERTS.duplicateFile))
-        return
+      if (wantsInclude && seenPartecipazioni.has(key)) {
+        classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateFile))
+        continue
       }
-      seenPartecipazioni.add(key)
+      if (wantsInclude) seenPartecipazioni.add(key)
       classified.push({
         status: 'valid',
         action: 'partecipazione',
+        included: wantsInclude,
+        alert: null,
+        proposta: null,
+        castEsternoId: null,
         ...fields,
         artistaId: artist.artist.id,
         ruoloId: ruolo.ruolo.id,
         episodioId,
         detail: 'Artista RASI',
       })
-      return
+      continue
     }
 
     if (!context.externalCastReady) {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.migration))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.migration))
+      continue
+    }
+
+    const manuals = manualWithoutRole(nome, cognome, episodioId, context)
+    const createAnyway = manuals.length > 0 && choice?.proposta === 'crea'
+    if (manuals.length > 1 && !createAnyway) {
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateManualAmbiguous))
+      continue
+    }
+    if (manuals.length === 1 && !createAnyway) {
+      const manual = manuals[0]
+      if (wantsInclude && seenManual.has(manual.id)) {
+        classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateFile))
+        continue
+      }
+      if (wantsInclude) seenManual.add(manual.id)
+      classified.push({
+        status: 'valid',
+        action: 'update_cast_esterno',
+        included: wantsInclude,
+        alert: CAST_IMPORT_ALERTS.duplicateManual,
+        proposta: 'aggiorna',
+        castEsternoId: manual.id,
+        ...fields,
+        ruoloId: ruolo.ruolo.id,
+        categoria: ruolo.ruolo.categoria,
+        episodioId,
+        detail: 'Aggiorna la persona già inserita a mano, senza creare una seconda riga',
+      })
+      continue
     }
 
     const externalKey = `${externalNameKey(nome, cognome)}|${normalizeIpn(ipn)}|${ruolo.ruolo.id}|${scopeKey(episodioId)}`
     if (esternoKeys.has(externalKey)) {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.duplicateCast))
-      return
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateCast))
+      continue
     }
-    if (seenEsterni.has(externalKey)) {
-      classified.push(skipped(fields, CAST_IMPORT_ALERTS.duplicateFile))
-      return
+    if (wantsInclude && seenEsterni.has(externalKey)) {
+      classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateFile))
+      continue
     }
-    seenEsterni.add(externalKey)
+    if (wantsInclude) seenEsterni.add(externalKey)
     classified.push({
       status: 'valid',
       action: 'cast_esterno',
+      included: wantsInclude,
+      alert: createAnyway ? CAST_IMPORT_ALERTS.duplicateManualCreate : null,
+      proposta: createAnyway ? 'crea' : null,
+      castEsternoId: createAnyway && manuals.length === 1 ? manuals[0].id : null,
       ...fields,
       ruoloId: ruolo.ruolo.id,
       categoria: ruolo.ruolo.categoria,
       episodioId,
-      detail: 'Nessun artista RASI con questo nome, cognome e IPN: va nel cast esterno',
+      detail: createAnyway
+        ? 'Nuova riga di cast esterno, la persona già presente resta com\'è'
+        : 'Nessun artista RASI con questo nome, cognome e IPN: va nel cast esterno',
     })
-  })
+  }
 
   return { ok: true, rows: classified }
 }
@@ -370,23 +489,7 @@ export function toPublicCastRows(rows: ClassifiedCastRow[]): CastImportPublicRow
   const result: CastImportPublicRow[] = []
   for (const row of rows) {
     if (row.status === 'ignored') continue
-    if (row.status === 'skipped') {
-      result.push({
-        rowNumber: row.rowNumber,
-        nome: row.nome,
-        cognome: row.cognome,
-        ipn: row.ipn,
-        ruolo: row.ruolo,
-        stagione: row.stagione,
-        episodio: row.episodio,
-        status: 'skipped',
-        action: null,
-        alert: row.alert,
-        detail: null,
-      })
-      continue
-    }
-    result.push({
+    const common = {
       rowNumber: row.rowNumber,
       nome: row.nome,
       cognome: row.cognome,
@@ -394,9 +497,26 @@ export function toPublicCastRows(rows: ClassifiedCastRow[]): CastImportPublicRow
       ruolo: row.ruolo,
       stagione: row.stagione,
       episodio: row.episodio,
+      alert: row.alert,
+      included: row.status === 'valid' && row.included,
+      proposta: row.proposta,
+      castEsternoId: row.castEsternoId,
+      flagged: Boolean(row.alert),
+    }
+    if (row.status === 'skipped') {
+      result.push({
+        ...common,
+        status: 'skipped',
+        action: null,
+        detail: null,
+        included: false,
+      })
+      continue
+    }
+    result.push({
+      ...common,
       status: 'valid',
       action: row.action,
-      alert: null,
       detail: row.detail,
     })
   }
@@ -405,15 +525,20 @@ export function toPublicCastRows(rows: ClassifiedCastRow[]): CastImportPublicRow
 
 export function summarizeCastRows(rows: CastImportPublicRow[]): {
   valid: number
+  excluded: number
   skipped: number
   partecipazioni: number
   castEsterno: number
+  aggiornamenti: number
 } {
+  const included = (row: CastImportPublicRow) => row.status === 'valid' && row.included
   return {
-    valid: rows.filter((row) => row.status === 'valid').length,
+    valid: rows.filter(included).length,
+    excluded: rows.filter((row) => row.status === 'valid' && !row.included).length,
     skipped: rows.filter((row) => row.status === 'skipped').length,
-    partecipazioni: rows.filter((row) => row.status === 'valid' && row.action === 'partecipazione').length,
-    castEsterno: rows.filter((row) => row.status === 'valid' && row.action === 'cast_esterno').length,
+    partecipazioni: rows.filter((row) => included(row) && row.action === 'partecipazione').length,
+    castEsterno: rows.filter((row) => included(row) && row.action === 'cast_esterno').length,
+    aggiornamenti: rows.filter((row) => included(row) && row.action === 'update_cast_esterno').length,
   }
 }
 
@@ -425,8 +550,63 @@ export function withCommitFailures(
   return rows.map((row) => {
     const alert = byRow.get(row.rowNumber)
     if (!alert || row.status !== 'valid') return row
-    return { ...row, status: 'skipped', action: null, alert, detail: null }
+    return {
+      ...row,
+      status: 'skipped',
+      action: null,
+      alert,
+      detail: null,
+      included: false,
+      flagged: true,
+      proposta: null,
+    }
   })
+}
+
+function cellText(value: unknown): string | null {
+  if (value == null) return ''
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'string') return value
+  return null
+}
+
+export function parseCastEdits(value: unknown): { ok: true; edits: CastEditInput[] } | { ok: false; error: string } {
+  if (!Array.isArray(value)) return { ok: false, error: 'Righe mancanti' }
+  if (value.length > 5000) return { ok: false, error: 'Troppe righe (massimo 5000)' }
+  const edits: CastEditInput[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') return { ok: false, error: 'Riga non valida' }
+    const row = item as Record<string, unknown>
+    const rowNumber = row.rowNumber
+    if (typeof rowNumber !== 'number' || !Number.isInteger(rowNumber) || rowNumber < 2) {
+      return { ok: false, error: 'Numero riga non valido' }
+    }
+    const nome = cellText(row.nome)
+    const cognome = cellText(row.cognome)
+    const ipn = cellText(row.ipn)
+    const ruolo = cellText(row.ruolo)
+    const stagione = cellText(row.stagione)
+    const episodio = cellText(row.episodio)
+    if (nome == null || cognome == null || ipn == null || ruolo == null || stagione == null || episodio == null) {
+      return { ok: false, error: 'Valori riga non validi' }
+    }
+    if (typeof row.included !== 'boolean') return { ok: false, error: 'Inclusione riga non valida' }
+    if (row.proposta !== null && row.proposta !== 'aggiorna' && row.proposta !== 'crea') {
+      return { ok: false, error: 'Azione riga non valida' }
+    }
+    edits.push({
+      rowNumber,
+      nome,
+      cognome,
+      ipn,
+      ruolo,
+      stagione,
+      episodio,
+      included: row.included,
+      proposta: row.proposta,
+    })
+  }
+  return { ok: true, edits }
 }
 
 /** Valori obbligatori di cast_esterno.ruolo/primarieta. Il ruolo vero è ruolo_id. */
@@ -462,16 +642,30 @@ export type CastEsternoInsert = {
   ordine: number
 }
 
+export type CastEsternoUpdate = {
+  id: string
+  nome: string
+  codice_ipn: string | null
+  ruolo_id: string
+  ruolo: 'attore' | 'doppiatore'
+  primarieta: 'primario' | 'comprimario'
+}
+
 export function buildCastImportInserts(
   operaId: string,
   rows: ClassifiedCastRow[],
   startOrdine: number,
-): { partecipazioni: (PartecipazioneInsert & { rowNumber: number })[]; castEsterno: (CastEsternoInsert & { rowNumber: number })[] } {
+): {
+  partecipazioni: (PartecipazioneInsert & { rowNumber: number })[]
+  castEsterno: (CastEsternoInsert & { rowNumber: number })[]
+  aggiornamenti: (CastEsternoUpdate & { rowNumber: number })[]
+} {
   const partecipazioni: (PartecipazioneInsert & { rowNumber: number })[] = []
   const castEsterno: (CastEsternoInsert & { rowNumber: number })[] = []
+  const aggiornamenti: (CastEsternoUpdate & { rowNumber: number })[] = []
   let ordine = startOrdine
   for (const row of rows) {
-    if (row.status !== 'valid') continue
+    if (row.status !== 'valid' || !row.included) continue
     if (row.action === 'partecipazione') {
       partecipazioni.push({
         rowNumber: row.rowNumber,
@@ -485,6 +679,19 @@ export function buildCastImportInserts(
       continue
     }
     const legacy = legacyCastFields(row.categoria, row.ruolo)
+    if (row.action === 'update_cast_esterno') {
+      if (!row.castEsternoId) continue
+      aggiornamenti.push({
+        rowNumber: row.rowNumber,
+        id: row.castEsternoId,
+        nome: `${row.nome} ${row.cognome}`.trim(),
+        codice_ipn: cleanCell(row.ipn) || null,
+        ruolo_id: row.ruoloId,
+        ruolo: legacy.ruolo,
+        primarieta: legacy.primarieta,
+      })
+      continue
+    }
     castEsterno.push({
       rowNumber: row.rowNumber,
       opera_id: operaId,
@@ -501,7 +708,7 @@ export function buildCastImportInserts(
     })
     ordine += 1
   }
-  return { partecipazioni, castEsterno }
+  return { partecipazioni, castEsterno, aggiornamenti }
 }
 
 export async function insertWithDuplicateFallback<T extends { rowNumber: number }>(

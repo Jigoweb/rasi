@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
-import { activeRuoloNames, buildCastTemplateCsv, buildCastTemplateRows, buildCastTemplateXlsx, castTemplateFileName } from './cast-template'
+import { activeRuoloNames, buildCastTemplateCsv, buildCastTemplateRows, buildCastTemplateXlsx, castTemplateFileName, splitExternalCastName } from './cast-template'
 import { CAST_TEMPLATE_COLUMNS } from './cast-import'
 
 describe('buildCastTemplateRows', () => {
@@ -37,6 +37,13 @@ describe('buildCastTemplateRows', () => {
     expect(rows[1]).toMatchObject({ Nome: 'Mario', Cognome: 'Rossi', IPN: 'IPN1', Stagione: 1, Episodio: 2 })
     expect(rows[0]).not.toHaveProperty('Personaggio')
     expect(rows[0]).not.toHaveProperty('Note')
+  })
+})
+
+describe('splitExternalCastName', () => {
+  it('splits a single stored name on the first space', () => {
+    expect(splitExternalCastName('  Maria De Filippi ')).toEqual({ nome: 'Maria', cognome: 'De Filippi' })
+    expect(splitExternalCastName('Cher')).toEqual({ nome: 'Cher', cognome: '' })
   })
 })
 

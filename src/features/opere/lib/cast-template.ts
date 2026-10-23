@@ -13,7 +13,18 @@ export type CastTemplateSource = {
 
 export type CastTemplateRow = Record<CastTemplateColumn, string | number>
 
-/** Una riga per partecipazione RASI già presente. Il cast esterno non è nel template. */
+/**
+ * Il cast esterno ha un solo campo nome. Spezzatura provvisoria sul primo spazio:
+ * Nome = prima parola, Cognome = il resto. Senza spazi il cognome resta vuoto.
+ */
+export function splitExternalCastName(value: string | null | undefined): { nome: string; cognome: string } {
+  const cleaned = cleanCell(value)
+  const space = cleaned.indexOf(' ')
+  if (space === -1) return { nome: cleaned, cognome: '' }
+  return { nome: cleaned.slice(0, space), cognome: cleanCell(cleaned.slice(space + 1)) }
+}
+
+/** Una riga per partecipazione RASI e per persona del cast esterno, anche inserita a mano. */
 export function buildCastTemplateRows(partecipazioni: CastTemplateSource[]): CastTemplateRow[] {
   const rows = partecipazioni.map((row) => ({
     Nome: cleanCell(row.nome),

@@ -5,6 +5,7 @@ import {
   CAST_TEMPLATE_COLUMNS,
   buildCastImportInserts,
   classifyCastImport,
+  classifyCastValues,
   insertWithDuplicateFallback,
   isMissingCastEsternoColumnError,
   legacyCastFields,
@@ -186,7 +187,7 @@ describe('classifyCastImport', () => {
       row({ Nome: 'Giulia', Cognome: 'Bianchi', IPN: 'new1', Ruolo: 'Comprimario' }),
       row({ Nome: 'Giulia', Cognome: 'Bianchi', IPN: 'NEW1', Ruolo: 'Protagonista Primario' }),
     ], {
-      castEsterno: [{ nome: 'Giulia Bianchi', codice_ipn: 'NEW1', ruolo_id: 'r-comp', episodio_id: null }],
+      castEsterno: [{ id: 'ext-1', nome: 'Giulia Bianchi', codice_ipn: 'NEW1', ruolo_id: 'r-comp', episodio_id: null }],
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
@@ -200,12 +201,134 @@ describe('classifyCastImport', () => {
     expect(fresh.ok && fresh.rows[1]).toMatchObject({ status: 'skipped', alert: CAST_IMPORT_ALERTS.duplicateFile })
   })
 
-  it('does not treat a manual external row without ruolo_id as the same role', () => {
+  it('proposes to update a manual external row that has no role', () => {
     const result = classify(
-      [row({ Nome: 'Giulia', Cognome: 'Bianchi', IPN: '', Ruolo: 'Comprimario' })],
-      { castEsterno: [{ nome: 'Giulia Bianchi', codice_ipn: null, ruolo_id: null, episodio_id: null }] },
+      [row({ Nome: 'Giulia', Cognome: 'Bianchi', IPN: 'NEW9', Ruolo: 'Comprimario' })],
+      { castEsterno: [{ id: 'ext-manual', nome: 'Giulia Bianchi', codice_ipn: null, ruolo_id: null, episodio_id: null }] },
     )
-    expect(result.ok && result.rows[0]).toMatchObject({ status: 'valid', action: 'cast_esterno' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.rows[0]).toMatchObject({
+      status: 'valid',
+      action: 'update_cast_esterno',
+      castEsternoId: 'ext-manual',
+      included: true,
+      proposta: 'aggiorna',
+      alert: CAST_IMPORT_ALERTS.duplicateManual,
+    })
+    const [created] = toPublicCastRows(result.rows)
+    expect(created.flagged).toBe(true)
+    const inserts = buildCastImportInserts('opera-1', result.rows, 1)
+    expect(inserts.castEsterno).toEqual([])
+    expect(inserts.aggiornamenti).toEqual([
+      expect.objectContaining({ id: 'ext-manual', ruolo_id: 'r-comp', codice_ipn: 'NEW9', nome: 'Giulia Bianchi' }),
+    ])
+  })
+
+  it('lets the operator create a second row or exclude the manual duplicate', () => {
+    const values = [{
+      rowNumber: 2,
+      Nome: 'Giulia',
+      Cognome: 'Bianchi',
+      IPN: '',
+      Ruolo: 'Comprimario',
+      Stagione: '',
+      Episodio: '',
+    }]
+    const base = context({
+      castEsterno: [{ id: 'ext-manual', nome: 'Giulia Bianchi', codice_ipn: null, ruolo_id: null, episodio_id: null }],
+    })
+    const edit = {
+      rowNumber: 2,
+      nome: 'Giulia',
+      cognome: 'Bianchi',
+      ipn: '',
+      ruolo: 'Comprimario',
+      stagione: '',
+      episodio: '',
+      included: true,
+      proposta: 'crea' as const,
+    }
+    const created = classifyCastValues(values, base, [edit])
+    expect(created.rows[0]).toMatchObject({
+      status: 'valid',
+      action: 'cast_esterno',
+      alert: CAST_IMPORT_ALERTS.duplicateManualCreate,
+      included: true,
+    })
+    expect(buildCastImportInserts('opera-1', created.rows, 0).castEsterno).toHaveLength(1)
+    expect(buildCastImportInserts('opera-1', created.rows, 0).aggiornamenti).toEqual([])
+
+    const excluded = classifyCastValues(values, base, [{ ...edit, proposta: 'aggiorna', included: false }])
+    expect(excluded.rows[0]).toMatchObject({ status: 'valid', action: 'update_cast_esterno', included: false })
+    expect(buildCastImportInserts('opera-1', excluded.rows, 0)).toMatchObject({
+      partecipazioni: [],
+      castEsterno: [],
+      aggiornamenti: [],
+    })
+  })
+
+  it('keeps an IPN conflict out until the operator corrects the name', () => {
+    const conflict = classify([
+      row({ Nome: 'Mario', Cognome: 'Bianchi', IPN: 'IPN1', Ruolo: 'Comprimario' }),
+    ])
+    expect(conflict.ok && conflict.rows[0]).toMatchObject({
+      status: 'skipped',
+      alert: CAST_IMPORT_ALERTS.ipnConflict,
+      included: false,
+    })
+    const corrected = classifyCastValues(
+      [{
+        rowNumber: 2,
+        Nome: 'Mario',
+        Cognome: 'Rossi',
+        IPN: 'IPN1',
+        Ruolo: 'Comprimario',
+        Stagione: '',
+        Episodio: '',
+      }],
+      context(),
+      [{
+        rowNumber: 2,
+        nome: 'Mario',
+        cognome: 'Rossi',
+        ipn: 'IPN1',
+        ruolo: 'Comprimario',
+        stagione: '',
+        episodio: '',
+        included: true,
+        proposta: null,
+      }],
+    )
+    expect(corrected.rows[0]).toMatchObject({ status: 'valid', action: 'partecipazione', artistaId: 'a1', included: true, alert: null })
+  })
+
+  it('does not import a forced include while the IPN is still in conflict', () => {
+    const forced = classifyCastValues(
+      [{
+        rowNumber: 2,
+        Nome: 'Mario',
+        Cognome: 'Bianchi',
+        IPN: 'IPN1',
+        Ruolo: 'Comprimario',
+        Stagione: '',
+        Episodio: '',
+      }],
+      context(),
+      [{
+        rowNumber: 2,
+        nome: 'Mario',
+        cognome: 'Bianchi',
+        ipn: 'IPN1',
+        ruolo: 'Comprimario',
+        stagione: '',
+        episodio: '',
+        included: true,
+        proposta: null,
+      }],
+    )
+    expect(forced.rows[0]).toMatchObject({ status: 'skipped', included: false, alert: CAST_IMPORT_ALERTS.ipnConflict })
+    expect(buildCastImportInserts('opera-1', forced.rows, 0).partecipazioni).toEqual([])
   })
 
   it('skips unknown, inactive and ambiguous roles', () => {
