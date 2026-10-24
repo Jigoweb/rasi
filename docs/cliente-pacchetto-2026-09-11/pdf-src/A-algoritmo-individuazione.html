@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <title>Algoritmo di individuazione — documento per revisione</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <p class="cover-kicker">RASI · Individuazioni</p>
+  <h1>Algoritmo di individuazione</h1>
+  <p class="subtitle">Come il programma abbina palinsesto e catalogo</p>
+  <p class="meta">
+    Documento per revisione cliente · versione 1.0 · 11 settembre 2026<br />
+    Descrive il comportamento attuale del programma. Non è un manuale tecnico.
+  </p>
+
+  <h2>1. A cosa serve</h2>
+  <p>
+    Ogni riga del palinsesto descrive una trasmissione: titolo, data, eventualmente stagione ed episodio, a volte anno e regia.
+    Il catalogo RASI descrive le opere, gli episodi e gli artisti rappresentati, con il loro ruolo.
+  </p>
+  <p>
+    L’individuazione è il collegamento tra i due: per quella trasmissione, quali artisti del catalogo risultano coinvolti.
+    Da questo collegamento dipendono elenchi, controlli e successive ripartizioni.
+  </p>
+  <p>
+    Il programma non “inventa” gli artisti. Prende solo quelli già presenti in catalogo sull’opera (e, per le serie, sull’episodio) che ritiene corrispondere alla trasmissione.
+  </p>
+
+  <h2>2. Le fasi, in ordine</h2>
+  <ol>
+    <li><span class="phase">Avvio.</span> Si parte da una campagna di palinsesto già importata.</li>
+    <li><span class="phase">Una riga alla volta.</span> Ogni trasmissione viene esaminata da sola.</li>
+    <li><span class="phase">Film o serie.</span> Il programma decide se trattarla come film o come serie televisiva.</li>
+    <li><span class="phase">Ricerca del titolo.</span> Nel catalogo cerca le opere il cui titolo è abbastanza simile. Sotto una soglia minima l’opera non viene considerata.</li>
+    <li><span class="phase">Punteggio.</span> A ogni opera rimasta assegna un punteggio: titolo, eventuale titolo originale, anno, regia e — se è una serie — episodio.</li>
+    <li><span class="phase">Soglia.</span> Se il punteggio è troppo basso, l’opera viene scartata.</li>
+    <li><span class="phase">Artisti.</span> Sulle opere accettate prende gli artisti collegati e crea una individuazione per ciascuno (artista + ruolo).</li>
+    <li><span class="phase">Scheda.</span> Sulla individuazione copia i dati della trasmissione (titolo, data, stagione, episodio del palinsesto).</li>
+  </ol>
+  <p>
+    Una campagna già chiusa non si aggiorna da sola. Se in seguito si cambia una regola o si completa il catalogo, va rilanciata una nuova individuazione.
+  </p>
+
+  <h2>3. Quando è un film e quando è una serie</h2>
+  <p>La trasmissione è trattata come <strong>serie</strong> se il palinsesto indica almeno uno di questi elementi:</p>
+  <ul>
+    <li>numero di stagione</li>
+    <li>numero di episodio</li>
+    <li>titolo dell’episodio (italiano o originale)</li>
+  </ul>
+  <p>
+    Se questi campi sono vuoti ma il titolo della trasmissione contiene indicazioni riconoscibili
+    (ad esempio «S01E02» oppure «Ep. 12»), il programma può ricavare stagione o episodio dal testo.
+    Non modifica il palinsesto salvato: usa quell’informazione solo per l’abbinamento.
+  </p>
+  <p>In tutti gli altri casi la trasmissione è trattata come <strong>film</strong>.</p>
+
+  <h2>4. I pesi del punteggio</h2>
+  <p>
+    Il punteggio massimo teorico è 100, se tutti gli elementi sono presenti e coincidono.
+    Ogni pezzo vale così:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Elemento</th>
+        <th>Peso</th>
+        <th>Quando si applica</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Titolo</td>
+        <td>fino a 50</td>
+        <td>Sempre. È il pezzo principale.</td>
+      </tr>
+      <tr>
+        <td>Titolo originale</td>
+        <td>fino a 10</td>
+        <td>Solo se palinsesto e catalogo hanno entrambi un titolo originale.</td>
+      </tr>
+      <tr>
+        <td>Anno</td>
+        <td>fino a 15</td>
+        <td>Se l’anno è disponibile da entrambe le parti. Sulle serie, se l’episodio è già certo, questo peso si riduce (5 oppure 10), perché conta di più l’episodio.</td>
+      </tr>
+      <tr>
+        <td>Regia</td>
+        <td>da −15 a +10</td>
+        <td>Solo se palinsesto e catalogo hanno entrambi la regia. Può togliere punti se le due regie non coincidono.</td>
+      </tr>
+      <tr>
+        <td>Episodio</td>
+        <td>fino a 15</td>
+        <td>Solo per le serie, se viene trovato un episodio in catalogo.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Fase titolo</h2>
+  <p>Prima del confronto il titolo viene semplificato, per far parlare palinsesto e catalogo la stessa lingua:</p>
+  <ul>
+    <li>si ignorano maiuscole e minuscole;</li>
+    <li>si tolgono coda tipo «Season», «Stagione», «Parte», «Volume»;</li>
+    <li>si toglie un numero o un romano finale (così «Vikings 5» e «Vikings» si possono incontrare).</li>
+  </ul>
+  <p>Poi il titolo della trasmissione viene confrontato con, in catalogo:</p>
+  <ul>
+    <li>il titolo dell’opera;</li>
+    <li>il titolo originale;</li>
+    <li>eventuali titoli alternativi (alias).</li>
+  </ul>
+  <p>
+    <strong>Soglia di ingresso: 70% di somiglianza.</strong>
+    Sotto questa soglia l’opera non entra nel punteggio: è come se non esistesse per quella trasmissione.
+    Sopra, il titolo può valere fino a 50 punti, in proporzione a quanto i due testi si assomigliano.
+  </p>
+  <p>
+    Questa soglia evita abbinamenti tra titoli diversi. Non basta, da sola, a distinguere due film o due episodi che condividono lo stesso titolo.
+  </p>
+
+  <h2>6. Fase anno</h2>
+  <p>Si confronta l’anno (o l’intervallo di anni) indicato dal palinsesto con quello del catalogo.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Distanza tra gli anni</th>
+        <th>Effetto sul punteggio (peso pieno 15)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Stesso anno, o periodi che si sovrappongono</td>
+        <td>punti pieni</td>
+      </tr>
+      <tr>
+        <td>Fino a 3 anni di differenza</td>
+        <td>circa due terzi dei punti</td>
+      </tr>
+      <tr>
+        <td>Da 4 a 5 anni</td>
+        <td>circa un terzo dei punti</td>
+      </tr>
+      <tr>
+        <td>Oltre 5 anni</td>
+        <td>nessun punto da questo pezzo</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    Se l’anno di uscita non aiuta, il programma può usare in modo ridotto l’anno di produzione.
+    Se uno dei due anni manca, l’anno è neutro: non aggiunge e non toglie.
+  </p>
+  <div class="warn">
+    <strong>Eccezione importante.</strong>
+    Una differenza di anno, anche di diversi anni, <em>non scarta</em> l’abbinamento.
+    Toglie solo i punti di questo pezzo. Due opere con titolo molto simile e anni diversi possono quindi passare entrambe, se il resto del punteggio basta.
+  </div>
+
+  <h2>7. Fase regia</h2>
+  <p>Vale solo se palinsesto e catalogo indicano entrambi il regista.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Quanto si assomigliano i nomi</th>
+        <th>Effetto</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Molto (almeno 70%)</td>
+        <td>+10 punti</td>
+      </tr>
+      <tr>
+        <td>In parte (almeno 40%)</td>
+        <td>+5 punti</td>
+      </tr>
+      <tr>
+        <td>Poco o per niente</td>
+        <td>−15 punti</td>
+      </tr>
+      <tr>
+        <td>Uno dei due manca</td>
+        <td>0 (neutro)</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    La penalità serve a separare film omonimi con registi diversi.
+    Se la regia non è valorizzata da una delle due parti, questo aiuto non c’è.
+  </p>
+
+  <h2>8. Fase episodio (solo serie)</h2>
+  <p>
+    Dopo aver accettato il titolo della serie, il programma cerca l’episodio in catalogo, in questo ordine:
+  </p>
+  <ol>
+    <li>
+      <strong>Stagione e numero episodio uguali.</strong>
+      È il caso pieno: l’episodio vale 15 punti.
+    </li>
+    <li>
+      <strong>Stesso numero di episodio, anche in un’altra stagione.</strong>
+      Si usa se il punto 1 non ha trovato nulla. L’episodio vale un po’ meno (circa 11–12 punti).
+      Questa regola si applica anche quando la stagione del palinsesto è indicata.
+    </li>
+    <li>
+      <strong>Titolo dell’episodio abbastanza simile</strong> (almeno 60%), se palinsesto e catalogo lo hanno.
+    </li>
+    <li>
+      <strong>Nessun episodio trovato.</strong>
+      Il programma non scarta la trasmissione. Attribuisce gli artisti distinti dell’intera serie,
+      riduce il punteggio del 20% e marca il risultato come <em>da controllare</em>.
+    </li>
+  </ol>
+  <p>
+    Inoltre, anche quando un episodio specifico è stato trovato, il programma include gli artisti
+    registrati sulla serie senza episodio (cast a livello di opera).
+  </p>
+  <div class="note">
+    Sulla scheda dell’individuazione restano stagione ed episodio <strong>del palinsesto</strong>,
+    non quelli dell’episodio di catalogo eventualmente usato al punto 2.
+    In elenco può quindi comparire una coppia stagione/episodio che in catalogo non esiste.
+  </div>
+
+  <h2>9. Quando l’abbinamento viene accettato</h2>
+  <p>
+    Non esiste una soglia fissa sempre uguale a 35 punti.
+    Il programma chiede almeno il <strong>35% del punteggio massimo possibile su quella riga</strong>,
+    e comunque non meno di 25 punti.
+  </p>
+  <p>
+    In pratica: se di una trasmissione si conosce solo il titolo, basta poco per passare
+    (un titolo al 70% fa già 35 punti). Se invece ci sono anche anno, regia ed episodio,
+    la soglia sale, perché il programma si aspetta che quei pezzi confermino l’abbinamento.
+  </p>
+  <p>
+    I risultati «nessun episodio trovato» (fase 8, punto 4) superano prima questa soglia
+    e poi vengono scritti con punteggio ridotto e stato da controllare.
+  </p>
+
+  <h2>10. Cosa viene scritto sull’individuazione</h2>
+  <ul>
+    <li>artista e ruolo presi dal catalogo;</li>
+    <li>opera (e, se c’è, episodio) usati per l’abbinamento;</li>
+    <li>titolo, date, stagione ed episodio copiati dal palinsesto;</li>
+    <li>un punteggio e una nota interna su come è stato calcolato;</li>
+    <li>stato di partenza: <em>individuato</em>, oppure <em>da controllare</em> se manca l’episodio in catalogo.</li>
+  </ul>
+  <p>
+    Lo stesso abbinamento non viene creato due volte.
+    Errori su una riga non bloccano il resto della campagna.
+  </p>
+
+  <h2>11. Eccezioni e casi particolari</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Situazione</th>
+        <th>Comportamento attuale</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Manca l’anno, o manca la regia, da una delle due parti</td>
+        <td>Quel pezzo è neutro. Non aiuta e non penalizza.</td>
+      </tr>
+      <tr>
+        <td>Il palinsesto scrive «Serie: Stagione 2» nel titolo</td>
+        <td>La coda viene tolta prima del confronto, per ritrovare il titolo della serie.</td>
+      </tr>
+      <tr>
+        <td>Stagione o episodio sono solo nel testo del titolo</td>
+        <td>Possono essere ricavati al volo, senza modificare il palinsesto.</td>
+      </tr>
+      <tr>
+        <td>Due opere con titolo molto simile</td>
+        <td>Entrambe possono superare la soglia di ingresso. Anno e regia dovrebbero distinguerle; se mancano o sono deboli, possono passare tutte e due.</td>
+      </tr>
+      <tr>
+        <td>Serie con stagione e episodio nel palinsesto, ma quell’episodio non è in catalogo</td>
+        <td>Oggi si usa, se esiste, lo stesso numero di episodio in un’altra stagione; altrimenti gli artisti dell’intera serie.</td>
+      </tr>
+      <tr>
+        <td>Palinsesto con solo un numero episodio continuo, senza stagione</td>
+        <td>Caso diverso (numerazione dell’emittente diversa da quella del catalogo). Queste regole non lo traducono da sole.</td>
+      </tr>
+      <tr>
+        <td>Campagna già elaborata</td>
+        <td>I risultati restano com’erano. Un cambio di regola o di catalogo richiede un nuovo lancio.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>12. Criticità da tenere presenti in revisione</h2>
+  <p>
+    Il programma fa quello per cui è stato regolato. Alcune di queste regole privilegiano il recupero
+    (individuare anche quando il catalogo è incompleto) rispetto alla precisione.
+    In revisione conviene avere chiare almeno queste conseguenze:
+  </p>
+  <ol>
+    <li>
+      <strong>Episodio di un’altra stagione.</strong>
+      Se manca l’episodio esatto, un numero episodio coincidente su un’altra stagione può bastare.
+      Si possono attribuire artisti a una puntata che in repertorio non c’è.
+    </li>
+    <li>
+      <strong>Artisti dell’intera serie.</strong>
+      Se non si trova nessun episodio, gli artisti di altri episodi possono comparire sulla trasmissione,
+      marcati come da controllare.
+    </li>
+    <li>
+      <strong>Elenco fuorviante.</strong>
+      Stagione ed episodio mostrati sono quelli del palinsesto, anche se il catalogo usato era un altro episodio.
+    </li>
+    <li>
+      <strong>L’anno non taglia.</strong>
+      Non esiste uno scarto automatico oltre un certo numero di anni. Film omonimi di epoche diverse
+      restano distinguibili soprattutto se titolo originale e regia sono valorizzati, e se in catalogo
+      l’artista è collegato al film giusto.
+    </li>
+    <li>
+      <strong>Il catalogo è il limite.</strong>
+      L’algoritmo non può individuare un artista su un’opera o un episodio che in catalogo non esiste.
+      Se il repertorio è incompleto o un artista è agganciato al titolo sbagliato, l’individuazione eredita l’errore.
+    </li>
+  </ol>
+  <p>
+    Quali di queste regole tenere, restringere o spegnere è una scelta di precisione contro completezza.
+    Non va decisa implicitamente: va confermata in sede, caso per caso (serie con stagione nota, film omonimi, palinsesti senza stagione).
+  </p>
+
+  <p class="footer-note">
+    Fine documento A · Algoritmo di individuazione · versione 1.0 del 11 settembre 2026
+  </p>
+</body>
+</html>

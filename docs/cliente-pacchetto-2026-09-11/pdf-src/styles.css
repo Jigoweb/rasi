@@ -1,0 +1,132 @@
+:root {
+  --ink: #1c2430;
+  --muted: #5a6573;
+  --line: #d5dbe3;
+  --band: #f4f1ea;
+  --accent: #1f4d3a;
+  --warn: #8a4b12;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  color: var(--ink);
+  font: 11.5pt/1.45 "Noto Serif", "Times New Roman", serif;
+}
+
+@page {
+  size: A4;
+  margin: 16mm 16mm 18mm 16mm;
+}
+
+.cover-kicker {
+  font-family: "Noto Sans", Arial, sans-serif;
+  font-size: 9pt;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+
+h1 {
+  font-size: 22pt;
+  line-height: 1.2;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--accent);
+}
+
+.subtitle {
+  font-size: 13pt;
+  color: var(--muted);
+  margin: 0 0 18px;
+}
+
+.meta {
+  font-family: "Noto Sans", Arial, sans-serif;
+  font-size: 9.5pt;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 0;
+  margin: 0 0 22px;
+}
+
+h2 {
+  font-family: "Noto Sans", Arial, sans-serif;
+  font-size: 12.5pt;
+  color: var(--accent);
+  margin: 22px 0 8px;
+  page-break-after: avoid;
+}
+
+h3 {
+  font-family: "Noto Sans", Arial, sans-serif;
+  font-size: 11pt;
+  margin: 14px 0 6px;
+  page-break-after: avoid;
+}
+
+p { margin: 0 0 9px; }
+
+ul, ol { margin: 0 0 10px; padding-left: 1.2em; }
+li { margin-bottom: 4px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 14px;
+  font-size: 10.5pt;
+  page-break-inside: avoid;
+}
+
+th, td {
+  border: 1px solid var(--line);
+  padding: 6px 8px;
+  vertical-align: top;
+  text-align: left;
+}
+
+th {
+  background: var(--band);
+  font-family: "Noto Sans", Arial, sans-serif;
+  font-size: 9pt;
+  letter-spacing: 0.02em;
+}
+
+.note {
+  background: var(--band);
+  border-left: 3px solid var(--accent);
+  padding: 10px 12px;
+  margin: 12px 0 14px;
+  font-size: 10.5pt;
+}
+
+.warn {
+  background: #fbf3ea;
+  border-left: 3px solid var(--warn);
+  padding: 10px 12px;
+  margin: 12px 0 14px;
+  font-size: 10.5pt;
+}
+
+.phase {
+  font-family: "Noto Sans", Arial, sans-serif;
+  font-size: 10pt;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.footer-note {
+  margin-top: 28px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 9.5pt;
+  color: var(--muted);
+  font-family: "Noto Sans", Arial, sans-serif;
+}
+
+strong { font-weight: 700; }
+em { font-style: italic; }
