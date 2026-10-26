@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/shared/components/ui/badge'
@@ -35,15 +36,18 @@ export function ArtistaCastEsternoMatchPanel({
   const [loading, setLoading] = useState(true)
   const [converting, setConverting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { beginLoad } = useInitialPageLoad(artistaId)
 
   const reload = useCallback(async () => {
-    setLoading(true)
+    const load = beginLoad()
+    if (load.initial) setLoading(true)
     const { data, error: loadError } = await cercaCastEsternoPerArtista(artistaId)
     if (loadError) setError(loadError.message)
+    else load.markLoaded()
     setMatches(data)
     setSelected(new Set(data.map((row) => row.cast_id)))
-    setLoading(false)
-  }, [artistaId])
+    if (load.initial) setLoading(false)
+  }, [artistaId, beginLoad])
 
   useEffect(() => {
     void reload()

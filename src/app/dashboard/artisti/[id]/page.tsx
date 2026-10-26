@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation';
+import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, updateArtista } from '@/features/artisti/services/artisti.service';
 import { getRuoliTipologie, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service';
 import { Database } from '@/shared/lib/supabase'
@@ -117,10 +118,12 @@ export default function ArtistaProfiloPage() {
   
   // Add partecipazione dialog state
   const [showAddPartecipazioneDialog, setShowAddPartecipazioneDialog] = useState(false)
+  const { beginLoad } = useInitialPageLoad(artistaId)
 
   const fetchArtistaData = useCallback(async () => {
+    const load = beginLoad()
     try {
-      setLoading(true)
+      if (load.initial) setLoading(true)
       setError(null)
 
       // Fetch artista details
@@ -169,13 +172,14 @@ export default function ArtistaProfiloPage() {
       })
       
       setPartecipazioni(sortedPartecipazioni as any)
+      load.markLoaded()
     } catch (error) {
       console.error('Error fetching artista data:', JSON.stringify(error, null, 2))
       setError('Errore nel caricamento dei dati')
     } finally {
-      setLoading(false)
+      if (load.initial) setLoading(false)
     }
-  }, [artistaId])
+  }, [artistaId, beginLoad])
 
   useEffect(() => {
     if (artistaId) {
