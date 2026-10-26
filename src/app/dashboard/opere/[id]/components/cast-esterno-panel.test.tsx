@@ -81,6 +81,29 @@ describe('CastEsternoPanel', () => {
     })
   })
 
+  it('keeps the saved cast visible while the list reloads', async () => {
+    let releaseReload: (value: unknown) => void = () => {}
+    ;(listCastEsterno as jest.Mock)
+      .mockResolvedValueOnce({ data: [row()], error: null })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        releaseReload = resolve
+      }))
+    const user = userEvent.setup()
+    render(<CastEsternoPanel operaId="op1" imdbTconst={null} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Azioni per Mario Rossi' }))
+    await user.click(await screen.findByRole('menuitem', { name: /Modifica/ }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Salva' }))
+
+    await waitFor(() => {
+      expect(listCastEsterno).toHaveBeenCalledTimes(2)
+    })
+    expect(screen.getByText('Mario Rossi')).toBeInTheDocument()
+
+    releaseReload({ data: [row({ nome: 'Mario Bianchi', personaggio: 'Il medico' })], error: null })
+    expect(await screen.findByText('Mario Bianchi')).toBeInTheDocument()
+  })
+
   it('shows an existing RASI artist with the same name', async () => {
     ;(listCastEsterno as jest.Mock).mockResolvedValue({ data: [row()], error: null })
     render(<CastEsternoPanel operaId="op1" imdbTconst={null} />)

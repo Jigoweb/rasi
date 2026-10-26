@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import Link from 'next/link'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -90,6 +91,7 @@ export function CastEsternoPanel({
   const [error, setError] = useState<string | null>(null)
 
   const episodiById = useMemo(() => new Map(episodi.map((episodio) => [episodio.id, episodio])), [episodi])
+  const { beginLoad } = useInitialPageLoad(operaId)
 
   const episodioOptions = useMemo(
     () =>
@@ -108,13 +110,17 @@ export function CastEsternoPanel({
   )
 
   const reload = useCallback(async () => {
-    setLoading(true)
+    const load = beginLoad()
+    if (load.initial) setLoading(true)
     const [{ data, error: loadError }, { data: matches }] = await Promise.all([
       listCastEsterno(operaId),
       listCastEsternoArtistiCorrispondenti(operaId),
     ])
     if (loadError) setError(loadError.message)
-    else setRows(data ?? [])
+    else {
+      setRows(data ?? [])
+      load.markLoaded()
+    }
     const byCast = new Map<string, ArtistaCorrispondente[]>()
     for (const match of matches ?? []) {
       const list = byCast.get(match.cast_id) ?? []
@@ -122,8 +128,8 @@ export function CastEsternoPanel({
       byCast.set(match.cast_id, list)
     }
     setCorrispondenti(byCast)
-    setLoading(false)
-  }, [operaId])
+    if (load.initial) setLoading(false)
+  }, [operaId, beginLoad])
 
   useEffect(() => {
     void reload()
