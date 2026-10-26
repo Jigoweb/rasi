@@ -4,7 +4,6 @@ import { useRef, useState } from 'react'
 import { Download, Loader2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/shared/components/ui/button'
-import { Badge } from '@/shared/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -19,12 +18,28 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
+import { EditableImportPreview } from '@/shared/components/editable-import-preview'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { supabase } from '@/shared/lib/supabase-client'
-import type { EpisodiImportResponse, EpisodioTemplateSource } from '@/features/opere/lib/episodi-import'
+import {
+  revalidateEpisodeDrafts,
+  type EpisodeDraft,
+  type EpisodeKey,
+  type EpisodiImportResponse,
+  type EpisodiImportSummary,
+  type EpisodioTemplateSource,
+  type ReviewedEpisodeRow,
+} from '@/features/opere/lib/episodi-import'
 
 type ImportSuccess = Extract<EpisodiImportResponse, { ok: true }>
+
+const EPISODE_FIELDS = [
+  { key: 'stagione', label: 'Stagione' },
+  { key: 'episodio', label: 'Episodio' },
+  { key: 'titolo', label: 'Titolo' },
+  { key: 'durataMinuti', label: 'Durata (minuti)' },
+  { key: 'dataPrimaMessaInOnda', label: 'Data prima messa in onda' },
+] as const
 
 type EpisodiImportActionsProps = {
   operaId: string
@@ -41,13 +56,14 @@ export function EpisodiImportActions({
 }: EpisodiImportActionsProps) {
   const { isAdmin, isOperatore } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
-  const fileRef = useRef<File | null>(null)
   const requestRef = useRef(0)
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<'preview' | 'summary'>('preview')
   const [loadingMode, setLoadingMode] = useState<'preview' | 'confirm' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<ImportSuccess | null>(null)
+  const [rows, setRows] = useState<ReviewedEpisodeRow[] | null>(null)
+  const [existingKeys, setExistingKeys] = useState<EpisodeKey[]>([])
+  const [summary, setSummary] = useState<EpisodiImportSummary | null>(null)
 
   if (!isAdmin && !isOperatore) return null
 
@@ -76,25 +92,33 @@ export function EpisodiImportActions({
     }
   }
 
-  const submitFile = async (file: File, mode: 'preview' | 'confirm') => {
+  const applyPayload = (payload: ImportSuccess, nextPhase: 'preview' | 'summary') => {
+    setRows(payload.rows.map(reviewedFromPayload))
+    setExistingKeys(payload.existingKeys ?? [])
+    setSummary(nextPhase === 'summary' ? payload.summary : null)
+    setPhase(nextPhase)
+  }
+
+  const submitPreview = async (file: File) => {
     const requestId = requestRef.current + 1
     requestRef.current = requestId
-    setLoadingMode(mode)
+    setLoadingMode('preview')
     setError(null)
-    if (mode === 'preview') setResult(null)
+    setRows(null)
+    setSummary(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const token = await accessToken()
       if (requestRef.current !== requestId) return
-      if (!session?.access_token) {
+      if (!token) {
         setError('Sessione scaduta. Accedi di nuovo.')
         return
       }
       const body = new FormData()
       body.append('file', file)
-      body.append('mode', mode)
+      body.append('mode', 'preview')
       const response = await fetch(`/api/opere/${operaId}/episodi/import`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${token}` },
         body,
       })
       const payload = await response.json().catch(() => null) as EpisodiImportResponse | null
@@ -103,8 +127,50 @@ export function EpisodiImportActions({
         setError(payload && !payload.ok ? payload.error : 'Importazione non riuscita.')
         return
       }
-      setResult(payload)
-      setPhase(mode === 'confirm' ? 'summary' : 'preview')
+      applyPayload(payload, 'preview')
+    } catch (submitError) {
+      console.error(submitError)
+      if (requestRef.current === requestId) setError('Importazione non riuscita.')
+    } finally {
+      if (requestRef.current === requestId) setLoadingMode(null)
+    }
+  }
+
+  const confirmRows = async () => {
+    if (!rows || loadingMode) return
+    const requestId = requestRef.current + 1
+    requestRef.current = requestId
+    setLoadingMode('confirm')
+    setError(null)
+    try {
+      const token = await accessToken()
+      if (requestRef.current !== requestId) return
+      if (!token) {
+        setError('Sessione scaduta. Accedi di nuovo.')
+        return
+      }
+      const response = await fetch(`/api/opere/${operaId}/episodi/import`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'confirm',
+          rows: rows.map((row) => ({
+            rowNumber: row.rowNumber,
+            included: row.included,
+            draft: row.draft,
+          })),
+        }),
+      })
+      const payload = await response.json().catch(() => null) as EpisodiImportResponse | null
+      if (requestRef.current !== requestId) return
+      if (!response.ok || !payload || !payload.ok) {
+        setError(payload && !payload.ok ? payload.error : 'Importazione non riuscita.')
+        return
+      }
+      applyPayload(payload, 'summary')
     } catch (submitError) {
       console.error(submitError)
       if (requestRef.current === requestId) setError('Importazione non riuscita.')
@@ -115,26 +181,53 @@ export function EpisodiImportActions({
 
   const onFileChange = (file: File | undefined) => {
     if (!file) return
-    fileRef.current = file
     setOpen(true)
     setPhase('preview')
-    setResult(null)
-    void submitFile(file, 'preview')
+    setRows(null)
+    setSummary(null)
+    setError(null)
+    void submitPreview(file)
   }
 
   const closeDialog = (nextOpen: boolean) => {
     if (nextOpen) return
-    const imported = phase === 'summary' ? result?.summary.imported ?? 0 : 0
+    const imported = phase === 'summary' ? summary?.imported ?? 0 : 0
     requestRef.current += 1
     setOpen(false)
     setLoadingMode(null)
     setPhase('preview')
-    setResult(null)
+    setRows(null)
+    setExistingKeys([])
+    setSummary(null)
     setError(null)
-    fileRef.current = null
     if (inputRef.current) inputRef.current.value = ''
     if (imported > 0) onImported()
   }
+
+  const changeValue = (rowNumber: number, key: string, value: string) => {
+    setRows((current) => {
+      if (!current) return current
+      const next = current.map((row) => (
+        row.rowNumber === rowNumber
+          ? { ...row, draft: { ...row.draft, [key]: value } as EpisodeDraft }
+          : row
+      ))
+      return revalidateEpisodeDrafts(next, existingKeys)
+    })
+  }
+
+  const changeIncluded = (rowNumber: number, included: boolean) => {
+    setRows((current) => {
+      if (!current) return current
+      const next = current.map((row) => (
+        row.rowNumber === rowNumber && row.status === 'valid' ? { ...row, included } : row
+      ))
+      return revalidateEpisodeDrafts(next, existingKeys)
+    })
+  }
+
+  const alerts = (rows ?? []).filter((row) => row.status === 'skipped' && row.message)
+  const importable = (rows ?? []).filter((row) => row.status === 'valid' && row.included).length
 
   return (
     <>
@@ -173,18 +266,19 @@ export function EpisodiImportActions({
       />
 
       <Dialog open={open} onOpenChange={closeDialog}>
-        <DialogContent className="sm:max-w-4xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[min(90vh,860px)] w-full flex-col gap-4 overflow-hidden sm:max-w-6xl">
+          <DialogHeader className="shrink-0 pr-8">
             <DialogTitle>
               {phase === 'summary' ? 'Importazione completata' : 'Anteprima importazione episodi'}
             </DialogTitle>
             <DialogDescription>
               {phase === 'summary'
-                ? 'Solo le righe valide sono state importate. Gli episodi già presenti non sono stati aggiornati.'
-                : 'Controlla le righe valide e quelle ignorate. La conferma importa solo le righe valide e non aggiorna gli episodi già presenti.'}
+                ? 'Sono stati importati solo gli episodi inclusi e ancora validi. Gli episodi già presenti non sono stati aggiornati.'
+                : 'Le righe segnalate sono evidenziate con il motivo. Puoi correggere stagione, episodio, titolo, durata e data: la riga viene ricontrollata subito e puoi includerla o escluderla. Non viene scritto nulla prima della conferma.'}
             </DialogDescription>
           </DialogHeader>
 
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
           {loadingMode && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -198,21 +292,21 @@ export function EpisodiImportActions({
             </div>
           )}
 
-          {result && (
+          {rows && (
             <div className="space-y-3">
               <p className="text-sm">
-                {phase === 'summary'
-                  ? `${episodeCount(result.summary.imported)}, ${skippedCount(result.summary.skipped)}.`
-                  : `${validCount(result.summary.valid)}, ${skippedCount(result.summary.skipped)} su ${result.summary.total}.`}
+                {phase === 'summary' && summary
+                  ? summaryLine(summary)
+                  : previewLine(rows)}
               </p>
-              {result.summary.valid === 0 && phase === 'preview' && (
-                <p className="text-sm text-muted-foreground">Nessuna riga valida da importare.</p>
+              {importable === 0 && phase === 'preview' && (
+                <p className="text-sm text-muted-foreground">Nessuna riga inclusa da importare.</p>
               )}
-              {result.alerts.length > 0 && (
+              {alerts.length > 0 && (
                 <div role="alert" className="rounded-md border px-3 py-2 text-sm space-y-1">
                   <p className="font-medium">Avvisi</p>
                   <ul className="list-disc pl-5 space-y-1">
-                    {result.alerts.map((alert) => (
+                    {alerts.map((alert) => (
                       <li key={`${alert.rowNumber}-${alert.message}`}>
                         Riga {alert.rowNumber}: {alert.message}
                       </li>
@@ -220,54 +314,32 @@ export function EpisodiImportActions({
                   </ul>
                 </div>
               )}
-              <div className="max-h-80 overflow-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Riga</TableHead>
-                      <TableHead>Esito</TableHead>
-                      <TableHead>Stagione</TableHead>
-                      <TableHead>Episodio</TableHead>
-                      <TableHead>Titolo</TableHead>
-                      <TableHead>Durata (minuti)</TableHead>
-                      <TableHead>Data prima messa in onda</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {result.rows.map((row) => (
-                      <TableRow key={row.rowNumber}>
-                        <TableCell>{row.rowNumber}</TableCell>
-                        <TableCell>
-                          <Badge variant={row.status === 'valid' ? 'secondary' : 'outline'}>
-                            {row.status === 'valid' ? 'Valida' : 'Ignorata'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{row.stagione ?? '—'}</TableCell>
-                        <TableCell>{row.episodio ?? '—'}</TableCell>
-                        <TableCell>{row.titolo ?? '—'}</TableCell>
-                        <TableCell>{row.durataMinuti ?? '—'}</TableCell>
-                        <TableCell>{formatItalianDate(row.dataPrimaMessaInOnda)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <EditableImportPreview
+                fields={[...EPISODE_FIELDS]}
+                rows={rows.map((row) => ({
+                  rowNumber: row.rowNumber,
+                  status: row.status,
+                  message: row.message,
+                  included: row.included,
+                  values: row.draft,
+                }))}
+                disabled={phase === 'summary' || loadingMode !== null}
+                onValueChange={changeValue}
+                onIncludedChange={changeIncluded}
+              />
             </div>
           )}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button type="button" variant="outline" onClick={() => closeDialog(false)} disabled={loadingMode !== null}>
               {phase === 'summary' ? 'Chiudi' : 'Annulla'}
             </Button>
             {phase === 'preview' && (
               <Button
                 type="button"
-                onClick={() => {
-                  const file = fileRef.current
-                  if (!file || loadingMode) return
-                  void submitFile(file, 'confirm')
-                }}
-                disabled={loadingMode !== null || !result || result.summary.valid === 0}
+                onClick={() => void confirmRows()}
+                disabled={loadingMode !== null || !rows || importable === 0}
               >
                 Conferma importazione
               </Button>
@@ -279,6 +351,29 @@ export function EpisodiImportActions({
   )
 }
 
+async function accessToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+function reviewedFromPayload(row: ReviewedEpisodeRow | (Omit<ReviewedEpisodeRow, 'draft' | 'included'> & {
+  draft?: EpisodeDraft
+  included?: boolean
+})): ReviewedEpisodeRow {
+  const draft = row.draft ?? {
+    stagione: row.stagione != null ? String(row.stagione) : '',
+    episodio: row.episodio != null ? String(row.episodio) : '',
+    titolo: row.titolo ?? '',
+    durataMinuti: row.durataMinuti != null ? String(row.durataMinuti) : '',
+    dataPrimaMessaInOnda: italianDate(row.dataPrimaMessaInOnda),
+  }
+  return {
+    ...row,
+    draft,
+    included: typeof row.included === 'boolean' ? row.included : row.status === 'valid',
+  }
+}
+
 function toBlobPart(content: Uint8Array | string): BlobPart {
   if (typeof content === 'string') return content
   const copy = new ArrayBuffer(content.byteLength)
@@ -286,20 +381,37 @@ function toBlobPart(content: Uint8Array | string): BlobPart {
   return copy
 }
 
-function validCount(count: number): string {
-  return count === 1 ? '1 riga valida' : `${count} righe valide`
+function previewLine(rows: ReviewedEpisodeRow[]): string {
+  const toImport = rows.filter((row) => row.status === 'valid' && row.included).length
+  const skipped = rows.filter((row) => row.status === 'skipped').length
+  const excluded = rows.filter((row) => row.status === 'valid' && !row.included).length
+  const parts = [toImportCount(toImport), skippedCount(skipped)]
+  if (excluded > 0) parts.push(excludedCount(excluded))
+  return `${parts.join(', ')} su ${rows.length}.`
+}
+
+function summaryLine(summary: EpisodiImportSummary): string {
+  return `${episodeCount(summary.imported)}, ${excludedCount(summary.excluded)}, ${skippedCount(summary.skipped)}.`
+}
+
+function toImportCount(count: number): string {
+  return count === 1 ? '1 episodio da importare' : `${count} episodi da importare`
 }
 
 function skippedCount(count: number): string {
   return count === 1 ? '1 riga ignorata' : `${count} righe ignorate`
 }
 
+function excludedCount(count: number): string {
+  return count === 1 ? '1 riga esclusa' : `${count} righe escluse`
+}
+
 function episodeCount(count: number): string {
   return count === 1 ? '1 episodio importato' : `${count} episodi importati`
 }
 
-function formatItalianDate(iso: string | null): string {
-  if (!iso) return '—'
+function italianDate(iso: string | null): string {
+  if (!iso) return ''
   const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!match) return iso
   return `${match[3]}/${match[2]}/${match[1]}`
