@@ -11,6 +11,8 @@ describe('CastImportActions', () => {
     expect(screen.getByRole('button', { name: 'Scarica template cast' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Importa cast' }))
 
+    expect(screen.getByRole('dialog')).toHaveTextContent('Attore primario')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Personaggio')
     expect(screen.getByRole('dialog')).toHaveTextContent('Nulla viene scritto prima della conferma')
     expect(screen.getByRole('dialog')).toHaveTextContent('Non si creano episodi né schede artista')
     expect(screen.getByRole('button', { name: 'Conferma importazione' })).toBeDisabled()

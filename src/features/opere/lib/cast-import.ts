@@ -3,17 +3,29 @@
  * Il parsing del file sta in `@/shared/lib/tabular-file` (riuso per gli episodi).
  */
 
-export const CAST_TEMPLATE_COLUMNS = ['Nome', 'Cognome', 'IPN', 'Ruolo', 'Stagione', 'Episodio'] as const
+import { fromRuoloPrimarieta, RUOLO_PRIMARIETA_OPTIONS, suggestRuoloPerPrimarieta } from './cast-esterno'
+
+/** Come il form online: Nome, Cognome, Personaggio, Ruolo, e per le serie Stagione ed Episodio. */
+export const CAST_TEMPLATE_COLUMNS = ['Nome', 'Cognome', 'Personaggio', 'Ruolo', 'Stagione', 'Episodio'] as const
+
+/** Template pubblicato prima di Personaggio. Resta importabile. */
+export const CAST_TEMPLATE_LEGACY_COLUMNS = ['Nome', 'Cognome', 'IPN', 'Ruolo', 'Stagione', 'Episodio'] as const
+
+/** IPN facoltativo insieme a Personaggio, se qualcuno lo aggiunge a mano. */
+export const CAST_TEMPLATE_COLUMNS_WITH_IPN = ['Nome', 'Cognome', 'IPN', 'Personaggio', 'Ruolo', 'Stagione', 'Episodio'] as const
+
+const ACCEPTED_CAST_HEADERS = [CAST_TEMPLATE_COLUMNS, CAST_TEMPLATE_LEGACY_COLUMNS, CAST_TEMPLATE_COLUMNS_WITH_IPN] as const
 
 export type CastTemplateColumn = (typeof CAST_TEMPLATE_COLUMNS)[number]
 
 export const CAST_IMPORT_ALERTS = {
-  headers: 'Il file deve avere esattamente le colonne: Nome, Cognome, IPN, Ruolo, Stagione, Episodio',
+  headers: 'Il file deve avere le colonne: Nome, Cognome, Personaggio, Ruolo, Stagione, Episodio',
   nameRequired: 'Nome e cognome sono obbligatori',
   ruoloMissing: 'Ruolo mancante',
   ruoloUnknown: 'Ruolo non riconosciuto',
   ruoloInactive: 'Ruolo non attivo',
   ruoloAmbiguous: 'Più ruoli attivi hanno lo stesso nome',
+  ruoloTipologia: 'Nessun ruolo attivo corrisponde a questa voce',
   seasonPair: 'Stagione ed episodio vanno indicati insieme',
   seasonNumber: 'Stagione o episodio non è un numero intero',
   episodeMissing: 'Episodio non trovato',
@@ -107,6 +119,8 @@ export type CastEditInput = {
   nome: string
   cognome: string
   ipn: string
+  /** Assente nei payload precedenti a Personaggio: si tratta come vuoto. */
+  personaggio?: string
   ruolo: string
   stagione: string
   episodio: string
@@ -130,6 +144,7 @@ type RowFields = {
   nome: string
   cognome: string
   ipn: string
+  personaggio: string
   ruolo: string
   stagione: number | null
   episodio: number | null
@@ -159,7 +174,7 @@ export type ClassifiedCastRow =
       CastDecision & {
         status: 'valid'
         action: 'cast_esterno' | 'update_cast_esterno'
-        ruoloId: string
+        ruoloId: string | null
         categoria: string | null
         episodioId: string | null
         detail: string
@@ -170,6 +185,7 @@ export type CastImportPublicRow = {
   nome: string
   cognome: string
   ipn: string
+  personaggio: string
   ruolo: string
   stagione: number | null
   episodio: number | null
@@ -193,9 +209,10 @@ export function isMissingCastEsternoColumnError(message: string): boolean {
 export function validateCastHeaders(headers: string[]): string | null {
   const trimmed = headers.map((header) => header.replace(/^\uFEFF/, '').trim())
   while (trimmed.length > 0 && trimmed[trimmed.length - 1] === '') trimmed.pop()
-  if (trimmed.length !== CAST_TEMPLATE_COLUMNS.length || trimmed.some((header, index) => header !== CAST_TEMPLATE_COLUMNS[index])) {
-    return CAST_IMPORT_ALERTS.headers
-  }
+  const accepted = ACCEPTED_CAST_HEADERS.some(
+    (expected) => trimmed.length === expected.length && trimmed.every((header, index) => header === expected[index]),
+  )
+  if (!accepted) return CAST_IMPORT_ALERTS.headers
   return null
 }
 
@@ -218,7 +235,7 @@ function parseOptionalInt(value: string): { ok: true; value: number | null } | {
   return { ok: true, value: Number(text) }
 }
 
-function resolveRuolo(label: string, ruoli: CastRuolo[]): { ok: true; ruolo: CastRuolo } | { ok: false; alert: string } {
+function resolveTipologia(label: string, ruoli: CastRuolo[]): { ok: true; ruolo: CastRuolo } | { ok: false; alert: string } {
   const key = cleanCell(label).toLowerCase()
   if (!key) return { ok: false, alert: CAST_IMPORT_ALERTS.ruoloMissing }
   const matches = ruoli.filter((ruolo) => cleanCell(ruolo.nome).toLowerCase() === key)
@@ -229,8 +246,31 @@ function resolveRuolo(label: string, ruoli: CastRuolo[]): { ok: true; ruolo: Cas
   return { ok: false, alert: `${CAST_IMPORT_ALERTS.ruoloInactive}: ${cleanCell(label)}` }
 }
 
+/**
+ * Prima le voci del form (Attore primario, …), poi i nomi di ruoli_tipologie
+ * dei file già compilati. Una voce del form senza tipologia attiva resta valida
+ * per il cast esterno (ruolo_id vuoto), come l'inserimento online.
+ */
+function resolveImportRuolo(
+  label: string,
+  ruoli: CastRuolo[],
+): { ok: true; ruolo: CastRuolo | null } | { ok: false; alert: string } {
+  const cleaned = cleanCell(label)
+  if (!cleaned) return { ok: false, alert: CAST_IMPORT_ALERTS.ruoloMissing }
+  const form = RUOLO_PRIMARIETA_OPTIONS.find((option) => option.label.toLowerCase() === cleaned.toLowerCase())
+  if (form) {
+    const parsed = fromRuoloPrimarieta(form.value)
+    const suggested = suggestRuoloPerPrimarieta(parsed.primarieta, ruoli, parsed.ruolo)
+    const matched = ruoli.find((ruolo) => ruolo.id === suggested && ruolo.attivo !== false) ?? null
+    return { ok: true, ruolo: matched }
+  }
+  return resolveTipologia(cleaned, ruoli)
+}
+
 function blankRow(record: CastValueRow): boolean {
-  return CAST_TEMPLATE_COLUMNS.every((column) => cleanCell(record[column] ?? '') === '')
+  return [record.Nome, record.Cognome, record.IPN, record.Personaggio, record.Ruolo, record.Stagione, record.Episodio].every(
+    (value) => cleanCell(value ?? '') === '',
+  )
 }
 
 type ArtistMatch =
@@ -285,7 +325,16 @@ function toCandidato(row: CastExistingEsterno): CastEsternoCandidato {
   }
 }
 
-export type CastValueRow = { rowNumber: number } & Record<CastTemplateColumn, string>
+export type CastValueRow = {
+  rowNumber: number
+  Nome: string
+  Cognome: string
+  IPN?: string
+  Personaggio?: string
+  Ruolo: string
+  Stagione: string
+  Episodio: string
+}
 
 export function classifyCastImport(
   headers: string[],
@@ -303,6 +352,7 @@ export function classifyCastImport(
         Nome: record.Nome ?? '',
         Cognome: record.Cognome ?? '',
         IPN: record.IPN ?? '',
+        Personaggio: record.Personaggio ?? '',
         Ruolo: record.Ruolo ?? '',
         Stagione: record.Stagione ?? '',
         Episodio: record.Episodio ?? '',
@@ -361,6 +411,7 @@ export function classifyCastValues(
     const nome = cleanCell(record.Nome)
     const cognome = cleanCell(record.Cognome)
     const ipn = cleanCell(record.IPN)
+    const personaggio = cleanCell(record.Personaggio)
     const ruoloLabel = cleanCell(record.Ruolo)
     const stagioneRaw = record.Stagione ?? ''
     const episodioRaw = record.Episodio ?? ''
@@ -371,6 +422,7 @@ export function classifyCastValues(
       nome,
       cognome,
       ipn,
+      personaggio,
       ruolo: ruoloLabel,
       stagione: stagioneParsed.ok ? stagioneParsed.value : null,
       episodio: episodioParsed.ok ? episodioParsed.value : null,
@@ -382,7 +434,7 @@ export function classifyCastValues(
       classified.push(rejected(fields, CAST_IMPORT_ALERTS.nameRequired))
       continue
     }
-    const ruolo = resolveRuolo(ruoloLabel, context.ruoli)
+    const ruolo = resolveImportRuolo(ruoloLabel, context.ruoli)
     if (!ruolo.ok) {
       classified.push(rejected(fields, ruolo.alert))
       continue
@@ -425,6 +477,10 @@ export function classifyCastValues(
     }
 
     if (artist.kind === 'rasi') {
+      if (!ruolo.ruolo) {
+        classified.push(rejected(fields, `${CAST_IMPORT_ALERTS.ruoloTipologia}: ${ruoloLabel}`))
+        continue
+      }
       const key = `${artist.artist.id}|${ruolo.ruolo.id}|${scopeKey(episodioId)}`
       if (partecipazioneKeys.has(key)) {
         classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateCast))
@@ -477,8 +533,8 @@ export function classifyCastValues(
         castEsternoId: manual.id,
         candidati,
         ...fields,
-        ruoloId: ruolo.ruolo.id,
-        categoria: ruolo.ruolo.categoria,
+        ruoloId: ruolo.ruolo?.id ?? null,
+        categoria: ruolo.ruolo?.categoria ?? null,
         episodioId,
         detail: many
           ? 'Aggiorna la persona scelta tra gli omonimi già inseriti a mano'
@@ -487,7 +543,8 @@ export function classifyCastValues(
       continue
     }
 
-    const externalKey = `${externalNameKey(nome, cognome)}|${normalizeIpn(ipn)}|${ruolo.ruolo.id}|${scopeKey(episodioId)}`
+    const roleKey = ruolo.ruolo?.id ?? cleanCell(ruoloLabel).toLowerCase()
+    const externalKey = `${externalNameKey(nome, cognome)}|${normalizeIpn(ipn)}|${roleKey}|${scopeKey(episodioId)}`
     if (esternoKeys.has(externalKey)) {
       classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateCast))
       continue
@@ -506,8 +563,8 @@ export function classifyCastValues(
       castEsternoId: null,
       candidati: createAnyway ? candidati : [],
       ...fields,
-      ruoloId: ruolo.ruolo.id,
-      categoria: ruolo.ruolo.categoria,
+      ruoloId: ruolo.ruolo?.id ?? null,
+      categoria: ruolo.ruolo?.categoria ?? null,
       episodioId,
       detail: createAnyway
         ? 'Nuova riga di cast esterno, la persona già presente resta com\'è'
@@ -527,6 +584,7 @@ export function toPublicCastRows(rows: ClassifiedCastRow[]): CastImportPublicRow
       nome: row.nome,
       cognome: row.cognome,
       ipn: row.ipn,
+      personaggio: row.personaggio,
       ruolo: row.ruolo,
       stagione: row.stagione,
       episodio: row.episodio,
@@ -618,10 +676,11 @@ export function parseCastEdits(value: unknown): { ok: true; edits: CastEditInput
     const nome = cellText(row.nome)
     const cognome = cellText(row.cognome)
     const ipn = cellText(row.ipn)
+    const personaggio = row.personaggio == null ? '' : cellText(row.personaggio)
     const ruolo = cellText(row.ruolo)
     const stagione = cellText(row.stagione)
     const episodio = cellText(row.episodio)
-    if (nome == null || cognome == null || ipn == null || ruolo == null || stagione == null || episodio == null) {
+    if (nome == null || cognome == null || ipn == null || personaggio == null || ruolo == null || stagione == null || episodio == null) {
       return { ok: false, error: 'Valori riga non validi' }
     }
     if (typeof row.included !== 'boolean') return { ok: false, error: 'Inclusione riga non valida' }
@@ -640,6 +699,7 @@ export function parseCastEdits(value: unknown): { ok: true; edits: CastEditInput
       nome,
       cognome,
       ipn,
+      personaggio,
       ruolo,
       stagione,
       episodio,
@@ -666,7 +726,7 @@ export type PartecipazioneInsert = {
   opera_id: string
   episodio_id: string | null
   ruolo_id: string
-  personaggio: null
+  personaggio: string | null
   note: null
 }
 
@@ -674,10 +734,10 @@ export type CastEsternoInsert = {
   opera_id: string
   episodio_id: string | null
   nome: string
-  personaggio: null
+  personaggio: string | null
   primarieta: 'primario' | 'comprimario'
   ruolo: 'attore' | 'doppiatore'
-  ruolo_id: string
+  ruolo_id: string | null
   codice_ipn: string | null
   imdb_nconst: null
   fonte: 'manuale'
@@ -688,9 +748,10 @@ export type CastEsternoUpdate = {
   id: string
   nome: string
   codice_ipn: string | null
-  ruolo_id: string
+  ruolo_id: string | null
   ruolo: 'attore' | 'doppiatore'
   primarieta: 'primario' | 'comprimario'
+  personaggio?: string | null
 }
 
 export function buildCastImportInserts(
@@ -708,6 +769,7 @@ export function buildCastImportInserts(
   let ordine = startOrdine
   for (const row of rows) {
     if (row.status !== 'valid' || !row.included) continue
+    const personaggio = cleanCell(row.personaggio) || null
     if (row.action === 'partecipazione') {
       partecipazioni.push({
         rowNumber: row.rowNumber,
@@ -715,7 +777,7 @@ export function buildCastImportInserts(
         opera_id: operaId,
         episodio_id: row.episodioId,
         ruolo_id: row.ruoloId,
-        personaggio: null,
+        personaggio,
         note: null,
       })
       continue
@@ -731,6 +793,7 @@ export function buildCastImportInserts(
         ruolo_id: row.ruoloId,
         ruolo: legacy.ruolo,
         primarieta: legacy.primarieta,
+        ...(personaggio ? { personaggio } : {}),
       })
       continue
     }
@@ -739,7 +802,7 @@ export function buildCastImportInserts(
       opera_id: operaId,
       episodio_id: row.episodioId,
       nome: `${row.nome} ${row.cognome}`.trim(),
-      personaggio: null,
+      personaggio,
       primarieta: legacy.primarieta,
       ruolo: legacy.ruolo,
       ruolo_id: row.ruoloId,
