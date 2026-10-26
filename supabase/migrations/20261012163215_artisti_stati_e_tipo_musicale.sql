@@ -1,0 +1,5 @@
+-- NO-OP. Storia gia applicata in produzione come 20261012163215.
+-- Lo SQL vero (ADD VALUE minorenne/deceduto/musicale) resta in
+-- 20261012100000_artisti_stati_e_tipo_musicale.sql, prima di
+-- 20261012100100_artisti_documento_note_referenti.sql che usa l'enum.
+-- Vedi supabase/scripts/migration_repair_plan.md.

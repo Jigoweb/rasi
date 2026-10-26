@@ -66,7 +66,7 @@ Do not rewrite historical matcher migrations to paper over Preview. Close/reopen
 
 1. Keep the Supabase Preview check non-required (PR #27 merged with the same red check).
 2. Point branching at a parent project that already contains the base schema, so Preview applies only *new* migration files.
-3. After merge to `main`, apply only the PR's new files (for the public site: `supabase/migrations/20260910143000_public_form_submissions.sql`) on production — never the full migrations folder against an empty database.
+3. After merge to `main`, apply only the PR's new files (for the public site: `supabase/migrations/20260914135439_public_form_submissions.sql`) on production — never the full migrations folder against an empty database.
 
 ## Verification
 

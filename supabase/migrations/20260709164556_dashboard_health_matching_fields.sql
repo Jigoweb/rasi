@@ -1,0 +1,5 @@
+-- NO-OP. Storia gia applicata in produzione (20260709164556 dashboard_health_matching_fields).
+-- Lo SQL originale non e nel repo. Questo file non riesegue nulla.
+-- I file locali get_dashboard_metrics di agosto e settembre restano pending:
+-- non sono questa versione.
+-- Vedi supabase/scripts/migration_repair_plan.md.

@@ -1,0 +1,4 @@
+-- NO-OP. Storia gia applicata in produzione (20260803121707 matcher_sky_gap_a_d_full).
+-- Terza versione remota della stessa linea SKY, senza file originale nel repo.
+-- Questo file non riesegue nulla.
+-- Vedi supabase/scripts/migration_repair_plan.md.

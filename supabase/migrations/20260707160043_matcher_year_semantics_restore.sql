@@ -1,0 +1,6 @@
+-- NO-OP. Storia gia applicata in produzione (20260707160043 matcher_year_semantics_restore).
+-- Lo SQL originale non e nel repo. Questo file non riesegue nulla.
+-- match_programmazione_to_partecipazioni e ridefinita da
+-- 20260731151036_matcher_derive_episode_medium_gate.sql e
+-- 20260803121140_matcher_sky_gap_a_d.sql.
+-- Vedi supabase/scripts/migration_repair_plan.md.

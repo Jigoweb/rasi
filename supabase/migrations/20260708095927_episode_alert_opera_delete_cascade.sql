@@ -1,0 +1,6 @@
+-- NO-OP. Storia gia applicata in produzione (20260708095927 episode_alert_opera_delete_cascade).
+-- Lo SQL originale non e nel repo. Questo file non riesegue nulla.
+-- 20260629175235 crea campagne_individuazione_episode_alerts.opera_id
+-- con ON DELETE SET NULL. Il passaggio a CASCADE, se c'e, vive solo in produzione:
+-- la query di pre-check nel piano va letta prima di un rebuild da zero.
+-- Vedi supabase/scripts/migration_repair_plan.md.

@@ -1,5 +1,5 @@
 -- SKY gap closure (A1/A2 + D2/D3): wire loose match keys + episode ep-only fallback +
--- soft year for film. Based on 20260731160000_matcher_derive_episode_medium_gate body.
+-- soft year for film. Based on 20260731151036_matcher_derive_episode_medium_gate body.
 -- A1/D2: match-time build_match_key (loose) so "Vikings 5" aligns to catalog "VIKINGS";
 --        also candidate via opere.match_key_loose/strict.
 -- A2: ep-only fallback even when numero_stagione is set but S+E failed.

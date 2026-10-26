@@ -4,7 +4,7 @@
 -- l'artista senza app_metadata.artista_id e solo sintetico, creato qui e
 -- annullato dal ROLLBACK.
 --
--- Prerequisito: migration 20261020205939_artista_id_app_metadata.sql gia applicata
+-- Prerequisito: migration 20261020212235_artista_id_app_metadata.sql gia applicata
 -- (get_user_artista_id legge solo app_metadata; il ramo pubblico di
 -- partecipazioni/individuazioni non vale per ruolo=artista).
 --
