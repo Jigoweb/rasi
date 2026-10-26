@@ -25,6 +25,11 @@ describe('buildCastExportRows', () => {
       ['Esterno', 'Anna Verdi', 1, 2],
     ])
     expect(rows[0].Ruolo).toBe('Attore primario')
+    const withTipologia = buildCastExportRows(
+      [],
+      [{ nome: 'Giulia Bianchi', personaggio: null, primarieta: 'comprimario', ruolo: 'attore', ruoloNome: 'Protagonista Primario', episodio_id: null }],
+    )
+    expect(withTipologia[0].Ruolo).toBe('Protagonista Primario')
     expect(rows[2].Ruolo).toBe('Doppiatore comprimario')
     expect(rows[1]).toEqual(expect.objectContaining({ 'Codice IPN': 'IPN1', Ruolo: 'Protagonista', Note: 'nota' }))
   })

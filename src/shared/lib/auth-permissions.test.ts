@@ -8,6 +8,7 @@ import {
   mergeAppMetadataWithArtistaLink,
   readAppMetadataArtistaId,
   readAuthoritativeUserRole,
+  canManageOperaCast,
 } from './auth-permissions'
 
 describe('auth-permissions', () => {
@@ -240,6 +241,17 @@ describe('auth-permissions', () => {
         provider: 'email',
         artista_id: '11111111-1111-4111-8111-111111111111',
       })
+    })
+  })
+
+  describe('canManageOperaCast', () => {
+    it('is limited to admin and operatore', () => {
+      expect(canManageOperaCast('admin')).toBe(true)
+      expect(canManageOperaCast('operatore')).toBe(true)
+      expect(canManageOperaCast('artista')).toBe(false)
+      expect(canManageOperaCast('collecting')).toBe(false)
+      expect(canManageOperaCast('readonly')).toBe(false)
+      expect(canManageOperaCast(null)).toBe(false)
     })
   })
 

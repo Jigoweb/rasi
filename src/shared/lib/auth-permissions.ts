@@ -166,3 +166,8 @@ export function canActorChangeTargetRole(
   return { ok: true }
 }
 
+/** Template e import del cast in scheda opera: solo admin e operatore. */
+export function canManageOperaCast(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'operatore'
+}
+
