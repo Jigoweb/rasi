@@ -11,6 +11,8 @@
 --
 -- Idempotente: CREATE OR REPLACE, DROP POLICY IF EXISTS, CREATE INDEX IF NOT EXISTS,
 -- UPDATE limitati alle righe la cui chiave cambia davvero.
+-- Eccezione 2026-10-26 (Matteo): gli alias "Gabriel's Inferno: Part Two" e
+-- "Part Three" non prendono la chiave collassata dal suffisso. Vedi sotto.
 -- Rollback: supabase/rollback/20261021100000_apply_missing_prod_effects.sql
 -- NON applicare senza OK esplicito di Matteo.
 
@@ -106,12 +108,43 @@ WHERE titolo ~* '\s*:\s*(SEASON|PARTE|PART|VOLUME|VOL|CHAPTER|LIMITED\s+SERIES|C
   AND (match_key_strict IS DISTINCT FROM public.build_match_key_strict(titolo, anno)
        OR match_key_loose IS DISTINCT FROM public.build_match_key(titolo, anno));
 
+-- UNIQUE (opera_id, emittente_id, alias_titolo_norm, alias_anno).
+-- "Gabriel's Inferno: Part Two" e "Part Three" condividono opera, emittente
+-- e anno: SERIES_PART_TRAIL le riduce entrambe a "gabriel's inferno" (+ anno)
+-- e l'UPDATE fallisce per collisione. Decisione Matteo 2026-10-26: restano
+-- chiavi distinte, scritte a mano. Nel file non c'è un altro titolo analogo.
 UPDATE public.opera_aliases
 SET alias_titolo_norm        = public.build_match_key(alias_titolo, alias_anno),
     alias_titolo_norm_strict = public.build_match_key_strict(alias_titolo, alias_anno)
 WHERE alias_titolo ~* '\s*:\s*(SEASON|PARTE|PART|VOLUME|VOL|CHAPTER|LIMITED\s+SERIES|COLLECTION|STAGIONE)\y'
+  AND alias_titolo !~* 'gabriel[''’]s inferno:\s*part\s+(two|three)\y'
   AND (alias_titolo_norm IS DISTINCT FROM public.build_match_key(alias_titolo, alias_anno)
        OR alias_titolo_norm_strict IS DISTINCT FROM public.build_match_key_strict(alias_titolo, alias_anno));
+
+UPDATE public.opera_aliases
+SET alias_titolo_norm = CASE
+      WHEN alias_titolo ~* ':\s*part\s+three\y' THEN 'gabriel''s inferno: part three'
+      ELSE 'gabriel''s inferno: part two'
+    END || COALESCE('::' || alias_anno::text, ''),
+    alias_titolo_norm_strict = CASE
+      WHEN alias_titolo ~* ':\s*part\s+three\y' THEN 'gabriel''s inferno: part three'
+      ELSE 'gabriel''s inferno: part two'
+    END || COALESCE('::' || alias_anno::text, '')
+WHERE alias_titolo ~* 'gabriel[''’]s inferno:\s*part\s+(two|three)\y'
+  AND (
+    alias_titolo_norm IS DISTINCT FROM (
+      CASE
+        WHEN alias_titolo ~* ':\s*part\s+three\y' THEN 'gabriel''s inferno: part three'
+        ELSE 'gabriel''s inferno: part two'
+      END || COALESCE('::' || alias_anno::text, '')
+    )
+    OR alias_titolo_norm_strict IS DISTINCT FROM (
+      CASE
+        WHEN alias_titolo ~* ':\s*part\s+three\y' THEN 'gabriel''s inferno: part three'
+        ELSE 'gabriel''s inferno: part two'
+      END || COALESCE('::' || alias_anno::text, '')
+    )
+  );
 
 -- ---------------------------------------------------------------------------
 -- 2. campaign_jobs: lettura solo dei propri job (20260623140000)

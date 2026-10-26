@@ -236,6 +236,10 @@ WHERE titolo ~* '\s*:\s*(SEASON|PARTE|PART|VOLUME|VOL|CHAPTER|LIMITED\s+SERIES|C
   AND (match_key_strict IS DISTINCT FROM public.build_match_key_strict(titolo, anno)
        OR match_key_loose IS DISTINCT FROM public.build_match_key(titolo, anno));
 
+-- La funzione appena ripristinata non ha SERIES_PART_TRAIL, quindi
+-- "Gabriel's Inferno: Part Two/Three" tornano a chiavi distinte
+-- (gabriel's inferno: part two|three). Stesso esito delle chiavi scritte
+-- a mano nel forward. Non si tocca schema_migrations.
 UPDATE public.opera_aliases
 SET alias_titolo_norm        = public.build_match_key(alias_titolo, alias_anno),
     alias_titolo_norm_strict = public.build_match_key_strict(alias_titolo, alias_anno)

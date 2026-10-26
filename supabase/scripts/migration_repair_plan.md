@@ -172,6 +172,19 @@ Effetto già in produzione. Il repair registra il timestamp del file e non riese
 
 `20261021100000_apply_missing_prod_effects.sql` porta gli effetti mancanti in modo idempotente. Il rollback è `supabase/rollback/20261021100000_apply_missing_prod_effects.sql`.
 
+### Collisione alias, decisione del 2026-10-26
+
+L'apply di fase 2 in produzione si è fermato su `opera_aliases`. `build_match_key_strict` toglie il suffisso `: Part …`, quindi «Gabriel's Inferno: Part Two» e «Gabriel's Inferno: Part Three» diventano la stessa chiave `gabriel's inferno` (più l'anno). Le due righe condividono `opera_id`, `emittente_id` e `alias_anno`, e `UNIQUE (opera_id, emittente_id, alias_titolo_norm, alias_anno)` rifiuta l'UPDATE. Matteo ha deciso che quelle chiavi restano distinte.
+
+Nel file di fase 2 l'UPDATE di massa degli alias esclude quei due titoli. Un secondo UPDATE scrive a mano:
+
+- Part Two → `gabriel's inferno: part two` più `::` e `alias_anno` se presente
+- Part Three → `gabriel's inferno: part three` più `::` e `alias_anno` se presente
+
+`alias_titolo_norm` e `alias_titolo_norm_strict` ricevono lo stesso valore. Nel file non c'è un altro titolo dello stesso tipo. Il suffisso Netflix resta attivo per le altre righe. Il rollback ripristina la funzione senza il suffisso: per questi due titoli produce le stesse chiavi distinte.
+
+Il trigger `opera_aliases_normalize` scatta solo su `alias_titolo` / `alias_anno`, non sulle colonne norm. L'apply non le modifica e non ricalcola via trigger. Un edit successivo del titolo, con la funzione nuova, le ricollasserebbe: rieseguire il solo file di fase 2 le rimette alle chiavi scritte a mano.
+
 Ordine, solo con OK esplicito:
 
 1. Fase 1 del repair, con i 3 PRESENT già in `APPLY_LOCAL`.
@@ -250,6 +263,25 @@ SELECT position(
 SELECT position(
   'LIMITED' IN pg_get_functiondef('public.build_match_key_strict(text,integer)'::regprocedure)
 ) > 0 AS series_suffix_nella_chiave;
+
+-- Dry-run della collisione, sola lettura, prima dell'apply.
+-- Atteso: le due parti collassano sulla stessa chiave derivata, e le chiavi
+-- scritte a mano nel file restano diverse tra loro e dalla chiave collassata.
+SELECT alias_titolo,
+       alias_anno,
+       lower(regexp_replace(
+         alias_titolo,
+         '\s*:\s*(SEASON|PARTE|PART|VOLUME|VOL|CHAPTER|LIMITED\s+SERIES|COLLECTION|STAGIONE)\y.*$',
+         '',
+         'i'
+       )) || COALESCE('::' || alias_anno::text, '') AS chiave_collassata,
+       CASE
+         WHEN alias_titolo ~* ':\s*part\s+three\y' THEN 'gabriel''s inferno: part three'
+         ELSE 'gabriel''s inferno: part two'
+       END || COALESCE('::' || alias_anno::text, '') AS chiave_manuale
+FROM public.opera_aliases
+WHERE alias_titolo ~* 'gabriel[''’]s inferno:\s*part\s+(two|three)\y'
+ORDER BY alias_titolo, alias_anno;
 
 -- 20260630125200 era PRESENT. Resta true. Non pushare il patch vecchio.
 SELECT position(
