@@ -11,6 +11,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Input } from '@/shared/components/ui/input'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { RUOLO_PRIMARIETA_OPTIONS } from '@/features/opere/lib/cast-esterno'
 import { externalCandidateLabel, type CastEsternoCandidato } from '@/features/opere/lib/cast-import'
 
 type ImportRow = {
@@ -18,6 +19,7 @@ type ImportRow = {
   nome: string
   cognome: string
   ipn: string
+  personaggio: string
   ruolo: string
   stagione: string
   episodio: string
@@ -65,6 +67,7 @@ function toDraft(row: ServerRow): ImportRow {
     ...row,
     stagione: textCell(row.stagione),
     episodio: textCell(row.episodio),
+    personaggio: row.personaggio ?? '',
     castEsternoId: row.castEsternoId ?? null,
     proposta: row.proposta ?? null,
     candidati: row.candidati ?? [],
@@ -77,6 +80,7 @@ function toEdit(row: ImportRow) {
     nome: row.nome,
     cognome: row.cognome,
     ipn: row.ipn,
+    personaggio: row.personaggio ?? '',
     ruolo: row.ruolo,
     stagione: row.stagione,
     episodio: row.episodio,
@@ -258,6 +262,8 @@ export function CastImportActions({
   const visible = summary ?? preview
   const importable = preview?.rows.filter((row) => row.included && row.status === 'valid').length ?? 0
   const editing = Boolean(preview && !summary)
+  const formRuoli = RUOLO_PRIMARIETA_OPTIONS.map((option) => option.label)
+  const ruoloOptions = [...formRuoli, ...ruoli.filter((nome) => !formRuoli.includes(nome))]
 
   return (
     <>
@@ -284,7 +290,7 @@ export function CastImportActions({
           <DialogHeader>
             <DialogTitle>{summary ? 'Import cast completato' : 'Importa cast'}</DialogTitle>
             <DialogDescription>
-              Le righe segnalate si correggono in anteprima: nome, cognome, IPN, ruolo, stagione ed episodio. Il controllo è immediato e puoi includerle o escluderle. Una persona già nel cast esterno senza ruolo viene aggiornata con il ruolo del file, salvo tua scelta diversa. Nulla viene scritto prima della conferma. Non si creano episodi né schede artista.
+              Il template è vuoto, con le stesse voci del form: Nome, Cognome, Personaggio, Ruolo (Attore primario, Attore comprimario, Doppiatore primario, Doppiatore comprimario), Stagione ed Episodio. Le righe segnalate si correggono in anteprima. Il controllo è immediato e puoi includerle o escluderle. Una persona già nel cast esterno senza ruolo viene aggiornata con il ruolo del file, salvo tua scelta diversa. Nulla viene scritto prima della conferma. Non si creano episodi né schede artista.
             </DialogDescription>
           </DialogHeader>
 
@@ -327,6 +333,7 @@ export function CastImportActions({
                     <TableHead>Riga</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Cognome</TableHead>
+                    <TableHead>Personaggio</TableHead>
                     <TableHead>IPN</TableHead>
                     <TableHead>Ruolo</TableHead>
                     <TableHead>Stagione</TableHead>
@@ -341,6 +348,7 @@ export function CastImportActions({
                       <TableCell>{row.rowNumber}</TableCell>
                       <TableCell>{editing ? <Input aria-label={`Nome riga ${row.rowNumber}`} value={row.nome} className="h-8 min-w-28" onChange={(event) => patchRow(row.rowNumber, { nome: event.target.value })} /> : row.nome}</TableCell>
                       <TableCell>{editing ? <Input aria-label={`Cognome riga ${row.rowNumber}`} value={row.cognome} className="h-8 min-w-28" onChange={(event) => patchRow(row.rowNumber, { cognome: event.target.value })} /> : row.cognome}</TableCell>
+                      <TableCell>{editing ? <Input aria-label={`Personaggio riga ${row.rowNumber}`} value={row.personaggio} className="h-8 min-w-28" onChange={(event) => patchRow(row.rowNumber, { personaggio: event.target.value })} /> : (row.personaggio || '—')}</TableCell>
                       <TableCell>{editing ? <Input aria-label={`IPN riga ${row.rowNumber}`} value={row.ipn} className="h-8 min-w-24" onChange={(event) => patchRow(row.rowNumber, { ipn: event.target.value })} /> : (row.ipn || '—')}</TableCell>
                       <TableCell>
                         {editing ? (
@@ -349,8 +357,8 @@ export function CastImportActions({
                               <SelectValue placeholder="Ruolo" />
                             </SelectTrigger>
                             <SelectContent>
-                              {ruoli.map((nome) => <SelectItem key={nome} value={nome}>{nome}</SelectItem>)}
-                              {row.ruolo && !ruoli.includes(row.ruolo) ? <SelectItem value={row.ruolo}>{row.ruolo}</SelectItem> : null}
+                              {ruoloOptions.map((nome) => <SelectItem key={nome} value={nome}>{nome}</SelectItem>)}
+                              {row.ruolo && !ruoloOptions.includes(row.ruolo) ? <SelectItem value={row.ruolo}>{row.ruolo}</SelectItem> : null}
                             </SelectContent>
                           </Select>
                         ) : row.ruolo}

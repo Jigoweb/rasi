@@ -15,7 +15,8 @@ import {
   type CastImportPublicRow,
   type ClassifiedCastRow,
 } from '@/features/opere/lib/cast-import'
-import { activeRuoloNames, buildCastTemplateCsv, buildCastTemplateRows, buildCastTemplateXlsx, splitExternalCastName, type CastTemplateSource } from '@/features/opere/lib/cast-template'
+import { RUOLO_PRIMARIETA_OPTIONS } from '@/features/opere/lib/cast-esterno'
+import { activeRuoloNames, buildCastTemplateCsv, buildCastTemplateXlsx } from '@/features/opere/lib/cast-template'
 import { parseTabularFile } from '@/shared/lib/tabular-file'
 import type { Database } from '@/shared/lib/supabase'
 
@@ -36,11 +37,6 @@ async function fetchAll<T>(load: (from: number, to: number) => PromiseLike<PageR
     if (batch.length < PAGE) return all
   }
   throw new Error('Lettura interrotta: risultato troppo grande')
-}
-
-function asOne<T>(value: T | T[] | null | undefined): T | null {
-  if (Array.isArray(value)) return value[0] ?? null
-  return value ?? null
 }
 
 async function loadArtisti(client: Client): Promise<CastImportContext['artisti']> {
@@ -116,6 +112,7 @@ export async function revalidateCastEdits(client: Client, operaId: string, edits
       Nome: edit.nome,
       Cognome: edit.cognome,
       IPN: edit.ipn,
+      Personaggio: edit.personaggio ?? '',
       Ruolo: edit.ruolo,
       Stagione: edit.stagione,
       Episodio: edit.episodio,
@@ -200,64 +197,17 @@ async function insertClassifiedRows(client: Client, operaId: string, rows: Class
   return [...partecipazioni.failed, ...esterni.failed, ...aggiornamenti]
 }
 
-type TemplatePartecipazione = {
-  artisti: { nome: string | null; cognome: string | null; codice_ipn: string | null } | { nome: string | null; cognome: string | null; codice_ipn: string | null }[] | null
-  ruoli_tipologie: { nome: string | null } | { nome: string | null }[] | null
-  episodi: { numero_stagione: number | null; numero_episodio: number | null } | { numero_stagione: number | null; numero_episodio: number | null }[] | null
-}
-
-export async function buildOperaCastTemplate(client: Client, operaId: string, format: 'xlsx' | 'csv') {
-  const [partecipazioni, ruoli, esterno, episodi] = await Promise.all([
-    fetchAll<TemplatePartecipazione>((from, to) =>
-      client
-        .from('partecipazioni')
-        .select('artisti(nome, cognome, codice_ipn), ruoli_tipologie(nome), episodi(numero_stagione, numero_episodio)')
-        .eq('opera_id', operaId)
-        .order('id')
-        .range(from, to),
-    ),
-    fetchAll<{ id: string; nome: string; attivo: boolean | null }>((from, to) =>
-      client.from('ruoli_tipologie').select('id, nome, attivo').order('nome').range(from, to),
-    ),
-    loadCastEsterno(client, operaId),
-    fetchAll<{ id: string; numero_stagione: number | null; numero_episodio: number | null }>((from, to) =>
-      client.from('episodi').select('id, numero_stagione, numero_episodio').eq('opera_id', operaId).order('id').range(from, to),
-    ),
-  ])
-
-  const ruoloNome = new Map(ruoli.map((ruolo) => [ruolo.id, ruolo.nome]))
-  const episodioById = new Map(episodi.map((episodio) => [episodio.id, episodio]))
-  const sources: CastTemplateSource[] = [
-    ...partecipazioni.map((row) => {
-      const artista = asOne(row.artisti)
-      const ruolo = asOne(row.ruoli_tipologie)
-      const episodio = asOne(row.episodi)
-      return {
-        nome: artista?.nome ?? null,
-        cognome: artista?.cognome ?? null,
-        codice_ipn: artista?.codice_ipn ?? null,
-        ruolo: ruolo?.nome ?? null,
-        numero_stagione: episodio?.numero_stagione ?? null,
-        numero_episodio: episodio?.numero_episodio ?? null,
-      }
-    }),
-    ...esterno.castEsterno.map((row) => {
-      const person = splitExternalCastName(row.nome)
-      const episodio = row.episodio_id ? episodioById.get(row.episodio_id) : null
-      return {
-        nome: person.nome,
-        cognome: person.cognome,
-        codice_ipn: row.codice_ipn,
-        ruolo: row.ruolo_id ? ruoloNome.get(row.ruolo_id) ?? null : null,
-        numero_stagione: episodio?.numero_stagione ?? null,
-        numero_episodio: episodio?.numero_episodio ?? null,
-      }
-    }),
-  ]
-  const rows = buildCastTemplateRows(sources)
-  if (format === 'csv') return { format, body: buildCastTemplateCsv(rows), rows: rows.length }
-  const body = await buildCastTemplateXlsx(rows, activeRuoloNames(ruoli))
-  return { format, body, rows: rows.length }
+/**
+ * Template vuoto per l'inserimento massivo di cast nuovo.
+ * Le partecipazioni già in archivio non vengono precompilate: restano poche e si inseriscono a mano.
+ * Il cast esterno già salvato non viene riesportato qui (per quello c'è «Scarica cast»).
+ * L'import continua ad aggiornare righe esistenti se il file le contiene.
+ */
+export async function buildOperaCastTemplate(_client: Client, _operaId: string, format: 'xlsx' | 'csv') {
+  const roleNames = RUOLO_PRIMARIETA_OPTIONS.map((option) => option.label)
+  if (format === 'csv') return { format, body: buildCastTemplateCsv([]), rows: 0 }
+  const body = await buildCastTemplateXlsx([], roleNames)
+  return { format, body, rows: 0 }
 }
 
 export type { CastImportPublicRow }

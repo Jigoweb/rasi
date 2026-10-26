@@ -3,6 +3,7 @@ import { buildCastTemplateCsv } from './cast-template'
 import {
   CAST_IMPORT_ALERTS,
   CAST_TEMPLATE_COLUMNS,
+  CAST_TEMPLATE_LEGACY_COLUMNS,
   buildCastImportInserts,
   classifyCastImport,
   classifyCastValues,
@@ -43,11 +44,12 @@ function context(overrides: Partial<CastImportContext> = {}): CastImportContext 
   }
 }
 
-function row(values: Partial<Record<(typeof CAST_TEMPLATE_COLUMNS)[number], string>>): Record<string, string> {
+function row(values: Partial<Record<(typeof CAST_TEMPLATE_COLUMNS)[number] | 'IPN', string>>): Record<string, string> {
   return {
     Nome: '',
     Cognome: '',
     IPN: '',
+    Personaggio: '',
     Ruolo: '',
     Stagione: '',
     Episodio: '',
@@ -431,17 +433,59 @@ describe('classifyCastImport', () => {
 })
 
 describe('template round-trip', () => {
-  it('reimports a prefilled partecipazione as a duplicate', () => {
+  it('ships headers only and still rejects a row that repeats an existing partecipazione', () => {
+    const empty = parseTabularFile('template.csv', Buffer.from(buildCastTemplateCsv([])))
+    expect(empty.ok && empty.table.headers).toEqual([...CAST_TEMPLATE_COLUMNS])
+    expect(empty.ok && empty.table.rows).toEqual([])
+
     const csv = buildCastTemplateCsv([
-      { Nome: 'Mario', Cognome: 'Rossi', IPN: 'IPN1', Ruolo: 'Comprimario', Stagione: '', Episodio: '' },
+      { Nome: 'Luca', Cognome: 'Neri', Personaggio: 'Voce', Ruolo: 'Comprimario', Stagione: '', Episodio: '' },
     ])
     const parsed = parseTabularFile('template.csv', Buffer.from(csv))
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
     const result = classifyCastImport(parsed.table.headers, parsed.table.rows, context({
-      partecipazioni: [{ artista_id: 'a1', ruolo_id: 'r-comp', episodio_id: null }],
+      partecipazioni: [{ artista_id: 'a3', ruolo_id: 'r-comp', episodio_id: null }],
     }))
+    expect(result.ok && result.rows[0]).toMatchObject({ status: 'skipped', alert: CAST_IMPORT_ALERTS.duplicateCast, personaggio: 'Voce' })
+  })
+
+  it('still imports the previous columns, including IPN', () => {
+    const result = classifyCastImport(
+      [...CAST_TEMPLATE_LEGACY_COLUMNS],
+      [{ Nome: 'Mario', Cognome: 'Rossi', IPN: 'IPN1', Ruolo: 'Comprimario', Stagione: '', Episodio: '' }],
+      context({ partecipazioni: [{ artista_id: 'a1', ruolo_id: 'r-comp', episodio_id: null }] }),
+    )
     expect(result.ok && result.rows[0]).toMatchObject({ status: 'skipped', alert: CAST_IMPORT_ALERTS.duplicateCast })
+  })
+
+  it('maps the online role labels and keeps the character', () => {
+    const result = classify([
+      row({ Nome: 'Giulia', Cognome: 'Bianchi', Personaggio: 'Anna', Ruolo: 'attore primario' }),
+      row({ Nome: 'Mario', Cognome: 'Rossi', IPN: 'IPN1', Personaggio: 'Il medico', Ruolo: 'Attore comprimario' }),
+      row({ Nome: 'Paolo', Cognome: 'Gialli', Ruolo: 'Doppiatore comprimario' }),
+    ])
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.rows[0]).toMatchObject({ status: 'valid', action: 'cast_esterno', ruoloId: 'r-prot', personaggio: 'Anna' })
+    expect(result.rows[1]).toMatchObject({ status: 'valid', action: 'partecipazione', ruoloId: 'r-comp', personaggio: 'Il medico' })
+    expect(result.rows[2]).toMatchObject({ status: 'valid', action: 'cast_esterno', ruoloId: null })
+    const inserts = buildCastImportInserts('opera-1', result.rows, 0)
+    expect(inserts.castEsterno[0]).toMatchObject({
+      nome: 'Giulia Bianchi',
+      personaggio: 'Anna',
+      ruolo: 'attore',
+      primarieta: 'primario',
+      ruolo_id: 'r-prot',
+    })
+    expect(inserts.partecipazioni[0]).toMatchObject({ personaggio: 'Il medico', ruolo_id: 'r-comp' })
+    expect(inserts.castEsterno[1]).toMatchObject({
+      nome: 'Paolo Gialli',
+      personaggio: null,
+      ruolo: 'doppiatore',
+      primarieta: 'comprimario',
+      ruolo_id: null,
+    })
   })
 })
 
