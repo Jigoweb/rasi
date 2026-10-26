@@ -217,9 +217,13 @@ export function EpisodiImportActions({
   }
 
   const changeIncluded = (rowNumber: number, included: boolean) => {
-    setRows((current) => current?.map((row) => (
-      row.rowNumber === rowNumber && row.status === 'valid' ? { ...row, included } : row
-    )) ?? current)
+    setRows((current) => {
+      if (!current) return current
+      const next = current.map((row) => (
+        row.rowNumber === rowNumber && row.status === 'valid' ? { ...row, included } : row
+      ))
+      return revalidateEpisodeDrafts(next, existingKeys)
+    })
   }
 
   const alerts = (rows ?? []).filter((row) => row.status === 'skipped' && row.message)

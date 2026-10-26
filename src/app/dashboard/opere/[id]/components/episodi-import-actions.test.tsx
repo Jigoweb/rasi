@@ -164,4 +164,63 @@ describe('EpisodiImportActions', () => {
       draft: { episodio: '9', titolo: 'Vecchio' },
     })
   })
+
+  it('libera il duplicato se si esclude la prima riga e lo include solo dopo la spunta', async () => {
+    useAuth.mockReturnValue({ isAdmin: true, isOperatore: false })
+    const user = userEvent.setup()
+    renderActions()
+    const duplicatePreview = {
+      ok: true,
+      mode: 'preview',
+      summary: { total: 2, valid: 1, skipped: 1, excluded: 0, imported: 0 },
+      existingKeys: [],
+      rows: [
+        {
+          rowNumber: 2,
+          status: 'valid',
+          message: null,
+          included: true,
+          stagione: 1,
+          episodio: 1,
+          titolo: 'Prima',
+          durataMinuti: null,
+          dataPrimaMessaInOnda: null,
+          draft: { stagione: '1', episodio: '1', titolo: 'Prima', durataMinuti: '', dataPrimaMessaInOnda: '' },
+        },
+        {
+          rowNumber: 3,
+          status: 'skipped',
+          message: 'Duplicato nel file: stagione 1, episodio 1 è già alla riga 2',
+          included: false,
+          stagione: 1,
+          episodio: 1,
+          titolo: 'Seconda',
+          durataMinuti: null,
+          dataPrimaMessaInOnda: null,
+          draft: { stagione: '1', episodio: '1', titolo: 'Seconda', durataMinuti: '', dataPrimaMessaInOnda: '' },
+        },
+      ],
+      alerts: [
+        { rowNumber: 3, message: 'Duplicato nel file: stagione 1, episodio 1 è già alla riga 2' },
+      ],
+    }
+    ;(global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => duplicatePreview,
+    })
+
+    await user.upload(screen.getByLabelText('File episodi'), new File(['stagione'], 'episodi.csv', { type: 'text/csv' }))
+    expect(await screen.findByRole('checkbox', { name: 'Includi riga 3' })).toBeDisabled()
+    await user.click(screen.getByRole('checkbox', { name: 'Includi riga 2' }))
+
+    const second = screen.getByRole('checkbox', { name: 'Includi riga 3' })
+    expect(second).toBeEnabled()
+    expect(second).not.toBeChecked()
+    expect(screen.getByText('0 episodi da importare, 0 righe ignorate, 2 righe escluse su 2.')).toBeInTheDocument()
+    expect(screen.queryByText(/Duplicato nel file/)).not.toBeInTheDocument()
+
+    await user.click(second)
+    expect(screen.getByText('1 episodio da importare, 0 righe ignorate, 1 riga esclusa su 2.')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Includi riga 2' })).not.toBeChecked()
+  })
 })

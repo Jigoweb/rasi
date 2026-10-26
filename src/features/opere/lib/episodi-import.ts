@@ -246,6 +246,7 @@ export function revalidateEpisodeDrafts(
       durata: row.draft.durataMinuti,
       data: row.draft.dataPrimaMessaInOnda,
       draft: row.draft,
+      included: row.included,
     })),
     existing,
     true,
@@ -353,6 +354,7 @@ type EpisodeCell = {
   durata: unknown
   data: unknown
   draft?: EpisodeDraft
+  included?: boolean
 }
 
 function classifyEpisodeCells(
@@ -421,7 +423,7 @@ function classifyEpisodeCells(
       status = 'skipped'
       message = fieldErrors.join('; ')
       if (key) seen.set(key, raw.rowNumber)
-    } else if (key) {
+    } else if (key && raw.included !== false) {
       seen.set(key, raw.rowNumber)
     }
 

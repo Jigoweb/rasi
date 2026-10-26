@@ -533,14 +533,48 @@ describe('revalidateEpisodeDrafts', () => {
     expect(rows[2].message).toBe('Duplicato nel file: stagione 1, episodio 1 è già alla riga 2')
   })
 
-  it('non promuove il duplicato se la prima riga valida viene solo esclusa', () => {
-    const rows = revalidateEpisodeDrafts([
+  it('rende importabile il duplicato se la prima riga valida è esclusa, senza includerlo da solo', () => {
+    const released = revalidateEpisodeDrafts([
       { rowNumber: 2, included: false, draft: draft('1', '1', 'Prima') },
+      { rowNumber: 3, included: false, draft: draft('1', '1', 'Seconda') },
+    ], [])
+    expect(released[0]).toMatchObject({ status: 'valid', included: false })
+    expect(released[1]).toMatchObject({ status: 'valid', included: false, message: null, titolo: 'Seconda' })
+
+    const chosen = revalidateEpisodeDrafts([
+      released[0],
+      { ...released[1], included: true },
+    ], [])
+    expect(chosen[0]).toMatchObject({ status: 'valid', included: false })
+    expect(chosen[1]).toMatchObject({ status: 'valid', included: true })
+
+    const restored = revalidateEpisodeDrafts([
+      { ...chosen[0], included: true },
+      chosen[1],
+    ], [])
+    expect(restored[0]).toMatchObject({ status: 'valid', included: true })
+    expect(restored[1].status).toBe('skipped')
+    expect(restored[1].included).toBe(false)
+    expect(restored[1].message).toMatch(/Duplicato nel file/)
+  })
+
+  it('una riga non valida o già presente continua a bloccare il duplicato successivo', () => {
+    const invalid = revalidateEpisodeDrafts([
+      { rowNumber: 2, included: false, draft: draft('1', '1', 'Rotta', '31/02/2020') },
       { rowNumber: 3, included: true, draft: draft('1', '1', 'Seconda') },
     ], [])
-    expect(rows[0]).toMatchObject({ status: 'valid', included: false })
-    expect(rows[1].status).toBe('skipped')
-    expect(rows[1].included).toBe(false)
+    expect(invalid[0].status).toBe('skipped')
+    expect(invalid[1].status).toBe('skipped')
+    expect(invalid[1].included).toBe(false)
+    expect(invalid[1].message).toMatch(/Duplicato nel file/)
+
+    const existing = revalidateEpisodeDrafts([
+      { rowNumber: 2, included: false, draft: draft('1', '1', 'Gia') },
+      { rowNumber: 3, included: true, draft: draft('1', '1', 'Altra') },
+    ], [{ numero_stagione: 1, numero_episodio: 1 }])
+    expect(existing[0].message).toMatch(/già presente/)
+    expect(existing[1].message).toMatch(/Duplicato nel file/)
+    expect(existing[1].included).toBe(false)
   })
 })
 
@@ -590,6 +624,32 @@ describe('confirmEpisodiDrafts', () => {
     expect(result.summary).toMatchObject({ imported: 2, excluded: 1, skipped: 2 })
     expect(result.rows.find((row) => row.rowNumber === 4)?.included).toBe(false)
     expect(result.alerts.map((alert) => alert.rowNumber)).toEqual([4, 5])
+  })
+
+  it('importa la seconda occorrenza se la prima è esclusa e la seconda è inclusa', async () => {
+    const { store, inserted } = storeFor()
+    const result = await confirmEpisodiDrafts({
+      store,
+      operaId,
+      rows: [
+        { rowNumber: 2, included: false, draft: draft('1', '1', 'Prima') },
+        { rowNumber: 3, included: true, draft: draft('1', '1', 'Seconda') },
+      ],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(inserted).toEqual([
+      {
+        opera_id: operaId,
+        numero_stagione: 1,
+        numero_episodio: 1,
+        titolo_episodio: 'Seconda',
+        durata_minuti: null,
+        data_prima_messa_in_onda: null,
+      },
+    ])
+    expect(result.summary).toMatchObject({ imported: 1, excluded: 1, skipped: 0, valid: 2 })
+    expect(result.rows[1]).toMatchObject({ status: 'valid', included: true, titolo: 'Seconda' })
   })
 
   it('trasforma un conflitto univoco in skip e blocca un permesso negato', async () => {
