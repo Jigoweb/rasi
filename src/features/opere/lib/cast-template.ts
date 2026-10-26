@@ -14,14 +14,14 @@ export type CastTemplateSource = {
 export type CastTemplateRow = Record<CastTemplateColumn, string | number>
 
 /**
- * Il cast esterno ha un solo campo nome. Spezzatura provvisoria sul primo spazio:
- * Nome = prima parola, Cognome = il resto. Senza spazi il cognome resta vuoto.
+ * Il cast esterno ha un solo campo nome. Cognome = ultima parola, nome = tutto ciò che precede.
+ * Senza spazi il cognome resta vuoto e l'anteprima chiede di compilarlo.
  */
 export function splitExternalCastName(value: string | null | undefined): { nome: string; cognome: string } {
   const cleaned = cleanCell(value)
-  const space = cleaned.indexOf(' ')
+  const space = cleaned.lastIndexOf(' ')
   if (space === -1) return { nome: cleaned, cognome: '' }
-  return { nome: cleaned.slice(0, space), cognome: cleanCell(cleaned.slice(space + 1)) }
+  return { nome: cleaned.slice(0, space), cognome: cleaned.slice(space + 1) }
 }
 
 /** Una riga per partecipazione RASI e per persona del cast esterno, anche inserita a mano. */

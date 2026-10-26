@@ -57,7 +57,7 @@ async function loadCastEsterno(client: Client, operaId: string): Promise<{ exter
   const probe = await client.from('cast_esterno').select('ruolo_id').eq('opera_id', operaId).limit(1)
   if (probe.error && isMissingCastEsternoColumnError(probe.error.message)) {
     const rows = await fetchAll<{ id: string; nome: string; episodio_id: string | null }>((from, to) =>
-      client.from('cast_esterno').select('id, nome, episodio_id').eq('opera_id', operaId).order('id').range(from, to),
+      client.from('cast_esterno').select('id, nome, episodio_id, personaggio').eq('opera_id', operaId).order('id').range(from, to),
     )
     return {
       externalCastReady: false,
@@ -66,7 +66,7 @@ async function loadCastEsterno(client: Client, operaId: string): Promise<{ exter
   }
   if (probe.error) throw new Error(probe.error.message)
   const rows = await fetchAll<CastExistingEsterno>((from, to) =>
-    client.from('cast_esterno').select('id, nome, codice_ipn, ruolo_id, episodio_id').eq('opera_id', operaId).order('id').range(from, to),
+    client.from('cast_esterno').select('id, nome, codice_ipn, ruolo_id, episodio_id, personaggio').eq('opera_id', operaId).order('id').range(from, to),
   )
   return { externalCastReady: true, castEsterno: rows }
 }

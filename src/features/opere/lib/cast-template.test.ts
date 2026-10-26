@@ -41,8 +41,9 @@ describe('buildCastTemplateRows', () => {
 })
 
 describe('splitExternalCastName', () => {
-  it('splits a single stored name on the first space', () => {
-    expect(splitExternalCastName('  Maria De Filippi ')).toEqual({ nome: 'Maria', cognome: 'De Filippi' })
+  it('uses the last word as surname', () => {
+    expect(splitExternalCastName('  Maria Grazia Rossi ')).toEqual({ nome: 'Maria Grazia', cognome: 'Rossi' })
+    expect(splitExternalCastName('Maria De Filippi')).toEqual({ nome: 'Maria De', cognome: 'Filippi' })
     expect(splitExternalCastName('Cher')).toEqual({ nome: 'Cher', cognome: '' })
   })
 })

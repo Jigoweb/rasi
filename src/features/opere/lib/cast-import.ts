@@ -27,7 +27,7 @@ export const CAST_IMPORT_ALERTS = {
   duplicateManualCreate:
     'Duplicato: questa persona è già nel cast esterno senza ruolo. Hai scelto di creare una nuova riga.',
   duplicateManualAmbiguous:
-    'Più persone del cast esterno senza ruolo hanno lo stesso nome in questo ambito: la riga non viene aggiornata in automatico.',
+    'Duplicato: più persone del cast esterno senza ruolo hanno questo nome in questo ambito. Scegli quale riga aggiornare.',
   migration: 'Cast esterno non disponibile: applica la migrazione con ruolo_id e codice_ipn prima di importare persone non RASI',
 } as const
 
@@ -89,6 +89,14 @@ export type CastExistingEsterno = {
   codice_ipn: string | null
   ruolo_id: string | null
   episodio_id: string | null
+  personaggio?: string | null
+}
+
+export type CastEsternoCandidato = {
+  id: string
+  nome: string
+  codice_ipn: string | null
+  personaggio: string | null
 }
 
 export type CastProposta = 'aggiorna' | 'crea'
@@ -104,6 +112,7 @@ export type CastEditInput = {
   episodio: string
   included: boolean
   proposta: CastProposta | null
+  castEsternoId: string | null
 }
 
 export type CastImportContext = {
@@ -131,6 +140,7 @@ type CastDecision = {
   alert: string | null
   proposta: CastProposta | null
   castEsternoId: string | null
+  candidati: CastEsternoCandidato[]
 }
 
 export type ClassifiedCastRow =
@@ -170,6 +180,7 @@ export type CastImportPublicRow = {
   included: boolean
   proposta: CastProposta | null
   castEsternoId: string | null
+  candidati: CastEsternoCandidato[]
   flagged: boolean
 }
 
@@ -252,7 +263,26 @@ function matchArtist(nome: string, cognome: string, ipn: string, artisti: CastAr
 }
 
 function rejected(fields: RowFields, alert: string): ClassifiedCastRow {
-  return { status: 'skipped', alert, included: false, proposta: null, castEsternoId: null, ...fields }
+  return { status: 'skipped', alert, included: false, proposta: null, castEsternoId: null, candidati: [], ...fields }
+}
+
+export function externalCandidateLabel(candidate: CastEsternoCandidato, index: number): string {
+  const ipn = cleanCell(candidate.codice_ipn)
+  const personaggio = cleanCell(candidate.personaggio)
+  const parts = [cleanCell(candidate.nome) || 'Senza nome']
+  if (personaggio) parts.push(personaggio)
+  parts.push(ipn ? `IPN ${ipn}` : 'senza IPN')
+  parts.push(String(index + 1))
+  return parts.join(' · ')
+}
+
+function toCandidato(row: CastExistingEsterno): CastEsternoCandidato {
+  return {
+    id: row.id,
+    nome: row.nome,
+    codice_ipn: row.codice_ipn,
+    personaggio: row.personaggio ?? null,
+  }
 }
 
 export type CastValueRow = { rowNumber: number } & Record<CastTemplateColumn, string>
@@ -412,6 +442,7 @@ export function classifyCastValues(
         alert: null,
         proposta: null,
         castEsternoId: null,
+        candidati: [],
         ...fields,
         artistaId: artist.artist.id,
         ruoloId: ruolo.ruolo.id,
@@ -427,30 +458,31 @@ export function classifyCastValues(
     }
 
     const manuals = manualWithoutRole(nome, cognome, episodioId, context)
+    const candidati = manuals.map(toCandidato)
     const createAnyway = manuals.length > 0 && choice?.proposta === 'crea'
-    if (manuals.length > 1 && !createAnyway) {
-      classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateManualAmbiguous))
-      continue
-    }
-    if (manuals.length === 1 && !createAnyway) {
-      const manual = manuals[0]
+    if (manuals.length > 0 && !createAnyway) {
+      const manual = manuals.find((row) => row.id === choice?.castEsternoId) ?? manuals[0]
       if (wantsInclude && seenManual.has(manual.id)) {
         classified.push(rejected(fields, CAST_IMPORT_ALERTS.duplicateFile))
         continue
       }
       if (wantsInclude) seenManual.add(manual.id)
+      const many = manuals.length > 1
       classified.push({
         status: 'valid',
         action: 'update_cast_esterno',
         included: wantsInclude,
-        alert: CAST_IMPORT_ALERTS.duplicateManual,
+        alert: many ? CAST_IMPORT_ALERTS.duplicateManualAmbiguous : CAST_IMPORT_ALERTS.duplicateManual,
         proposta: 'aggiorna',
         castEsternoId: manual.id,
+        candidati,
         ...fields,
         ruoloId: ruolo.ruolo.id,
         categoria: ruolo.ruolo.categoria,
         episodioId,
-        detail: 'Aggiorna la persona già inserita a mano, senza creare una seconda riga',
+        detail: many
+          ? 'Aggiorna la persona scelta tra gli omonimi già inseriti a mano'
+          : 'Aggiorna la persona già inserita a mano, senza creare una seconda riga',
       })
       continue
     }
@@ -471,7 +503,8 @@ export function classifyCastValues(
       included: wantsInclude,
       alert: createAnyway ? CAST_IMPORT_ALERTS.duplicateManualCreate : null,
       proposta: createAnyway ? 'crea' : null,
-      castEsternoId: createAnyway && manuals.length === 1 ? manuals[0].id : null,
+      castEsternoId: null,
+      candidati: createAnyway ? candidati : [],
       ...fields,
       ruoloId: ruolo.ruolo.id,
       categoria: ruolo.ruolo.categoria,
@@ -501,6 +534,7 @@ export function toPublicCastRows(rows: ClassifiedCastRow[]): CastImportPublicRow
       included: row.status === 'valid' && row.included,
       proposta: row.proposta,
       castEsternoId: row.castEsternoId,
+      candidati: row.candidati,
       flagged: Boolean(row.alert),
     }
     if (row.status === 'skipped') {
@@ -594,6 +628,13 @@ export function parseCastEdits(value: unknown): { ok: true; edits: CastEditInput
     if (row.proposta !== null && row.proposta !== 'aggiorna' && row.proposta !== 'crea') {
       return { ok: false, error: 'Azione riga non valida' }
     }
+    let castEsternoId: string | null = null
+    if (row.castEsternoId != null) {
+      if (typeof row.castEsternoId !== 'string' || row.castEsternoId.trim() === '') {
+        return { ok: false, error: 'Persona da aggiornare non valida' }
+      }
+      castEsternoId = row.castEsternoId
+    }
     edits.push({
       rowNumber,
       nome,
@@ -604,6 +645,7 @@ export function parseCastEdits(value: unknown): { ok: true; edits: CastEditInput
       episodio,
       included: row.included,
       proposta: row.proposta,
+      castEsternoId,
     })
   }
   return { ok: true, edits }

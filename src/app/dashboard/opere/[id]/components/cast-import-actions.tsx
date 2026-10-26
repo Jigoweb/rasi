@@ -11,6 +11,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Input } from '@/shared/components/ui/input'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
+import { externalCandidateLabel, type CastEsternoCandidato } from '@/features/opere/lib/cast-import'
 
 type ImportRow = {
   rowNumber: number
@@ -27,6 +28,7 @@ type ImportRow = {
   included: boolean
   proposta: 'aggiorna' | 'crea' | null
   castEsternoId: string | null
+  candidati: CastEsternoCandidato[]
   flagged: boolean
 }
 
@@ -59,7 +61,14 @@ function textCell(value: number | string | null | undefined): string {
 }
 
 function toDraft(row: ServerRow): ImportRow {
-  return { ...row, stagione: textCell(row.stagione), episodio: textCell(row.episodio) }
+  return {
+    ...row,
+    stagione: textCell(row.stagione),
+    episodio: textCell(row.episodio),
+    castEsternoId: row.castEsternoId ?? null,
+    proposta: row.proposta ?? null,
+    candidati: row.candidati ?? [],
+  }
 }
 
 function toEdit(row: ImportRow) {
@@ -73,6 +82,7 @@ function toEdit(row: ImportRow) {
     episodio: row.episodio,
     included: row.included,
     proposta: row.proposta,
+    castEsternoId: row.castEsternoId,
   }
 }
 
@@ -360,7 +370,24 @@ export function CastImportActions({
                           <Badge variant={row.status === 'valid' ? 'secondary' : 'outline'}>{actionLabel(row.action)}</Badge>
                           {row.detail && <div className="text-xs text-muted-foreground">{row.detail}</div>}
                           {row.alert && <div className="text-xs font-medium text-amber-800">{row.alert}</div>}
-                          {editing && (row.castEsternoId || row.proposta) && (
+                          {editing && row.candidati.length > 1 && (row.proposta ?? 'aggiorna') === 'aggiorna' && (
+                            <Select
+                              value={row.castEsternoId ?? undefined}
+                              onValueChange={(castEsternoId) => patchRow(row.rowNumber, { castEsternoId, proposta: 'aggiorna' }, true)}
+                            >
+                              <SelectTrigger className="h-8" aria-label={`Persona da aggiornare riga ${row.rowNumber}`}>
+                                <SelectValue placeholder="Scegli la persona" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {row.candidati.map((candidate, index) => (
+                                  <SelectItem key={candidate.id} value={candidate.id}>
+                                    {externalCandidateLabel(candidate, index)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          {editing && (row.candidati.length > 0 || row.proposta || row.castEsternoId) && (
                             <Select
                               value={row.proposta ?? 'aggiorna'}
                               onValueChange={(proposta: 'aggiorna' | 'crea') => patchRow(row.rowNumber, { proposta }, true)}

@@ -6,6 +6,7 @@ import {
   buildCastImportInserts,
   classifyCastImport,
   classifyCastValues,
+  externalCandidateLabel,
   insertWithDuplicateFallback,
   isMissingCastEsternoColumnError,
   legacyCastFields,
@@ -248,6 +249,7 @@ describe('classifyCastImport', () => {
       episodio: '',
       included: true,
       proposta: 'crea' as const,
+      castEsternoId: null,
     }
     const created = classifyCastValues(values, base, [edit])
     expect(created.rows[0]).toMatchObject({
@@ -298,6 +300,7 @@ describe('classifyCastImport', () => {
         episodio: '',
         included: true,
         proposta: null,
+        castEsternoId: null,
       }],
     )
     expect(corrected.rows[0]).toMatchObject({ status: 'valid', action: 'partecipazione', artistaId: 'a1', included: true, alert: null })
@@ -325,10 +328,69 @@ describe('classifyCastImport', () => {
         episodio: '',
         included: true,
         proposta: null,
+        castEsternoId: null,
       }],
     )
     expect(forced.rows[0]).toMatchObject({ status: 'skipped', included: false, alert: CAST_IMPORT_ALERTS.ipnConflict })
     expect(buildCastImportInserts('opera-1', forced.rows, 0).partecipazioni).toEqual([])
+  })
+
+  it('lets the operator choose which homonym to update in the same scope', () => {
+    const manuals = [
+      { id: 'ext-a', nome: 'Giulia Bianchi', codice_ipn: null, ruolo_id: null, episodio_id: null, personaggio: 'Anna' },
+      { id: 'ext-b', nome: 'Giulia Bianchi', codice_ipn: 'IPN9', ruolo_id: null, episodio_id: null, personaggio: null },
+    ]
+    const values = [{
+      rowNumber: 2,
+      Nome: 'Giulia',
+      Cognome: 'Bianchi',
+      IPN: '',
+      Ruolo: 'Comprimario',
+      Stagione: '',
+      Episodio: '',
+    }]
+    const base = context({ castEsterno: manuals })
+    const preview = classifyCastValues(values, base)
+    expect(preview.rows[0]).toMatchObject({
+      status: 'valid',
+      action: 'update_cast_esterno',
+      castEsternoId: 'ext-a',
+      included: true,
+      alert: CAST_IMPORT_ALERTS.duplicateManualAmbiguous,
+    })
+    if (preview.rows[0].status !== 'valid') return
+    expect(preview.rows[0].candidati.map((item) => item.id)).toEqual(['ext-a', 'ext-b'])
+    expect(externalCandidateLabel(preview.rows[0].candidati[0], 0)).toContain('Anna')
+
+    const chosen = classifyCastValues(values, base, [{
+      rowNumber: 2,
+      nome: 'Giulia',
+      cognome: 'Bianchi',
+      ipn: '',
+      ruolo: 'Comprimario',
+      stagione: '',
+      episodio: '',
+      included: true,
+      proposta: 'aggiorna',
+      castEsternoId: 'ext-b',
+    }])
+    expect(chosen.rows[0]).toMatchObject({ action: 'update_cast_esterno', castEsternoId: 'ext-b' })
+    expect(buildCastImportInserts('opera-1', chosen.rows, 0).aggiornamenti).toEqual([
+      expect.objectContaining({ id: 'ext-b' }),
+    ])
+  })
+
+  it('treats the same person on the whole opera and on an episode as a new external row', () => {
+    const result = classify(
+      [row({ Nome: 'Giulia', Cognome: 'Bianchi', Ruolo: 'Comprimario', Stagione: '1', Episodio: '2' })],
+      { castEsterno: [{ id: 'ext-opera', nome: 'Giulia Bianchi', codice_ipn: null, ruolo_id: null, episodio_id: null }] },
+    )
+    expect(result.ok && result.rows[0]).toMatchObject({
+      status: 'valid',
+      action: 'cast_esterno',
+      castEsternoId: null,
+      episodioId: 'ep-1',
+    })
   })
 
   it('skips unknown, inactive and ambiguous roles', () => {
