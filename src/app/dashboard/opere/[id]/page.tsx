@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, ReactNode } from 'react'
+import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -152,13 +153,14 @@ export default function OperaDetailPage() {
     codice_isan: ''
   })
   const [isSavingEpisodio, setIsSavingEpisodio] = useState(false)
+  const { beginLoad } = useInitialPageLoad(operaId)
 
   const fetchData = useCallback(async (options?: { silent?: boolean }) => {
+    const load = beginLoad()
+    const showPlaceholder = !options?.silent && load.initial
     try {
-      if (!options?.silent) {
-        setLoading(true)
-        setError(null)
-      }
+      if (showPlaceholder) setLoading(true)
+      if (!options?.silent) setError(null)
 
       const { data: oData, error: oErr } = await getOperaById(operaId)
       if (oErr) {
@@ -203,12 +205,13 @@ export default function OperaDetailPage() {
       } else {
         setEpisodi([])
       }
+      load.markLoaded()
     } catch (e) {
       if (!options?.silent) setError('Errore nel caricamento dei dati')
     } finally {
-      if (!options?.silent) setLoading(false)
+      if (showPlaceholder) setLoading(false)
     }
-  }, [operaId])
+  }, [operaId, beginLoad])
 
   useEffect(() => {
     if (operaId) fetchData()
