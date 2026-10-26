@@ -1,0 +1,5 @@
+-- NO-OP. Storia gia applicata in produzione (20260803121351 matcher_sky_gap_a_d_body).
+-- Il file di repo e 20260803121140_matcher_sky_gap_a_d.sql.
+-- docs/superpowers/plans/2026-08-03-matcher-sky-gap-rerun.md registra anche
+-- l'apply remoto come matcher_sky_gap_a_d_body. Questo file non riesegue nulla.
+-- Vedi supabase/scripts/migration_repair_plan.md.

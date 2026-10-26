@@ -3,7 +3,7 @@
  * RPC. Exposes typed candidates + confidence classification used by the
  * review-queue UI and the auto-individuazione pipeline.
  *
- * RPC defined in supabase/migrations/20260526143305_find_opera_candidates_v2.sql.
+ * RPC defined in supabase/migrations/20260526131621_find_opera_candidates_v2.sql.
  */
 import { supabase } from '@/shared/lib/supabase-client'
 

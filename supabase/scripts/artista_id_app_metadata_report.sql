@@ -1,5 +1,5 @@
 -- Report read-only su artista_id Auth. Non modifica dati e non stampa email.
--- Eseguirlo PRIMA della migration 20261020205939_artista_id_app_metadata.sql
+-- Eseguirlo PRIMA della migration 20261020212235_artista_id_app_metadata.sql
 -- e di nuovo DOPO, come verifica.
 --
 -- Prima della migration il proprietario elimina da Auth l'artista non
