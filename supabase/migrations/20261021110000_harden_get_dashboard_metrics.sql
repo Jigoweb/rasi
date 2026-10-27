@@ -6,13 +6,15 @@
 -- solo ad authenticated e fissano search_path = public. CREATE OR REPLACE
 -- non revoca i grant già presenti, quindi PUBLIC e anon sopravvivono.
 --
--- La bozza #45 aggiunge 20261021100000_apply_missing_prod_effects.sql,
+-- Su main, #45 ha aggiunto 20261021100000_apply_missing_prod_effects.sql,
 -- che fa CREATE OR REPLACE della firma (date, date), con
 -- search_path = public e GRANT EXECUTE solo ad authenticated. Non revoca
 -- PUBLIC né anon. CREATE OR REPLACE non tocca i grant, ma riscrive
--- search_path: questa migration deve partire dopo, altrimenti pg_temp
--- torna fuori dal path. Non riscrive il corpo, così vale sia per la firma
--- lasciata da #45 sia per un overload già presente in pg_proc.
+-- search_path: questa migration parte dopo quel file (20261021110000,
+-- prima di 20261023073751 che non tocca questa funzione). Un CREATE OR
+-- REPLACE eseguito dopo rimetterebbe search_path = public e toglierebbe
+-- pg_temp. Non riscrive il corpo, così vale sia per la firma lasciata
+-- da #45 sia per un overload già presente in pg_proc.
 --
 -- Il corpo in #45 (e le tre definizioni già nel repo) legge solo tabelle
 -- di public — artisti, opere, episodi, programmazioni,
@@ -25,7 +27,7 @@
 -- L'unico chiamante dell'app è la dashboard, con il client browser e la
 -- sessione (ruolo authenticated). Non c'è un chiamante anon. service_role
 -- non la usa oggi; il grant resta per lo stesso motivo di
--- 20261020074422 su get_user_email_by_id.
+-- 20261020122804 su get_user_email_by_id.
 --
 -- Idempotente: rieseguirla riallinea le stesse ACL. Se non esiste nessuna
 -- firma, fallisce: non c'è nulla da chiudere e il silenzio nasconderebbe

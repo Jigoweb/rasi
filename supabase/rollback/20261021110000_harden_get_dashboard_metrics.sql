@@ -9,8 +9,8 @@
 --
 -- search_path torna a public, senza pg_temp. È il valore delle tre
 -- definizioni nel repo (20260623220000, 20260811183000,
--- 20260911160000), non un RESET: un search_path vuoto non è lo stato
--- precedente di queste firme.
+-- 20260911160000) e di 20261021100000 su main, non un RESET: un
+-- search_path vuoto non è lo stato precedente di queste firme.
 --
 -- Non riscrive il corpo. Idempotente. Se la funzione non c'è, fallisce.
 

@@ -2,6 +2,11 @@
 -- 20261021110000_harden_get_dashboard_metrics.sql.
 -- Solo SELECT: non modifica grant, corpi, dati.
 --
+-- Su main il corpo vivo è quello di 20261021100000: una firma
+-- (date, date), SECURITY DEFINER, search_path = public, GRANT solo ad
+-- authenticated. 20261023073751 non ridefinisce la funzione. Questo
+-- script controlla comunque ogni overload presente in pg_proc.
+--
 -- Valori attesi per ogni overload:
 --   prosecdef                         true
 --   proconfig                         search_path=public, pg_temp
