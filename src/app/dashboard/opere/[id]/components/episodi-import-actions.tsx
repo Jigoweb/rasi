@@ -36,7 +36,8 @@ type ImportSuccess = Extract<EpisodiImportResponse, { ok: true }>
 const EPISODE_FIELDS = [
   { key: 'stagione', label: 'Stagione' },
   { key: 'episodio', label: 'Episodio' },
-  { key: 'titolo', label: 'Titolo' },
+  { key: 'titolo', label: 'Titolo italiano' },
+  { key: 'titoloOriginale', label: 'Titolo originale' },
   { key: 'durataMinuti', label: 'Durata (minuti)' },
   { key: 'dataPrimaMessaInOnda', label: 'Data prima messa in onda' },
 ] as const
@@ -274,7 +275,7 @@ export function EpisodiImportActions({
             <DialogDescription>
               {phase === 'summary'
                 ? 'Sono stati importati solo gli episodi inclusi e ancora validi. Gli episodi già presenti non sono stati aggiornati.'
-                : 'Le righe segnalate sono evidenziate con il motivo. Puoi correggere stagione, episodio, titolo, durata e data: la riga viene ricontrollata subito e puoi includerla o escluderla. Non viene scritto nulla prima della conferma.'}
+                : 'Le righe segnalate sono evidenziate con il motivo. Puoi correggere stagione, episodio, titolo italiano, titolo originale, durata e data: la riga viene ricontrollata subito e puoi includerla o escluderla. Non viene scritto nulla prima della conferma.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -360,12 +361,13 @@ function reviewedFromPayload(row: ReviewedEpisodeRow | (Omit<ReviewedEpisodeRow,
   draft?: EpisodeDraft
   included?: boolean
 })): ReviewedEpisodeRow {
-  const draft = row.draft ?? {
-    stagione: row.stagione != null ? String(row.stagione) : '',
-    episodio: row.episodio != null ? String(row.episodio) : '',
-    titolo: row.titolo ?? '',
-    durataMinuti: row.durataMinuti != null ? String(row.durataMinuti) : '',
-    dataPrimaMessaInOnda: italianDate(row.dataPrimaMessaInOnda),
+  const draft: EpisodeDraft = {
+    stagione: row.draft?.stagione ?? (row.stagione != null ? String(row.stagione) : ''),
+    episodio: row.draft?.episodio ?? (row.episodio != null ? String(row.episodio) : ''),
+    titolo: row.draft?.titolo ?? row.titolo ?? '',
+    titoloOriginale: row.draft?.titoloOriginale ?? row.titoloOriginale ?? '',
+    durataMinuti: row.draft?.durataMinuti ?? (row.durataMinuti != null ? String(row.durataMinuti) : ''),
+    dataPrimaMessaInOnda: row.draft?.dataPrimaMessaInOnda ?? italianDate(row.dataPrimaMessaInOnda),
   }
   return {
     ...row,

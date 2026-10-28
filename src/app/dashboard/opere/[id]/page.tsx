@@ -36,6 +36,7 @@ import { CastImportActions } from './components/cast-import-actions'
 import { EpisodiImportActions } from './components/episodi-import-actions'
 import { listCastEsterno } from '@/features/opere/services/cast-esterno.service'
 import { buildCastExportRows, castExportFileName } from '@/features/opere/lib/cast-export'
+import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -133,6 +134,7 @@ export default function OperaDetailPage() {
     numero_stagione: '',
     numero_episodio: '',
     titolo_episodio: '',
+    titolo_episodio_originale: '',
     descrizione: '',
     durata_minuti: '',
     data_prima_messa_in_onda: '',
@@ -146,6 +148,7 @@ export default function OperaDetailPage() {
   const [showAddPartecipazioneDialog, setShowAddPartecipazioneDialog] = useState(false)
   const [editEpisodioForm, setEditEpisodioForm] = useState({
     titolo_episodio: '',
+    titolo_episodio_originale: '',
     descrizione: '',
     durata_minuti: '',
     data_prima_messa_in_onda: '',
@@ -315,7 +318,8 @@ export default function OperaDetailPage() {
         p.ruoli_tipologie?.nome?.toLowerCase().includes(query) ||
         p.personaggio?.toLowerCase().includes(query) ||
         p.note?.toLowerCase().includes(query) ||
-        p.episodi?.titolo_episodio?.toLowerCase().includes(query)
+        p.episodi?.titolo_episodio?.toLowerCase().includes(query) ||
+        p.episodi?.titolo_episodio_originale?.toLowerCase().includes(query)
       )
       if (!matchesSearch) return false
     }
@@ -432,6 +436,7 @@ export default function OperaDetailPage() {
     setSelectedEpisodio(e)
     setEditEpisodioForm({
       titolo_episodio: e.titolo_episodio || '',
+      titolo_episodio_originale: e.titolo_episodio_originale || '',
       descrizione: e.descrizione || '',
       durata_minuti: e.durata_minuti ? String(e.durata_minuti) : '',
       data_prima_messa_in_onda: e.data_prima_messa_in_onda || '',
@@ -448,6 +453,7 @@ export default function OperaDetailPage() {
     try {
       const updates: any = {
         titolo_episodio: editEpisodioForm.titolo_episodio || null,
+        titolo_episodio_originale: editEpisodioForm.titolo_episodio_originale || null,
         descrizione: editEpisodioForm.descrizione || null,
         durata_minuti: editEpisodioForm.durata_minuti ? parseInt(editEpisodioForm.durata_minuti) : null,
         data_prima_messa_in_onda: editEpisodioForm.data_prima_messa_in_onda || null,
@@ -481,6 +487,7 @@ export default function OperaDetailPage() {
       numero_stagione: '1',
       numero_episodio: String(nextEp),
       titolo_episodio: '',
+      titolo_episodio_originale: '',
       descrizione: '',
       durata_minuti: '',
       data_prima_messa_in_onda: '',
@@ -507,6 +514,7 @@ export default function OperaDetailPage() {
         numero_stagione: stag,
         numero_episodio: ep,
         titolo_episodio: addEpisodioForm.titolo_episodio || null,
+        titolo_episodio_originale: addEpisodioForm.titolo_episodio_originale || null,
         descrizione: addEpisodioForm.descrizione || null,
         durata_minuti: addEpisodioForm.durata_minuti ? parseInt(addEpisodioForm.durata_minuti, 10) : null,
         data_prima_messa_in_onda: addEpisodioForm.data_prima_messa_in_onda || null,
@@ -1344,7 +1352,8 @@ export default function OperaDetailPage() {
                   <TableRow>
                     <TableHead className="py-3 px-4 pl-6">Stagione</TableHead>
                     <TableHead className="py-3 px-4">Episodio</TableHead>
-                    <TableHead className="py-3 px-4">Titolo</TableHead>
+                    <TableHead className="py-3 px-4">Titolo italiano</TableHead>
+                    <TableHead className="py-3 px-4">Titolo originale</TableHead>
                     <TableHead className="py-3 px-4">Data</TableHead>
                     <TableHead className="py-3 px-4">Durata</TableHead>
                     <TableHead className="py-3 px-4">IMDb tconst</TableHead>
@@ -1355,7 +1364,7 @@ export default function OperaDetailPage() {
                 <TableBody>
                   {(episodi || []).length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-12">
+                      <TableCell colSpan={9} className="text-center py-12">
                         <div className="flex flex-col items-center gap-4">
                           <p className="text-muted-foreground">Nessun episodio associato</p>
                           <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
@@ -1371,6 +1380,7 @@ export default function OperaDetailPage() {
                         <TableCell className="py-4 px-4 pl-6">{e.numero_stagione}</TableCell>
                         <TableCell className="py-4 px-4">{e.numero_episodio}</TableCell>
                         <TableCell className="py-4 px-4">{e.titolo_episodio || '—'}</TableCell>
+                        <TableCell className="py-4 px-4 italic text-muted-foreground">{e.titolo_episodio_originale || '—'}</TableCell>
                         <TableCell className="py-4 px-4">{e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}</TableCell>
                         <TableCell className="py-4 px-4">{e.durata_minuti ? `${e.durata_minuti} min` : '—'}</TableCell>
                         <TableCell className="py-4 px-4 font-mono text-sm">
@@ -1435,6 +1445,9 @@ export default function OperaDetailPage() {
                         <div className="flex-1">
                           <div className="font-medium">S{e.numero_stagione} E{e.numero_episodio}</div>
                           <div className="text-sm">{e.titolo_episodio || '—'}</div>
+                          {e.titolo_episodio_originale && (
+                            <div className="text-sm italic text-muted-foreground">{e.titolo_episodio_originale}</div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <Button
@@ -1553,7 +1566,7 @@ export default function OperaDetailPage() {
                     .sort((a, b) => (a.numero_stagione - b.numero_stagione) || (a.numero_episodio - b.numero_episodio))
                     .map((e) => (
                       <SelectItem key={e.id} value={e.id}>
-                        S{e.numero_stagione}E{e.numero_episodio}{e.titolo_episodio ? ` – ${e.titolo_episodio}` : ''}
+                        S{e.numero_stagione}E{e.numero_episodio}{episodeTitleLabel(e) ? ` – ${episodeTitleLabel(e)}` : ''}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -1737,7 +1750,7 @@ export default function OperaDetailPage() {
                               <span className="flex items-center gap-1">
                                 <Tv className="h-3 w-3" />
                                 S{p.episodi.numero_stagione || '?'}E{p.episodi.numero_episodio || '?'}
-                                {p.episodi.titolo_episodio && ` – ${p.episodi.titolo_episodio}`}
+                                {episodeTitleLabel(p.episodi) && ` – ${episodeTitleLabel(p.episodi)}`}
                               </span>
                             )}
                             {p.personaggio && (
@@ -2688,12 +2701,21 @@ export default function OperaDetailPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="titolo_episodio">Titolo Episodio</Label>
+              <Label htmlFor="titolo_episodio">Titolo italiano</Label>
               <Input
                 id="titolo_episodio"
                 value={editEpisodioForm.titolo_episodio}
                 onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, titolo_episodio: e.target.value })}
-                placeholder="Titolo dell'episodio"
+                placeholder="es. Il quinto oboe"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="titolo_episodio_originale">Titolo originale</Label>
+              <Input
+                id="titolo_episodio_originale"
+                value={editEpisodioForm.titolo_episodio_originale}
+                onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, titolo_episodio_originale: e.target.value })}
+                placeholder="es. The Fifth Oboe"
               />
             </div>
             <div className="space-y-2">
@@ -2806,12 +2828,21 @@ export default function OperaDetailPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="add_titolo_episodio">Titolo episodio</Label>
+              <Label htmlFor="add_titolo_episodio">Titolo italiano</Label>
               <Input
                 id="add_titolo_episodio"
                 value={addEpisodioForm.titolo_episodio}
                 onChange={(e) => setAddEpisodioForm({ ...addEpisodioForm, titolo_episodio: e.target.value })}
-                placeholder="Titolo dell'episodio"
+                placeholder="es. Il quinto oboe"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add_titolo_episodio_originale">Titolo originale</Label>
+              <Input
+                id="add_titolo_episodio_originale"
+                value={addEpisodioForm.titolo_episodio_originale}
+                onChange={(e) => setAddEpisodioForm({ ...addEpisodioForm, titolo_episodio_originale: e.target.value })}
+                placeholder="es. The Fifth Oboe"
               />
             </div>
             <div className="space-y-2">
@@ -2894,7 +2925,7 @@ export default function OperaDetailPage() {
             <DialogTitle>Elimina Episodio</DialogTitle>
             <DialogDescription>
               Sei sicuro di voler eliminare l&apos;episodio S{episodioToDelete?.numero_stagione}E{episodioToDelete?.numero_episodio}
-              {episodioToDelete?.titolo_episodio ? ` - ${episodioToDelete.titolo_episodio}` : ''}?
+              {episodeTitleLabel(episodioToDelete) ? ` - ${episodeTitleLabel(episodioToDelete)}` : ''}?
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-red-600">

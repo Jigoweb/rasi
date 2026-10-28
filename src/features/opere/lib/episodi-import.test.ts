@@ -20,7 +20,10 @@ import {
 const HEADER = [...EPISODI_IMPORT_HEADERS]
 
 function matrix(rows: unknown[][]): unknown[][] {
-  return [HEADER, ...rows]
+  const aligned = rows.map((row) => (
+    row.length === 5 ? [row[0], row[1], row[2], '', row[3], row[4]] : row
+  ))
+  return [HEADER, ...aligned]
 }
 
 function row(result: ReturnType<typeof classifyEpisodiMatrix>, index = 0) {
@@ -68,12 +71,14 @@ describe('classifyEpisodiMatrix', () => {
       stagione: 1,
       episodio: 2,
       titolo: 'Pilota',
+      titoloOriginale: null,
       durataMinuti: 45,
       dataPrimaMessaInOnda: '2020-03-15',
       draft: {
         stagione: '1',
         episodio: '2',
         titolo: 'Pilota',
+        titoloOriginale: '',
         durataMinuti: '45',
         dataPrimaMessaInOnda: '15/03/2020',
       },
@@ -227,6 +232,27 @@ describe('classifyEpisodiMatrix', () => {
     if (!extra.ok) expect(extra.error).toMatch(/Note/)
   })
 
+  it('legge titolo italiano e titolo originale come colonne distinte', () => {
+    const result = classifyEpisodiMatrix(
+      [[...HEADER], [1, 2, '  Il quinto oboe  ', ' The Fifth Oboe ', 40, null]],
+      [],
+    )
+    expect(row(result)).toMatchObject({
+      status: 'valid',
+      titolo: 'Il quinto oboe',
+      titoloOriginale: 'The Fifth Oboe',
+      draft: { titolo: 'Il quinto oboe', titoloOriginale: 'The Fifth Oboe' },
+    })
+  })
+
+  it('accetta il template precedente con la sola colonna Titolo come titolo italiano', () => {
+    const result = classifyEpisodiMatrix(
+      [['Stagione', 'Episodio', 'Titolo', 'Durata (minuti)', 'Data prima messa in onda'], [1, 1, 'Pilota', null, null]],
+      [],
+    )
+    expect(row(result)).toMatchObject({ status: 'valid', titolo: 'Pilota', titoloOriginale: null })
+  })
+
   it('accetta le colonne in ordine diverso', () => {
     const result = classifyEpisodiMatrix(
       [
@@ -252,6 +278,7 @@ describe('template episodi', () => {
       numero_stagione: 1,
       numero_episodio: 2,
       titolo_episodio: 'Secondo',
+      titolo_episodio_originale: 'Second',
       durata_minuti: 44,
       data_prima_messa_in_onda: '2020-03-15',
     },
@@ -298,6 +325,7 @@ describe('template episodi', () => {
       stagione: 1,
       episodio: 2,
       titolo: 'Secondo',
+      titoloOriginale: 'Second',
       durataMinuti: 44,
       dataPrimaMessaInOnda: '2020-03-15',
     })
@@ -396,6 +424,7 @@ describe('runEpisodiImport', () => {
         numero_stagione: 1,
         numero_episodio: 2,
         titolo_episodio: 'Nuovo',
+        titolo_episodio_originale: null,
         durata_minuti: 41,
         data_prima_messa_in_onda: null,
       },
@@ -478,8 +507,8 @@ describe('runEpisodiImport', () => {
   })
 })
 
-function draft(stagione: string, episodio: string, titolo: string, data = ''): EpisodeDraft {
-  return { stagione, episodio, titolo, durataMinuti: '', dataPrimaMessaInOnda: data }
+function draft(stagione: string, episodio: string, titolo: string, data = '', titoloOriginale = ''): EpisodeDraft {
+  return { stagione, episodio, titolo, titoloOriginale, durataMinuti: '', dataPrimaMessaInOnda: data }
 }
 
 describe('revalidateEpisodeDrafts', () => {
@@ -644,12 +673,31 @@ describe('confirmEpisodiDrafts', () => {
         numero_stagione: 1,
         numero_episodio: 1,
         titolo_episodio: 'Seconda',
+        titolo_episodio_originale: null,
         durata_minuti: null,
         data_prima_messa_in_onda: null,
       },
     ])
     expect(result.summary).toMatchObject({ imported: 1, excluded: 1, skipped: 0, valid: 2 })
     expect(result.rows[1]).toMatchObject({ status: 'valid', included: true, titolo: 'Seconda' })
+  })
+
+  it('salva il titolo originale distinto dal titolo italiano', async () => {
+    const { store, inserted } = storeFor()
+    const result = await confirmEpisodiDrafts({
+      store,
+      operaId,
+      rows: [{
+        rowNumber: 2,
+        included: true,
+        draft: draft('1', '3', 'Il quinto oboe', '', 'The Fifth Oboe'),
+      }],
+    })
+    expect(result.ok).toBe(true)
+    expect(inserted[0]).toMatchObject({
+      titolo_episodio: 'Il quinto oboe',
+      titolo_episodio_originale: 'The Fifth Oboe',
+    })
   })
 
   it('trasforma un conflitto univoco in skip e blocca un permesso negato', async () => {

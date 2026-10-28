@@ -42,6 +42,37 @@ beforeEach(() => {
 })
 
 describe('OperaDetailPage', () => {
+  it('mostra titolo italiano e originale degli episodi', async () => {
+    ;(getOperaById as jest.Mock).mockResolvedValueOnce({
+      data: { ...operaFixture, tipo: 'serie_tv', has_episodes: true },
+      error: null,
+    })
+    const { getEpisodiByOperaId } = jest.requireMock('@/features/opere/services/opere.service') as {
+      getEpisodiByOperaId: jest.Mock
+    }
+    getEpisodiByOperaId.mockResolvedValueOnce({
+      data: [{
+        id: 'ep1',
+        numero_stagione: 1,
+        numero_episodio: 2,
+        titolo_episodio: 'Il quinto oboe',
+        titolo_episodio_originale: 'The Fifth Oboe',
+        descrizione: null,
+        durata_minuti: 40,
+        data_prima_messa_in_onda: null,
+        imdb_tconst: null,
+        codice_isan: null,
+      }],
+      error: null,
+    })
+
+    render(<OperaDetailPage />)
+    expect(await screen.findByRole('columnheader', { name: 'Titolo italiano' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Titolo originale' })).toBeInTheDocument()
+    expect(screen.getAllByText('Il quinto oboe').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('The Fifth Oboe').length).toBeGreaterThan(0)
+  })
+
   it('renders opera title', async () => {
     render(<OperaDetailPage />)
     await waitFor(() => {

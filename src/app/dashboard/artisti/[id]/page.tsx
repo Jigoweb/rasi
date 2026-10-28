@@ -24,6 +24,7 @@ import { useAuth } from '@/shared/contexts/auth-context'
 import { ArtistaFormMultistep } from '@/app/dashboard/artisti/components/artista-form-multistep'
 import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/components/add-partecipazione-dialog'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
+import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 import { ArtistaInviteHeader } from '@/app/dashboard/artisti/[id]/components/artista-invite-header'
 import { ArtistaNotePanel } from '@/app/dashboard/artisti/[id]/components/artista-note-panel'
 import { ArtistaReferentiPanel } from '@/app/dashboard/artisti/[id]/components/artista-referenti-panel'
@@ -71,6 +72,7 @@ interface Partecipazione {
   episodi?: {
     id: string
     titolo_episodio: string | null
+    titolo_episodio_originale?: string | null
     numero_episodio: number | null
     numero_stagione: number | null
   } | null
@@ -956,6 +958,7 @@ export default function ArtistaProfiloPage() {
                             <span className="flex items-center gap-1">
                               <Tv className="h-3 w-3" />
                               S{partecipazione.episodi.numero_stagione || '?'}E{partecipazione.episodi.numero_episodio || '?'}
+                              {episodeTitleLabel(partecipazione.episodi) ? ` – ${episodeTitleLabel(partecipazione.episodi)}` : ''}
                             </span>
                           )}
                           {partecipazione.personaggio && (
