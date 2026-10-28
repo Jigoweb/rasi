@@ -168,6 +168,7 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
       episodi (
         id,
         titolo_episodio,
+        titolo_episodio_originale,
         numero_episodio,
         numero_stagione
       )

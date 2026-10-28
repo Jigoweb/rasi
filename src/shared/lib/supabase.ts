@@ -658,6 +658,7 @@ export type Database = {
           numero_stagione: number
           opera_id: string
           titolo_episodio: string | null
+          titolo_episodio_originale: string | null
         }
         Insert: {
           codice_isan?: string | null
@@ -672,6 +673,7 @@ export type Database = {
           numero_stagione: number
           opera_id: string
           titolo_episodio?: string | null
+          titolo_episodio_originale?: string | null
         }
         Update: {
           codice_isan?: string | null
@@ -686,6 +688,7 @@ export type Database = {
           numero_stagione?: number
           opera_id?: string
           titolo_episodio?: string | null
+          titolo_episodio_originale?: string | null
         }
         Relationships: [
           {
@@ -1458,6 +1461,7 @@ export type Database = {
           numero_stagione: number | null
           numero_episodio: number | null
           titolo_episodio: string | null
+          titolo_episodio_originale: string | null
           nome: string
           personaggio: string | null
           primarieta: string

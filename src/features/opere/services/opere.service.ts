@@ -89,7 +89,7 @@ export const getOpereForExport = async (
 
         let epQuery = supabase
           .from('episodi')
-          .select('id, opera_id, numero_stagione, numero_episodio, titolo_episodio, durata_minuti, data_prima_messa_in_onda, codice_isan, imdb_tconst')
+          .select('id, opera_id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, durata_minuti, data_prima_messa_in_onda, codice_isan, imdb_tconst')
           .order('id', { ascending: true })
           .limit(batchSize)
 
@@ -173,6 +173,7 @@ export const formatOpereForExport = (rows: any[]) => {
       'Stagione': ep?.numero_stagione ?? '',
       'Episodio': ep?.numero_episodio ?? '',
       'Titolo Episodio': ep?.titolo_episodio || '',
+      'Titolo originale episodio': ep?.titolo_episodio_originale || '',
       'Durata Episodio (min)': ep?.durata_minuti ?? '',
       'Data Prima Messa in Onda': ep?.data_prima_messa_in_onda || '',
       'ISAN Episodio': ep?.codice_isan || '',
@@ -346,7 +347,7 @@ export const getPartecipazioniByOperaId = async (operaId: string) => {
       ruolo_id,
       artisti ( id, nome, cognome, nome_arte, codice_ipn ),
       ruoli_tipologie ( id, nome, descrizione ),
-      episodi ( id, numero_stagione, numero_episodio, titolo_episodio )
+      episodi ( id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale )
     `)
     .eq('opera_id', operaId)
     .order('created_at', { ascending: false })
@@ -589,7 +590,7 @@ export const checkPartecipazioniDuplicate = async (
 export const getEpisodiByOperaId = async (operaId: string) => {
   const { data, error } = await supabase
     .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
+    .select('id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
     .eq('opera_id', operaId)
     .order('numero_stagione', { ascending: true })
     .order('numero_episodio', { ascending: true })
@@ -639,6 +640,7 @@ export const upsertEpisodi = async (
     numero_stagione: number
     numero_episodio: number
     titolo_episodio?: string | null
+    titolo_episodio_originale?: string | null
     descrizione?: string | null
     durata_minuti?: number | null
     data_prima_messa_in_onda?: string | null
@@ -670,6 +672,9 @@ export const upsertEpisodi = async (
           .from('episodi')
           .update({
             titolo_episodio: ep.titolo_episodio,
+            ...(ep.titolo_episodio_originale !== undefined
+              ? { titolo_episodio_originale: ep.titolo_episodio_originale }
+              : {}),
             descrizione: ep.descrizione,
             durata_minuti: ep.durata_minuti,
             data_prima_messa_in_onda: ep.data_prima_messa_in_onda,
@@ -692,6 +697,9 @@ export const upsertEpisodi = async (
             numero_stagione: ep.numero_stagione,
             numero_episodio: ep.numero_episodio,
             titolo_episodio: ep.titolo_episodio,
+            ...(ep.titolo_episodio_originale !== undefined
+              ? { titolo_episodio_originale: ep.titolo_episodio_originale }
+              : {}),
             descrizione: ep.descrizione,
             durata_minuti: ep.durata_minuti,
             data_prima_messa_in_onda: ep.data_prima_messa_in_onda,

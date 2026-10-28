@@ -174,6 +174,7 @@ function createStore(token: string): EpisodiImportStore {
         numero_stagione: row.numero_stagione,
         numero_episodio: row.numero_episodio,
         titolo_episodio: row.titolo_episodio,
+        titolo_episodio_originale: row.titolo_episodio_originale,
         durata_minuti: row.durata_minuti,
         data_prima_messa_in_onda: row.data_prima_messa_in_onda,
       })

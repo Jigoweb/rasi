@@ -60,6 +60,7 @@ export interface BuildMatchingReviewContextInput {
   episodioStagione?: number | null
   episodioNumero?: number | null
   episodioTitolo?: string | null
+  episodioTitoloOriginale?: string | null
   dettagliMatching?: MatchingDetailRecord | null
 }
 
@@ -100,6 +101,7 @@ export function buildMatchingReviewContext(input: BuildMatchingReviewContextInpu
     { label: 'Registi', value: input.operaRegisti?.length ? input.operaRegisti.join(', ') : null },
     { label: 'Validazione opera', value: input.operaStatoValidazione },
     { label: 'Episodio in catalogo', value: formatEpisode(input.episodioStagione, input.episodioNumero, input.episodioTitolo) },
+    { label: 'Titolo originale episodio', value: input.episodioTitoloOriginale },
     { label: 'Artista', value: input.artistaDisplay },
     { label: 'Ruolo', value: input.ruoloDisplay },
   ])
@@ -302,6 +304,7 @@ function buildMatchingSignals(input: {
       label: 'Episodio',
       tone: 'ok',
       summary: `Episodio risolto ${formatEpisode(season, episode, typeof input.episodio.prog_titolo_ep === 'string' ? input.episodio.prog_titolo_ep : null)}`,
+      detail: catalogEpisodeDetail(input.episodio),
       points: formatPoints(input.episodio.score, '/15'),
     })
   } else if (input.totale.is_serie === true && input.totale.has_episode_data !== true) {
@@ -347,6 +350,17 @@ function formatValue(value: unknown): string {
 
 function formatOptionalNumber(value?: number | null) {
   return value == null ? null : String(value)
+}
+
+function catalogEpisodeDetail(episodio: Record<string, unknown>): string | undefined {
+  const text = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null)
+  const italian = text(episodio.episodio_titolo)
+  const original = text(episodio.episodio_titolo_originale)
+  const broadcastOriginal = text(episodio.prog_titolo_ep_originale)
+  const parts: string[] = []
+  if (italian || original) parts.push(`Catalogo: ${[italian, original].filter(Boolean).join(' / ')}`)
+  if (broadcastOriginal) parts.push(`Originale programmazione: ${broadcastOriginal}`)
+  return parts.length > 0 ? parts.join(' · ') : undefined
 }
 
 function formatEpisode(season?: number | null, episode?: number | null, title?: string | null) {

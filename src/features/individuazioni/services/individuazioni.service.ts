@@ -152,6 +152,7 @@ export interface IndividuazioneReviewDetail {
     numero_stagione: number
     numero_episodio: number
     titolo_episodio?: string | null
+    titolo_episodio_originale?: string | null
     data_prima_messa_in_onda?: string | null
   } | null
   programmazione?: {
@@ -438,7 +439,7 @@ export const getIndividuazioneReviewDetail = async (
         artisti(nome, cognome, nome_arte),
         opere(id, titolo, titolo_originale, tipo, anno_produzione, regista, stato_validazione),
         ruoli_tipologie(nome),
-        episodi(id, numero_stagione, numero_episodio, titolo_episodio, data_prima_messa_in_onda),
+        episodi(id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, data_prima_messa_in_onda),
         programmazioni(id, titolo, titolo_originale, anno, regia, numero_stagione, numero_episodio, titolo_episodio, data_trasmissione, ora_inizio, ora_fine)
       `)
       .eq('id', individuazioneId)

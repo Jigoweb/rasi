@@ -6,6 +6,7 @@ type EpisodioExport = {
   numero_stagione: number | null
   numero_episodio: number | null
   titolo_episodio: string | null
+  titolo_episodio_originale?: string | null
 } | null
 
 export type PartecipazioneExport = {
@@ -38,14 +39,16 @@ export type CastExportRow = {
   Stagione: number | ''
   Episodio: number | ''
   'Titolo episodio': string
+  'Titolo originale episodio': string
   Note: string
 }
 
-function episodioFields(episodio: EpisodioExport): Pick<CastExportRow, 'Stagione' | 'Episodio' | 'Titolo episodio'> {
+function episodioFields(episodio: EpisodioExport): Pick<CastExportRow, 'Stagione' | 'Episodio' | 'Titolo episodio' | 'Titolo originale episodio'> {
   return {
     Stagione: episodio?.numero_stagione ?? '',
     Episodio: episodio?.numero_episodio ?? '',
     'Titolo episodio': episodio?.titolo_episodio ?? '',
+    'Titolo originale episodio': episodio?.titolo_episodio_originale ?? '',
   }
 }
 

@@ -1,3 +1,5 @@
+import { episodeTitleLabel } from './episodio-titoli'
+
 export type PrimarietaCast = 'primario' | 'comprimario'
 export type RuoloCast = 'attore' | 'doppiatore'
 /** Valore unico per le select: "attore:primario", "doppiatore:comprimario"… */
@@ -111,12 +113,14 @@ export interface EpisodioRef {
   numero_stagione: number | null
   numero_episodio: number | null
   titolo_episodio?: string | null
+  titolo_episodio_originale?: string | null
 }
 
 export function formatEpisodioLabel(episodio: EpisodioRef | null | undefined): string {
   if (!episodio) return 'Tutta la serie'
   const code = `S${episodio.numero_stagione ?? '?'}E${episodio.numero_episodio ?? '?'}`
-  return episodio.titolo_episodio ? `${code} – ${episodio.titolo_episodio}` : code
+  const title = episodeTitleLabel(episodio)
+  return title ? `${code} – ${title}` : code
 }
 
 /** Raggruppa per episodio: prima il cast dell'intera opera (episodio_id null), poi gli episodi in ordine. */
