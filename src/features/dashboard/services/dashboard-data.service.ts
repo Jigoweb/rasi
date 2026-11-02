@@ -9,6 +9,7 @@ import {
   loadActivityFeed,
   type AttivitaItem,
 } from './dashboard-activity.service'
+import { fetchImportoNettoDistribuito } from '@/features/ripartizioni/lib/importo-distribuito'
 
 export type { AttivitaItem }
 
@@ -225,7 +226,21 @@ export async function loadDashboardRpcData(
   })
 
   if (error) throw error
-  return normalizeDashboardRpcPayload(data)
+  const normalized = normalizeDashboardRpcPayload(data)
+  // La funzione SQL somma ancora l'importo disponibile. In pagina si mostra
+  // il netto delle ripartizioni delle campagne davvero distribuite.
+  const importoDistribuito = await fetchImportoNettoDistribuito(supabase)
+
+  return {
+    ...normalized,
+    primary: {
+      ...normalized.primary,
+      stats: {
+        ...normalized.primary.stats,
+        importo_distribuito: importoDistribuito,
+      },
+    },
+  }
 }
 
 export function normalizeDashboardRpcPayload(payload: any): DashboardRpcData {
@@ -298,16 +313,7 @@ export function createSupabaseDashboardDataDeps(supabase: SupabaseClient): Dashb
         .eq('stato', 'in_corso')
         .eq('campagne_programmazione.stato', 'in_corso')
     ),
-    sumImportoDistribuito: async () => {
-      const { data } = await supabase
-        .from('campagne_ripartizione')
-        .select('importo_totale_disponibile')
-        .eq('stato', 'distribuita')
-      return (data || []).reduce(
-        (acc: number, row: any) => acc + (parseFloat(row.importo_totale_disponibile) || 0),
-        0
-      )
-    },
+    sumImportoDistribuito: () => fetchImportoNettoDistribuito(supabase),
     countIndividuazioni: () => count((supabase as any).from('individuazioni').select('id', { count: 'exact', head: true })),
     countIndividuazioniValide: () => count((supabase as any).from('individuazioni').select('id', { count: 'exact', head: true }).neq('stato', 'respinto')),
     loadRecentActivities: () => loadActivityFeed(supabase, { limit: 5, perSourceLimit: 5 }),
