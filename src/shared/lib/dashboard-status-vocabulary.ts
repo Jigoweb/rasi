@@ -10,14 +10,33 @@ export const PROGRAMMAZIONE_STATUS_LABELS = {
   bozza: 'Bozza',
 } as const
 
+/**
+ * Valori di `stato_ripartizione` (db/init/00_schema.sql).
+ * Nessuna migrazione successiva modifica l'enum.
+ */
 export const RIPARTIZIONE_STATUS_LABELS = {
   pianificata: 'Pianificata',
-  in_corso: 'In corso',
-  completata: 'Completata',
+  calcolata: 'Calcolata',
+  approvata: 'Approvata',
   distribuita: 'Distribuita',
-  sospesa: 'Sospesa',
-  annullata: 'Annullata',
 } as const
+
+export type StatoRipartizione = keyof typeof RIPARTIZIONE_STATUS_LABELS
+
+export const RIPARTIZIONE_STATUSES = Object.keys(
+  RIPARTIZIONE_STATUS_LABELS,
+) as StatoRipartizione[]
+
+export function isStatoRipartizione(value: string): value is StatoRipartizione {
+  return Object.prototype.hasOwnProperty.call(RIPARTIZIONE_STATUS_LABELS, value)
+}
+
+/** Etichetta italiana. Stati vuoti o non previsti restano visibili, senza eccezioni. */
+export function getRipartizioneStatusLabel(stato: string | null | undefined): string {
+  if (typeof stato !== 'string' || stato.trim() === '') return 'Sconosciuto'
+  if (isStatoRipartizione(stato)) return RIPARTIZIONE_STATUS_LABELS[stato]
+  return stato
+}
 
 export const INDIVIDUAZIONE_STATUS_LABELS = {
   completata: 'Completata',
