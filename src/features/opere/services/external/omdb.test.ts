@@ -15,6 +15,7 @@ import {
   buildCredits,
   buildEpisodesForSeason,
 } from './omdb'
+import { formatReleaseDateForDb } from '@/features/opere/lib/release-date'
 
 describe('OMDb type mapping', () => {
   it('maps client types to OMDb type param', () => {
@@ -67,6 +68,21 @@ describe('OMDb scalar parsers', () => {
     expect(parseReleased('2008-01-20')).toEqual({ year: 2008, month: 1, day: 20 })
     expect(parseReleased('N/A')).toBeNull()
     expect(parseReleased(undefined)).toBeNull()
+  })
+
+  it('parseReleased parses OMDb day-mon-year strings and rejects year-only leftovers', () => {
+    expect(parseReleased('20 Mar 2008')).toEqual({ year: 2008, month: 3, day: 20 })
+    expect(parseReleased('1 Jan 2000')).toEqual({ year: 2000, month: 1, day: 1 })
+    // Year alone is not a release date we can persist — do not invent month/day later.
+    expect(parseReleased('2008')).toBeNull()
+    expect(parseReleased('2008–2013')).toBeNull()
+  })
+
+  it('formatReleaseDateForDb requires year, month and day — never invents 01-01', () => {
+    expect(formatReleaseDateForDb({ year: 2008, month: 1, day: 20 })).toBe('2008-01-20')
+    expect(formatReleaseDateForDb({ year: 2008, month: null, day: null })).toBeNull()
+    expect(formatReleaseDateForDb({ year: 2008, month: 3, day: null })).toBeNull()
+    expect(formatReleaseDateForDb(null)).toBeNull()
   })
 
   it('splitList cleans people/genre strings and strips annotations', () => {

@@ -18,7 +18,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
-import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
+import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, formatReleaseDateForDb, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
 import { ArrowLeft, Film, Tv, FileText, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Copy, ExternalLink } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/shared/components/ui/dropdown-menu'
@@ -765,9 +765,7 @@ export default function OperaDetailPage() {
           titolo_episodio: ep.title || null,
           descrizione: ep.plot || null,
           durata_minuti: ep.runtimeMinutes,
-          data_prima_messa_in_onda: ep.releaseDate 
-            ? `${ep.releaseDate.year}-${String(ep.releaseDate.month || 1).padStart(2, '0')}-${String(ep.releaseDate.day || 1).padStart(2, '0')}`
-            : null,
+          data_prima_messa_in_onda: formatReleaseDateForDb(ep.releaseDate),
           imdb_tconst: ep.id || null,
           metadati: { imdb_rating: ep.rating },
         }))
@@ -791,8 +789,8 @@ export default function OperaDetailPage() {
       const updates: any = {}
       const fieldsUpdated: string[] = []
       
-      if (selectedFields['titolo_originale']) {
-        updates.titolo_originale = imdbDataToImport.title || null
+      if (selectedFields['titolo_originale'] && imdbDataToImport.originalTitle) {
+        updates.titolo_originale = imdbDataToImport.originalTitle
         fieldsUpdated.push(IMPORT_FIELD_LABELS.titolo_originale)
       }
       if (selectedFields['anno_produzione']) {
@@ -2198,17 +2196,16 @@ export default function OperaDetailPage() {
             </div>
           ) : imdbDataToImport ? (
             <div className="flex-1 overflow-y-auto space-y-4">
-              {/* Titolo Originale - confronta IMDb title con DB titolo_originale (case insensitive) */}
-              {imdbDataToImport.title && (
+              {/* Titolo originale solo se OMDb/IMDb lo fornisce (non usare Title come sostituto) */}
+              {imdbDataToImport.originalTitle && (
                 <ImportFieldRow
                   fieldKey="titolo_originale"
                   label="Titolo Originale"
                   dbValue={opera?.titolo_originale}
-                  imdbValue={imdbDataToImport.title}
+                  imdbValue={imdbDataToImport.originalTitle}
                   selected={selectedFields['titolo_originale'] || false}
                   onToggle={(checked) => setSelectedFields(prev => ({ ...prev, titolo_originale: checked }))}
-                  status={getComparisonStatus(opera?.titolo_originale, imdbDataToImport.title)}
-                  hint="Il titolo IMDb verrà salvato in Titolo Originale"
+                  status={getComparisonStatus(opera?.titolo_originale, imdbDataToImport.originalTitle)}
                 />
               )}
               

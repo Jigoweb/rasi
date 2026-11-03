@@ -25,7 +25,7 @@ import { Checkbox } from '@/shared/components/ui/checkbox'
 import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import * as XLSX from 'xlsx'
-import { getTitleById, mapImdbToOpera } from '@/features/opere/services/external/imdb.service'
+import { getTitleById, mapImdbToOpera, mapImdbTypeToOperaTipo } from '@/features/opere/services/external/imdb.service'
 import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
@@ -793,19 +793,15 @@ export default function OperePage() {
         type: result.type, 
         id: result.id 
       })
+      const tipoValue = mapImdbTypeToOperaTipo(result.type)
       
-      // Map IMDb type to our type (film, serie_tv, animazione)
-      let tipoValue: 'film' | 'serie_tv' | 'animazione' = 'film'
-      const imdbType = (result.type || '').toLowerCase()
-      if (imdbType.includes('movie') || imdbType === 'film') tipoValue = 'film'
-      else if (imdbType.includes('series') || imdbType.includes('tv')) tipoValue = 'serie_tv'
-      else if (imdbType.includes('documentary') || imdbType.includes('animation') || imdbType.includes('cartoon')) tipoValue = 'animazione'
-      
-      // Set values - always use defined values, never undefined
+      // Set values from IMDb; leave tipo untouched when unmapped (episode / unknown)
       form.setValue('titolo', mapped.titolo || '', { shouldValidate: true })
       form.setValue('titolo_originale', mapped.titolo_originale || '', { shouldValidate: true })
-      form.setValue('tipo', tipoValue, { shouldValidate: true })
-      form.setValue('has_episodes', tipoValue === 'serie_tv', { shouldValidate: true })
+      if (tipoValue) {
+        form.setValue('tipo', tipoValue, { shouldValidate: true })
+        form.setValue('has_episodes', tipoValue === 'serie_tv', { shouldValidate: true })
+      }
       form.setValue('anno_produzione', mapped.anno_produzione ?? undefined, { shouldValidate: true })
       form.setValue('imdb_tconst', mapped.imdb_tconst || '', { shouldValidate: true })
       
@@ -1187,7 +1183,7 @@ export default function OperePage() {
                       await updateOpera(selectedOpera.id, {
                         titolo: mapped.titolo,
                         titolo_originale: mapped.titolo_originale || null,
-                        tipo: mapped.tipo,
+                        ...(mapped.tipo ? { tipo: mapped.tipo } : {}),
                         anno_produzione: mapped.anno_produzione ?? null,
                         imdb_tconst: mapped.imdb_tconst,
                         codici_esterni: mapped.codici_esterni,
