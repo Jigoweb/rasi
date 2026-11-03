@@ -590,7 +590,7 @@ export const checkPartecipazioniDuplicate = async (
 export const getEpisodiByOperaId = async (operaId: string) => {
   const { data, error } = await supabase
     .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
+    .select('id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, alias_titoli, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
     .eq('opera_id', operaId)
     .order('numero_stagione', { ascending: true })
     .order('numero_episodio', { ascending: true })

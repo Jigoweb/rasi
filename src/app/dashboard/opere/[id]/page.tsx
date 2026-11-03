@@ -40,6 +40,13 @@ import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
+function parseCommaSeparatedAliases(value: string): string[] | null {
+  const aliasArray = value
+    ? value.split(',').map((alias) => alias.trim()).filter(Boolean)
+    : null
+  return aliasArray && aliasArray.length > 0 ? aliasArray : null
+}
+
 export default function OperaDetailPage() {
   const params = useParams()
   const operaId = params.id as string
@@ -135,6 +142,7 @@ export default function OperaDetailPage() {
     numero_episodio: '',
     titolo_episodio: '',
     titolo_episodio_originale: '',
+    alias_titoli: '',
     descrizione: '',
     durata_minuti: '',
     data_prima_messa_in_onda: '',
@@ -149,6 +157,7 @@ export default function OperaDetailPage() {
   const [editEpisodioForm, setEditEpisodioForm] = useState({
     titolo_episodio: '',
     titolo_episodio_originale: '',
+    alias_titoli: '',
     descrizione: '',
     durata_minuti: '',
     data_prima_messa_in_onda: '',
@@ -444,6 +453,7 @@ export default function OperaDetailPage() {
     setEditEpisodioForm({
       titolo_episodio: e.titolo_episodio || '',
       titolo_episodio_originale: e.titolo_episodio_originale || '',
+      alias_titoli: Array.isArray(e.alias_titoli) ? e.alias_titoli.join(', ') : '',
       descrizione: e.descrizione || '',
       durata_minuti: e.durata_minuti ? String(e.durata_minuti) : '',
       data_prima_messa_in_onda: e.data_prima_messa_in_onda || '',
@@ -461,6 +471,7 @@ export default function OperaDetailPage() {
       const updates: any = {
         titolo_episodio: editEpisodioForm.titolo_episodio || null,
         titolo_episodio_originale: editEpisodioForm.titolo_episodio_originale || null,
+        alias_titoli: parseCommaSeparatedAliases(editEpisodioForm.alias_titoli),
         descrizione: editEpisodioForm.descrizione || null,
         durata_minuti: editEpisodioForm.durata_minuti ? parseInt(editEpisodioForm.durata_minuti) : null,
         data_prima_messa_in_onda: editEpisodioForm.data_prima_messa_in_onda || null,
@@ -495,6 +506,7 @@ export default function OperaDetailPage() {
       numero_episodio: String(nextEp),
       titolo_episodio: '',
       titolo_episodio_originale: '',
+      alias_titoli: '',
       descrizione: '',
       durata_minuti: '',
       data_prima_messa_in_onda: '',
@@ -522,6 +534,7 @@ export default function OperaDetailPage() {
         numero_episodio: ep,
         titolo_episodio: addEpisodioForm.titolo_episodio || null,
         titolo_episodio_originale: addEpisodioForm.titolo_episodio_originale || null,
+        alias_titoli: parseCommaSeparatedAliases(addEpisodioForm.alias_titoli),
         descrizione: addEpisodioForm.descrizione || null,
         durata_minuti: addEpisodioForm.durata_minuti ? parseInt(addEpisodioForm.durata_minuti, 10) : null,
         data_prima_messa_in_onda: addEpisodioForm.data_prima_messa_in_onda || null,
@@ -1418,7 +1431,12 @@ export default function OperaDetailPage() {
                       <TableRow key={e.id} className="hover:bg-muted/50">
                         <TableCell className="py-4 px-4 pl-6">{e.numero_stagione}</TableCell>
                         <TableCell className="py-4 px-4">{e.numero_episodio}</TableCell>
-                        <TableCell className="py-4 px-4">{e.titolo_episodio || '—'}</TableCell>
+                        <TableCell className="py-4 px-4">
+                          <div>{e.titolo_episodio || '—'}</div>
+                          {Array.isArray(e.alias_titoli) && e.alias_titoli.length > 0 && (
+                            <div className="text-xs text-muted-foreground">{e.alias_titoli.join(', ')}</div>
+                          )}
+                        </TableCell>
                         <TableCell className="py-4 px-4 italic text-muted-foreground">{e.titolo_episodio_originale || '—'}</TableCell>
                         <TableCell className="py-4 px-4">{e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}</TableCell>
                         <TableCell className="py-4 px-4">{e.durata_minuti ? `${e.durata_minuti} min` : '—'}</TableCell>
@@ -1486,6 +1504,9 @@ export default function OperaDetailPage() {
                           <div className="text-sm">{e.titolo_episodio || '—'}</div>
                           {e.titolo_episodio_originale && (
                             <div className="text-sm italic text-muted-foreground">{e.titolo_episodio_originale}</div>
+                          )}
+                          {Array.isArray(e.alias_titoli) && e.alias_titoli.length > 0 && (
+                            <div className="text-xs text-muted-foreground">{e.alias_titoli.join(', ')}</div>
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
@@ -2749,6 +2770,16 @@ export default function OperaDetailPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="alias_titoli">Titoli alternativi</Label>
+              <Input
+                id="alias_titoli"
+                value={editEpisodioForm.alias_titoli}
+                onChange={(e) => setEditEpisodioForm({ ...editEpisodioForm, alias_titoli: e.target.value })}
+                placeholder="es. Alias 1, Alias 2, Alias 3"
+              />
+              <p className="text-xs text-muted-foreground">Separa con virgola</p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="descrizione">Descrizione</Label>
               <Textarea
                 id="descrizione"
@@ -2874,6 +2905,16 @@ export default function OperaDetailPage() {
                 onChange={(e) => setAddEpisodioForm({ ...addEpisodioForm, titolo_episodio_originale: e.target.value })}
                 placeholder="es. The Fifth Oboe"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add_alias_titoli">Titoli alternativi</Label>
+              <Input
+                id="add_alias_titoli"
+                value={addEpisodioForm.alias_titoli}
+                onChange={(e) => setAddEpisodioForm({ ...addEpisodioForm, alias_titoli: e.target.value })}
+                placeholder="es. Alias 1, Alias 2, Alias 3"
+              />
+              <p className="text-xs text-muted-foreground">Separa con virgola</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="add_descrizione">Descrizione</Label>

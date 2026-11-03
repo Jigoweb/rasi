@@ -60,6 +60,7 @@ describe('OperaDetailPage', () => {
         descrizione: null,
         durata_minuti: 40,
         data_prima_messa_in_onda: null,
+        alias_titoli: null,
         imdb_tconst: null,
         codice_isan: null,
       }],
