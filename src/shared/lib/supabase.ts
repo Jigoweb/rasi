@@ -46,7 +46,7 @@ export type Database = {
           documento_data_scadenza: string | null
           nome: string
           nome_arte: string | null
-          partita_iva: number | null
+          partita_iva: string | null
           ragione_sociale: string | null
           search_vector: unknown
           stato: Database["public"]["Enums"]["stato_iscrizione"] | null
@@ -83,7 +83,7 @@ export type Database = {
           documento_data_scadenza?: string | null
           nome: string
           nome_arte?: string | null
-          partita_iva?: number | null
+          partita_iva?: string | null
           ragione_sociale?: string | null
           search_vector?: unknown
           stato?: Database["public"]["Enums"]["stato_iscrizione"] | null
@@ -120,7 +120,7 @@ export type Database = {
           documento_data_scadenza?: string | null
           nome?: string
           nome_arte?: string | null
-          partita_iva?: number | null
+          partita_iva?: string | null
           ragione_sociale?: string | null
           search_vector?: unknown
           stato?: Database["public"]["Enums"]["stato_iscrizione"] | null
@@ -151,6 +151,44 @@ export type Database = {
           presa_il?: string
         }
         Relationships: []
+      }
+      artisti_dati_riservati: {
+        Row: {
+          artista_id: string
+          created_at: string | null
+          dettagli_regime: string | null
+          regime: string | null
+          tassazione: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          artista_id: string
+          created_at?: string | null
+          dettagli_regime?: string | null
+          regime?: string | null
+          tassazione?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          artista_id?: string
+          created_at?: string | null
+          dettagli_regime?: string | null
+          regime?: string | null
+          tassazione?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artisti_dati_riservati_artista_id_fkey"
+            columns: ["artista_id"]
+            isOneToOne: true
+            referencedRelation: "artisti"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       artisti_note: {
         Row: {
@@ -658,6 +696,7 @@ export type Database = {
           numero_stagione: number
           opera_id: string
           titolo_episodio: string | null
+          titolo_episodio_originale: string | null
         }
         Insert: {
           codice_isan?: string | null
@@ -672,6 +711,7 @@ export type Database = {
           numero_stagione: number
           opera_id: string
           titolo_episodio?: string | null
+          titolo_episodio_originale?: string | null
         }
         Update: {
           codice_isan?: string | null
@@ -686,6 +726,7 @@ export type Database = {
           numero_stagione?: number
           opera_id?: string
           titolo_episodio?: string | null
+          titolo_episodio_originale?: string | null
         }
         Relationships: [
           {
@@ -1442,6 +1483,10 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["ruolo_utente"]
       }
+      apply_artisti_contatti_import: {
+        Args: { p_patches: Json }
+        Returns: Json
+      }
       replace_cast_esterno: {
         Args: { p_opera_id: string; p_rows: Json; p_episodio_id?: string | null }
         Returns: undefined
@@ -1458,6 +1503,7 @@ export type Database = {
           numero_stagione: number | null
           numero_episodio: number | null
           titolo_episodio: string | null
+          titolo_episodio_originale: string | null
           nome: string
           personaggio: string | null
           primarieta: string

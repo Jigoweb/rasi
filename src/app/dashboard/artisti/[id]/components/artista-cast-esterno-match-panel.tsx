@@ -139,6 +139,7 @@ export function ArtistaCastEsternoMatchPanel({
                         numero_stagione: row.numero_stagione,
                         numero_episodio: row.numero_episodio,
                         titolo_episodio: row.titolo_episodio,
+                        titolo_episodio_originale: row.titolo_episodio_originale,
                       })
                     : row.opera_tipo === 'serie_tv' ? 'Tutta la serie' : null}
                   {row.personaggio ? ` · ${row.personaggio}` : ''}

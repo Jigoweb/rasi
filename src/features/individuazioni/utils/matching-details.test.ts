@@ -21,6 +21,7 @@ describe('matching-details', () => {
       episodioStagione: 2,
       episodioNumero: 8,
       episodioTitolo: 'Chapter Eight: The Mind Flayer',
+      episodioTitoloOriginale: 'Chapter Eight: The Mind Flayer',
       dettagliMatching: {
         titolo: {
           score: 45,
@@ -48,6 +49,8 @@ describe('matching-details', () => {
     expect(context.alerts.some(alert => alert.title === 'In coda di revisione')).toBe(true)
     expect(context.transmission.find(fact => fact.label === 'Titolo')?.value).toBe('Stranger Things')
     expect(context.catalog.find(fact => fact.label === 'Artista')?.value).toBe('Mario Rossi')
+    expect(context.catalog.find(fact => fact.label === 'Titolo originale episodio')?.value)
+      .toBe('Chapter Eight: The Mind Flayer')
     expect(context.signals.some(signal => signal.label === 'Titolo')).toBe(true)
     expect(context.scoreSummary).toEqual({
       total: '66%',
@@ -73,5 +76,24 @@ describe('matching-details', () => {
 
     expect(context.alerts.some(alert => alert.title === 'Episodio non trovato in catalogo')).toBe(true)
     expect(context.signals.some(signal => signal.summary.includes('Episodio non risolto'))).toBe(true)
+  })
+
+  it('mostra titolo italiano e originale di catalogo nel segnale episodio', () => {
+    const context = buildMatchingReviewContext({
+      dettagliMatching: {
+        episodio: {
+          score: 80,
+          prog_stagione: 1,
+          prog_episodio: 2,
+          prog_titolo_ep: 'Il quinto oboe',
+          prog_titolo_ep_originale: 'The Fifth Oboe',
+          episodio_titolo: 'Il quinto oboe',
+          episodio_titolo_originale: 'The Fifth Oboe',
+        },
+        totale: { episodio_applicato: true, is_serie: true, has_episode_data: true },
+      },
+    })
+    const signal = context.signals.find(item => item.key === 'episodio')
+    expect(signal?.detail).toBe('Catalogo: Il quinto oboe / The Fifth Oboe · Originale programmazione: The Fifth Oboe')
   })
 })

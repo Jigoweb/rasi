@@ -91,6 +91,13 @@ describe('groupCastByEpisodio', () => {
     )
     expect(groups.map((group) => group.episodio?.id ?? null)).toEqual([null, 'e1', 'e2'])
     expect(formatEpisodioLabel(groups[1].episodio)).toBe('S1E1 – Pilota')
+    expect(formatEpisodioLabel({
+      id: 'e9',
+      numero_stagione: 1,
+      numero_episodio: 9,
+      titolo_episodio: null,
+      titolo_episodio_originale: 'Pilot',
+    })).toBe('S1E9 – Pilot')
     expect(formatEpisodioLabel(null)).toBe('Tutta la serie')
   })
 })

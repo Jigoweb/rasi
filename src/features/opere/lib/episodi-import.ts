@@ -7,10 +7,19 @@ import { readTabularMatrix, type TabularMatrixErrorCode } from '@/shared/lib/tab
 export const EPISODI_IMPORT_HEADERS = [
   'Stagione',
   'Episodio',
-  'Titolo',
+  'Titolo italiano',
+  'Titolo originale',
   'Durata (minuti)',
   'Data prima messa in onda',
 ] as const
+
+const LEGACY_TITOLO = 'Titolo'
+const BASE_HEADERS = ['Stagione', 'Episodio', 'Durata (minuti)', 'Data prima messa in onda'] as const
+
+type TitleColumns = {
+  italiano: 'Titolo italiano' | 'Titolo'
+  originale: 'Titolo originale' | null
+}
 
 export const EPISODI_IMPORT_MAX_BYTES = 5 * 1024 * 1024
 
@@ -20,12 +29,13 @@ const DURATA = 'Durata non valida: inserire i minuti come numero intero maggiore
 const DATA = 'Data prima messa in onda non valida: usare gg/mm/aaaa oppure una data Excel'
 const RIGA_VUOTA = 'Riga vuota'
 
-const DRAFT_FIELDS = ['stagione', 'episodio', 'titolo', 'durataMinuti', 'dataPrimaMessaInOnda'] as const
+const DRAFT_FIELDS = ['stagione', 'episodio', 'titolo', 'titoloOriginale', 'durataMinuti', 'dataPrimaMessaInOnda'] as const
 
 export type EpisodioTemplateSource = {
   numero_stagione: number
   numero_episodio: number
   titolo_episodio: string | null
+  titolo_episodio_originale?: string | null
   durata_minuti: number | null
   data_prima_messa_in_onda: string | null
 }
@@ -34,6 +44,7 @@ export type EpisodeDraft = {
   stagione: string
   episodio: string
   titolo: string
+  titoloOriginale: string
   durataMinuti: string
   dataPrimaMessaInOnda: string
 }
@@ -45,6 +56,7 @@ export type ClassifiedEpisodeRow = {
   stagione: number | null
   episodio: number | null
   titolo: string | null
+  titoloOriginale: string | null
   durataMinuti: number | null
   dataPrimaMessaInOnda: string | null
   draft: EpisodeDraft
@@ -68,6 +80,7 @@ export type EpisodeInsert = {
   numero_stagione: number
   numero_episodio: number
   titolo_episodio: string | null
+  titolo_episodio_originale: string | null
   durata_minuti: number | null
   data_prima_messa_in_onda: string | null
 }
@@ -135,20 +148,22 @@ export function buildEpisodiTemplateXlsx(episodes: EpisodioTemplateSource[]): Ui
     episode.numero_stagione,
     episode.numero_episodio,
     episode.titolo_episodio ?? '',
+    episode.titolo_episodio_originale ?? '',
     episode.durata_minuti ?? '',
     episode.data_prima_messa_in_onda ? isoToItalian(episode.data_prima_messa_in_onda) : '',
   ])
   const sheet = XLSX.utils.aoa_to_sheet([[...EPISODI_IMPORT_HEADERS], ...rows])
+  const dateColumn = EPISODI_IMPORT_HEADERS.indexOf('Data prima messa in onda')
   sorted.forEach((episode, index) => {
     if (!episode.data_prima_messa_in_onda) return
-    const ref = XLSX.utils.encode_cell({ r: index + 1, c: 4 })
+    const ref = XLSX.utils.encode_cell({ r: index + 1, c: dateColumn })
     sheet[ref] = {
       t: 'n',
       v: isoToExcelSerial(episode.data_prima_messa_in_onda),
       z: 'dd/mm/yyyy',
     }
   })
-  sheet['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 40 }, { wch: 18 }, { wch: 28 }]
+  sheet['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 36 }, { wch: 36 }, { wch: 18 }, { wch: 28 }]
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, 'Episodi')
   const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
@@ -164,7 +179,8 @@ export function buildEpisodiTemplateCsv(episodes: EpisodioTemplateSource[]): str
     sorted.map((episode) => ({
       Stagione: episode.numero_stagione,
       Episodio: episode.numero_episodio,
-      Titolo: episode.titolo_episodio ?? '',
+      'Titolo italiano': episode.titolo_episodio ?? '',
+      'Titolo originale': episode.titolo_episodio_originale ?? '',
       'Durata (minuti)': episode.durata_minuti ?? '',
       'Data prima messa in onda': episode.data_prima_messa_in_onda
         ? isoToItalian(episode.data_prima_messa_in_onda)
@@ -203,6 +219,9 @@ export function classifyEpisodiMatrix(
   if (!headerCheck.ok) return headerCheck
 
   const column = new Map(headers.map((header, index) => [header, index]))
+  const originaleIndex = headerCheck.titles.originale
+    ? column.get(headerCheck.titles.originale) ?? -1
+    : -1
   const cells: EpisodeCell[] = []
   for (let index = 1; index < matrix.length; index += 1) {
     const source = matrix[index] ?? []
@@ -210,11 +229,12 @@ export function classifyEpisodiMatrix(
       rowNumber: index + 1,
       stagione: source[column.get('Stagione') ?? -1],
       episodio: source[column.get('Episodio') ?? -1],
-      titolo: source[column.get('Titolo') ?? -1],
+      titolo: source[column.get(headerCheck.titles.italiano) ?? -1],
+      titoloOriginale: originaleIndex >= 0 ? source[originaleIndex] : null,
       durata: source[column.get('Durata (minuti)') ?? -1],
       data: source[column.get('Data prima messa in onda') ?? -1],
     }
-    if ([cell.stagione, cell.episodio, cell.titolo, cell.durata, cell.data].every(cellIsEmpty)) continue
+    if ([cell.stagione, cell.episodio, cell.titolo, cell.titoloOriginale, cell.durata, cell.data].every(cellIsEmpty)) continue
     cells.push(cell)
   }
   return classifyEpisodeCells(cells, existing, false)
@@ -232,6 +252,7 @@ export function revalidateEpisodeDrafts(
       stagione: row.draft.stagione,
       episodio: row.draft.episodio,
       titolo: row.draft.titolo,
+      titoloOriginale: row.draft.titoloOriginale,
       durata: row.draft.durataMinuti,
       data: row.draft.dataPrimaMessaInOnda,
       draft: row.draft,
@@ -340,6 +361,7 @@ type EpisodeCell = {
   stagione: unknown
   episodio: unknown
   titolo: unknown
+  titoloOriginale: unknown
   durata: unknown
   data: unknown
   draft?: EpisodeDraft
@@ -356,21 +378,25 @@ function classifyEpisodeCells(
   const rows: ClassifiedEpisodeRow[] = []
 
   for (const raw of cells) {
-    const empty = [raw.stagione, raw.episodio, raw.titolo, raw.durata, raw.data].every(cellIsEmpty)
+    const empty = [raw.stagione, raw.episodio, raw.titolo, raw.titoloOriginale, raw.durata, raw.data].every(cellIsEmpty)
     if (empty && !keepEmpty) continue
 
     const stagione = empty ? null : readPositiveInt(raw.stagione)
     const episodio = empty ? null : readPositiveInt(raw.episodio)
     const titolo = empty ? null : readTitle(raw.titolo)
+    const titoloOriginale = empty ? null : readTitle(raw.titoloOriginale)
     const durata = empty ? null : readDuration(raw.durata)
     const data = empty ? null : readDate(raw.data)
-    const draft = raw.draft ?? {
-      stagione: displayInt(raw.stagione, stagione),
-      episodio: displayInt(raw.episodio, episodio),
-      titolo: titolo ?? rawCellText(raw.titolo),
-      durataMinuti: displayInt(raw.durata, durata),
-      dataPrimaMessaInOnda: displayDate(raw.data, data),
-    }
+    const draft = raw.draft
+      ? { ...emptyDraft(), ...raw.draft, titoloOriginale: raw.draft.titoloOriginale ?? '' }
+      : {
+          stagione: displayInt(raw.stagione, stagione),
+          episodio: displayInt(raw.episodio, episodio),
+          titolo: titolo ?? rawCellText(raw.titolo),
+          titoloOriginale: titoloOriginale ?? rawCellText(raw.titoloOriginale),
+          durataMinuti: displayInt(raw.durata, durata),
+          dataPrimaMessaInOnda: displayDate(raw.data, data),
+        }
 
     if (empty) {
       rows.push({
@@ -380,6 +406,7 @@ function classifyEpisodeCells(
         stagione: null,
         episodio: null,
         titolo: null,
+        titoloOriginale: null,
         durataMinuti: null,
         dataPrimaMessaInOnda: null,
         draft,
@@ -423,6 +450,7 @@ function classifyEpisodeCells(
       stagione: parsedSeason,
       episodio: parsedEpisode,
       titolo,
+      titoloOriginale,
       durataMinuti: typeof durata === 'number' ? durata : null,
       dataPrimaMessaInOnda: typeof data === 'string' ? data : null,
       draft,
@@ -441,7 +469,7 @@ function withDefaultInclusion(rows: ClassifiedEpisodeRow[]): ReviewedEpisodeRow[
 }
 
 function emptyDraft(): EpisodeDraft {
-  return { stagione: '', episodio: '', titolo: '', durataMinuti: '', dataPrimaMessaInOnda: '' }
+  return { stagione: '', episodio: '', titolo: '', titoloOriginale: '', durataMinuti: '', dataPrimaMessaInOnda: '' }
 }
 
 async function prepareOpera(
@@ -475,6 +503,7 @@ async function insertReviewedRows(
       numero_stagione: row.stagione,
       numero_episodio: row.episodio,
       titolo_episodio: row.titolo,
+      titolo_episodio_originale: row.titoloOriginale,
       durata_minuti: row.durataMinuti,
       data_prima_messa_in_onda: row.dataPrimaMessaInOnda,
     })
@@ -546,19 +575,50 @@ function headerCells(row: unknown[]): string[] {
   return cells
 }
 
-function validateHeaders(headers: string[]): { ok: true } | { ok: false; error: string } {
-  const expected = [...EPISODI_IMPORT_HEADERS]
-  const missing = expected.filter((header) => !headers.includes(header))
-  const unexpected = headers.filter((header) => !expected.includes(header as (typeof expected)[number]))
+function validateHeaders(headers: string[]): { ok: true; titles: TitleColumns } | { ok: false; error: string } {
+  const titles = resolveTitleColumns(headers)
+  if (!titles.ok) return titles
+  const allowed = new Set<string>([
+    ...BASE_HEADERS,
+    titles.titles.italiano,
+    ...(titles.titles.originale ? [titles.titles.originale] : []),
+  ])
+  const missing = BASE_HEADERS.filter((header) => !headers.includes(header))
+  const unexpected = headers.filter((header) => header && !allowed.has(header))
   const duplicates = headers.filter((header, index) => header && headers.indexOf(header) !== index)
-  if (missing.length === 0 && unexpected.length === 0 && duplicates.length === 0) return { ok: true }
+  if (missing.length === 0 && unexpected.length === 0 && duplicates.length === 0) return titles
+  return { ok: false, error: headerError(headers) }
+}
+
+function resolveTitleColumns(headers: string[]): { ok: true; titles: TitleColumns } | { ok: false; error: string } {
+  const hasItalian = headers.includes('Titolo italiano')
+  const hasLegacy = headers.includes(LEGACY_TITOLO)
+  const hasOriginal = headers.includes('Titolo originale')
+  if (hasItalian && hasLegacy) return { ok: false, error: headerError(headers) }
+  if (hasItalian) {
+    if (!hasOriginal) return { ok: false, error: headerError(headers) }
+    return { ok: true, titles: { italiano: 'Titolo italiano', originale: 'Titolo originale' } }
+  }
+  if (hasLegacy) {
+    return {
+      ok: true,
+      titles: { italiano: LEGACY_TITOLO, originale: hasOriginal ? 'Titolo originale' : null },
+    }
+  }
   return { ok: false, error: headerError(headers) }
 }
 
 function headerError(headers: string[]): string {
   const expected = [...EPISODI_IMPORT_HEADERS]
-  const missing = expected.filter((header) => !headers.includes(header))
-  const unexpected = headers.filter((header) => header && !expected.includes(header as (typeof expected)[number]))
+  const allowed = new Set<string>([...expected, LEGACY_TITOLO])
+  const missingBase = BASE_HEADERS.filter((header) => !headers.includes(header))
+  const missingTitles = headers.includes('Titolo italiano') || headers.includes(LEGACY_TITOLO)
+    ? headers.includes('Titolo italiano') && !headers.includes('Titolo originale')
+      ? ['Titolo originale']
+      : []
+    : ['Titolo italiano', 'Titolo originale']
+  const missing = [...missingBase, ...missingTitles]
+  const unexpected = headers.filter((header) => header && !allowed.has(header) && header !== 'Titolo originale')
   const parts = [`Il file non ha le colonne attese. Colonne richieste: ${expected.join(', ')}.`]
   if (missing.length > 0) parts.push(`Mancano: ${missing.join(', ')}.`)
   if (unexpected.length > 0) parts.push(`Non previste: ${unexpected.join(', ')}.`)

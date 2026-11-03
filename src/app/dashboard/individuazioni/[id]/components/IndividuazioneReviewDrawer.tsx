@@ -187,6 +187,7 @@ export default function IndividuazioneReviewDrawer({
       episodioStagione: detail?.episodio?.numero_stagione,
       episodioNumero: detail?.episodio?.numero_episodio,
       episodioTitolo: detail?.episodio?.titolo_episodio,
+      episodioTitoloOriginale: detail?.episodio?.titolo_episodio_originale,
       dettagliMatching: individuazione.dettagli_matching as Record<string, unknown> | undefined,
     })
   }, [detail, individuazione])
