@@ -298,7 +298,7 @@ describe('classifyContattiImport', () => {
   })
 
   it('does not write an invalid partita IVA and conflicts when a valid one differs', () => {
-    const current = artist({ partita_iva: 12345678903 })
+    const current = artist({ partita_iva: '12345678903' })
     const invalid = classify([current], [edit({ values: { partita_iva: '0000' } })])
     expect(field(invalid[0], 'partita_iva').stato).toBe('vuoto')
     expect(buildArtistPatch(current, invalid[0])).toBeNull()
@@ -313,6 +313,19 @@ describe('classifyContattiImport', () => {
       incoming: '11111111115',
     })
     expect(buildArtistPatch(current, conflict[0])?.partita_iva).toBeUndefined()
+  })
+
+  it('keeps a leading zero and strips an IT prefix from the partita IVA', () => {
+    const piva = '01234567897'
+    const current = artist({ partita_iva: piva })
+    const same = classify([current], [edit({ values: { partita_iva: 'IT01234567897' } })])
+    expect(field(same[0], 'partita_iva').stato).toBe('uguale')
+    expect(buildArtistPatch(current, same[0])).toBeNull()
+
+    const empty = artist()
+    const fill = classify([empty], [edit({ values: { partita_iva: 'it 01234567897' } })])
+    expect(field(fill[0], 'partita_iva')).toMatchObject({ stato: 'compilare', incoming: piva })
+    expect(buildArtistPatch(empty, fill[0])?.partita_iva).toBe(piva)
   })
 
   it('is idempotent: applying the same file again changes nothing', () => {

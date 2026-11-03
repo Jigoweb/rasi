@@ -102,7 +102,7 @@ export type ContattiArtist = {
   nome: string
   cognome: string
   codice_fiscale: string | null
-  partita_iva: number | string | null
+  partita_iva: string | null
   contatti: unknown
   indirizzo: unknown
   riservati?: {
@@ -180,7 +180,7 @@ export type ArtistPatch = {
   contatti?: Record<string, unknown>
   indirizzo?: Record<string, unknown>
   codice_fiscale?: string
-  partita_iva?: number
+  partita_iva?: string
   riservati?: ContattiReserved
   campiCompilati: ContattiFieldKey[]
   conflittiSostituiti: ContattiFieldKey[]
@@ -260,7 +260,7 @@ function pivaChecksum(digits: string): boolean {
   return (10 - (sum % 10)) % 10 === Number(digits[10])
 }
 
-/** Partita IVA di 11 cifre, con eventuale prefisso IT. Segnaposto → null. */
+/** Partita IVA di 11 cifre, con eventuale prefisso IT. Lo zero iniziale resta. Segnaposto → null. */
 export function normalizePartitaIva(value: string | null | undefined): string | null {
   const compact = (value ?? '').trim().toUpperCase().replace(/[\s.-]/g, '')
   const digits = compact.startsWith('IT') ? compact.slice(2) : compact
@@ -268,19 +268,8 @@ export function normalizePartitaIva(value: string | null | undefined): string | 
   return digits
 }
 
-function readPartitaIva(value: number | string | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return Math.trunc(value)
-  if (typeof value === 'string' && /^\d+$/.test(value.trim())) {
-    const parsed = Number(value.trim())
-    return parsed > 0 ? parsed : null
-  }
-  return null
-}
-
-function formatPartitaIva(value: number | null): string {
-  if (value == null) return ''
-  const digits = String(value)
-  return digits.length < 11 ? digits.padStart(11, '0') : digits
+function readPartitaIva(value: string | null | undefined): string | null {
+  return normalizePartitaIva(value)
 }
 
 function artistLabel(artist: ContattiArtist): string {
@@ -356,8 +345,8 @@ function buildFields(artist: ContattiArtist, values: ContattiValues, decisions: 
 
   let pivaStato: ContattiFieldStato = 'vuoto'
   if (pivaIncoming) {
-    if (pivaCurrent == null) pivaStato = 'compilare'
-    else if (pivaCurrent === Number(pivaIncoming)) pivaStato = 'uguale'
+    if (!pivaCurrent) pivaStato = 'compilare'
+    else if (pivaCurrent === pivaIncoming) pivaStato = 'uguale'
     else pivaStato = 'conflitto'
   }
 
@@ -378,7 +367,7 @@ function buildFields(artist: ContattiArtist, values: ContattiValues, decisions: 
     fieldView(
       'partita_iva',
       pivaIncoming ?? values.partita_iva,
-      formatPartitaIva(pivaCurrent),
+      pivaCurrent ?? '',
       pivaStato,
       decisionFor(decisions, 'partita_iva'),
     ),
@@ -629,7 +618,7 @@ export function buildArtistPatch(artist: ContattiArtist, row: ContattiImportRow)
   }
   if (writes.has('partita_iva')) {
     const piva = normalizePartitaIva(writes.get('partita_iva'))
-    if (piva) patch.partita_iva = Number(piva)
+    if (piva) patch.partita_iva = piva
   }
 
   const reservedKeys = ['regime', 'tassazione', 'dettagli_regime'] as const

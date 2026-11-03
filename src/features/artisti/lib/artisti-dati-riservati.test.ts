@@ -7,6 +7,19 @@ function read(relativePath: string): string {
   return fs.readFileSync(path.join(root, relativePath), 'utf8')
 }
 
+describe('artisti.partita_iva text', () => {
+  const migration = read('supabase/migrations/20261103092850_artisti_partita_iva_text.sql')
+
+  it('converts bigint to text and pads only short numeric values', () => {
+    expect(migration).toMatch(/ALTER COLUMN partita_iva TYPE text/i)
+    expect(migration).toMatch(/char_length\(partita_iva::text\) < 11/)
+    expect(migration).toMatch(/lpad\(partita_iva::text, 11, '0'\)/)
+    expect(migration).toMatch(/WHEN partita_iva IS NULL THEN NULL/)
+    expect(migration).not.toMatch(/::bigint/)
+    expect(migration).toMatch(/v_patch->>'partita_iva'/)
+  })
+})
+
 describe('artisti_dati_riservati visibility', () => {
   const migration = read('supabase/migrations/20261103083959_artisti_dati_riservati_regime.sql')
 

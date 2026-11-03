@@ -90,7 +90,7 @@ const artistaSchema = z.object({
   codici_esterni: z.record(z.any()).optional(),
   ragione_sociale: z.string().optional().or(z.literal('')),
   forma_giuridica: z.string().optional().or(z.literal('')),
-  partita_iva: z.string().optional().or(z.literal('')), // bigint come stringa
+  partita_iva: z.string().optional().or(z.literal('')),
   codice_paese: z.array(z.string()).optional(),
   componente_stabile_gruppo_orchestra: z.string().optional().or(z.literal('')),
   
@@ -307,7 +307,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codici_esterni: data.codici_esterni || {},
       ragione_sociale: data.ragione_sociale || null,
       forma_giuridica: data.forma_giuridica || null,
-      partita_iva: data.partita_iva ? Number(data.partita_iva) : null,
+      partita_iva: data.partita_iva?.trim() ? data.partita_iva.trim() : null,
       codice_paese: data.codice_paese && data.codice_paese.length > 0 ? data.codice_paese.join('/') : null,
       componente_stabile_gruppo_orchestra: data.componente_stabile_gruppo_orchestra || null,
       diritti_attivi: (data.diritti_attivi && data.diritti_attivi.length > 0) ? data.diritti_attivi : null,

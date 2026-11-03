@@ -43,7 +43,7 @@ type ArtistaRecord = {
   diritti_attivi?: string[] | null
   ragione_sociale?: string | null
   forma_giuridica?: string | null
-  partita_iva?: number | string | null
+  partita_iva?: string | null
   contatti?: unknown
   indirizzo?: unknown
 }

@@ -23,7 +23,7 @@ type ArtistRow = {
   nome: string
   cognome: string
   codice_fiscale: string | null
-  partita_iva: number | null
+  partita_iva: string | null
   contatti: Json | null
   indirizzo: Json | null
 }

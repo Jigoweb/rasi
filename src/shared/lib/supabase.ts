@@ -46,7 +46,7 @@ export type Database = {
           documento_data_scadenza: string | null
           nome: string
           nome_arte: string | null
-          partita_iva: number | null
+          partita_iva: string | null
           ragione_sociale: string | null
           search_vector: unknown
           stato: Database["public"]["Enums"]["stato_iscrizione"] | null
@@ -83,7 +83,7 @@ export type Database = {
           documento_data_scadenza?: string | null
           nome: string
           nome_arte?: string | null
-          partita_iva?: number | null
+          partita_iva?: string | null
           ragione_sociale?: string | null
           search_vector?: unknown
           stato?: Database["public"]["Enums"]["stato_iscrizione"] | null
@@ -120,7 +120,7 @@ export type Database = {
           documento_data_scadenza?: string | null
           nome?: string
           nome_arte?: string | null
-          partita_iva?: number | null
+          partita_iva?: string | null
           ragione_sociale?: string | null
           search_vector?: unknown
           stato?: Database["public"]["Enums"]["stato_iscrizione"] | null
