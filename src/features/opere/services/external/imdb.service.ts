@@ -1,4 +1,7 @@
 import { fetchJson } from '@/shared/lib/http'
+import { formatReleaseDateForDb } from '@/features/opere/lib/release-date'
+
+export { formatReleaseDateForDb }
 
 export async function searchTitles(term: string, year?: number | string, type?: string, includeDirectors = false) {
   const params = new URLSearchParams()
@@ -61,6 +64,20 @@ export async function getTitleCredits(id: string) {
   return { ok, status, error: data?.error, message: data?.message, result: data?.result }
 }
 
+export type OperaTipoFromImdb = 'film' | 'serie_tv' | 'animazione'
+
+/** Map OMDb/imdbapi type strings to DB `opere.tipo`. Unknown / episode → null (do not invent). */
+export function mapImdbTypeToOperaTipo(type?: string | null): OperaTipoFromImdb | null {
+  const t = (type || '').trim().toLowerCase()
+  if (!t || t === 'n/a') return null
+  if (t.includes('episode')) return null
+  if (t.includes('movie') || t === 'film') return 'film'
+  if (t === 'tvseries' || t === 'tvminiseries' || t === 'serie_tv' || t === 'serietv' || t === 'series') return 'serie_tv'
+  if (t.includes('series')) return 'serie_tv'
+  if (t.includes('animation') || t.includes('cartoon') || t.includes('documentary')) return 'animazione'
+  return null
+}
+
 export function mapImdbToOpera(imdb: {
   title: string
   originalTitle: string | null
@@ -72,7 +89,7 @@ export function mapImdbToOpera(imdb: {
   return {
     titolo: imdb.title,
     titolo_originale: imdb.originalTitle || null,
-    tipo: imdb.type || 'film',
+    tipo: mapImdbTypeToOperaTipo(imdb.type),
     anno_produzione: imdb.year ?? null,
     anno_produzione_fine: imdb.endYear ?? null,
     imdb_tconst: imdb.id,

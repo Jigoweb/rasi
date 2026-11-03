@@ -10,6 +10,10 @@
 //    actors only, no character names, no person ids.
 //  - No per-episode runtime/plot in the season listing.
 
+import { formatReleaseDateForDb, type ReleaseDateParts } from '@/features/opere/lib/release-date'
+
+export { formatReleaseDateForDb, type ReleaseDateParts }
+
 const OMDB_URL = process.env.OMDB_API_URL || 'https://www.omdbapi.com'
 
 export class OmdbConfigError extends Error {
@@ -99,13 +103,24 @@ export function parseRating(rating?: string | null): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-/** ISO "2008-01-20" -> { year, month, day }; blank -> null. */
-export function parseReleased(released?: string | null): { year: number | null; month: number | null; day: number | null } | null {
+const OMDB_MONTHS: Record<string, number> = {
+  jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+  jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+}
+
+/** ISO "2008-01-20" or OMDb "20 Mar 2008" -> full parts; blank / year-only -> null.
+ *  Year-only is rejected so callers cannot invent month/day later. */
+export function parseReleased(released?: string | null): ReleaseDateParts | null {
   if (isBlank(released)) return null
-  const m = String(released).match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (m) return { year: +m[1], month: +m[2], day: +m[3] }
-  const y = parseYear(released)
-  return y ? { year: y, month: null, day: null } : null
+  const iso = String(released).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (iso) return { year: +iso[1], month: +iso[2], day: +iso[3] }
+  const human = String(released).match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/)
+  if (human) {
+    const month = OMDB_MONTHS[human[2].toLowerCase()]
+    if (!month) return null
+    return { year: +human[3], month, day: +human[1] }
+  }
+  return null
 }
 
 /** Comma-separated OMDb people/genre string -> clean array. Strips trailing
@@ -257,7 +272,7 @@ export interface ImdbEpisode {
   episodeNumber: number
   runtimeMinutes: number | null
   plot: string | null
-  releaseDate: { year: number | null; month: number | null; day: number | null } | null
+  releaseDate: ReleaseDateParts | null
   rating: number | null
 }
 
