@@ -38,6 +38,8 @@ const EPISODE_FIELDS = [
   { key: 'episodio', label: 'Episodio' },
   { key: 'titolo', label: 'Titolo italiano' },
   { key: 'titoloOriginale', label: 'Titolo originale' },
+  { key: 'titoliAlternativi', label: 'Titoli alternativi' },
+  { key: 'imdbTconst', label: 'IMDb tconst' },
   { key: 'durataMinuti', label: 'Durata (minuti)' },
   { key: 'dataPrimaMessaInOnda', label: 'Data prima messa in onda' },
 ] as const
@@ -192,7 +194,7 @@ export function EpisodiImportActions({
 
   const closeDialog = (nextOpen: boolean) => {
     if (nextOpen) return
-    const imported = phase === 'summary' ? summary?.imported ?? 0 : 0
+    const changed = phase === 'summary' ? (summary?.imported ?? 0) + (summary?.updated ?? 0) : 0
     requestRef.current += 1
     setOpen(false)
     setLoadingMode(null)
@@ -202,7 +204,7 @@ export function EpisodiImportActions({
     setSummary(null)
     setError(null)
     if (inputRef.current) inputRef.current.value = ''
-    if (imported > 0) onImported()
+    if (changed > 0) onImported()
   }
 
   const changeValue = (rowNumber: number, key: string, value: string) => {
@@ -274,8 +276,8 @@ export function EpisodiImportActions({
             </DialogTitle>
             <DialogDescription>
               {phase === 'summary'
-                ? 'Sono stati importati solo gli episodi inclusi e ancora validi. Gli episodi già presenti non sono stati aggiornati.'
-                : 'Le righe segnalate sono evidenziate con il motivo. Puoi correggere stagione, episodio, titolo italiano, titolo originale, durata e data: la riga viene ricontrollata subito e puoi includerla o escluderla. Non viene scritto nulla prima della conferma.'}
+                ? 'Sono stati importati gli episodi nuovi e aggiornati quelli già presenti, solo se inclusi e ancora validi. Le celle vuote non hanno cancellato i valori esistenti.'
+                : 'Le righe segnalate sono evidenziate con il motivo. Puoi correggere stagione, episodio, titolo italiano, titolo originale, titoli alternativi, IMDb tconst, durata e data: la riga viene ricontrollata subito e puoi includerla o escluderla. Gli episodi già presenti possono essere aggiornati. Le celle vuote non cancellano i valori esistenti. Non viene scritto nulla prima della conferma.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -366,6 +368,8 @@ function reviewedFromPayload(row: ReviewedEpisodeRow | (Omit<ReviewedEpisodeRow,
     episodio: row.draft?.episodio ?? (row.episodio != null ? String(row.episodio) : ''),
     titolo: row.draft?.titolo ?? row.titolo ?? '',
     titoloOriginale: row.draft?.titoloOriginale ?? row.titoloOriginale ?? '',
+    titoliAlternativi: row.draft?.titoliAlternativi ?? aliasFromRow(row.aliasTitoli),
+    imdbTconst: row.draft?.imdbTconst ?? row.imdbTconst ?? '',
     durataMinuti: row.draft?.durataMinuti ?? (row.durataMinuti != null ? String(row.durataMinuti) : ''),
     dataPrimaMessaInOnda: row.draft?.dataPrimaMessaInOnda ?? italianDate(row.dataPrimaMessaInOnda),
   }
@@ -393,7 +397,7 @@ function previewLine(rows: ReviewedEpisodeRow[]): string {
 }
 
 function summaryLine(summary: EpisodiImportSummary): string {
-  return `${episodeCount(summary.imported)}, ${excludedCount(summary.excluded)}, ${skippedCount(summary.skipped)}.`
+  return `${episodeCount(summary.imported)}, ${updatedCount(summary.updated)}, ${excludedCount(summary.excluded)}, ${skippedCount(summary.skipped)}.`
 }
 
 function toImportCount(count: number): string {
@@ -410,6 +414,15 @@ function excludedCount(count: number): string {
 
 function episodeCount(count: number): string {
   return count === 1 ? '1 episodio importato' : `${count} episodi importati`
+}
+
+function updatedCount(count: number): string {
+  return count === 1 ? '1 aggiornato' : `${count} aggiornati`
+}
+
+function aliasFromRow(aliases: string[] | null | undefined): string {
+  if (!aliases || aliases.length === 0) return ''
+  return aliases.map((alias) => alias.trim()).filter(Boolean).join(', ')
 }
 
 function italianDate(iso: string | null): string {

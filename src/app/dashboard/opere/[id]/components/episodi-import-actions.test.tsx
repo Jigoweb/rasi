@@ -19,7 +19,7 @@ jest.mock('@/shared/lib/supabase-client', () => ({
 const preview = {
   ok: true,
   mode: 'preview',
-  summary: { total: 2, valid: 1, skipped: 1, excluded: 0, imported: 0 },
+  summary: { total: 2, valid: 1, skipped: 1, excluded: 0, imported: 0, updated: 0 },
   existingKeys: [{ numero_stagione: 1, numero_episodio: 1 }],
   rows: [
     {
@@ -39,6 +39,8 @@ const preview = {
       stagione: 1,
       episodio: 2,
       titolo: 'Nuovo',
+      aliasTitoli: ['Altro titolo'],
+      imdbTconst: 'tt7654321',
       durataMinuti: null,
       dataPrimaMessaInOnda: null,
     },
@@ -54,7 +56,7 @@ const preview = {
 const confirmed = {
   ...preview,
   mode: 'confirm',
-  summary: { total: 2, valid: 1, skipped: 1, excluded: 0, imported: 1 },
+  summary: { total: 2, valid: 1, skipped: 1, excluded: 0, imported: 1, updated: 0 },
 }
 
 function renderActions(onImported = jest.fn()) {
@@ -101,6 +103,12 @@ describe('EpisodiImportActions', () => {
     await user.upload(screen.getByLabelText('File episodi'), file)
 
     expect(await screen.findByText('Anteprima importazione episodi')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Titoli alternativi' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'IMDb tconst' })).toBeInTheDocument()
+    expect(screen.getByText(/Gli episodi già presenti possono essere aggiornati/)).toBeInTheDocument()
+    expect(screen.getByText(/Le celle vuote non cancellano i valori esistenti/)).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Titoli alternativi riga 3' })).toHaveValue('Altro titolo')
+    expect(screen.getByRole('textbox', { name: 'IMDb tconst riga 3' })).toHaveValue('tt7654321')
     expect(screen.getByText('1 episodio da importare, 1 riga ignorata su 2.')).toBeInTheDocument()
     expect(screen.getByText('Valida')).toBeInTheDocument()
     expect(screen.getByText('Ignorata')).toBeInTheDocument()
@@ -111,7 +119,8 @@ describe('EpisodiImportActions', () => {
     await user.click(screen.getByRole('button', { name: 'Conferma importazione' }))
 
     expect(await screen.findByText('Importazione completata')).toBeInTheDocument()
-    expect(screen.getByText('1 episodio importato, 0 righe escluse, 1 riga ignorata.')).toBeInTheDocument()
+    expect(screen.getByText('1 episodio importato, 0 aggiornati, 0 righe escluse, 1 riga ignorata.')).toBeInTheDocument()
+    expect(screen.getByText(/Le celle vuote non hanno cancellato i valori esistenti/)).toBeInTheDocument()
 
     const confirmCall = (global.fetch as jest.Mock).mock.calls[1]
     expect(String(confirmCall[0])).toContain('/api/opere/11111111-1111-4111-8111-111111111111/episodi/import')
@@ -124,7 +133,10 @@ describe('EpisodiImportActions', () => {
       rows: Array<{ rowNumber: number; included: boolean; draft: { episodio: string } }>
     }
     expect(sent.mode).toBe('confirm')
-    expect(sent.rows.find((row) => row.rowNumber === 3)).toMatchObject({ included: true, draft: { episodio: '2' } })
+    expect(sent.rows.find((row) => row.rowNumber === 3)).toMatchObject({
+      included: true,
+      draft: { episodio: '2', titoliAlternativi: 'Altro titolo', imdbTconst: 'tt7654321' },
+    })
     expect(sent.rows.find((row) => row.rowNumber === 2)?.included).toBe(false)
 
     await user.click(screen.getByRole('button', { name: 'Chiudi' }))
@@ -172,7 +184,7 @@ describe('EpisodiImportActions', () => {
     const duplicatePreview = {
       ok: true,
       mode: 'preview',
-      summary: { total: 2, valid: 1, skipped: 1, excluded: 0, imported: 0 },
+      summary: { total: 2, valid: 1, skipped: 1, excluded: 0, imported: 0, updated: 0 },
       existingKeys: [],
       rows: [
         {
@@ -222,5 +234,24 @@ describe('EpisodiImportActions', () => {
     await user.click(second)
     expect(screen.getByText('1 episodio da importare, 0 righe ignorate, 1 riga esclusa su 2.')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Includi riga 2' })).not.toBeChecked()
+  })
+
+  it('nel riepilogo conta gli episodi importati e quelli aggiornati', async () => {
+    useAuth.mockReturnValue({ isAdmin: true, isOperatore: false })
+    const user = userEvent.setup()
+    const { onImported } = renderActions()
+    ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, init: RequestInit) => ({
+      ok: true,
+      json: async () => (typeof init.body === 'string'
+        ? { ...confirmed, summary: { ...confirmed.summary, imported: 1, updated: 2 } }
+        : preview),
+    }))
+
+    await user.upload(screen.getByLabelText('File episodi'), new File(['stagione'], 'episodi.csv', { type: 'text/csv' }))
+    await user.click(await screen.findByRole('button', { name: 'Conferma importazione' }))
+
+    expect(await screen.findByText('1 episodio importato, 2 aggiornati, 0 righe escluse, 1 riga ignorata.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Chiudi' }))
+    await waitFor(() => expect(onImported).toHaveBeenCalledTimes(1))
   })
 })
