@@ -487,6 +487,39 @@ describe('template round-trip', () => {
       ruolo_id: null,
     })
   })
+
+  it('maps Attore comprimario to Comprimario, not Doppiatore comprimario (prod-like tipologies)', () => {
+    const prodRuoli = [
+      { id: '172b', nome: 'Doppiatore comprimario', attivo: true, categoria: 'recitazione' },
+      { id: 'fe7a', nome: 'Doppiatore primario', attivo: true, categoria: 'recitazione' },
+      { id: '9ca1', nome: 'Primario', attivo: true, categoria: 'recitazione' },
+      { id: 'cecd', nome: 'Comprimario', attivo: true, categoria: 'recitazione' },
+    ]
+    const result = classify(
+      [
+        row({ Nome: 'Flavio', Cognome: 'Bucci', Personaggio: 'Riccardo', Ruolo: 'Attore comprimario' }),
+        row({ Nome: 'Christian', Cognome: 'De Sica', Personaggio: 'Cesare', Ruolo: 'Attore primario' }),
+      ],
+      { ruoli: prodRuoli },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.rows[0]).toMatchObject({ status: 'valid', action: 'cast_esterno', ruoloId: 'cecd' })
+    expect(result.rows[1]).toMatchObject({ status: 'valid', action: 'cast_esterno', ruoloId: '9ca1' })
+    const inserts = buildCastImportInserts('opera-1', result.rows, 0)
+    expect(inserts.castEsterno[0]).toMatchObject({
+      nome: 'Flavio Bucci',
+      ruolo: 'attore',
+      primarieta: 'comprimario',
+      ruolo_id: 'cecd',
+    })
+    expect(inserts.castEsterno[1]).toMatchObject({
+      nome: 'Christian De Sica',
+      ruolo: 'attore',
+      primarieta: 'primario',
+      ruolo_id: '9ca1',
+    })
+  })
 })
 
 describe('buildCastImportInserts', () => {

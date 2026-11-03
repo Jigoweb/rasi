@@ -32,6 +32,31 @@ const AZIONE_STYLES: Record<AuditAzione, string> = {
 
 const ALL = 'all'
 
+function DiffValue({
+  value,
+  tone,
+}: {
+  value: string
+  tone: 'added' | 'removed' | 'modified' | 'muted'
+}) {
+  if (tone === 'muted' || value === '—') {
+    return <span className="text-muted-foreground">{value}</span>
+  }
+
+  const toneClass =
+    tone === 'added'
+      ? 'bg-emerald-100/80 text-emerald-900'
+      : tone === 'removed'
+        ? 'bg-red-100/80 text-red-900'
+        : 'bg-amber-100/80 text-amber-950'
+
+  return (
+    <span className={`inline rounded px-1 py-0.5 break-all ${toneClass}`}>
+      {value}
+    </span>
+  )
+}
+
 function RegistroAttivitaContent() {
   const { isAdmin, loading: authLoading } = useAuth()
   const searchParams = useSearchParams()
@@ -266,9 +291,31 @@ function RegistroAttivitaContent() {
                                   <tbody>
                                     {diff.map((row) => (
                                       <tr key={row.campo} className="align-top">
-                                        <td className="py-1 pr-3 font-medium">{formatCampo(row.campo)}</td>
-                                        <td className="py-1 pr-3 break-all text-muted-foreground">{row.prima}</td>
-                                        <td className="py-1 break-all">{row.dopo}</td>
+                                        <td className="py-1.5 pr-3 font-medium">{formatCampo(row.campo)}</td>
+                                        <td className="py-1.5 pr-3">
+                                          <DiffValue
+                                            value={row.prima}
+                                            tone={
+                                              row.kind === 'removed'
+                                                ? 'removed'
+                                                : row.kind === 'modified'
+                                                  ? 'modified'
+                                                  : 'muted'
+                                            }
+                                          />
+                                        </td>
+                                        <td className="py-1.5">
+                                          <DiffValue
+                                            value={row.dopo}
+                                            tone={
+                                              row.kind === 'added'
+                                                ? 'added'
+                                                : row.kind === 'modified'
+                                                  ? 'modified'
+                                                  : 'muted'
+                                            }
+                                          />
+                                        </td>
                                       </tr>
                                     ))}
                                   </tbody>

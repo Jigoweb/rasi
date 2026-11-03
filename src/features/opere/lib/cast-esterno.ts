@@ -90,6 +90,7 @@ export function suggestRuoloPerPrimarieta(
 ): string | null {
   if (ruoloCast === 'doppiatore') {
     // Solo ruoli di doppiaggio: un doppiatore non va proposto come protagonista.
+    // Anche se in anagrafica la categoria è errata (es. "Doppiatore *" in recitazione).
     const doppiaggio = ruoli.filter((ruolo) => ruolo.categoria === 'doppiaggio' || /doppi/i.test(ruolo.nome))
     const find = (pattern: RegExp, exclude?: RegExp) =>
       doppiaggio.find((ruolo) => pattern.test(ruolo.nome) && !(exclude && exclude.test(ruolo.nome)))?.id ?? null
@@ -97,8 +98,12 @@ export function suggestRuoloPerPrimarieta(
     return find(/comprimari|secondari/i)
   }
 
-  const recitazione = ruoli.filter((ruolo) => !ruolo.categoria || ruolo.categoria === 'recitazione')
-  const pool = recitazione.length > 0 ? recitazione : ruoli
+  // Attore: esclude i nomi di doppiaggio anche se la categoria in anagrafica è "recitazione"
+  // (in prod "Doppiatore comprimario" è in recitazione e, per ordine id, batteva "Comprimario").
+  const recitazione = ruoli.filter(
+    (ruolo) => (!ruolo.categoria || ruolo.categoria === 'recitazione') && !/doppi/i.test(ruolo.nome),
+  )
+  const pool = recitazione.length > 0 ? recitazione : ruoli.filter((ruolo) => !/doppi/i.test(ruolo.nome))
   const byName = (pattern: RegExp, exclude?: RegExp) =>
     pool.find((ruolo) => pattern.test(ruolo.nome) && !(exclude && exclude.test(ruolo.nome)))?.id ?? null
 

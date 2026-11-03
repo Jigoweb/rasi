@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll'
+import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle, Music } from 'lucide-react'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle, Music, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
@@ -29,13 +31,28 @@ import { notifyError, notifySuccess } from '@/shared/lib/toast'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
-/** Filtro per campo valorizzato/non valorizzato */
-type FieldFilter = {
-  field: 'titolo_originale' | 'regista' | 'imdb_tconst' | 'codice_isan' | 'codice_opera' | 'anno_produzione' | 'has_episodes'
-  hasValue: boolean
-}
+const PAGE_SIZE = 100
+
+type PresenceField =
+  | 'titolo_originale'
+  | 'regista'
+  | 'imdb_tconst'
+  | 'codice_isan'
+  | 'codice_opera'
+  | 'anno_produzione'
+  | 'has_episodes'
+
+type StatoValidazione = 'da_validare' | 'validato'
+
+/** Filtri unificati: tipo/stato a valore, oppure presenza campo. */
+type FieldFilter =
+  | { field: 'tipo'; value: TipoOpera }
+  | { field: 'stato_validazione'; value: StatoValidazione }
+  | { field: PresenceField; hasValue: boolean }
 
 const FIELD_LABELS: Record<string, string> = {
+  tipo: 'Tipo',
+  stato_validazione: 'Stato',
   titolo_originale: 'Titolo Originale',
   regista: 'Regia',
   imdb_tconst: 'IMDB tconst',
@@ -45,60 +62,208 @@ const FIELD_LABELS: Record<string, string> = {
   has_episodes: 'Episodi',
 }
 
-function FilterPopover({ onAdd }: { onAdd: (f: FieldFilter) => void }) {
-  const [open, setOpen] = useState(false)
-  const [field, setField] = useState<string>('')
-  const [hasValue, setHasValue] = useState<boolean>(true)
+const STATO_VALIDAZIONE_LABELS: Record<StatoValidazione, string> = {
+  da_validare: 'Da validare',
+  validato: 'Validato',
+}
 
-  const handleAdd = () => {
-    if (field) {
-      onAdd({ field: field as FieldFilter['field'], hasValue })
-      setOpen(false)
-      setField('')
-      setHasValue(true)
-    }
+function filterChipLabel(filter: FieldFilter): string {
+  if (filter.field === 'tipo') return `Tipo: ${TIPO_OPERA_LABELS[filter.value] ?? filter.value}`
+  if (filter.field === 'stato_validazione') return `Stato: ${STATO_VALIDAZIONE_LABELS[filter.value]}`
+  if (filter.field === 'has_episodes') return `Episodi: ${filter.hasValue ? 'Con episodi' : 'Senza episodi'}`
+  return `${FIELD_LABELS[filter.field]}: ${filter.hasValue ? 'Valorizzato' : 'Non valorizzato'}`
+}
+
+type FilterDimension = {
+  id: 'tipo' | 'stato_validazione' | PresenceField
+  label: string
+  hint: string
+  group: 'catalogo' | 'dati'
+}
+
+const FILTER_DIMENSIONS: FilterDimension[] = [
+  { id: 'tipo', label: 'Tipo', hint: 'Film, serie, animazione…', group: 'catalogo' },
+  { id: 'stato_validazione', label: 'Stato', hint: 'Da validare o validato', group: 'catalogo' },
+  { id: 'titolo_originale', label: 'Titolo originale', hint: 'Presente o assente', group: 'dati' },
+  { id: 'regista', label: 'Regia', hint: 'Presente o assente', group: 'dati' },
+  { id: 'imdb_tconst', label: 'IMDb', hint: 'Codice tconst', group: 'dati' },
+  { id: 'codice_isan', label: 'ISAN', hint: 'Codice ISAN', group: 'dati' },
+  { id: 'codice_opera', label: 'Codice opera', hint: 'Presente o assente', group: 'dati' },
+  { id: 'anno_produzione', label: 'Anno', hint: 'Presente o assente', group: 'dati' },
+  { id: 'has_episodes', label: 'Episodi', hint: 'Con o senza episodi', group: 'dati' },
+]
+
+type FilterOption = { filter: FieldFilter; label: string; description?: string }
+
+function optionsForDimension(id: FilterDimension['id']): FilterOption[] {
+  if (id === 'tipo') {
+    return (Object.keys(TIPO_OPERA_LABELS) as TipoOpera[]).map((value) => ({
+      filter: { field: 'tipo', value },
+      label: TIPO_OPERA_LABELS[value],
+    }))
+  }
+  if (id === 'stato_validazione') {
+    return (Object.keys(STATO_VALIDAZIONE_LABELS) as StatoValidazione[]).map((value) => ({
+      filter: { field: 'stato_validazione', value },
+      label: STATO_VALIDAZIONE_LABELS[value],
+      description: value === 'da_validare' ? 'Ancora da revisionare' : 'Scheda confermata',
+    }))
+  }
+  if (id === 'has_episodes') {
+    return [
+      { filter: { field: 'has_episodes', hasValue: true }, label: 'Con episodi' },
+      { filter: { field: 'has_episodes', hasValue: false }, label: 'Senza episodi' },
+    ]
+  }
+  return [
+    { filter: { field: id, hasValue: true }, label: 'Valorizzato', description: 'Campo compilato' },
+    { filter: { field: id, hasValue: false }, label: 'Non valorizzato', description: 'Campo vuoto o assente' },
+  ]
+}
+
+function isSameFilter(a: FieldFilter, b: FieldFilter): boolean {
+  if (a.field !== b.field) return false
+  if (a.field === 'tipo' && b.field === 'tipo') return a.value === b.value
+  if (a.field === 'stato_validazione' && b.field === 'stato_validazione') return a.value === b.value
+  if ('hasValue' in a && 'hasValue' in b) return a.hasValue === b.hasValue
+  return false
+}
+
+function FilterPopover({
+  activeFilters,
+  onAdd,
+}: {
+  activeFilters: FieldFilter[]
+  onAdd: (f: FieldFilter) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<'dimensions' | FilterDimension['id']>('dimensions')
+
+  const close = () => {
+    setOpen(false)
+    setStep('dimensions')
   }
 
+  const pick = (filter: FieldFilter) => {
+    onAdd(filter)
+    close()
+  }
+
+  const activeFor = (field: FieldFilter['field']) => activeFilters.find((f) => f.field === field)
+  const dimension = step === 'dimensions' ? null : FILTER_DIMENSIONS.find((item) => item.id === step) ?? null
+  const options = dimension ? optionsForDimension(dimension.id) : []
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setStep('dimensions')
+      }}
+    >
       <PopoverTrigger asChild>
         <Button variant="outline" className="w-full sm:w-auto">
           <Filter className="h-4 w-4 mr-2" />
           Aggiungi filtro
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72" align="end">
-        <div className="space-y-4">
-          <h4 className="font-medium text-sm">Filtra per campo</h4>
-          <Select value={field} onValueChange={setField}>
-            <SelectTrigger>
-              <SelectValue placeholder="Seleziona campo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="titolo_originale">Titolo Originale</SelectItem>
-              <SelectItem value="regista">Regia</SelectItem>
-              <SelectItem value="imdb_tconst">IMDB tconst</SelectItem>
-              <SelectItem value="codice_isan">Codice ISAN</SelectItem>
-              <SelectItem value="codice_opera">Codice Opera</SelectItem>
-              <SelectItem value="anno_produzione">Anno</SelectItem>
-              <SelectItem value="has_episodes">Episodi</SelectItem>
-            </SelectContent>
-          </Select>
-          {field ? (
-            <Select value={hasValue ? 'si' : 'no'} onValueChange={(v) => setHasValue(v === 'si')}>
-              <SelectTrigger>
-                <SelectValue placeholder="Stato" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="si">Valorizzato</SelectItem>
-                <SelectItem value="no">Non valorizzato</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : null}
-          <Button onClick={handleAdd} disabled={!field} className="w-full">
-            Aggiungi
-          </Button>
-        </div>
+      <PopoverContent className="w-80 p-0 overflow-hidden" align="end">
+        {step === 'dimensions' ? (
+          <div>
+            <div className="border-b px-3 py-2.5">
+              <p className="text-sm font-medium">Aggiungi filtro</p>
+              <p className="text-xs text-muted-foreground">Scegli un criterio, poi il valore</p>
+            </div>
+            <div className="max-h-80 overflow-y-auto py-1">
+              <p className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Catalogo
+              </p>
+              {FILTER_DIMENSIONS.filter((item) => item.group === 'catalogo').map((item) => {
+                const active = activeFor(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setStep(item.id)}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{item.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {active ? filterChipLabel(active).split(': ').slice(1).join(': ') : item.hint}
+                      </span>
+                    </span>
+                    {active ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : null}
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </button>
+                )
+              })}
+              <div className="my-1 border-t" />
+              <p className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Completezza dati
+              </p>
+              {FILTER_DIMENSIONS.filter((item) => item.group === 'dati').map((item) => {
+                const active = activeFor(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setStep(item.id)}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{item.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {active ? filterChipLabel(active).split(': ').slice(1).join(': ') : item.hint}
+                      </span>
+                    </span>
+                    {active ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : null}
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="flex items-center gap-1 border-b px-1.5 py-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => setStep('dimensions')}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Indietro
+              </Button>
+              <div className="min-w-0 flex-1 pr-2">
+                <p className="truncate text-sm font-medium">{dimension?.label}</p>
+              </div>
+            </div>
+            <div className="max-h-80 overflow-y-auto py-1">
+              {options.map((option) => {
+                const selected = activeFilters.some((f) => isSameFilter(f, option.filter))
+                return (
+                  <button
+                    key={`${option.filter.field}-${'value' in option.filter ? option.filter.value : option.filter.hasValue}`}
+                    type="button"
+                    onClick={() => pick(option.filter)}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{option.label}</span>
+                      {option.description ? (
+                        <span className="block text-xs text-muted-foreground">{option.description}</span>
+                      ) : null}
+                    </span>
+                    {selected ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /> : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   )
@@ -110,8 +275,9 @@ export default function OperePage() {
   const [opere, setOpere] = useState<Opera[]>([])
   const [loading, setLoading] = useState(true)
   const [isSearching, setIsSearching] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [typeFilter, setTypeFilter] = useState<string>('all')
   const [filters, setFilters] = useState<FieldFilter[]>([])
   const [incompleteMode, setIncompleteMode] = useState(
     () => searchParams?.get('incomplete') === '1'
@@ -134,10 +300,147 @@ export default function OperePage() {
   const [isDeleting, setIsDeleting] = useState(false)
 
   const { startExport } = useExportProcess()
+  const requestIdRef = useRef(0)
+  const opereLengthRef = useRef(0)
+
+  useEffect(() => {
+    opereLengthRef.current = opere.length
+  }, [opere.length])
+
+  const applyFiltersToQuery = useCallback((query: ReturnType<typeof supabase.from>) => {
+    let q = query
+    for (const f of filters) {
+      if (f.field === 'tipo') {
+        q = q.eq('tipo', f.value)
+        continue
+      }
+      if (f.field === 'stato_validazione') {
+        q = q.eq('stato_validazione', f.value)
+        continue
+      }
+      const hasValue = f.hasValue
+      switch (f.field) {
+        case 'titolo_originale':
+          if (hasValue) q = q.not('titolo_originale', 'is', null).neq('titolo_originale', '')
+          else q = q.or('titolo_originale.is.null,titolo_originale.eq.')
+          break
+        case 'regista':
+          if (hasValue) q = q.not('regista', 'is', null).neq('regista', '{}')
+          else q = q.or('regista.is.null,regista.eq.{}')
+          break
+        case 'imdb_tconst':
+          if (hasValue) q = q.not('imdb_tconst', 'is', null).neq('imdb_tconst', '')
+          else q = q.or('imdb_tconst.is.null,imdb_tconst.eq.')
+          break
+        case 'codice_isan':
+          if (hasValue) q = q.not('codice_isan', 'is', null).neq('codice_isan', '')
+          else q = q.or('codice_isan.is.null,codice_isan.eq.')
+          break
+        case 'codice_opera':
+          if (hasValue) q = q.not('codice_opera', 'is', null).neq('codice_opera', '')
+          else q = q.or('codice_opera.is.null,codice_opera.eq.')
+          break
+        case 'anno_produzione':
+          if (hasValue) q = q.not('anno_produzione', 'is', null)
+          else q = q.is('anno_produzione', null)
+          break
+        case 'has_episodes':
+          q = q.eq('has_episodes', hasValue)
+          break
+      }
+    }
+    return q
+  }, [filters])
+
+  const buildOpereQuery = useCallback((from: number, to: number) => {
+    let query = supabase
+      .from('opere')
+      .select('*')
+      .order('anno_produzione', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+
+    if (searchQuery.trim()) {
+      query = query.or(
+        `titolo.ilike.%${searchQuery.trim()}%,codice_opera.ilike.%${searchQuery.trim()}%,titolo_originale.ilike.%${searchQuery.trim()}%`,
+      )
+    }
+
+    query = applyFiltersToQuery(query)
+    if (incompleteMode) {
+      query = query.or(OPERE_INCOMPLETE_OR)
+    }
+    return query
+  }, [applyFiltersToQuery, incompleteMode, searchQuery])
+
+  const clearIncompleteMode = () => {
+    setIncompleteMode(false)
+    const params = new URLSearchParams(searchParams?.toString() ?? '')
+    params.delete('incomplete')
+    const qs = params.toString()
+    router.replace(qs ? `/dashboard/opere?${qs}` : '/dashboard/opere')
+  }
+
+  const fetchOpere = useCallback(async () => {
+    const requestId = ++requestIdRef.current
+    try {
+      setIsSearching(true)
+      setHasMore(true)
+      const isInitialLoad =
+        opereLengthRef.current === 0 &&
+        !searchQuery &&
+        filters.length === 0 &&
+        !incompleteMode
+      if (isInitialLoad) setLoading(true)
+
+      const { data, error } = await buildOpereQuery(0, PAGE_SIZE - 1)
+      if (requestId !== requestIdRef.current) return
+      if (error) throw error
+      setOpere(data || [])
+      setHasMore((data?.length ?? 0) === PAGE_SIZE)
+    } catch (error) {
+      if (requestId !== requestIdRef.current) return
+      console.error('Error fetching opere:', error)
+      notifyError('Impossibile caricare le opere', error)
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+        setIsSearching(false)
+        setLoadingMore(false)
+      }
+    }
+  }, [buildOpereQuery, filters.length, incompleteMode, searchQuery])
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || loading || isSearching) return
+    const requestId = requestIdRef.current
+    const from = opereLengthRef.current
+    setLoadingMore(true)
+    try {
+      const { data, error } = await buildOpereQuery(from, from + PAGE_SIZE - 1)
+      if (requestId !== requestIdRef.current) return
+      if (error) throw error
+      const rows = data || []
+      setOpere((prev) => [...prev, ...rows])
+      setHasMore(rows.length === PAGE_SIZE)
+    } catch (error) {
+      if (requestId !== requestIdRef.current) return
+      console.error('Error loading more opere:', error)
+      notifyError('Impossibile caricare altre opere', error)
+    } finally {
+      if (requestId === requestIdRef.current) setLoadingMore(false)
+    }
+  }, [buildOpereQuery, hasMore, isSearching, loading, loadingMore])
+
+  const loadMoreRef = useInfiniteScroll<HTMLDivElement>({
+    enabled: hasMore && !loading && opere.length > 0,
+    isLoading: loadingMore || isSearching,
+    onLoadMore: loadMore,
+  })
 
   useEffect(() => {
     fetchOpere()
-  }, [searchQuery, typeFilter, filters, incompleteMode])
+  }, [fetchOpere])
 
   useEffect(() => {
     if (searchParams?.get('incomplete') === '1') {
@@ -157,92 +460,6 @@ export default function OperePage() {
     }
   }, [searchParams, showForm])
 
-  const applyFiltersToQuery = (query: ReturnType<typeof supabase.from>) => {
-    let q = query
-    if (typeFilter !== 'all') {
-      q = q.eq('tipo', typeFilter as TipoOpera)
-    }
-    for (const f of filters) {
-      const hasValue = f.hasValue
-      switch (f.field) {
-        case 'titolo_originale':
-            if (hasValue) q = q.not('titolo_originale', 'is', null).neq('titolo_originale', '')
-            else q = q.or('titolo_originale.is.null,titolo_originale.eq.')
-            break
-          case 'regista':
-            if (hasValue) q = q.not('regista', 'is', null).neq('regista', '{}')
-            else q = q.or('regista.is.null,regista.eq.{}')
-            break
-          case 'imdb_tconst':
-            if (hasValue) q = q.not('imdb_tconst', 'is', null).neq('imdb_tconst', '')
-            else q = q.or('imdb_tconst.is.null,imdb_tconst.eq.')
-            break
-          case 'codice_isan':
-            if (hasValue) q = q.not('codice_isan', 'is', null).neq('codice_isan', '')
-            else q = q.or('codice_isan.is.null,codice_isan.eq.')
-            break
-          case 'codice_opera':
-            if (hasValue) q = q.not('codice_opera', 'is', null).neq('codice_opera', '')
-            else q = q.or('codice_opera.is.null,codice_opera.eq.')
-            break
-          case 'anno_produzione':
-            if (hasValue) q = q.not('anno_produzione', 'is', null)
-            else q = q.is('anno_produzione', null)
-            break
-        case 'has_episodes':
-          q = q.eq('has_episodes', hasValue)
-          break
-      }
-    }
-    return q
-  }
-
-  const clearIncompleteMode = () => {
-    setIncompleteMode(false)
-    const params = new URLSearchParams(searchParams?.toString() ?? '')
-    params.delete('incomplete')
-    const qs = params.toString()
-    router.replace(qs ? `/dashboard/opere?${qs}` : '/dashboard/opere')
-  }
-
-  const fetchOpere = async () => {
-    try {
-      setIsSearching(true)
-      const isInitialLoad =
-        opere.length === 0 &&
-        !searchQuery &&
-        typeFilter === 'all' &&
-        filters.length === 0 &&
-        !incompleteMode
-      if (isInitialLoad) setLoading(true)
-
-      let query = supabase
-        .from('opere')
-        .select('*')
-        .order('anno_produzione', { ascending: false })
-        .limit(100)
-
-      if (searchQuery.trim()) {
-        query = query.or(`titolo.ilike.%${searchQuery.trim()}%,codice_opera.ilike.%${searchQuery.trim()}%,titolo_originale.ilike.%${searchQuery.trim()}%`)
-      }
-
-      query = applyFiltersToQuery(query)
-      if (incompleteMode) {
-        query = query.or(OPERE_INCOMPLETE_OR)
-      }
-      const { data, error } = await query
-
-      if (error) throw error
-      setOpere(data || [])
-    } catch (error) {
-      console.error('Error fetching opere:', error)
-      notifyError('Impossibile caricare le opere', error)
-    } finally {
-      setLoading(false)
-      setIsSearching(false)
-    }
-  }
-
   const addFilter = (filter: FieldFilter) => {
     setFilters(prev => {
       const without = prev.filter(x => x.field !== filter.field)
@@ -254,7 +471,7 @@ export default function OperePage() {
     setFilters(prev => prev.filter(f => f.field !== field))
   }
 
-  const hasActiveFilters = searchQuery || typeFilter !== 'all' || filters.length > 0 || incompleteMode
+  const hasActiveFilters = Boolean(searchQuery || filters.length > 0 || incompleteMode)
 
   const getTypeBadge = (tipo: string) => {
     switch (tipo) {
@@ -668,25 +885,11 @@ export default function OperePage() {
                 placeholder="Cerca per titolo, titolo originale..."
               />
             </div>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Filtra per tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti i tipi</SelectItem>
-                <SelectItem value="film">Film</SelectItem>
-                <SelectItem value="serie_tv">Serie TV</SelectItem>
-                <SelectItem value="animazione">Animazione</SelectItem>
-                <SelectItem value="musicale">Opera musicale</SelectItem>
-              </SelectContent>
-            </Select>
-            <FilterPopover onAdd={addFilter} />
-            <Button 
-              variant="outline" 
+            <FilterPopover activeFilters={filters} onAdd={addFilter} />
+            <Button
+              variant="outline"
               onClick={() => {
                 setSearchQuery('')
-                setTypeFilter('all')
                 setFilters([])
                 if (incompleteMode) clearIncompleteMode()
               }}
@@ -699,59 +902,44 @@ export default function OperePage() {
           {hasActiveFilters && (
             <div className="mt-3 flex flex-wrap gap-2">
               {incompleteMode && (
-                <Button
-                  variant="outline"
-                  size="sm"
+                <button
+                  type="button"
                   onClick={clearIncompleteMode}
-                  className="h-8 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 text-xs font-medium text-amber-900 hover:bg-amber-100"
                 >
                   Incomplete (Data Health)
-                  <X className="h-3 w-3 ml-2" />
-                </Button>
+                  <X className="h-3 w-3 opacity-70" />
+                </button>
               )}
               {searchQuery && (
-                <Button variant="outline" size="sm" onClick={() => setSearchQuery('')} className="h-8">
-                  Ricerca: {searchQuery}
-                  <X className="h-3 w-3 ml-2" />
-                </Button>
-              )}
-              {typeFilter !== 'all' && (
-                <Button variant="outline" size="sm" onClick={() => setTypeFilter('all')} className="h-8">
-                  Tipo: {TIPO_OPERA_LABELS[typeFilter] ?? typeFilter}
-                  <X className="h-3 w-3 ml-2" />
-                </Button>
-              )}
-              {filters.map((f) => (
-                <Button
-                  key={f.field}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => removeFilter(f.field)}
-                  className="h-8"
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border bg-background px-3 text-xs hover:bg-accent"
                 >
-                  {FIELD_LABELS[f.field]}: {f.hasValue ? 'Valorizzato' : 'Non valorizzato'}
-                  <X className="h-3 w-3 ml-2" />
-                </Button>
-              ))}
+                  <span className="text-muted-foreground">Ricerca</span>
+                  <span className="font-medium">{searchQuery}</span>
+                  <X className="h-3 w-3 opacity-70" />
+                </button>
+              )}
+              {filters.map((f) => {
+                const [key, ...rest] = filterChipLabel(f).split(': ')
+                const value = rest.join(': ')
+                return (
+                  <button
+                    key={f.field}
+                    type="button"
+                    onClick={() => removeFilter(f.field)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full border bg-background px-3 text-xs hover:bg-accent"
+                  >
+                    <span className="text-muted-foreground">{key}</span>
+                    <span className="font-medium">{value}</span>
+                    <X className="h-3 w-3 opacity-70" />
+                  </button>
+                )
+              })}
             </div>
           )}
-          <div className="mt-4 text-sm text-muted-foreground">
-            {loading ? (
-              <span className="animate-pulse">Caricamento...</span>
-            ) : (
-              <span>
-                {opere.length === 0 ? (
-                  hasActiveFilters ? (
-                    <>Nessun risultato trovato con i filtri selezionati</>
-                  ) : (
-                    <>Nessuna opera nel catalogo</>
-                  )
-                ) : (
-                  <>Mostrando <strong>{opere.length}</strong> {opere.length === 1 ? 'risultato' : 'risultati'}</>
-                )}
-              </span>
-            )}
-          </div>
         </CardContent>
       </Card>
 
@@ -929,6 +1117,18 @@ export default function OperePage() {
               ))
             )}
           </div>
+          {opere.length > 0 && (
+            <div className="border-t px-4 py-3">
+              <div ref={loadMoreRef} className="flex min-h-8 items-center justify-center" aria-hidden={!loadingMore}>
+                {loadingMore ? (
+                  <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Caricamento…
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1368,6 +1568,8 @@ export default function OperePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {opere.length > PAGE_SIZE ? <FloatingScrollUpButton /> : null}
     </div>
   )
 }

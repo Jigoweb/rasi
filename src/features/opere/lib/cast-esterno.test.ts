@@ -69,6 +69,20 @@ describe('suggestRuoloPerPrimarieta', () => {
     expect(suggestRuoloPerPrimarieta('comprimario', ruoli, 'doppiatore')).toBeNull()
   })
 
+  it('does not map attore comprimario to a doppiatore role even if that name comes first and shares categoria', () => {
+    // Come in produzione: Doppiatore * sono in "recitazione" e, per id, precedono Comprimario.
+    const produzione = [
+      { id: '172b', nome: 'Doppiatore comprimario', categoria: 'recitazione' },
+      { id: 'fe7a', nome: 'Doppiatore primario', categoria: 'recitazione' },
+      { id: '9ca1', nome: 'Primario', categoria: 'recitazione' },
+      { id: 'cecd', nome: 'Comprimario', categoria: 'recitazione' },
+    ]
+    expect(suggestRuoloPerPrimarieta('comprimario', produzione, 'attore')).toBe('cecd')
+    expect(suggestRuoloPerPrimarieta('primario', produzione, 'attore')).toBe('9ca1')
+    expect(suggestRuoloPerPrimarieta('comprimario', produzione, 'doppiatore')).toBe('172b')
+    expect(suggestRuoloPerPrimarieta('primario', produzione, 'doppiatore')).toBe('fe7a')
+  })
+
   it('returns null when nothing matches', () => {
     expect(suggestRuoloPerPrimarieta('primario', [{ id: 'x', nome: 'Regia', categoria: 'direzione' }])).toBeNull()
   })

@@ -1,4 +1,11 @@
-import { auditRecordHref, buildAuditDiff, formatAzione, formatCampo, formatTabella } from './audit-log-display'
+import {
+  auditRecordHref,
+  buildAuditDiff,
+  classifyAuditDiff,
+  formatAzione,
+  formatCampo,
+  formatTabella,
+} from './audit-log-display'
 
 describe('audit log display', () => {
   it('labels actions, tables and fields', () => {
@@ -7,6 +14,12 @@ describe('audit log display', () => {
     expect(formatTabella('cast_esterno')).toBe('Cast esterno')
     expect(formatTabella('nuova_tabella')).toBe('nuova_tabella')
     expect(formatCampo('luogo_nascita')).toBe('Luogo nascita')
+  })
+
+  it('classifies added, removed and modified values', () => {
+    expect(classifyAuditDiff('—', 'Roma')).toBe('added')
+    expect(classifyAuditDiff('Mario', '—')).toBe('removed')
+    expect(classifyAuditDiff('No', 'Sì')).toBe('modified')
   })
 
   it('shows only changed fields for updates', () => {
@@ -18,8 +31,8 @@ describe('audit log display', () => {
         new_data: { luogo_nascita: 'Roma', is_rasi: true },
       }),
     ).toEqual([
-      { campo: 'luogo_nascita', prima: '—', dopo: 'Roma' },
-      { campo: 'is_rasi', prima: 'No', dopo: 'Sì' },
+      { campo: 'luogo_nascita', prima: '—', dopo: 'Roma', kind: 'added' },
+      { campo: 'is_rasi', prima: 'No', dopo: 'Sì', kind: 'modified' },
     ])
   })
 
@@ -32,8 +45,8 @@ describe('audit log display', () => {
         new_data: null,
       }),
     ).toEqual([
-      { campo: 'nome', prima: 'Mario', dopo: '—' },
-      { campo: 'ordine', prima: '0', dopo: '—' },
+      { campo: 'nome', prima: 'Mario', dopo: '—', kind: 'removed' },
+      { campo: 'ordine', prima: '0', dopo: '—', kind: 'removed' },
     ])
   })
 

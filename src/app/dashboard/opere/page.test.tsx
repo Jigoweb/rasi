@@ -26,7 +26,7 @@ jest.mock('@/shared/lib/toast', () => ({
 
 const createQueryBuilder = () => {
   const builder: Record<string, jest.Mock> = {}
-  const methods = ['select', 'order', 'limit', 'or', 'eq', 'not', 'neq', 'is']
+  const methods = ['select', 'order', 'limit', 'range', 'or', 'eq', 'not', 'neq', 'is']
   for (const m of methods) {
     builder[m] = jest.fn(() => builder)
   }
@@ -45,6 +45,11 @@ jest.mock('@/shared/lib/supabase-client', () => ({
 
 // Radix UI requires browser APIs absent from jsdom
 global.ResizeObserver = jest.fn().mockImplementation(() => ({
+  observe: jest.fn(),
+  unobserve: jest.fn(),
+  disconnect: jest.fn(),
+}))
+global.IntersectionObserver = jest.fn().mockImplementation(() => ({
   observe: jest.fn(),
   unobserve: jest.fn(),
   disconnect: jest.fn(),
@@ -107,5 +112,21 @@ describe('OperePage Select validation', () => {
     await waitFor(() => {
       expect(screen.queryByText('Incomplete (Data Health)')).not.toBeInTheDocument()
     })
+  })
+
+  it('keeps a single add-filter control and no standalone type select', async () => {
+    render(<OperePage />)
+
+    expect(await screen.findByRole('button', { name: 'Aggiungi filtro' })).toBeInTheDocument()
+    expect(screen.queryByText('Tutti i tipi')).not.toBeInTheDocument()
+  })
+
+  it('loads the first page with range and does not show the result counter', async () => {
+    render(<OperePage />)
+
+    await waitFor(() => {
+      expect(queryBuilder.range).toHaveBeenCalledWith(0, 99)
+    })
+    expect(screen.queryByText(/Mostrando/)).not.toBeInTheDocument()
   })
 })

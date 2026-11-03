@@ -19,7 +19,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
-import { ArrowLeft, Film, Tv, FileText, Hash, Calendar, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Building2 } from 'lucide-react'
+import { ArrowLeft, Film, Tv, FileText, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Copy, ExternalLink } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/shared/components/ui/dropdown-menu'
 import { Textarea } from '@/shared/components/ui/textarea'
@@ -52,7 +52,7 @@ export default function OperaDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showEditForm, setShowEditForm] = useState(false)
-  const [updatedByEmail, setUpdatedByEmail] = useState<string | null>(null)
+  const [updatedByName, setUpdatedByName] = useState<string | null>(null)
   
   // IMDb Integration State
   const [showImdbSearch, setShowImdbSearch] = useState(false)
@@ -176,7 +176,14 @@ export default function OperaDetailPage() {
       setOpera(oData || null)
 
       if (oData?.updated_by) {
-        getUserEmailById(oData.updated_by).then(email => setUpdatedByEmail(email))
+        getUserEmailById(oData.updated_by).then((email) => {
+          if (!email) {
+            setUpdatedByName(null)
+            return
+          }
+          const localPart = email.split('@')[0]?.trim()
+          setUpdatedByName(localPart || email)
+        })
       }
 
       const { data: pData, error: pErr } = await getPartecipazioniByOperaId(operaId)
@@ -1098,97 +1105,131 @@ export default function OperaDetailPage() {
           <CardTitle className="flex items-center"><BadgeInfo className="mr-2 h-5 w-5" />Informazioni Opera</CardTitle>
         </CardHeader>
         <CardContent className="px-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-4">
-            <div className="space-y-2">
-              <div className="flex items-center text-sm text-muted-foreground"><FileText className="mr-2 h-4 w-4" />Titolo originale</div>
-              <div className="font-medium">
+          <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
+            <div className="min-w-0 space-y-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Titolo originale</dt>
+              <dd className="text-sm font-medium">
                 {opera.titolo_originale ? (
                   <span className="italic">{opera.titolo_originale}</span>
                 ) : (
-                  <span className="text-muted-foreground italic font-normal">Non indicato</span>
+                  <span className="text-muted-foreground font-normal">—</span>
                 )}
-              </div>
+              </dd>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center text-sm text-muted-foreground"><Hash className="mr-2 h-4 w-4" />Codice ISAN</div>
-              <div className="font-medium font-mono break-all">{opera.codice_isan ?? <span className="text-muted-foreground italic font-normal">Non assegnato</span>}</div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center text-sm text-muted-foreground"><Calendar className="mr-2 h-4 w-4" />Anno Produzione</div>
-              <div className="font-medium">
+
+            <div className="min-w-0 space-y-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Anno produzione</dt>
+              <dd className="text-sm font-medium">
                 {opera.anno_produzione != null
                   ? opera.anno_produzione_fine != null &&
                     opera.anno_produzione_fine !== opera.anno_produzione
                     ? `${opera.anno_produzione}–${opera.anno_produzione_fine}`
                     : opera.anno_produzione
-                  : '-'}
-              </div>
+                  : <span className="text-muted-foreground font-normal">—</span>}
+              </dd>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center text-sm text-muted-foreground"><FileText className="mr-2 h-4 w-4" />IMDb tconst</div>
-              <div className="font-medium">
+
+            <div className="min-w-0 space-y-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Regia</dt>
+              <dd className="text-sm font-medium">
+                {Array.isArray(opera.regista) && opera.regista.length > 0
+                  ? opera.regista.join(', ')
+                  : <span className="text-muted-foreground font-normal">—</span>}
+              </dd>
+            </div>
+
+            <div className="min-w-0 space-y-1 sm:col-span-2 lg:col-span-3">
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Alias titoli</dt>
+              <dd className="text-sm font-medium">
+                {Array.isArray(opera.alias_titoli) && opera.alias_titoli.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    {opera.alias_titoli.map((alias) => (
+                      <Badge key={alias} variant="outline" className="font-normal">
+                        {alias}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground font-normal">—</span>
+                )}
+              </dd>
+            </div>
+
+            <div className="min-w-0 space-y-1 sm:col-span-2">
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Codice ISAN</dt>
+              <dd>
+                {opera.codice_isan ? (
+                  <div className="flex items-center gap-1.5 max-w-md">
+                    <Input
+                      readOnly
+                      value={opera.codice_isan}
+                      aria-label="Codice ISAN"
+                      className="h-8 font-mono text-sm"
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 shrink-0 px-2"
+                      aria-label="Copia codice ISAN"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(opera.codice_isan!).then(
+                          () => toast.success('Codice ISAN copiato'),
+                          () => toast.error('Copia non riuscita'),
+                        )
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </dd>
+            </div>
+
+            <div className="min-w-0 space-y-1">
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">IMDb</dt>
+              <dd className="text-sm font-medium">
                 {opera.imdb_tconst ? (
-                  <a 
+                  <a
                     href={`https://www.imdb.com/title/${opera.imdb_tconst}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline font-mono"
+                    className="inline-flex items-center gap-1.5 text-primary hover:underline font-mono"
                   >
                     {opera.imdb_tconst}
+                    <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                    <span className="sr-only">(apre IMDb in una nuova scheda)</span>
                   </a>
-                ) : '-'}
-              </div>
+                ) : (
+                  <span className="text-muted-foreground font-normal">—</span>
+                )}
+              </dd>
             </div>
-            {(opera.metadati as any)?.produttore_ragione_sociale && (
-              <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-                <div className="flex items-center text-sm text-muted-foreground"><Building2 className="mr-2 h-4 w-4" />Produttore</div>
-                <div className="font-medium">{(opera.metadati as any).produttore_ragione_sociale}</div>
+
+            {(opera.metadati as { produttore_ragione_sociale?: string } | null)?.produttore_ragione_sociale && (
+              <div className="min-w-0 space-y-1 sm:col-span-2 lg:col-span-3">
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Produttore</dt>
+                <dd className="text-sm font-medium leading-relaxed">
+                  {(opera.metadati as { produttore_ragione_sociale: string }).produttore_ragione_sociale}
+                </dd>
               </div>
             )}
-            <div className="space-y-2">
-              <div className="flex items-center text-sm text-muted-foreground"><Clapperboard className="mr-2 h-4 w-4" />Regia</div>
-              <div className="font-medium">
-                {(opera as any).regista
-                  ? (Array.isArray((opera as any).regista) 
-                      ? (opera as any).regista.join(', ') 
-                      : (opera as any).regista)
-                  : '-'}
+
+            {(opera as { durata_minuti?: number | null }).durata_minuti ? (
+              <div className="min-w-0 space-y-1">
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Durata</dt>
+                <dd className="text-sm font-medium">{opera.durata_minuti} minuti</dd>
               </div>
-            </div>
-            {(opera as any).durata_minuti && (
-              <div className="space-y-2">
-                <div className="flex items-center text-sm text-muted-foreground"><Clock className="mr-2 h-4 w-4" />Durata</div>
-                <div className="font-medium">{opera.durata_minuti} minuti</div>
-              </div>
-            )}
-            {(opera as any).generi && Array.isArray((opera as any).generi) && (opera as any).generi.length > 0 && (
-              <div className="space-y-2 sm:col-span-2 lg:col-span-3">
-                <div className="flex items-center text-sm text-muted-foreground"><Film className="mr-2 h-4 w-4" />Generi</div>
-                <div className="flex flex-wrap gap-2">
-                  {(opera as any).generi.map((genere: string, idx: number) => (
-                    <Badge key={idx} variant="outline" className="text-xs">{genere}</Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-            {(opera as any).paese_produzione && Array.isArray((opera as any).paese_produzione) && (opera as any).paese_produzione.length > 0 && (
-              <div className="space-y-2 sm:col-span-2">
-                <div className="flex items-center text-sm text-muted-foreground"><Video className="mr-2 h-4 w-4" />Paese Produzione</div>
-                <div className="font-medium">{(opera as any).paese_produzione.join(', ')}</div>
-              </div>
-            )}
-            {(opera as any).casa_produzione && (
-              <div className="space-y-2">
-                <div className="flex items-center text-sm text-muted-foreground"><Users className="mr-2 h-4 w-4" />Casa Produzione</div>
-                <div className="font-medium">{(opera as any).casa_produzione}</div>
-              </div>
-            )}
-          </div>
+            ) : null}
+          </dl>
           <div className="mt-6 pt-4 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleSearchImdb}>
                 <Search className="mr-2 h-4 w-4" />
-                Ricerca su IMDb
+                Importa da OMDb
               </Button>
               <Button onClick={() => setShowEditForm(true)}>
                 <Edit className="mr-2 h-4 w-4" />
@@ -1200,7 +1241,7 @@ export default function OperaDetailPage() {
                 <Clock className="h-3 w-3" />
                 <span>
                   Aggiornato il {new Date(opera.updated_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  {updatedByEmail && <span> da <span className="font-medium">{updatedByEmail}</span></span>}
+                  {updatedByName && <span> da <span className="font-medium">{updatedByName}</span></span>}
                 </span>
               </div>
             )}
@@ -1504,14 +1545,6 @@ export default function OperaDetailPage() {
         </Card>
       )}
 
-      <CastEsternoPanel
-        key={castRevision}
-        operaId={operaId}
-        imdbTconst={opera.imdb_tconst}
-        episodi={episodi}
-        ruoliTipologie={ruoli}
-      />
-
       {/* Partecipazioni Section */}
       <Card className="py-0 gap-0">
         <CardHeader className="py-4">
@@ -1526,81 +1559,71 @@ export default function OperaDetailPage() {
           </CardTitle>
         </CardHeader>
         
-        {/* Header con ricerca, filtri, aggiungi e elimina */}
+        {/* Header con ricerca, filtri e azioni */}
         <div className="px-4 py-3 border-b space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2">
-            {/* Campo di ricerca - più corto */}
-            <div className="relative max-w-xs">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Cerca partecipazioni..."
-                value={partecipazioniSearchQuery}
-                onChange={(e) => setPartecipazioniSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            
-            {/* Filtri */}
-            <Select value={partecipazioniFilterRuolo || 'all'} onValueChange={(value) => setPartecipazioniFilterRuolo(value === 'all' ? '' : value)}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Ruolo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti i ruoli</SelectItem>
-                {ruoli.map((ruolo) => (
-                  <SelectItem key={ruolo.id} value={ruolo.id}>
-                    {ruolo.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {episodi.length > 0 && (
-              <Select value={partecipazioniFilterEpisodio || 'all'} onValueChange={(value) => setPartecipazioniFilterEpisodio(value === 'all' ? '' : value)}>
-                <SelectTrigger className="w-[240px]" aria-label="Filtra per episodio">
-                  <SelectValue placeholder="Episodio" />
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col sm:flex-row gap-2 flex-1 min-w-0">
+              <div className="relative max-w-xs w-full sm:w-auto">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cerca partecipazioni..."
+                  value={partecipazioniSearchQuery}
+                  onChange={(e) => setPartecipazioniSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+
+              <Select value={partecipazioniFilterRuolo || 'all'} onValueChange={(value) => setPartecipazioniFilterRuolo(value === 'all' ? '' : value)}>
+                <SelectTrigger className="w-full sm:w-[200px]">
+                  <SelectValue placeholder="Ruolo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Tutti gli episodi</SelectItem>
-                  <SelectItem value="__serie__">Senza episodio (tutta la serie)</SelectItem>
-                  {[...episodi]
-                    .sort((a, b) => (a.numero_stagione - b.numero_stagione) || (a.numero_episodio - b.numero_episodio))
-                    .map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        S{e.numero_stagione}E{e.numero_episodio}{episodeTitleLabel(e) ? ` – ${episodeTitleLabel(e)}` : ''}
-                      </SelectItem>
-                    ))}
+                  <SelectItem value="all">Tutti i ruoli</SelectItem>
+                  {ruoli.map((ruolo) => (
+                    <SelectItem key={ruolo.id} value={ruolo.id}>
+                      {ruolo.nome}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-            )}
-            
-            {/* Bottoni azioni */}
-            <div className="flex gap-2 ml-auto flex-wrap">
-              {canManageCast && (
-                <CastImportActions
-                  operaId={operaId}
-                  onImported={() => {
-                    setCastRevision((revision) => revision + 1)
-                    void fetchData({ silent: true })
-                  }}
-                />
+              {episodi.length > 0 && (
+                <Select value={partecipazioniFilterEpisodio || 'all'} onValueChange={(value) => setPartecipazioniFilterEpisodio(value === 'all' ? '' : value)}>
+                  <SelectTrigger className="w-full sm:w-[240px]" aria-label="Filtra per episodio">
+                    <SelectValue placeholder="Episodio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tutti gli episodi</SelectItem>
+                    <SelectItem value="__serie__">Senza episodio (tutta la serie)</SelectItem>
+                    {[...episodi]
+                      .sort((a, b) => (a.numero_stagione - b.numero_stagione) || (a.numero_episodio - b.numero_episodio))
+                      .map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          S{e.numero_stagione}E{e.numero_episodio}{episodeTitleLabel(e) ? ` – ${episodeTitleLabel(e)}` : ''}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportCastExcel}
-                disabled={isExportingCast}
-                title="Partecipazioni RASI e cast esterno di quest'opera, con episodio"
-              >
-                {isExportingCast ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                Scarica cast (Excel)
-              </Button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end shrink-0">
+              <CastImportActions
+                operaId={operaId}
+                canImport={canManageCast}
+                onExportExcel={handleExportCastExcel}
+                exportingExcel={isExportingCast}
+                onImported={() => {
+                  setCastRevision((revision) => revision + 1)
+                  void fetchData({ silent: true })
+                }}
+              />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setShowAddPartecipazioneDialog(true)}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Aggiungi partecipazione
+                Aggiungi
               </Button>
               {!isPartecipazioniSelectionMode ? (
                 <Button
@@ -1610,7 +1633,7 @@ export default function OperaDetailPage() {
                   disabled={(partecipazioni || []).length === 0}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
-                  Elimina partecipazioni
+                  Elimina
                 </Button>
               ) : (
                 <Button
@@ -1776,6 +1799,16 @@ export default function OperaDetailPage() {
           )}
         </CardContent>
       </Card>
+
+
+      <CastEsternoPanel
+        key={castRevision}
+        operaId={operaId}
+        imdbTconst={opera.imdb_tconst}
+        episodi={episodi}
+        ruoliTipologie={ruoli}
+      />
+
       
       {/* Export Dialog */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>

@@ -53,7 +53,26 @@ export function formatValore(value: Json | undefined): string {
   return JSON.stringify(value)
 }
 
-export type AuditDiffRow = { campo: string; prima: string; dopo: string }
+export type AuditDiffKind = 'added' | 'removed' | 'modified'
+
+export type AuditDiffRow = {
+  campo: string
+  prima: string
+  dopo: string
+  kind: AuditDiffKind
+}
+
+export const AUDIT_DIFF_KIND_LABELS: Record<AuditDiffKind, string> = {
+  added: 'Aggiunto',
+  removed: 'Rimosso',
+  modified: 'Modificato',
+}
+
+export function classifyAuditDiff(prima: string, dopo: string): AuditDiffKind {
+  if (prima === '—' && dopo !== '—') return 'added'
+  if (dopo === '—' && prima !== '—') return 'removed'
+  return 'modified'
+}
 
 function asObject(value: Json | null | undefined): Record<string, Json | undefined> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, Json | undefined>) : {}
@@ -81,11 +100,16 @@ export function buildAuditDiff(entry: {
           .filter((campo) => formatValore((entry.azione === 'DELETE' ? oldData : newData)[campo]) !== '—')
           .sort()
 
-  return campi.map((campo) => ({
-    campo,
-    prima: entry.azione === 'INSERT' ? '—' : formatValore(oldData[campo]),
-    dopo: entry.azione === 'DELETE' ? '—' : formatValore(newData[campo]),
-  }))
+  return campi.map((campo) => {
+    const prima = entry.azione === 'INSERT' ? '—' : formatValore(oldData[campo])
+    const dopo = entry.azione === 'DELETE' ? '—' : formatValore(newData[campo])
+    return {
+      campo,
+      prima,
+      dopo,
+      kind: classifyAuditDiff(prima, dopo),
+    }
+  })
 }
 
 /** Link alla scheda collegata, se esiste ancora una pagina di dettaglio. */
