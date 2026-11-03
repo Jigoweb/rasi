@@ -3,6 +3,7 @@
  */
 import {
   EPISODI_IMPORT_HEADERS,
+  buildEpisodePatch,
   buildEpisodiTemplateCsv,
   buildEpisodiTemplateXlsx,
   canImportEpisodi,
@@ -13,8 +14,9 @@ import {
   revalidateEpisodeDrafts,
   runEpisodiImport,
   type EpisodeDraft,
-  type EpisodiImportStore,
   type EpisodeInsert,
+  type EpisodeUpdatePatch,
+  type EpisodiImportStore,
 } from './episodi-import'
 
 const HEADER = [...EPISODI_IMPORT_HEADERS]
@@ -421,6 +423,25 @@ describe('template episodi', () => {
   })
 })
 
+describe('buildEpisodePatch', () => {
+  it('buildEpisodePatch omette i campi vuoti e restituisce null se patch vuota', () => {
+    const base = row(classifyEpisodiMatrix(
+      [[...EPISODI_IMPORT_HEADERS], [1, 1, '', '', '', '', '', '']],
+      [{ numero_stagione: 1, numero_episodio: 1 }],
+    ))
+    expect(buildEpisodePatch(base)).toBeNull()
+
+    const withTconst = row(classifyEpisodiMatrix(
+      [[...EPISODI_IMPORT_HEADERS], [1, 1, 'Solo titolo', '', '', 'tt1', '', '']],
+      [{ numero_stagione: 1, numero_episodio: 1 }],
+    ))
+    expect(buildEpisodePatch(withTconst)).toEqual({
+      titolo_episodio: 'Solo titolo',
+      imdb_tconst: 'tt1',
+    })
+  })
+})
+
 describe('runEpisodiImport', () => {
   const operaId = '11111111-1111-4111-8111-111111111111'
 
@@ -441,6 +462,9 @@ describe('runEpisodiImport', () => {
       async insertEpisode(row) {
         inserted.push(row)
         return options.onInsert ? options.onInsert(row) : { ok: true }
+      },
+      async updateEpisode() {
+        return { ok: true }
       },
     }
     return { store, inserted }
@@ -468,7 +492,7 @@ describe('runEpisodiImport', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.mode).toBe('preview')
-    expect(result.summary).toEqual({ total: 2, valid: 2, skipped: 0, excluded: 0, imported: 0 })
+    expect(result.summary).toEqual({ total: 2, valid: 2, skipped: 0, excluded: 0, imported: 0, updated: 0 })
     expect(result.rows[0]).toMatchObject({
       status: 'valid',
       action: 'update',
@@ -509,6 +533,8 @@ describe('runEpisodiImport', () => {
         numero_episodio: 2,
         titolo_episodio: 'Nuovo',
         titolo_episodio_originale: null,
+        alias_titoli: null,
+        imdb_tconst: null,
         durata_minuti: 41,
         data_prima_messa_in_onda: null,
       },
@@ -573,6 +599,46 @@ describe('runEpisodiImport', () => {
     expect(result.summary).toMatchObject({ imported: 0, skipped: 1, valid: 0 })
     expect(result.alerts[0].message).toMatch(/già presente/)
     expect(result.alerts[0].message).toMatch(/nessun aggiornamento/)
+  })
+
+  it('in conferma aggiorna gli esistenti e inserisce i nuovi', async () => {
+    const updated: Array<{ stagione: number; episodio: number; patch: EpisodeUpdatePatch }> = []
+    const inserted: EpisodeInsert[] = []
+    const store: EpisodiImportStore = {
+      async getOpera() { return { id: operaId, tipo: 'serie_tv', has_episodes: true } },
+      async listEpisodeKeys() { return [{ numero_stagione: 1, numero_episodio: 1 }] },
+      async insertEpisode(row) { inserted.push(row); return { ok: true } },
+      async updateEpisode(input) {
+        updated.push({ stagione: input.numero_stagione, episodio: input.numero_episodio, patch: input.patch })
+        return { ok: true }
+      },
+    }
+    const bytes = new TextEncoder().encode(
+      `${EPISODI_IMPORT_HEADERS.join(',')}\n` +
+      `1,1,Aggiornato,,Alias X,tt111,45,\n` +
+      `1,2,Nuovo,,,,,\n`,
+    )
+    const result = await runEpisodiImport({ store, operaId, filename: 'e.csv', bytes, mode: 'confirm' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.summary).toMatchObject({ imported: 1, updated: 1 })
+    expect(updated).toEqual([{
+      stagione: 1,
+      episodio: 1,
+      patch: {
+        titolo_episodio: 'Aggiornato',
+        alias_titoli: ['Alias X'],
+        imdb_tconst: 'tt111',
+        durata_minuti: 45,
+      },
+    }])
+    expect(inserted[0]).toMatchObject({
+      numero_stagione: 1,
+      numero_episodio: 2,
+      titolo_episodio: 'Nuovo',
+      alias_titoli: null,
+      imdb_tconst: null,
+    })
   })
 
   it('rifiuta un formato diverso da xlsx e csv', async () => {
@@ -722,6 +788,9 @@ describe('confirmEpisodiDrafts', () => {
         inserted.push(row)
         return options.onInsert ? options.onInsert(row) : { ok: true }
       },
+      async updateEpisode() {
+        return { ok: true }
+      },
     }
     return { store, inserted, wasLookedUp: () => lookedUp }
   }
@@ -773,6 +842,8 @@ describe('confirmEpisodiDrafts', () => {
         numero_episodio: 1,
         titolo_episodio: 'Seconda',
         titolo_episodio_originale: null,
+        alias_titoli: null,
+        imdb_tconst: null,
         durata_minuti: null,
         data_prima_messa_in_onda: null,
       },

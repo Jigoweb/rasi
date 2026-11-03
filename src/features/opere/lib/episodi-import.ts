@@ -99,8 +99,19 @@ export type EpisodeInsert = {
   numero_episodio: number
   titolo_episodio: string | null
   titolo_episodio_originale: string | null
+  alias_titoli: string[] | null
+  imdb_tconst: string | null
   durata_minuti: number | null
   data_prima_messa_in_onda: string | null
+}
+
+export type EpisodeUpdatePatch = {
+  titolo_episodio?: string | null
+  titolo_episodio_originale?: string | null
+  alias_titoli?: string[] | null
+  imdb_tconst?: string | null
+  durata_minuti?: number | null
+  data_prima_messa_in_onda?: string | null
 }
 
 export type EpisodiImportStore = {
@@ -111,6 +122,12 @@ export type EpisodiImportStore = {
   } | null>
   listEpisodeKeys(operaId: string): Promise<Array<{ numero_stagione: number; numero_episodio: number }>>
   insertEpisode(row: EpisodeInsert): Promise<{ ok: true } | { ok: false; code?: string; message: string }>
+  updateEpisode(input: {
+    opera_id: string
+    numero_stagione: number
+    numero_episodio: number
+    patch: EpisodeUpdatePatch
+  }): Promise<{ ok: true } | { ok: false; code?: string; message: string }>
 }
 
 export type EpisodiImportMode = 'preview' | 'confirm'
@@ -121,6 +138,7 @@ export type EpisodiImportSummary = {
   skipped: number
   excluded: number
   imported: number
+  updated: number
 }
 
 export type EpisodeKey = { numero_stagione: number; numero_episodio: number }
@@ -367,9 +385,9 @@ export async function confirmEpisodiDrafts(input: {
   const ready = await prepareOpera(input.store, input.operaId)
   if (!ready.ok) return ready
   const rows = revalidateEpisodeDrafts(parsed.rows, ready.existing)
-  const inserted = await insertReviewedRows(input.store, input.operaId, rows)
-  if (!inserted.ok) return inserted
-  return successResponse('confirm', rows, inserted.imported, ready.existing)
+  const applied = await applyReviewedRows(input.store, input.operaId, rows)
+  if (!applied.ok) return applied
+  return successResponse('confirm', rows, applied.imported, applied.updated, ready.existing)
 }
 
 export async function runEpisodiImport(input: {
@@ -393,11 +411,11 @@ export async function runEpisodiImport(input: {
 
   const rows = withDefaultInclusion(classified.rows)
   if (input.mode !== 'confirm') {
-    return successResponse('preview', rows, 0, ready.existing)
+    return successResponse('preview', rows, 0, 0, ready.existing)
   }
-  const inserted = await insertReviewedRows(input.store, input.operaId, rows)
-  if (!inserted.ok) return inserted
-  return successResponse('confirm', rows, inserted.imported, ready.existing)
+  const applied = await applyReviewedRows(input.store, input.operaId, rows)
+  if (!applied.ok) return applied
+  return successResponse('confirm', rows, applied.imported, applied.updated, ready.existing)
 }
 
 type EpisodeCell = {
@@ -572,44 +590,86 @@ async function prepareOpera(
   return { ok: true, existing: await store.listEpisodeKeys(operaId) }
 }
 
-async function insertReviewedRows(
+export function buildEpisodePatch(row: ClassifiedEpisodeRow): EpisodeUpdatePatch | null {
+  const patch: EpisodeUpdatePatch = {}
+  if (row.draft.titolo.trim()) patch.titolo_episodio = row.titolo
+  if (row.draft.titoloOriginale.trim()) patch.titolo_episodio_originale = row.titoloOriginale
+  if (row.draft.titoliAlternativi.trim()) patch.alias_titoli = row.aliasTitoli
+  if (row.draft.imdbTconst.trim()) patch.imdb_tconst = row.imdbTconst
+  if (row.draft.durataMinuti.trim()) patch.durata_minuti = row.durataMinuti
+  if (row.draft.dataPrimaMessaInOnda.trim()) patch.data_prima_messa_in_onda = row.dataPrimaMessaInOnda
+  return Object.keys(patch).length > 0 ? patch : null
+}
+
+async function applyReviewedRows(
   store: EpisodiImportStore,
   operaId: string,
   rows: ReviewedEpisodeRow[],
-): Promise<{ ok: true; imported: number } | { ok: false; status: number; error: string }> {
+): Promise<{ ok: true; imported: number; updated: number } | { ok: false; status: number; error: string }> {
   let imported = 0
+  let updated = 0
   for (const row of rows) {
-    if (row.action !== 'insert' || !row.included || row.status !== 'valid' || row.stagione == null || row.episodio == null) continue
-    const outcome = await store.insertEpisode({
+    if (!row.included || row.status !== 'valid' || row.stagione == null || row.episodio == null) continue
+    if (row.action === 'insert') {
+      const outcome = await store.insertEpisode({
+        opera_id: operaId,
+        numero_stagione: row.stagione,
+        numero_episodio: row.episodio,
+        titolo_episodio: row.titolo,
+        titolo_episodio_originale: row.titoloOriginale,
+        alias_titoli: row.aliasTitoli,
+        imdb_tconst: row.imdbTconst,
+        durata_minuti: row.durataMinuti,
+        data_prima_messa_in_onda: row.dataPrimaMessaInOnda,
+      })
+      if (outcome.ok) {
+        imported += 1
+        continue
+      }
+      const denied = markRowFailed(row, outcome)
+      if (denied) return denied
+      continue
+    }
+    if (row.action !== 'update') continue
+    const patch = buildEpisodePatch(row)
+    if (!patch) continue
+    const outcome = await store.updateEpisode({
       opera_id: operaId,
       numero_stagione: row.stagione,
       numero_episodio: row.episodio,
-      titolo_episodio: row.titolo,
-      titolo_episodio_originale: row.titoloOriginale,
-      durata_minuti: row.durataMinuti,
-      data_prima_messa_in_onda: row.dataPrimaMessaInOnda,
+      patch,
     })
     if (outcome.ok) {
-      imported += 1
+      updated += 1
       continue
     }
-    if (outcome.code === '42501' || /permission denied/i.test(outcome.message)) {
-      return { ok: false, status: 403, error: 'Accesso negato: non puoi inserire episodi su questa opera.' }
-    }
-    row.status = 'skipped'
-    row.action = null
-    row.included = false
-    row.message = outcome.code === '23505'
-      ? `Episodio già presente sull'opera (stagione ${row.stagione}, episodio ${row.episodio}): riga ignorata, nessun aggiornamento`
-      : `Importazione non riuscita: ${outcome.message}`
+    const denied = markRowFailed(row, outcome)
+    if (denied) return denied
   }
-  return { ok: true, imported }
+  return { ok: true, imported, updated }
+}
+
+function markRowFailed(
+  row: ReviewedEpisodeRow,
+  outcome: { ok: false; code?: string; message: string },
+): { ok: false; status: number; error: string } | null {
+  if (outcome.code === '42501' || /permission denied/i.test(outcome.message)) {
+    return { ok: false, status: 403, error: 'Accesso negato: non puoi inserire episodi su questa opera.' }
+  }
+  row.status = 'skipped'
+  row.action = null
+  row.included = false
+  row.message = outcome.code === '23505'
+    ? `Episodio già presente sull'opera (stagione ${row.stagione}, episodio ${row.episodio}): riga ignorata, nessun aggiornamento`
+    : `Importazione non riuscita: ${outcome.message}`
+  return null
 }
 
 function successResponse(
   mode: EpisodiImportMode,
   rows: ReviewedEpisodeRow[],
   imported: number,
+  updated: number,
   existing: EpisodeKey[],
 ): EpisodiImportResponse {
   return {
@@ -621,6 +681,7 @@ function successResponse(
       skipped: rows.filter((row) => row.status === 'skipped').length,
       excluded: rows.filter((row) => row.status === 'valid' && !row.included).length,
       imported,
+      updated,
     },
     rows,
     alerts: alertsFrom(rows),
