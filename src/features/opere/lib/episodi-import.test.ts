@@ -440,6 +440,24 @@ describe('buildEpisodePatch', () => {
       imdb_tconst: 'tt1',
     })
   })
+
+  it('buildEpisodePatch non include alias_titoli per celle con sole virgole', () => {
+    const existing = [{ numero_stagione: 1, numero_episodio: 1 }]
+    const commaOnly = row(
+      classifyEpisodiMatrix([[...EPISODI_IMPORT_HEADERS], [1, 1, '', '', ',', '', '', '']], existing),
+    )
+    expect(commaOnly.aliasTitoli).toBeNull()
+    expect(commaOnly.draft.titoliAlternativi.trim()).not.toBe('')
+    expect(buildEpisodePatch(commaOnly)).toBeNull()
+
+    const commaWithTitle = row(
+      classifyEpisodiMatrix(
+        [[...EPISODI_IMPORT_HEADERS], [1, 1, 'Solo titolo', '', ', ,', '', '', '']],
+        existing,
+      ),
+    )
+    expect(buildEpisodePatch(commaWithTitle)).toEqual({ titolo_episodio: 'Solo titolo' })
+  })
 })
 
 describe('runEpisodiImport', () => {
@@ -510,7 +528,7 @@ describe('runEpisodiImport', () => {
     expect(result.existingKeys).toEqual([{ numero_stagione: 1, numero_episodio: 1 }])
   })
 
-  it('in conferma inserisce solo le righe valide e non aggiorna gli esistenti', async () => {
+  it('in conferma inserisce i nuovi e classifica gli esistenti come update', async () => {
     const { store, inserted } = storeFor({
       opera: { id: operaId, tipo: 'animazione', has_episodes: true },
       existing: [{ numero_stagione: 1, numero_episodio: 1 }],

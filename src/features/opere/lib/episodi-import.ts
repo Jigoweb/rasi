@@ -594,7 +594,7 @@ export function buildEpisodePatch(row: ClassifiedEpisodeRow): EpisodeUpdatePatch
   const patch: EpisodeUpdatePatch = {}
   if (row.draft.titolo.trim()) patch.titolo_episodio = row.titolo
   if (row.draft.titoloOriginale.trim()) patch.titolo_episodio_originale = row.titoloOriginale
-  if (row.draft.titoliAlternativi.trim()) patch.alias_titoli = row.aliasTitoli
+  if (row.aliasTitoli && row.aliasTitoli.length > 0) patch.alias_titoli = row.aliasTitoli
   if (row.draft.imdbTconst.trim()) patch.imdb_tconst = row.imdbTconst
   if (row.draft.durataMinuti.trim()) patch.durata_minuti = row.durataMinuti
   if (row.draft.dataPrimaMessaInOnda.trim()) patch.data_prima_messa_in_onda = row.dataPrimaMessaInOnda
