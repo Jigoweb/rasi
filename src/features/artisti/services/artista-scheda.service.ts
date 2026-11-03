@@ -11,6 +11,16 @@ export type ArtistaReferenteInput = Omit<
 export type CastEsternoCorrispondente =
   Database['public']['Functions']['cerca_cast_esterno_per_artista']['Returns'][number] & { ruolo: string }
 
+export const getArtistaDatiRiservati = async (artistaId: string) => {
+  const { data, error } = await supabase
+    .from('artisti_dati_riservati')
+    .select('artista_id, regime, tassazione, dettagli_regime')
+    .eq('artista_id', artistaId)
+    .maybeSingle()
+
+  return { data, error }
+}
+
 export const getArtistaNote = async (artistaId: string) => {
   const { data, error } = await supabase
     .from('artisti_note')

@@ -29,6 +29,8 @@ import { ArtistaInviteHeader } from '@/app/dashboard/artisti/[id]/components/art
 import { ArtistaNotePanel } from '@/app/dashboard/artisti/[id]/components/artista-note-panel'
 import { ArtistaReferentiPanel } from '@/app/dashboard/artisti/[id]/components/artista-referenti-panel'
 import { ArtistaCastEsternoMatchPanel } from '@/app/dashboard/artisti/[id]/components/artista-cast-esterno-match-panel'
+import { ArtistaDatiRiservatiPanel } from '@/app/dashboard/artisti/[id]/components/artista-dati-riservati-panel'
+import { canManageArtistiContatti } from '@/shared/lib/auth-permissions'
 import { computeArtistaAlerts, etaAnni } from '@/features/artisti/lib/artista-alerts'
 import {
   AMBITO_LABELS,
@@ -81,7 +83,8 @@ interface Partecipazione {
 export default function ArtistaProfiloPage() {
   const params = useParams()
   const artistaId = params.id as string
-  const { isAdmin } = useAuth()
+  const { isAdmin, userRole } = useAuth()
+  const canSeeDatiRiservati = canManageArtistiContatti(userRole)
 
   const [artista, setArtista] = useState<Artista | null>(null)
   const [partecipazioni, setPartecipazioni] = useState<Partecipazione[]>([])
@@ -674,7 +677,7 @@ export default function ArtistaProfiloPage() {
           )}
           
           {/* Contatti e Indirizzo */}
-          {((artista.contatti as any)?.email || (artista.contatti as any)?.number || artista.indirizzo) && (
+          {((artista.contatti as any)?.email || (artista.contatti as any)?.number || (artista.contatti as any)?.telefono || artista.indirizzo) && (
             <div className="mt-6 pt-6 border-t">
               <h3 className="text-sm font-semibold mb-4">Contatti e Residenza</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
@@ -687,13 +690,13 @@ export default function ArtistaProfiloPage() {
                     <div className="font-medium break-all">{(artista.contatti as any).email}</div>
                   </div>
                 )}
-                {(artista.contatti as any)?.number && (
+                {((artista.contatti as any)?.number || (artista.contatti as any)?.telefono) && (
                   <div className="space-y-2">
                     <div className="flex items-center text-sm text-muted-foreground">
                       <User className="mr-2 h-4 w-4" />
                       Telefono
                     </div>
-                    <div className="font-medium">{(artista.contatti as any).number}</div>
+                    <div className="font-medium">{(artista.contatti as any).number || (artista.contatti as any).telefono}</div>
                   </div>
                 )}
                 {artista.indirizzo && (
@@ -718,6 +721,8 @@ export default function ArtistaProfiloPage() {
           )}
         </CardContent>
       </Card>
+
+      {canSeeDatiRiservati && <ArtistaDatiRiservatiPanel artistaId={artista.id} />}
 
       <ArtistaReferentiPanel artistaId={artista.id} stato={artista.stato} />
 

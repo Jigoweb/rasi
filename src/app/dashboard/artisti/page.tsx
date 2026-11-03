@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
+import { useAuth } from '@/shared/contexts/auth-context'
+import { canManageArtistiContatti } from '@/shared/lib/auth-permissions'
 import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, AlertTriangle, Loader2, Filter, X } from 'lucide-react'
 import { SearchInput } from '@/shared/components/search-input'
 import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
@@ -255,6 +257,8 @@ function ArtistiFilterPopover({
 }
 
 export default function ArtistiPage() {
+  const { userRole } = useAuth()
+  const canImportContatti = canManageArtistiContatti(userRole)
   const router = useRouter()
   const searchParams = useSearchParams()
   const [artisti, setArtisti] = useState<Artista[]>([])
@@ -567,6 +571,11 @@ export default function ArtistiPage() {
           <h1 className="text-3xl font-bold tracking-tight">Artisti</h1>
           <p className="text-gray-600">Gestione degli artisti registrati</p>
           <div className="mt-2 flex gap-2 lg:hidden">
+            {canImportContatti && (
+              <Button variant="outline" asChild>
+                <Link href="/dashboard/artisti/contatti-import">Recupero contatti</Link>
+              </Button>
+            )}
             <Button variant="outline" onClick={exportData}>
               <Download className="h-4 w-4 mr-2" />
               Esporta CSV
@@ -578,6 +587,11 @@ export default function ArtistiPage() {
           </div>
         </div>
         <div className="hidden lg:flex gap-2">
+          {canImportContatti && (
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/artisti/contatti-import">Recupero contatti</Link>
+            </Button>
+          )}
           <Button variant="outline" onClick={exportData}>
             <Download className="h-4 w-4 mr-2" />
             Esporta CSV
