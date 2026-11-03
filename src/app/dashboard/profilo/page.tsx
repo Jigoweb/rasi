@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { getArtistaById, getPartecipazioniByArtistaId } from '@/features/artisti/services/artisti.service'
+import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 import { supabase } from '@/shared/lib/supabase-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Badge } from '@/shared/components/ui/badge'
@@ -111,6 +112,7 @@ export default function ProfiloArtistaPage() {
             numero_stagione,
             numero_episodio,
             titolo_episodio,
+            titolo_episodio_originale,
             punteggio_matching,
             stato,
             metodo,
@@ -252,7 +254,7 @@ export default function ProfiloArtistaPage() {
                       <TableCell>{p.personaggio || '-'}</TableCell>
                       <TableCell>
                         {p.episodi
-                          ? `S${p.episodi.numero_stagione}E${p.episodi.numero_episodio}${p.episodi.titolo_episodio ? ` - ${p.episodi.titolo_episodio}` : ''}`
+                          ? `S${p.episodi.numero_stagione}E${p.episodi.numero_episodio}${episodeTitleLabel(p.episodi) ? ` - ${episodeTitleLabel(p.episodi)}` : ''}`
                           : '-'}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate text-gray-600">
@@ -331,7 +333,7 @@ export default function ProfiloArtistaPage() {
                       </TableCell>
                       <TableCell>
                         {ind.numero_stagione || ind.numero_episodio
-                          ? `S${ind.numero_stagione || '?'}E${ind.numero_episodio || '?'}${ind.titolo_episodio ? ` - ${ind.titolo_episodio}` : ''}`
+                          ? `S${ind.numero_stagione || '?'}E${ind.numero_episodio || '?'}${episodeTitleLabel(ind) ? ` - ${episodeTitleLabel(ind)}` : ''}`
                           : '-'}
                       </TableCell>
                       <TableCell>

@@ -9,6 +9,7 @@ import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Badge } from '@/shared/components/ui/badge'
 import { Label } from '@/shared/components/ui/label'
 import { Search, Loader2, AlertCircle, CheckCircle2, Tv, Film, X } from 'lucide-react'
+import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 import { getOpere, getEpisodiByOperaId } from '@/features/opere/services/opere.service'
 import { getArtisti } from '@/features/artisti/services/artisti.service'
 import { getRuoliTipologie } from '@/features/opere/services/opere.service'
@@ -44,6 +45,7 @@ interface Episodio {
   numero_stagione: number
   numero_episodio: number
   titolo_episodio: string | null
+  titolo_episodio_originale?: string | null
 }
 
 interface SelectedItem {
@@ -576,7 +578,7 @@ export function AddPartecipazioneDialog({
                                           <div className="flex-1">
                                             <div className="text-sm font-medium">
                                               S{ep.numero_stagione}E{ep.numero_episodio}
-                                              {ep.titolo_episodio && ` - ${ep.titolo_episodio}`}
+                                              {episodeTitleLabel(ep) && ` - ${episodeTitleLabel(ep)}`}
                                             </div>
                                           </div>
                                           {isEpSelected && (
