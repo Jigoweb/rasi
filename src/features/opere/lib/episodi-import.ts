@@ -9,11 +9,14 @@ export const EPISODI_IMPORT_HEADERS = [
   'Episodio',
   'Titolo italiano',
   'Titolo originale',
+  'Titoli alternativi',
+  'IMDb tconst',
   'Durata (minuti)',
   'Data prima messa in onda',
 ] as const
 
 const LEGACY_TITOLO = 'Titolo'
+const OPTIONAL_HEADERS = ['Titoli alternativi', 'IMDb tconst'] as const
 const BASE_HEADERS = ['Stagione', 'Episodio', 'Durata (minuti)', 'Data prima messa in onda'] as const
 
 type TitleColumns = {
@@ -36,8 +39,15 @@ export type EpisodioTemplateSource = {
   numero_episodio: number
   titolo_episodio: string | null
   titolo_episodio_originale?: string | null
+  alias_titoli?: string[] | null
+  imdb_tconst?: string | null
   durata_minuti: number | null
   data_prima_messa_in_onda: string | null
+}
+
+function formatAliasTitoli(aliases: string[] | null | undefined): string {
+  if (!Array.isArray(aliases) || aliases.length === 0) return ''
+  return aliases.map((a) => a.trim()).filter(Boolean).join(', ')
 }
 
 export type EpisodeDraft = {
@@ -149,6 +159,8 @@ export function buildEpisodiTemplateXlsx(episodes: EpisodioTemplateSource[]): Ui
     episode.numero_episodio,
     episode.titolo_episodio ?? '',
     episode.titolo_episodio_originale ?? '',
+    formatAliasTitoli(episode.alias_titoli),
+    episode.imdb_tconst ?? '',
     episode.durata_minuti ?? '',
     episode.data_prima_messa_in_onda ? isoToItalian(episode.data_prima_messa_in_onda) : '',
   ])
@@ -163,7 +175,16 @@ export function buildEpisodiTemplateXlsx(episodes: EpisodioTemplateSource[]): Ui
       z: 'dd/mm/yyyy',
     }
   })
-  sheet['!cols'] = [{ wch: 12 }, { wch: 12 }, { wch: 36 }, { wch: 36 }, { wch: 18 }, { wch: 28 }]
+  sheet['!cols'] = [
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 36 },
+    { wch: 36 },
+    { wch: 28 },
+    { wch: 14 },
+    { wch: 18 },
+    { wch: 28 },
+  ]
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, sheet, 'Episodi')
   const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
@@ -181,6 +202,8 @@ export function buildEpisodiTemplateCsv(episodes: EpisodioTemplateSource[]): str
       Episodio: episode.numero_episodio,
       'Titolo italiano': episode.titolo_episodio ?? '',
       'Titolo originale': episode.titolo_episodio_originale ?? '',
+      'Titoli alternativi': formatAliasTitoli(episode.alias_titoli),
+      'IMDb tconst': episode.imdb_tconst ?? '',
       'Durata (minuti)': episode.durata_minuti ?? '',
       'Data prima messa in onda': episode.data_prima_messa_in_onda
         ? isoToItalian(episode.data_prima_messa_in_onda)
@@ -580,6 +603,7 @@ function validateHeaders(headers: string[]): { ok: true; titles: TitleColumns } 
   if (!titles.ok) return titles
   const allowed = new Set<string>([
     ...BASE_HEADERS,
+    ...OPTIONAL_HEADERS,
     titles.titles.italiano,
     ...(titles.titles.originale ? [titles.titles.originale] : []),
   ])
@@ -610,7 +634,7 @@ function resolveTitleColumns(headers: string[]): { ok: true; titles: TitleColumn
 
 function headerError(headers: string[]): string {
   const expected = [...EPISODI_IMPORT_HEADERS]
-  const allowed = new Set<string>([...expected, LEGACY_TITOLO])
+  const allowed = new Set<string>([...expected, LEGACY_TITOLO, ...OPTIONAL_HEADERS])
   const missingBase = BASE_HEADERS.filter((header) => !headers.includes(header))
   const missingTitles = headers.includes('Titolo italiano') || headers.includes(LEGACY_TITOLO)
     ? headers.includes('Titolo italiano') && !headers.includes('Titolo originale')

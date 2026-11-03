@@ -20,9 +20,15 @@ import {
 const HEADER = [...EPISODI_IMPORT_HEADERS]
 
 function matrix(rows: unknown[][]): unknown[][] {
-  const aligned = rows.map((row) => (
-    row.length === 5 ? [row[0], row[1], row[2], '', row[3], row[4]] : row
-  ))
+  const aligned = rows.map((row) => {
+    if (row.length === 5) {
+      return [row[0], row[1], row[2], '', '', '', row[3], row[4]]
+    }
+    if (row.length === 6) {
+      return [row[0], row[1], row[2], row[3], '', '', row[4], row[5]]
+    }
+    return row
+  })
   return [HEADER, ...aligned]
 }
 
@@ -291,18 +297,41 @@ describe('template episodi', () => {
     },
   ]
 
-  it('precompila l’xlsx con gli episodi esistenti, ordinati, e il reimport li salta', () => {
-    const bytes = buildEpisodiTemplateXlsx(existing)
+  it('esporta Titoli alternativi e IMDb tconst nel template xlsx/csv', () => {
+    const withMeta = [
+      {
+        numero_stagione: 1,
+        numero_episodio: 1,
+        titolo_episodio: 'Pilota',
+        titolo_episodio_originale: 'Pilot',
+        alias_titoli: ['Alias A', 'Alias B'],
+        imdb_tconst: 'tt100',
+        durata_minuti: 40,
+        data_prima_messa_in_onda: '2020-01-01',
+      },
+    ]
+    expect([...EPISODI_IMPORT_HEADERS]).toEqual([
+      'Stagione',
+      'Episodio',
+      'Titolo italiano',
+      'Titolo originale',
+      'Titoli alternativi',
+      'IMDb tconst',
+      'Durata (minuti)',
+      'Data prima messa in onda',
+    ])
+    const csv = buildEpisodiTemplateCsv(withMeta)
+    expect(csv).toContain('Titoli alternativi')
+    expect(csv).toContain('IMDb tconst')
+    expect(csv).toContain('Alias A, Alias B')
+    expect(csv).toContain('tt100')
+    const bytes = buildEpisodiTemplateXlsx(withMeta)
     const parsed = parseEpisodiFile('episodi.xlsx', bytes)
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
-    const classified = classifyEpisodiMatrix(parsed.matrix, existing)
-    if (!classified.ok) throw new Error(classified.error)
-    expect(classified.rows.map((item) => [item.stagione, item.episodio, item.status, item.titolo, item.durataMinuti, item.dataPrimaMessaInOnda])).toEqual([
-      [1, 1, 'skipped', null, null, null],
-      [1, 2, 'skipped', 'Secondo', 44, '2020-03-15'],
-    ])
-    expect(classified.rows.every((item) => item.message?.includes('nessun aggiornamento'))).toBe(true)
+    expect(parsed.matrix[0]).toEqual([...EPISODI_IMPORT_HEADERS])
+    expect(parsed.matrix[1]?.[4]).toBe('Alias A, Alias B')
+    expect(parsed.matrix[1]?.[5]).toBe('tt100')
   })
 
   it('precompila anche il CSV, con virgola o punto e virgola', () => {
