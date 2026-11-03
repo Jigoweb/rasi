@@ -175,11 +175,23 @@ function createStore(token: string): EpisodiImportStore {
         numero_episodio: row.numero_episodio,
         titolo_episodio: row.titolo_episodio,
         titolo_episodio_originale: row.titolo_episodio_originale,
+        alias_titoli: row.alias_titoli,
+        imdb_tconst: row.imdb_tconst,
         durata_minuti: row.durata_minuti,
         data_prima_messa_in_onda: row.data_prima_messa_in_onda,
       })
-      if (!error) return { ok: true }
-      return { ok: false, code: error.code, message: error.message }
+      if (!error) return { ok: true as const }
+      return { ok: false as const, code: error.code, message: error.message }
+    },
+    async updateEpisode(input) {
+      const { error } = await client
+        .from('episodi')
+        .update(input.patch)
+        .eq('opera_id', input.opera_id)
+        .eq('numero_stagione', input.numero_stagione)
+        .eq('numero_episodio', input.numero_episodio)
+      if (!error) return { ok: true as const }
+      return { ok: false as const, code: error.code, message: error.message }
     },
   }
 }
