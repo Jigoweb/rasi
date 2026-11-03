@@ -9,6 +9,7 @@ import {
   readAppMetadataArtistaId,
   readAuthoritativeUserRole,
   canManageOperaCast,
+  canManageArtistiContatti,
 } from './auth-permissions'
 
 describe('auth-permissions', () => {
@@ -252,6 +253,17 @@ describe('auth-permissions', () => {
       expect(canManageOperaCast('collecting')).toBe(false)
       expect(canManageOperaCast('readonly')).toBe(false)
       expect(canManageOperaCast(null)).toBe(false)
+    })
+  })
+
+  describe('canManageArtistiContatti', () => {
+    it('is limited to admin and operatore', () => {
+      expect(canManageArtistiContatti('admin')).toBe(true)
+      expect(canManageArtistiContatti('operatore')).toBe(true)
+      expect(canManageArtistiContatti('artista')).toBe(false)
+      expect(canManageArtistiContatti('collecting')).toBe(false)
+      expect(canManageArtistiContatti('readonly')).toBe(false)
+      expect(canManageArtistiContatti(null)).toBe(false)
     })
   })
 
