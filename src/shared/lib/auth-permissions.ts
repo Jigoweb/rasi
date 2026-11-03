@@ -171,3 +171,8 @@ export function canManageOperaCast(role: string | null | undefined): boolean {
   return role === 'admin' || role === 'operatore'
 }
 
+/** Recupero contatti e dati di regime: solo admin e operatore. */
+export function canManageArtistiContatti(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'operatore'
+}
+

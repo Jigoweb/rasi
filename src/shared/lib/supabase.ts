@@ -152,6 +152,44 @@ export type Database = {
         }
         Relationships: []
       }
+      artisti_dati_riservati: {
+        Row: {
+          artista_id: string
+          created_at: string | null
+          dettagli_regime: string | null
+          regime: string | null
+          tassazione: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          artista_id: string
+          created_at?: string | null
+          dettagli_regime?: string | null
+          regime?: string | null
+          tassazione?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          artista_id?: string
+          created_at?: string | null
+          dettagli_regime?: string | null
+          regime?: string | null
+          tassazione?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artisti_dati_riservati_artista_id_fkey"
+            columns: ["artista_id"]
+            isOneToOne: true
+            referencedRelation: "artisti"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       artisti_note: {
         Row: {
           artista_id: string
@@ -1441,6 +1479,10 @@ export type Database = {
       get_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["ruolo_utente"]
+      }
+      apply_artisti_contatti_import: {
+        Args: { p_patches: Json }
+        Returns: Json
       }
       replace_cast_esterno: {
         Args: { p_opera_id: string; p_rows: Json; p_episodio_id?: string | null }
