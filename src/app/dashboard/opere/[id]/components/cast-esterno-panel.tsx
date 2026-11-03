@@ -5,7 +5,8 @@ import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import Link from 'next/link'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Input } from '@/shared/components/ui/input'
@@ -34,7 +35,7 @@ import {
   updateCastEsterno,
   type CastEsternoRow,
 } from '@/features/opere/services/cast-esterno.service'
-import { Download, Edit, Loader2, MoreHorizontal, Plus, Trash2, Tv, UserCheck, Users } from 'lucide-react'
+import { Edit, Info, Loader2, MoreHorizontal, Plus, Search, Trash2, Tv, UserCheck, Users } from 'lucide-react'
 
 /** Valore Select per "intera opera/serie" (Radix non accetta value vuoto). */
 const SERIE_SCOPE = '__serie__'
@@ -348,6 +349,27 @@ export function CastEsternoPanel({
     )
   }
 
+  const downloadLabel = `Importa da OMDb${scopeEpisodio ? ` (${formatEpisodioLabel({ ...scopeEpisodio, titolo_episodio: null })})` : ''}`
+  const downloadTitle = downloadTconst
+    ? `Importa gli attori da OMDb per ${downloadTarget}`
+    : scopeEpisodio
+      ? 'Questo episodio non ha un tconst IMDb'
+      : 'Collega prima un tconst IMDb all\'opera'
+  const isCastEmpty = !loading && rows.length === 0 && !draft
+
+  const downloadButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={downloadFromImdb}
+      disabled={busy || !downloadTconst}
+      title={downloadTitle}
+    >
+      {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Search className="h-4 w-4 mr-2" />}
+      {downloadLabel}
+    </Button>
+  )
+
   return (
     <Card className="gap-4 py-4">
       <CardHeader>
@@ -357,36 +379,27 @@ export function CastEsternoPanel({
               <Users className="mr-2 h-5 w-5" />
               Cast esterno
               <Badge variant="secondary" className="ml-2">{rows.length}</Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="ml-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label="Informazioni sul cast esterno"
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  Nomi non presenti in anagrafica RASI.
+                  {hasEpisodi ? ' Ogni nome può valere per tutta la serie o per singoli episodi.' : ''}
+                </TooltipContent>
+              </Tooltip>
             </CardTitle>
-            <CardDescription>
-              Nomi non presenti in anagrafica RASI.
-              {hasEpisodi ? ' Ogni nome può valere per tutta la serie o per singoli episodi.' : ''}
-            </CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={downloadFromImdb}
-            disabled={busy || !downloadTconst}
-            title={
-              downloadTconst
-                ? `Scarica gli attori IMDb per ${downloadTarget}`
-                : scopeEpisodio
-                  ? 'Questo episodio non ha un tconst IMDb'
-                  : 'Collega prima un tconst IMDb all\'opera'
-            }
-          >
-            {busy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-            Scarica cast da IMDb{scopeEpisodio ? ` (${formatEpisodioLabel({ ...scopeEpisodio, titolo_episodio: null })})` : ''}
-          </Button>
+          {!isCastEmpty && downloadButton}
         </div>
       </CardHeader>
       <CardContent className="px-4 space-y-4">
-        <p className="text-xs text-muted-foreground">
-          Il download usa OMDb (chiave gratuita <span className="font-mono">OMDB_API_KEY</span>): solo gli attori in evidenza, senza personaggio e senza codice persona.
-          OMDb li propone tutti come primari; la primarietà si corregge qui e non viene riscaricata da sola.
-          Il cast completo IMDb (comprimari) non è incluso in quel piano: aggiungilo a mano.
-        </p>
         {!imdbTconst && !hasEpisodi && (
           <p className="text-sm text-muted-foreground">Nessun tconst IMDb su questa opera. Il cast esterno si può comunque compilare a mano.</p>
         )}
@@ -467,10 +480,16 @@ export function CastEsternoPanel({
 
         {loading ? (
           <div className="h-16 animate-pulse rounded bg-muted" />
-        ) : visibleRows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {rows.length === 0 ? 'Nessun cast esterno salvato.' : 'Nessun cast esterno per questa selezione.'}
-          </p>
+        ) : draft ? null : visibleRows.length === 0 ? (
+          rows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-4 py-10 text-center">
+              <Users className="h-8 w-8 text-muted-foreground" aria-hidden />
+              <p className="text-sm text-muted-foreground">Nessun cast esterno salvato.</p>
+              {downloadButton}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nessun cast esterno per questa selezione.</p>
+          )
         ) : (
           <div className="space-y-4">
             {groups.map((group) => (

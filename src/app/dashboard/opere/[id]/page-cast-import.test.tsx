@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import OperaDetailPage from './page'
 
@@ -29,9 +30,12 @@ jest.mock('@/features/opere/services/cast-esterno.service', () => ({
 
 describe('OperaDetailPage cast import for operatore', () => {
   it('shows the template and import actions', async () => {
+    const user = userEvent.setup()
     render(<OperaDetailPage />)
-    expect(await screen.findByRole('button', { name: 'Scarica template cast' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Importa cast' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Cast' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cast' }))
+    expect(await screen.findByRole('menuitem', { name: 'Scarica template cast' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Importa cast' })).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByText('Opera Test')).toBeInTheDocument()
     })

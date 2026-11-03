@@ -3,13 +3,23 @@ import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom'
 import { CastImportActions } from './cast-import-actions'
 
+async function openCastMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('button', { name: 'Cast' }))
+}
+
+async function openImportDialog(user: ReturnType<typeof userEvent.setup>) {
+  await openCastMenu(user)
+  await user.click(await screen.findByRole('menuitem', { name: 'Importa cast' }))
+}
+
 describe('CastImportActions', () => {
   it('shows the Italian actions and the preview rules', async () => {
     const user = userEvent.setup()
     render(<CastImportActions operaId="op1" onImported={() => undefined} />)
 
-    expect(screen.getByRole('button', { name: 'Scarica template cast' })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Importa cast' }))
+    await openCastMenu(user)
+    expect(await screen.findByRole('menuitem', { name: 'Scarica template cast' })).toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: 'Importa cast' }))
 
     expect(screen.getByRole('dialog')).toHaveTextContent('Attore primario')
     expect(screen.getByRole('dialog')).toHaveTextContent('Personaggio')
@@ -65,7 +75,7 @@ describe('CastImportActions', () => {
     }) as jest.Mock
 
     render(<CastImportActions operaId="op1" onImported={() => undefined} />)
-    await user.click(screen.getByRole('button', { name: 'Importa cast' }))
+    await openImportDialog(user)
     const file = new File(['Nome'], 'cast.csv', { type: 'text/csv' })
     await user.upload(screen.getByLabelText('File template cast'), file)
 
@@ -113,7 +123,7 @@ describe('CastImportActions', () => {
     global.fetch = jest.fn(async () => ({ ok: true, json: async () => preview })) as jest.Mock
 
     render(<CastImportActions operaId="op1" onImported={() => undefined} />)
-    await user.click(screen.getByRole('button', { name: 'Importa cast' }))
+    await openImportDialog(user)
     await user.upload(screen.getByLabelText('File template cast'), new File(['Nome'], 'cast.csv', { type: 'text/csv' }))
 
     expect(await screen.findByText(/Scegli quale riga aggiornare/)).toBeInTheDocument()

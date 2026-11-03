@@ -2,10 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { Download, Loader2, Upload } from 'lucide-react'
+import { ChevronDown, Clapperboard, Download, Loader2, Upload } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Badge } from '@/shared/components/ui/badge'
 import { Input } from '@/shared/components/ui/input'
@@ -105,9 +114,15 @@ async function readError(response: Response): Promise<string> {
 export function CastImportActions({
   operaId,
   onImported,
+  canImport = true,
+  onExportExcel,
+  exportingExcel = false,
 }: {
   operaId: string
   onImported: () => void
+  canImport?: boolean
+  onExportExcel?: () => void
+  exportingExcel?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const requestId = useRef(0)
@@ -265,25 +280,67 @@ export function CastImportActions({
   const formRuoli = RUOLO_PRIMARIETA_OPTIONS.map((option) => option.label)
   const ruoloOptions = [...formRuoli, ...ruoli.filter((nome) => !formRuoli.includes(nome))]
 
+  const showMenu = canImport || Boolean(onExportExcel)
+
+  if (!showMenu) return null
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={downloading}>
-            {downloading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-            Scarica template cast
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={downloading || exportingExcel}
+            aria-label="Cast"
+          >
+            {(downloading || exportingExcel)
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <Clapperboard className="h-4 w-4 mr-2" />}
+            Cast
+            <ChevronDown className="h-3.5 w-3.5 ml-1 opacity-70" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => download('xlsx')}>Excel (.xlsx)</DropdownMenuItem>
-          <DropdownMenuItem onClick={() => download('csv')}>CSV (.csv)</DropdownMenuItem>
+        <DropdownMenuContent align="end" className="min-w-[12rem]">
+          {canImport && (
+            <>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={downloading}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Scarica template cast
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => void download('xlsx')}>Excel (.xlsx)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void download('csv')}>CSV (.csv)</DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem
+                onSelect={() => {
+                  reset()
+                  setOpen(true)
+                }}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Importa cast
+              </DropdownMenuItem>
+            </>
+          )}
+          {canImport && onExportExcel && <DropdownMenuSeparator />}
+          {onExportExcel && (
+            <DropdownMenuItem
+              disabled={exportingExcel}
+              onSelect={() => {
+                onExportExcel()
+              }}
+            >
+              {exportingExcel
+                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <Download className="h-4 w-4 mr-2" />}
+              Scarica cast (Excel)
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <Button variant="outline" size="sm" onClick={() => { reset(); setOpen(true) }}>
-        <Upload className="h-4 w-4 mr-2" />
-        Importa cast
-      </Button>
 
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) reset() }}>
         <DialogContent className="max-w-6xl">
