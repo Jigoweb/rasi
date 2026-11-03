@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState, type ReactNode } from 'react'
-import { Edit, MoreHorizontal, Trash2 } from 'lucide-react'
+import { ChevronRight, Edit, MoreHorizontal, Trash2 } from 'lucide-react'
+import { cn } from '@/shared/lib/utils'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import {
@@ -115,69 +116,101 @@ export function EpisodiByStagione({
   }
 
   return (
-    <div className="divide-y">
+    <div>
       {groups.map((group) => {
         const isExpanded = expanded.has(group.key)
         const canPeek = group.count >= 2
         const showPeek = canPeek && !isExpanded
 
         return (
-          <div key={String(group.key)} className="py-2">
-            <div className="flex items-center justify-between gap-3 px-4 pl-6 py-2">
-              <h3 className="text-sm font-medium">
-                {formatStagioneHeader(group.stagione, group.count)}
-              </h3>
-              {canPeek && isExpanded && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toggleSeason(group.key, false)}
-                >
-                  Riduci
-                </Button>
-              )}
-            </div>
+          <div key={String(group.key)}>
+            {canPeek ? (
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-4 pl-6 py-2 bg-muted/50 text-left hover:bg-muted/70 transition-colors"
+                aria-expanded={isExpanded}
+                onClick={() => toggleSeason(group.key, !isExpanded)}
+              >
+                <ChevronRight
+                  className={cn(
+                    'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                    isExpanded && 'rotate-90',
+                  )}
+                />
+                <span className="text-sm font-medium">
+                  {formatStagioneHeader(group.stagione, group.count)}
+                </span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 px-4 pl-6 py-2 bg-muted/50">
+                <span className="text-sm font-medium">
+                  {formatStagioneHeader(group.stagione, group.count)}
+                </span>
+              </div>
+            )}
 
             <div className="relative">
-              <div className={showPeek ? 'max-h-[4.75rem] overflow-hidden' : undefined}>
+              <div className={showPeek ? 'max-h-[7.5rem] overflow-hidden' : undefined}>
                 <div className="hidden lg:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="py-3 px-4 pl-6">Episodio</TableHead>
-                        <TableHead className="py-3 px-4">Titolo italiano</TableHead>
-                        <TableHead className="py-3 px-4">Titolo originale</TableHead>
-                        <TableHead className="py-3 px-4">Data</TableHead>
-                        <TableHead className="py-3 px-4">Durata</TableHead>
-                        <TableHead className="py-3 px-4">IMDb tconst</TableHead>
-                        <TableHead className="py-3 px-4">Codice ISAN</TableHead>
-                        <TableHead className="py-3 px-4 pr-6 w-24"></TableHead>
-                      </TableRow>
-                    </TableHeader>
+                  <Table className="table-fixed w-full">
+                    <colgroup>
+                      <col className="w-20" />
+                      <col className="w-[22%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-28" />
+                      <col className="w-24" />
+                      <col className="w-32" />
+                      <col className="w-32" />
+                      <col className="w-14" />
+                    </colgroup>
+                    {!showPeek && (
+                      <TableHeader>
+                        <TableRow>
+                          {(
+                            [
+                              ['Episodio', 'pl-6'],
+                              ['Titolo italiano', ''],
+                              ['Titolo originale', ''],
+                              ['Data', ''],
+                              ['Durata', ''],
+                              ['IMDb tconst', ''],
+                              ['Codice ISAN', ''],
+                              [null, 'pr-6'],
+                            ] as const
+                          ).map(([label, extra], index) => (
+                            <TableHead
+                              key={label ?? `actions-${index}`}
+                              className={cn('h-9 py-2 px-4', extra)}
+                            >
+                              {label}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                    )}
                     <TableBody>
                       {group.episodi.map((e) => (
                         <TableRow key={e.id} className="hover:bg-muted/50">
-                          <TableCell className="py-4 px-4 pl-6">{e.numero_episodio ?? '—'}</TableCell>
-                          <TableCell className="py-4 px-4">{e.titolo_episodio || '—'}</TableCell>
-                          <TableCell className="py-4 px-4 italic text-muted-foreground">
+                          <TableCell className="py-1.5 px-4 pl-6">{e.numero_episodio ?? '—'}</TableCell>
+                          <TableCell className="py-1.5 px-4">{e.titolo_episodio || '—'}</TableCell>
+                          <TableCell className="py-1.5 px-4 italic text-muted-foreground">
                             {e.titolo_episodio_originale || '—'}
                           </TableCell>
-                          <TableCell className="py-4 px-4">
+                          <TableCell className="py-1.5 px-4">
                             {e.data_prima_messa_in_onda
                               ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT')
                               : '—'}
                           </TableCell>
-                          <TableCell className="py-4 px-4">
+                          <TableCell className="py-1.5 px-4">
                             {e.durata_minuti ? `${e.durata_minuti} min` : '—'}
                           </TableCell>
-                          <TableCell className="py-4 px-4 font-mono text-sm">
+                          <TableCell className="py-1.5 px-4 font-mono text-sm">
                             <ImdbCell tconst={e.imdb_tconst} />
                           </TableCell>
-                          <TableCell className="py-4 px-4 font-mono text-sm">
+                          <TableCell className="py-1.5 px-4 font-mono text-sm">
                             {e.codice_isan || <span className="text-muted-foreground">—</span>}
                           </TableCell>
-                          <TableCell className="py-4 px-4 pr-6">
+                          <TableCell className="py-1.5 px-4 pr-6">
                             <EpisodioActionsMenu episodio={e} onEdit={onEdit} onDelete={onDelete} />
                           </TableCell>
                         </TableRow>
@@ -186,10 +219,10 @@ export function EpisodiByStagione({
                   </Table>
                 </div>
 
-                <div className="lg:hidden p-4 space-y-3">
+                <div className="lg:hidden p-3 space-y-2">
                   {group.episodi.map((e) => (
-                    <Card key={e.id} className="gap-4 py-4">
-                      <CardContent className="space-y-2 px-4">
+                    <Card key={e.id} className="gap-2 py-3">
+                      <CardContent className="space-y-1.5 px-3">
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="font-medium">
@@ -240,17 +273,15 @@ export function EpisodiByStagione({
               </div>
 
               {showPeek && (
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-b from-transparent to-card flex items-end justify-center pb-2">
-                  <Button
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent via-white/90 to-white flex items-end justify-center pb-2">
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="pointer-events-auto rounded-full"
+                    className="pointer-events-auto text-sm font-medium text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
                     aria-expanded={false}
                     onClick={() => toggleSeason(group.key, true)}
                   >
-                    Espandi stagione
-                  </Button>
+                    Espandi
+                  </button>
                 </div>
               )}
             </div>

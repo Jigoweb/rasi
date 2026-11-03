@@ -72,7 +72,7 @@ describe('OperaDetailPage', () => {
     expect(screen.getAllByText('Il quinto oboe').length).toBeGreaterThan(0)
     expect(screen.getAllByText('The Fifth Oboe').length).toBeGreaterThan(0)
     expect(screen.getByText('Stagione 1 · 1 episodio')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Espandi stagione' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Stagione 1 · 1 episodio/ })).not.toBeInTheDocument()
   })
 
   it('raggruppa gli episodi per stagione con anteprima espandibile', async () => {
@@ -116,18 +116,19 @@ describe('OperaDetailPage', () => {
 
     render(<OperaDetailPage />)
 
-    expect(await screen.findByText('Stagione 1 · 2 episodi')).toBeInTheDocument()
-    const expand = await screen.findByRole('button', { name: 'Espandi stagione' })
-    expect(screen.queryByRole('button', { name: 'Riduci' })).not.toBeInTheDocument()
+    const toggle = await screen.findByRole('button', { name: /Stagione 1 · 2 episodi/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Espandi' })).toBeInTheDocument()
 
-    await user.click(expand)
-    expect(await screen.findByRole('button', { name: 'Riduci' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Espandi stagione' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Espandi' }))
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.queryByRole('button', { name: 'Espandi' })).not.toBeInTheDocument()
     expect(screen.getAllByText('Pilota').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Il quinto oboe').length).toBeGreaterThan(0)
 
-    await user.click(screen.getByRole('button', { name: 'Riduci' }))
-    expect(await screen.findByRole('button', { name: 'Espandi stagione' })).toBeInTheDocument()
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('button', { name: 'Espandi' })).toBeInTheDocument()
   })
 
   it('renders opera title', async () => {
