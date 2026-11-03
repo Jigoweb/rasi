@@ -71,6 +71,63 @@ describe('OperaDetailPage', () => {
     expect(screen.getByRole('columnheader', { name: 'Titolo originale' })).toBeInTheDocument()
     expect(screen.getAllByText('Il quinto oboe').length).toBeGreaterThan(0)
     expect(screen.getAllByText('The Fifth Oboe').length).toBeGreaterThan(0)
+    expect(screen.getByText('Stagione 1 · 1 episodio')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Espandi stagione' })).not.toBeInTheDocument()
+  })
+
+  it('raggruppa gli episodi per stagione con anteprima espandibile', async () => {
+    const user = userEvent.setup()
+    ;(getOperaById as jest.Mock).mockResolvedValueOnce({
+      data: { ...operaFixture, tipo: 'serie_tv', has_episodes: true },
+      error: null,
+    })
+    const { getEpisodiByOperaId } = jest.requireMock('@/features/opere/services/opere.service') as {
+      getEpisodiByOperaId: jest.Mock
+    }
+    getEpisodiByOperaId.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'ep1',
+          numero_stagione: 1,
+          numero_episodio: 1,
+          titolo_episodio: 'Pilota',
+          titolo_episodio_originale: 'Pilot',
+          descrizione: null,
+          durata_minuti: 40,
+          data_prima_messa_in_onda: null,
+          imdb_tconst: null,
+          codice_isan: null,
+        },
+        {
+          id: 'ep2',
+          numero_stagione: 1,
+          numero_episodio: 2,
+          titolo_episodio: 'Il quinto oboe',
+          titolo_episodio_originale: 'The Fifth Oboe',
+          descrizione: null,
+          durata_minuti: 40,
+          data_prima_messa_in_onda: null,
+          imdb_tconst: null,
+          codice_isan: null,
+        },
+      ],
+      error: null,
+    })
+
+    render(<OperaDetailPage />)
+
+    expect(await screen.findByText('Stagione 1 · 2 episodi')).toBeInTheDocument()
+    const expand = await screen.findByRole('button', { name: 'Espandi stagione' })
+    expect(screen.queryByRole('button', { name: 'Riduci' })).not.toBeInTheDocument()
+
+    await user.click(expand)
+    expect(await screen.findByRole('button', { name: 'Riduci' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Espandi stagione' })).not.toBeInTheDocument()
+    expect(screen.getAllByText('Pilota').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Il quinto oboe').length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: 'Riduci' }))
+    expect(await screen.findByRole('button', { name: 'Espandi stagione' })).toBeInTheDocument()
   })
 
   it('renders opera title', async () => {

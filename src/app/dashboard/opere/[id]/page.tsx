@@ -34,6 +34,7 @@ import { canManageOperaCast } from '@/shared/lib/auth-permissions'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
 import { CastImportActions } from './components/cast-import-actions'
 import { EpisodiImportActions } from './components/episodi-import-actions'
+import { EpisodiByStagione } from './components/episodi-by-stagione'
 import { listCastEsterno } from '@/features/opere/services/cast-esterno.service'
 import { buildCastExportRows, castExportFileName } from '@/features/opere/lib/cast-export'
 import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
@@ -1385,160 +1386,17 @@ export default function OperaDetailPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="hidden lg:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="py-3 px-4 pl-6">Stagione</TableHead>
-                    <TableHead className="py-3 px-4">Episodio</TableHead>
-                    <TableHead className="py-3 px-4">Titolo italiano</TableHead>
-                    <TableHead className="py-3 px-4">Titolo originale</TableHead>
-                    <TableHead className="py-3 px-4">Data</TableHead>
-                    <TableHead className="py-3 px-4">Durata</TableHead>
-                    <TableHead className="py-3 px-4">IMDb tconst</TableHead>
-                    <TableHead className="py-3 px-4">Codice ISAN</TableHead>
-                    <TableHead className="py-3 px-4 pr-6 w-24"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(episodi || []).length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-12">
-                        <div className="flex flex-col items-center gap-4">
-                          <p className="text-muted-foreground">Nessun episodio associato</p>
-                          <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Aggiungi il primo episodio
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    episodi.map((e: any) => (
-                      <TableRow key={e.id} className="hover:bg-muted/50">
-                        <TableCell className="py-4 px-4 pl-6">{e.numero_stagione}</TableCell>
-                        <TableCell className="py-4 px-4">{e.numero_episodio}</TableCell>
-                        <TableCell className="py-4 px-4">{e.titolo_episodio || '—'}</TableCell>
-                        <TableCell className="py-4 px-4 italic text-muted-foreground">{e.titolo_episodio_originale || '—'}</TableCell>
-                        <TableCell className="py-4 px-4">{e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}</TableCell>
-                        <TableCell className="py-4 px-4">{e.durata_minuti ? `${e.durata_minuti} min` : '—'}</TableCell>
-                        <TableCell className="py-4 px-4 font-mono text-sm">
-                          {e.imdb_tconst ? (
-                            <a 
-                              href={`https://www.imdb.com/title/${e.imdb_tconst}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              {e.imdb_tconst}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="py-4 px-4 font-mono text-sm">
-                          {e.codice_isan || <span className="text-muted-foreground">—</span>}
-                        </TableCell>
-                        <TableCell className="py-4 px-4 pr-6">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={() => openEditEpisodioDialog(e)}
-                              aria-label="Modifica episodio"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => openDeleteEpisodioDialog(e)}
-                              aria-label="Elimina episodio"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-            <div className="lg:hidden p-4 space-y-3">
-              {(episodi || []).length === 0 ? (
-                <div className="flex flex-col items-center gap-4 py-8">
-                  <p className="text-muted-foreground">Nessun episodio associato</p>
-                  <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Aggiungi il primo episodio
-                  </Button>
-                </div>
-              ) : (
-                episodi.map((e: any) => (
-                  <Card key={e.id} className="gap-4 py-4">
-                    <CardContent className="space-y-2 px-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium">S{e.numero_stagione} E{e.numero_episodio}</div>
-                          <div className="text-sm">{e.titolo_episodio || '—'}</div>
-                          {e.titolo_episodio_originale && (
-                            <div className="text-sm italic text-muted-foreground">{e.titolo_episodio_originale}</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEditEpisodioDialog(e)}
-                            aria-label="Modifica episodio"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => openDeleteEpisodioDialog(e)}
-                            aria-label="Elimina episodio"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {e.data_prima_messa_in_onda ? new Date(e.data_prima_messa_in_onda).toLocaleDateString('it-IT') : '—'}
-                        {e.durata_minuti && ` • ${e.durata_minuti} min`}
-                      </div>
-                      {(e.imdb_tconst || e.codice_isan) && (
-                        <div className="text-xs space-y-1">
-                          {e.imdb_tconst && (
-                            <div>
-                              <a 
-                                href={`https://www.imdb.com/title/${e.imdb_tconst}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-primary hover:underline font-mono"
-                              >
-                                IMDb: {e.imdb_tconst}
-                              </a>
-                            </div>
-                          )}
-                          {e.codice_isan && (
-                            <div className="font-mono text-muted-foreground">
-                              ISAN: {e.codice_isan}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-            </div>
+            <EpisodiByStagione
+              episodi={episodi || []}
+              onEdit={openEditEpisodioDialog}
+              onDelete={openDeleteEpisodioDialog}
+              emptyActions={
+                <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Aggiungi il primo episodio
+                </Button>
+              }
+            />
           </CardContent>
         </Card>
       )}
