@@ -32,7 +32,10 @@ const DURATA = 'Durata non valida: inserire i minuti come numero intero maggiore
 const DATA = 'Data prima messa in onda non valida: usare gg/mm/aaaa oppure una data Excel'
 const RIGA_VUOTA = 'Riga vuota'
 
-const DRAFT_FIELDS = ['stagione', 'episodio', 'titolo', 'titoloOriginale', 'durataMinuti', 'dataPrimaMessaInOnda'] as const
+const DRAFT_FIELDS = [
+  'stagione', 'episodio', 'titolo', 'titoloOriginale',
+  'titoliAlternativi', 'imdbTconst', 'durataMinuti', 'dataPrimaMessaInOnda',
+] as const
 
 export type EpisodioTemplateSource = {
   numero_stagione: number
@@ -55,6 +58,8 @@ export type EpisodeDraft = {
   episodio: string
   titolo: string
   titoloOriginale: string
+  titoliAlternativi: string
+  imdbTconst: string
   durataMinuti: string
   dataPrimaMessaInOnda: string
 }
@@ -62,11 +67,14 @@ export type EpisodeDraft = {
 export type ClassifiedEpisodeRow = {
   rowNumber: number
   status: 'valid' | 'skipped'
+  action: 'insert' | 'update' | null
   message: string | null
   stagione: number | null
   episodio: number | null
   titolo: string | null
   titoloOriginale: string | null
+  aliasTitoli: string[] | null
+  imdbTconst: string | null
   durataMinuti: number | null
   dataPrimaMessaInOnda: string | null
   draft: EpisodeDraft
@@ -254,10 +262,21 @@ export function classifyEpisodiMatrix(
       episodio: source[column.get('Episodio') ?? -1],
       titolo: source[column.get(headerCheck.titles.italiano) ?? -1],
       titoloOriginale: originaleIndex >= 0 ? source[originaleIndex] : null,
+      titoliAlternativi: optionalCell(source, column, 'Titoli alternativi'),
+      imdbTconst: optionalCell(source, column, 'IMDb tconst'),
       durata: source[column.get('Durata (minuti)') ?? -1],
       data: source[column.get('Data prima messa in onda') ?? -1],
     }
-    if ([cell.stagione, cell.episodio, cell.titolo, cell.titoloOriginale, cell.durata, cell.data].every(cellIsEmpty)) continue
+    if ([
+      cell.stagione,
+      cell.episodio,
+      cell.titolo,
+      cell.titoloOriginale,
+      cell.titoliAlternativi,
+      cell.imdbTconst,
+      cell.durata,
+      cell.data,
+    ].every(cellIsEmpty)) continue
     cells.push(cell)
   }
   return classifyEpisodeCells(cells, existing, false)
@@ -276,6 +295,8 @@ export function revalidateEpisodeDrafts(
       episodio: row.draft.episodio,
       titolo: row.draft.titolo,
       titoloOriginale: row.draft.titoloOriginale,
+      titoliAlternativi: row.draft.titoliAlternativi,
+      imdbTconst: row.draft.imdbTconst,
       durata: row.draft.durataMinuti,
       data: row.draft.dataPrimaMessaInOnda,
       draft: row.draft,
@@ -385,6 +406,8 @@ type EpisodeCell = {
   episodio: unknown
   titolo: unknown
   titoloOriginale: unknown
+  titoliAlternativi?: unknown
+  imdbTconst?: unknown
   durata: unknown
   data: unknown
   draft?: EpisodeDraft
@@ -401,22 +424,41 @@ function classifyEpisodeCells(
   const rows: ClassifiedEpisodeRow[] = []
 
   for (const raw of cells) {
-    const empty = [raw.stagione, raw.episodio, raw.titolo, raw.titoloOriginale, raw.durata, raw.data].every(cellIsEmpty)
+    const empty = [
+      raw.stagione,
+      raw.episodio,
+      raw.titolo,
+      raw.titoloOriginale,
+      raw.titoliAlternativi,
+      raw.imdbTconst,
+      raw.durata,
+      raw.data,
+    ].every(cellIsEmpty)
     if (empty && !keepEmpty) continue
 
     const stagione = empty ? null : readPositiveInt(raw.stagione)
     const episodio = empty ? null : readPositiveInt(raw.episodio)
     const titolo = empty ? null : readTitle(raw.titolo)
     const titoloOriginale = empty ? null : readTitle(raw.titoloOriginale)
+    const aliasTitoli = empty ? null : parseAliasTitoli(raw.titoliAlternativi)
+    const imdbTconst = empty ? null : readTconst(raw.imdbTconst)
     const durata = empty ? null : readDuration(raw.durata)
     const data = empty ? null : readDate(raw.data)
     const draft = raw.draft
-      ? { ...emptyDraft(), ...raw.draft, titoloOriginale: raw.draft.titoloOriginale ?? '' }
+      ? {
+          ...emptyDraft(),
+          ...raw.draft,
+          titoloOriginale: raw.draft.titoloOriginale ?? '',
+          titoliAlternativi: raw.draft.titoliAlternativi ?? '',
+          imdbTconst: raw.draft.imdbTconst ?? '',
+        }
       : {
           stagione: displayInt(raw.stagione, stagione),
           episodio: displayInt(raw.episodio, episodio),
           titolo: titolo ?? rawCellText(raw.titolo),
           titoloOriginale: titoloOriginale ?? rawCellText(raw.titoloOriginale),
+          titoliAlternativi: rawCellText(raw.titoliAlternativi),
+          imdbTconst: rawCellText(raw.imdbTconst),
           durataMinuti: displayInt(raw.durata, durata),
           dataPrimaMessaInOnda: displayDate(raw.data, data),
         }
@@ -425,11 +467,14 @@ function classifyEpisodeCells(
       rows.push({
         rowNumber: raw.rowNumber,
         status: 'skipped',
+        action: null,
         message: RIGA_VUOTA,
         stagione: null,
         episodio: null,
         titolo: null,
         titoloOriginale: null,
+        aliasTitoli: null,
+        imdbTconst: null,
         durataMinuti: null,
         dataPrimaMessaInOnda: null,
         draft,
@@ -449,19 +494,21 @@ function classifyEpisodeCells(
     const key = parsedSeason != null && parsedEpisode != null ? episodeKey(parsedSeason, parsedEpisode) : null
 
     let status: ClassifiedEpisodeRow['status'] = 'valid'
+    let action: ClassifiedEpisodeRow['action'] = 'insert'
     let message: string | null = null
 
     if (key && seen.has(key)) {
       status = 'skipped'
+      action = null
       message = `Duplicato nel file: stagione ${parsedSeason}, episodio ${parsedEpisode} è già alla riga ${seen.get(key)}`
-    } else if (key && existingKeys.has(key)) {
-      status = 'skipped'
-      message = `Episodio già presente sull'opera (stagione ${parsedSeason}, episodio ${parsedEpisode}): riga ignorata, nessun aggiornamento`
-      seen.set(key, raw.rowNumber)
     } else if (fieldErrors.length > 0) {
       status = 'skipped'
+      action = null
       message = fieldErrors.join('; ')
       if (key) seen.set(key, raw.rowNumber)
+    } else if (key && existingKeys.has(key)) {
+      action = 'update'
+      seen.set(key, raw.rowNumber)
     } else if (key && raw.included !== false) {
       seen.set(key, raw.rowNumber)
     }
@@ -469,11 +516,14 @@ function classifyEpisodeCells(
     rows.push({
       rowNumber: raw.rowNumber,
       status,
+      action,
       message,
       stagione: parsedSeason,
       episodio: parsedEpisode,
       titolo,
       titoloOriginale,
+      aliasTitoli,
+      imdbTconst,
       durataMinuti: typeof durata === 'number' ? durata : null,
       dataPrimaMessaInOnda: typeof data === 'string' ? data : null,
       draft,
@@ -492,7 +542,16 @@ function withDefaultInclusion(rows: ClassifiedEpisodeRow[]): ReviewedEpisodeRow[
 }
 
 function emptyDraft(): EpisodeDraft {
-  return { stagione: '', episodio: '', titolo: '', titoloOriginale: '', durataMinuti: '', dataPrimaMessaInOnda: '' }
+  return {
+    stagione: '',
+    episodio: '',
+    titolo: '',
+    titoloOriginale: '',
+    titoliAlternativi: '',
+    imdbTconst: '',
+    durataMinuti: '',
+    dataPrimaMessaInOnda: '',
+  }
 }
 
 async function prepareOpera(
@@ -520,7 +579,7 @@ async function insertReviewedRows(
 ): Promise<{ ok: true; imported: number } | { ok: false; status: number; error: string }> {
   let imported = 0
   for (const row of rows) {
-    if (!row.included || row.status !== 'valid' || row.stagione == null || row.episodio == null) continue
+    if (row.action !== 'insert' || !row.included || row.status !== 'valid' || row.stagione == null || row.episodio == null) continue
     const outcome = await store.insertEpisode({
       opera_id: operaId,
       numero_stagione: row.stagione,
@@ -538,6 +597,7 @@ async function insertReviewedRows(
       return { ok: false, status: 403, error: 'Accesso negato: non puoi inserire episodi su questa opera.' }
     }
     row.status = 'skipped'
+    row.action = null
     row.included = false
     row.message = outcome.code === '23505'
       ? `Episodio già presente sull'opera (stagione ${row.stagione}, episodio ${row.episodio}): riga ignorata, nessun aggiornamento`
@@ -590,6 +650,12 @@ function isoToExcelSerial(iso: string): number {
   const utc = Date.UTC(year, month - 1, day)
   const epoch = Date.UTC(1899, 11, 30)
   return Math.round((utc - epoch) / 86400000)
+}
+
+function optionalCell(source: unknown[], column: Map<string, number>, header: string): unknown {
+  const index = column.get(header)
+  if (index === undefined) return null
+  return source[index]
 }
 
 function headerCells(row: unknown[]): string[] {
@@ -697,6 +763,18 @@ function readTitle(value: unknown): string | null {
   if (cellIsEmpty(value)) return null
   const text = String(value).trim()
   return text ? text : null
+}
+
+function parseAliasTitoli(value: unknown): string[] | null {
+  if (cellIsEmpty(value)) return null
+  const parts = String(value).split(',').map((part) => part.trim()).filter(Boolean)
+  return parts.length > 0 ? parts : null
+}
+
+function readTconst(value: unknown): string | null {
+  if (cellIsEmpty(value)) return null
+  const text = String(value).trim()
+  return text || null
 }
 
 function readDate(value: unknown): string | null | 'invalid' {

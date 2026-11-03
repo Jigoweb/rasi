@@ -73,11 +73,14 @@ describe('classifyEpisodiMatrix', () => {
     expect(row(result)).toEqual({
       rowNumber: 2,
       status: 'valid',
+      action: 'insert',
       message: null,
       stagione: 1,
       episodio: 2,
       titolo: 'Pilota',
       titoloOriginale: null,
+      aliasTitoli: null,
+      imdbTconst: null,
       durataMinuti: 45,
       dataPrimaMessaInOnda: '2020-03-15',
       draft: {
@@ -85,6 +88,8 @@ describe('classifyEpisodiMatrix', () => {
         episodio: '2',
         titolo: 'Pilota',
         titoloOriginale: '',
+        titoliAlternativi: '',
+        imdbTconst: '',
         durataMinuti: '45',
         dataPrimaMessaInOnda: '15/03/2020',
       },
@@ -169,19 +174,57 @@ describe('classifyEpisodiMatrix', () => {
     expect(row(result).message).toMatch(/Data prima messa in onda non valida/)
   })
 
-  it('salta un episodio già presente senza trattarlo come aggiornamento', () => {
+  it('tratta un episodio già presente come update valido anche senza alias e tconst', () => {
     const result = classifyEpisodiMatrix(matrix([[1, 1, 'Nuovo titolo', 50, '01/01/2021']]), [
       { numero_stagione: 1, numero_episodio: 1 },
     ])
     expect(row(result)).toMatchObject({
-      status: 'skipped',
+      status: 'valid',
+      action: 'update',
       stagione: 1,
       episodio: 1,
       titolo: 'Nuovo titolo',
+      aliasTitoli: null,
+      imdbTconst: null,
+      message: null,
     })
-    expect(row(result).message).toBe(
-      'Episodio già presente sull\'opera (stagione 1, episodio 1): riga ignorata, nessun aggiornamento',
+  })
+
+  it('segna gli episodi già presenti come update validi, non come skipped', () => {
+    const result = classifyEpisodiMatrix(
+      [
+        [...EPISODI_IMPORT_HEADERS],
+        [1, 1, 'Nuovo titolo', '', 'Alias 1, Alias 2', 'tt999', '', ''],
+      ],
+      [{ numero_stagione: 1, numero_episodio: 1 }],
     )
+    expect(row(result)).toMatchObject({
+      status: 'valid',
+      action: 'update',
+      titolo: 'Nuovo titolo',
+      aliasTitoli: ['Alias 1', 'Alias 2'],
+      imdbTconst: 'tt999',
+      draft: {
+        titoliAlternativi: 'Alias 1, Alias 2',
+        imdbTconst: 'tt999',
+      },
+    })
+  })
+
+  it('accetta file legacy senza Titoli alternativi e IMDb tconst', () => {
+    const result = classifyEpisodiMatrix(
+      [
+        ['Stagione', 'Episodio', 'Titolo italiano', 'Titolo originale', 'Durata (minuti)', 'Data prima messa in onda'],
+        [1, 2, 'IT', 'OR', 30, null],
+      ],
+      [],
+    )
+    expect(row(result)).toMatchObject({
+      status: 'valid',
+      action: 'insert',
+      aliasTitoli: null,
+      imdbTconst: null,
+    })
   })
 
   it('tiene la prima occorrenza e salta i duplicati successivi nel file', () => {
@@ -425,11 +468,22 @@ describe('runEpisodiImport', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.mode).toBe('preview')
-    expect(result.summary).toEqual({ total: 2, valid: 1, skipped: 1, excluded: 0, imported: 0 })
-    expect(result.rows[0].included).toBe(false)
-    expect(result.rows[1].included).toBe(true)
+    expect(result.summary).toEqual({ total: 2, valid: 2, skipped: 0, excluded: 0, imported: 0 })
+    expect(result.rows[0]).toMatchObject({
+      status: 'valid',
+      action: 'update',
+      included: true,
+      stagione: 1,
+      episodio: 1,
+    })
+    expect(result.rows[1]).toMatchObject({
+      status: 'valid',
+      action: 'insert',
+      included: true,
+      stagione: 1,
+      episodio: 2,
+    })
     expect(result.existingKeys).toEqual([{ numero_stagione: 1, numero_episodio: 1 }])
-    expect(result.rows[1]).toMatchObject({ status: 'valid', stagione: 1, episodio: 2 })
   })
 
   it('in conferma inserisce solo le righe valide e non aggiorna gli esistenti', async () => {
@@ -447,6 +501,7 @@ describe('runEpisodiImport', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.summary.imported).toBe(1)
+    expect(result.rows[0]).toMatchObject({ status: 'valid', action: 'update', stagione: 1, episodio: 1 })
     expect(inserted).toEqual([
       {
         opera_id: operaId,
@@ -458,7 +513,7 @@ describe('runEpisodiImport', () => {
         data_prima_messa_in_onda: null,
       },
     ])
-    expect(result.alerts.map((alert) => alert.rowNumber)).toEqual([2, 4])
+    expect(result.alerts.map((alert) => alert.rowNumber)).toEqual([4])
   })
 
   it('rifiuta un’opera che non può avere episodi e un’opera assente', async () => {
@@ -537,7 +592,16 @@ describe('runEpisodiImport', () => {
 })
 
 function draft(stagione: string, episodio: string, titolo: string, data = '', titoloOriginale = ''): EpisodeDraft {
-  return { stagione, episodio, titolo, titoloOriginale, durataMinuti: '', dataPrimaMessaInOnda: data }
+  return {
+    stagione,
+    episodio,
+    titolo,
+    titoloOriginale,
+    titoliAlternativi: '',
+    imdbTconst: '',
+    durataMinuti: '',
+    dataPrimaMessaInOnda: data,
+  }
 }
 
 describe('revalidateEpisodeDrafts', () => {
@@ -630,9 +694,10 @@ describe('revalidateEpisodeDrafts', () => {
       { rowNumber: 2, included: false, draft: draft('1', '1', 'Gia') },
       { rowNumber: 3, included: true, draft: draft('1', '1', 'Altra') },
     ], [{ numero_stagione: 1, numero_episodio: 1 }])
-    expect(existing[0].message).toMatch(/già presente/)
+    expect(existing[0]).toMatchObject({ status: 'valid', action: 'update', message: null, included: false })
     expect(existing[1].message).toMatch(/Duplicato nel file/)
     expect(existing[1].included).toBe(false)
+    expect(existing[1].action).toBeNull()
   })
 })
 
@@ -679,9 +744,14 @@ describe('confirmEpisodiDrafts', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(inserted.map((row) => row.numero_episodio)).toEqual([1, 4])
-    expect(result.summary).toMatchObject({ imported: 2, excluded: 1, skipped: 2 })
+    expect(result.summary).toMatchObject({ imported: 2, excluded: 1, skipped: 1, valid: 4 })
     expect(result.rows.find((row) => row.rowNumber === 4)?.included).toBe(false)
-    expect(result.alerts.map((alert) => alert.rowNumber)).toEqual([4, 5])
+    expect(result.rows.find((row) => row.rowNumber === 5)).toMatchObject({
+      status: 'valid',
+      action: 'update',
+      included: true,
+    })
+    expect(result.alerts.map((alert) => alert.rowNumber)).toEqual([4])
   })
 
   it('importa la seconda occorrenza se la prima è esclusa e la seconda è inclusa', async () => {
