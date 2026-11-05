@@ -1,6 +1,9 @@
 -- Chiude l'esecuzione anonima (e, dove indicato, authenticated) delle
 -- funzioni public segnalate dagli advisor di sicurezza, e fissa
--- search_path = public, pg_temp sulle 39 firme con proconfig nullo.
+-- search_path = public, pg_temp su 35 delle 39 firme con proconfig nullo.
+-- Quattro helper LANGUAGE sql restano senza SET: il dettaglio è nel
+-- blocco search_path. L'avviso function_search_path_mutable su quelle
+-- quattro è accettato.
 --
 -- Stesso schema di 20261021110000_harden_get_dashboard_metrics.sql (#46):
 --   ALTER FUNCTION ... SET search_path = public, pg_temp
@@ -30,11 +33,12 @@
 -- Per anon le due funzioni restituiscono NULL (auth.uid() è NULL).
 --
 -- Le funzioni LANGUAGE sql con una clausola SET non vengono più inlined
--- dal planner. Vale per build_match_key, build_match_key_strict,
--- nome_persona_key, year_range_bounds, year_ranges_overlap,
--- artist_mandate_covers_year e
--- match_programmazione_to_partecipazioni(uuid,numeric,uuid[],integer,integer,uuid[]).
--- Da misurare prima del merge.
+-- dal planner. Misura già fatta (baseline in sola lettura su produzione,
+-- A/B su PG17 locale): build_match_key in un WHERE su 5000 titoli passa
+-- da 91 ms a 319 ms; year_ranges_overlap, con SET anche su
+-- year_range_bounds, è circa 11 volte più lenta. Per questo le quattro
+-- firme inlinabili non ricevono SET. nome_persona_key e
+-- artist_mandate_covers_year sì: non sono inlinabili.
 --
 -- BOZZA operativa: non applicata da questa PR. Va eseguita solo dopo
 -- l'ok esplicito, sul database deciso da chi approva.
@@ -108,10 +112,23 @@ BEGIN
 END
 $revoke_anon$;
 
--- ===== search_path fisso sulle 39 firme con proconfig nullo =====
+-- ===== search_path fisso su 35 delle 39 firme con proconfig nullo =====
 -- Include anche firme i cui grant non cambiano (matcher, chiavi,
 -- trigger di normalizzazione). Non include le firme che avevano già
 -- search_path = public, né get_user_email_by_id.
+--
+-- Escluse di proposito, tutte le firme (l'avviso
+-- function_search_path_mutable resta accettato):
+--   build_match_key(text,integer)
+--   build_match_key_strict(text,integer)
+--   year_range_bounds(integer,integer)
+--   year_ranges_overlap(integer,integer,integer,integer)
+-- Sono LANGUAGE sql e il planner le inlinea solo senza una clausola SET.
+-- Baseline in sola lettura su produzione e A/B su PG17 locale:
+-- build_match_key in un WHERE su 5000 titoli da 91 ms a 319 ms;
+-- year_ranges_overlap con SET anche su year_range_bounds circa 11 volte
+-- più lenta. nome_persona_key e artist_mandate_covers_year restano
+-- nell'elenco: non sono inlinabili comunque.
 DO $fix_search_path$
 DECLARE
   fn text;
@@ -120,8 +137,6 @@ DECLARE
     'public._rasi_exec_json(text)',
     'public.acquire_campagna_processing_lock(uuid,uuid,numeric)',
     'public.artist_mandate_covers_year(uuid,integer,uuid[])',
-    'public.build_match_key(text,integer)',
-    'public.build_match_key_strict(text,integer)',
     'public.check_campagna_processing_lock(uuid,numeric)',
     'public.derive_programmazione_episode_signals(integer,integer,text,text,text,text)',
     'public.finalize_campagna_individuazione(uuid,uuid)',
@@ -152,13 +167,11 @@ DECLARE
     'public.trg_opere_sync_match_keys()',
     'public.trg_programmazioni_sync_match_keys()',
     'public.update_search_vector()',
-    'public.update_updated_at_column()',
-    'public.year_range_bounds(integer,integer)',
-    'public.year_ranges_overlap(integer,integer,integer,integer)'
+    'public.update_updated_at_column()'
   ];
 BEGIN
-  IF cardinality(fns) <> 39 THEN
-    RAISE EXCEPTION 'elenco search_path: attese 39 firme, trovate %', cardinality(fns);
+  IF cardinality(fns) <> 35 THEN
+    RAISE EXCEPTION 'elenco search_path: attese 35 firme, trovate %', cardinality(fns);
   END IF;
 
   FOREACH fn IN ARRAY fns LOOP
@@ -265,8 +278,8 @@ BEGIN
       ('public.artist_mandate_covers_year(uuid,integer,uuid[])', true, true, true, true, 'search_path=public,pg_temp', false, false),
       ('public.audit_log_auth_user_change()', false, false, false, true, 'search_path=public', true, false),
       ('public.audit_log_row_change()', false, false, false, true, 'search_path=public', true, false),
-      ('public.build_match_key(text,integer)', true, true, true, true, 'search_path=public,pg_temp', false, false),
-      ('public.build_match_key_strict(text,integer)', true, true, true, true, 'search_path=public,pg_temp', false, false),
+      ('public.build_match_key(text,integer)', true, true, true, true, NULL::text, false, false),
+      ('public.build_match_key_strict(text,integer)', true, true, true, true, NULL::text, false, false),
       ('public.check_campagna_processing_lock(uuid,numeric)', false, false, false, true, 'search_path=public,pg_temp', true, false),
       ('public.derive_programmazione_episode_signals(integer,integer,text,text,text,text)', true, true, true, true, 'search_path=public,pg_temp', false, false),
       ('public.finalize_campagna_individuazione(uuid,uuid)', false, false, false, true, 'search_path=public,pg_temp', true, false),
@@ -305,8 +318,8 @@ BEGIN
       ('public.trg_programmazioni_sync_match_keys()', true, true, true, true, 'search_path=public,pg_temp', false, false),
       ('public.update_search_vector()', true, true, true, true, 'search_path=public,pg_temp', false, false),
       ('public.update_updated_at_column()', false, false, false, true, 'search_path=public,pg_temp', true, false),
-      ('public.year_range_bounds(integer,integer)', true, true, true, true, 'search_path=public,pg_temp', false, false),
-      ('public.year_ranges_overlap(integer,integer,integer,integer)', true, true, true, true, 'search_path=public,pg_temp', false, false)
+      ('public.year_range_bounds(integer,integer)', true, true, true, true, NULL::text, false, false),
+      ('public.year_ranges_overlap(integer,integer,integer,integer)', true, true, true, true, NULL::text, false, false)
     ) AS v(sig, anon_ok, public_ok, auth_ok, svc_ok, path_norm, secdef, check_email)
   LOOP
     proc := to_regprocedure(r.sig);
@@ -322,7 +335,17 @@ BEGIN
       bad := array_append(bad, r.sig || ': grant');
     END IF;
 
-    IF NOT EXISTS (
+    -- path_norm NULL: search_path deve restare non impostato (le quattro
+    -- helper inlinabili escluse dal SET).
+    IF r.path_norm IS NULL THEN
+      IF EXISTS (
+        SELECT 1
+        FROM unnest(COALESCE((SELECT p.proconfig FROM pg_proc p WHERE p.oid = proc), ARRAY[]::text[])) AS cfg
+        WHERE replace(cfg, ' ', '') LIKE 'search_path=%'
+      ) THEN
+        bad := array_append(bad, r.sig || ': search_path doveva restare mutabile');
+      END IF;
+    ELSIF NOT EXISTS (
       SELECT 1
       FROM unnest(COALESCE((SELECT p.proconfig FROM pg_proc p WHERE p.oid = proc), ARRAY[]::text[])) AS cfg
       WHERE replace(cfg, ' ', '') = r.path_norm

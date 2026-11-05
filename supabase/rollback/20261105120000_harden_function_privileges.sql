@@ -10,8 +10,11 @@
 --
 -- I grant delle funzioni solo-service_role e di quelle authenticated tornano
 -- a PUBLIC, anon, authenticated e service_role.
--- Le 39 firme con proconfig nullo tornano a search_path non impostato
--- (RESET, non search_path vuoto).
+-- Le 35 firme a cui la migration fissa search_path tornano a search_path
+-- non impostato (RESET, non search_path vuoto).
+-- build_match_key, build_match_key_strict, year_range_bounds e
+-- year_ranges_overlap non sono toccate: la migration non le modifica,
+-- il search_path era già nullo e resta nullo.
 -- Le firme che avevano già search_path = public non vengono riscritte.
 
 BEGIN;
@@ -27,8 +30,6 @@ DECLARE
     'public.artist_mandate_covers_year(uuid,integer,uuid[])',
     'public.audit_log_auth_user_change()',
     'public.audit_log_row_change()',
-    'public.build_match_key(text,integer)',
-    'public.build_match_key_strict(text,integer)',
     'public.check_campagna_processing_lock(uuid,numeric)',
     'public.derive_programmazione_episode_signals(integer,integer,text,text,text,text)',
     'public.finalize_campagna_individuazione(uuid,uuid)',
@@ -66,9 +67,7 @@ DECLARE
     'public.trg_opere_sync_match_keys()',
     'public.trg_programmazioni_sync_match_keys()',
     'public.update_search_vector()',
-    'public.update_updated_at_column()',
-    'public.year_range_bounds(integer,integer)',
-    'public.year_ranges_overlap(integer,integer,integer,integer)'
+    'public.update_updated_at_column()'
   ];
 BEGIN
   FOREACH fn IN ARRAY fns LOOP
@@ -131,8 +130,6 @@ DECLARE
     'public._rasi_exec_json(text)',
     'public.acquire_campagna_processing_lock(uuid,uuid,numeric)',
     'public.artist_mandate_covers_year(uuid,integer,uuid[])',
-    'public.build_match_key(text,integer)',
-    'public.build_match_key_strict(text,integer)',
     'public.check_campagna_processing_lock(uuid,numeric)',
     'public.derive_programmazione_episode_signals(integer,integer,text,text,text,text)',
     'public.finalize_campagna_individuazione(uuid,uuid)',
@@ -163,13 +160,11 @@ DECLARE
     'public.trg_opere_sync_match_keys()',
     'public.trg_programmazioni_sync_match_keys()',
     'public.update_search_vector()',
-    'public.update_updated_at_column()',
-    'public.year_range_bounds(integer,integer)',
-    'public.year_ranges_overlap(integer,integer,integer,integer)'
+    'public.update_updated_at_column()'
   ];
 BEGIN
-  IF cardinality(fns) <> 39 THEN
-    RAISE EXCEPTION 'elenco search_path: attese 39 firme, trovate %', cardinality(fns);
+  IF cardinality(fns) <> 35 THEN
+    RAISE EXCEPTION 'elenco search_path: attese 35 firme, trovate %', cardinality(fns);
   END IF;
   FOREACH fn IN ARRAY fns LOOP
     -- proconfig era NULL. RESET, non SET search_path = '': un search_path

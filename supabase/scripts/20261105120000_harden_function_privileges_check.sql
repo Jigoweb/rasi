@@ -4,6 +4,13 @@
 -- Ogni riga di firma deve avere esito = ok. La riga RIEPILOGO è ok solo
 -- se non ci sono assenti o fail. get_user_role e get_user_artista_id sono
 -- nell'elenco per confermare che anon e PUBLIC possono ancora eseguirle.
+--
+-- atteso_search_path NULL significa: search_path non impostato. Vale per
+-- build_match_key, build_match_key_strict, year_range_bounds e
+-- year_ranges_overlap. La migration non le tocca: sono LANGUAGE sql
+-- inlinabili e un SET le rallenta (build_match_key su 5000 titoli da
+-- 91 ms a 319 ms; year_ranges_overlap circa 11 volte). L'avviso advisor
+-- su queste quattro è accettato.
 
 WITH expected (
   signature,
@@ -22,8 +29,8 @@ WITH expected (
     ('artist_mandate_covers_year(uuid,integer,uuid[])'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false),
     ('audit_log_auth_user_change()'::text, false, false, false, true, 'search_path=public'::text, true, false),
     ('audit_log_row_change()'::text, false, false, false, true, 'search_path=public'::text, true, false),
-    ('build_match_key(text,integer)'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false),
-    ('build_match_key_strict(text,integer)'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false),
+    ('build_match_key(text,integer)'::text, true, true, true, true, NULL::text, false, false),
+    ('build_match_key_strict(text,integer)'::text, true, true, true, true, NULL::text, false, false),
     ('check_campagna_processing_lock(uuid,numeric)'::text, false, false, false, true, 'search_path=public,pg_temp'::text, true, false),
     ('derive_programmazione_episode_signals(integer,integer,text,text,text,text)'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false),
     ('finalize_campagna_individuazione(uuid,uuid)'::text, false, false, false, true, 'search_path=public,pg_temp'::text, true, false),
@@ -64,8 +71,8 @@ WITH expected (
     ('trg_programmazioni_sync_match_keys()'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false),
     ('update_search_vector()'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false),
     ('update_updated_at_column()'::text, false, false, false, true, 'search_path=public,pg_temp'::text, true, false),
-    ('year_range_bounds(integer,integer)'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false),
-    ('year_ranges_overlap(integer,integer,integer,integer)'::text, true, true, true, true, 'search_path=public,pg_temp'::text, false, false)
+    ('year_range_bounds(integer,integer)'::text, true, true, true, true, NULL::text, false, false),
+    ('year_ranges_overlap(integer,integer,integer,integer)'::text, true, true, true, true, NULL::text, false, false)
 ),
 report AS (
   SELECT
@@ -91,7 +98,12 @@ report AS (
         OR has_function_privilege('authenticated', p.oid, 'EXECUTE') IS DISTINCT FROM e.atteso_authenticated
         OR has_function_privilege('service_role', p.oid, 'EXECUTE') IS DISTINCT FROM e.atteso_service_role
         THEN 'fail'
-      WHEN NOT EXISTS (
+      WHEN e.atteso_search_path IS NULL AND EXISTS (
+        SELECT 1
+        FROM unnest(COALESCE(p.proconfig, ARRAY[]::text[])) AS cfg
+        WHERE replace(cfg, ' ', '') LIKE 'search_path=%'
+      ) THEN 'fail'
+      WHEN e.atteso_search_path IS NOT NULL AND NOT EXISTS (
         SELECT 1
         FROM unnest(COALESCE(p.proconfig, ARRAY[]::text[])) AS cfg
         WHERE replace(cfg, ' ', '') = e.atteso_search_path
