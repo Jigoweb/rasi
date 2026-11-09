@@ -1,4 +1,4 @@
--- Verifica dopo 20261109120000_fix_campagne_programmazione_list_return_types.sql.
+-- Verifica dopo 20261109104140_fix_campagne_programmazione_list_return_types.sql.
 --
 -- Il check di #60 (20261106220000_role_guard_staff_functions_check.sql)
 -- controlla grant, search_path e presenza del guard, ma non esegue la

@@ -20,8 +20,9 @@
 -- (authenticated + service_role; né PUBLIC né anon).
 --
 -- Verifica dopo l'applicazione:
---   supabase/scripts/20261109120000_fix_campagne_programmazione_list_return_types_check.sql
+--   supabase/scripts/20261109104140_fix_campagne_programmazione_list_return_types_check.sql
 --
+-- Applicata in produzione il 9/11/2026 (schema_migrations 20261109104140).
 -- La CLI Supabase avvolge il file in una transazione: niente BEGIN interno.
 
 CREATE OR REPLACE FUNCTION public.get_campagne_programmazione_with_counts()
