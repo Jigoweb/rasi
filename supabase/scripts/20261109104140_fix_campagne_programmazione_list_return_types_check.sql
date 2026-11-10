@@ -1,4 +1,4 @@
--- Verifica read-only dopo 20261110090000_fix_return_types_staff_functions.sql.
+-- Verifica read-only dopo 20261109104140_fix_campagne_programmazione_list_return_types.sql.
 -- Solo SELECT: non modifica grant, corpi, dati, e non chiama le funzioni.
 -- Una sessione non-staff riceverebbe 42501 dal guard prima del RETURN QUERY,
 -- quindi questo script non farebbe emergere il 42804. I tipi del RETURN QUERY
@@ -8,8 +8,8 @@
 --
 -- Sezioni:
 --   colonna   tipo dell'espressione nel RETURN QUERY (con i cast) vs OUT dichiarato
---   sorgente  tipo della colonna/espressione senza il cast correttivo. Se differisce
---             dall'OUT, il corpo deve contenere il cast indicato.
+--   sorgente  tipo della colonna senza il cast. Se il corpo di produzione
+--             ha un cast (anche identitario), quel token deve esserci.
 --   firma     linguaggio, volatility, search_path, SECURITY DEFINER, guard, grant,
 --             presenza o assenza di RETURN QUERY
 --
@@ -22,10 +22,10 @@ body AS (
   SELECT
     cp.id,
     cp.nome::text AS nome,
-    cp.descrizione,
+    cp.descrizione::text AS descrizione,
     cp.stato::text AS stato,
     cp.emittente_id,
-    e.nome AS emittente_nome,
+    e.nome::text AS emittente_nome,
     cp.anno,
     cp.created_at,
     cp.updated_at,
@@ -74,10 +74,10 @@ actual AS (
     VALUES
       (1, 'id', pg_typeof(typed.id)::text, pg_typeof(bared.id)::text, NULL::text),
       (2, 'nome', pg_typeof(typed.nome)::text, pg_typeof(bared.nome)::text, 'cp.nome::text'),
-      (3, 'descrizione', pg_typeof(typed.descrizione)::text, pg_typeof(bared.descrizione)::text, NULL::text),
+      (3, 'descrizione', pg_typeof(typed.descrizione)::text, pg_typeof(bared.descrizione)::text, 'cp.descrizione::text'),
       (4, 'stato', pg_typeof(typed.stato)::text, pg_typeof(bared.stato)::text, 'cp.stato::text'),
       (5, 'emittente_id', pg_typeof(typed.emittente_id)::text, pg_typeof(bared.emittente_id)::text, NULL::text),
-      (6, 'emittente_nome', pg_typeof(typed.emittente_nome)::text, pg_typeof(bared.emittente_nome)::text, NULL::text),
+      (6, 'emittente_nome', pg_typeof(typed.emittente_nome)::text, pg_typeof(bared.emittente_nome)::text, 'e.nome::text'),
       (7, 'anno', pg_typeof(typed.anno)::text, pg_typeof(bared.anno)::text, NULL::text),
       (8, 'created_at', pg_typeof(typed.created_at)::text, pg_typeof(bared.created_at)::text, NULL::text),
       (9, 'updated_at', pg_typeof(typed.updated_at)::text, pg_typeof(bared.updated_at)::text, NULL::text),
@@ -119,12 +119,10 @@ sorgenti AS (
       ELSE ' cast ' || a.cast_token || ' ASSENTE'
     END AS rilevato,
     CASE
-      WHEN d.expected IS NULL THEN 'fail'
-      WHEN a.bare_type IS NOT DISTINCT FROM d.expected THEN 'ok'
-      WHEN a.cast_token IS NOT NULL
-        AND fn.src LIKE '%' || a.cast_token || '%'
-        AND a.actual IS NOT DISTINCT FROM d.expected THEN 'ok'
-      ELSE 'fail'
+      WHEN d.expected IS NULL OR a.actual IS DISTINCT FROM d.expected THEN 'fail'
+      WHEN a.cast_token IS NOT NULL AND fn.src NOT LIKE '%' || a.cast_token || '%' THEN 'fail'
+      WHEN a.bare_type IS DISTINCT FROM d.expected AND a.cast_token IS NULL THEN 'fail'
+      ELSE 'ok'
     END AS esito
   FROM actual a
   LEFT JOIN declared d ON d.col = a.col

@@ -1,22 +1,3 @@
--- Rollback di 20261110090000_fix_return_types_staff_functions.sql.
--- NON è una migration: non sta in supabase/migrations e non parte da solo.
---
--- Eseguirlo a mano, in un'unica transazione (il BEGIN/COMMIT qui sotto).
--- Ripristina il corpo #60 di get_campagne_programmazione_with_counts(),
--- quello con cp.nome senza cast (character varying contro OUT text).
--- Le altre sette funzioni staff non sono state modificate: qui non si toccano.
--- I GRANT non cambiano: CREATE OR REPLACE li conserva.
-
-BEGIN;
-
-DO $rollback_preflight$
-BEGIN
-  IF to_regprocedure('public.get_campagne_programmazione_with_counts()') IS NULL THEN
-    RAISE EXCEPTION 'firma assente, rollback annullato: get_campagne_programmazione_with_counts()';
-  END IF;
-END
-$rollback_preflight$;
-
 CREATE OR REPLACE FUNCTION public.get_campagne_programmazione_with_counts()
  RETURNS TABLE(id uuid, nome text, descrizione text, stato text, emittente_id uuid, emittente_nome text, anno integer, created_at timestamp with time zone, updated_at timestamp with time zone, created_by uuid, processing_by uuid, processing_started_at timestamp with time zone, programmazioni_count bigint)
  LANGUAGE plpgsql
@@ -34,11 +15,11 @@ BEGIN
   RETURN QUERY
   SELECT
     cp.id,
-    cp.nome,
-    cp.descrizione,
+    cp.nome::text,
+    cp.descrizione::text,
     cp.stato::text,
     cp.emittente_id,
-    e.nome AS emittente_nome,
+    e.nome::text AS emittente_nome,
     cp.anno,
     cp.created_at,
     cp.updated_at,
@@ -50,6 +31,4 @@ BEGIN
   LEFT JOIN emittenti e ON e.id = cp.emittente_id
   ORDER BY cp.created_at DESC;
 END;
-$function$;
-
-COMMIT;
+$function$
