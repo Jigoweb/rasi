@@ -31,6 +31,7 @@ export type EpisodioListItem = {
   numero_episodio: number | null
   titolo_episodio: string | null
   titolo_episodio_originale: string | null
+  alias_titoli?: string[] | null
   data_prima_messa_in_onda: string | null
   durata_minuti: number | null
   imdb_tconst: string | null
@@ -192,7 +193,12 @@ export function EpisodiByStagione({
                       {group.episodi.map((e) => (
                         <TableRow key={e.id} className="hover:bg-muted/50">
                           <TableCell className="py-1.5 px-4 pl-6">{e.numero_episodio ?? '—'}</TableCell>
-                          <TableCell className="py-1.5 px-4">{e.titolo_episodio || '—'}</TableCell>
+                          <TableCell className="py-1.5 px-4">
+                            <div>{e.titolo_episodio || '—'}</div>
+                            {Array.isArray(e.alias_titoli) && e.alias_titoli.length > 0 && (
+                              <div className="text-xs text-muted-foreground">{e.alias_titoli.join(', ')}</div>
+                            )}
+                          </TableCell>
                           <TableCell className="py-1.5 px-4 italic text-muted-foreground">
                             {e.titolo_episodio_originale || '—'}
                           </TableCell>
@@ -233,6 +239,9 @@ export function EpisodiByStagione({
                               <div className="text-sm italic text-muted-foreground">
                                 {e.titolo_episodio_originale}
                               </div>
+                            )}
+                            {Array.isArray(e.alias_titoli) && e.alias_titoli.length > 0 && (
+                              <div className="text-xs text-muted-foreground">{e.alias_titoli.join(', ')}</div>
                             )}
                           </div>
                           <div className="shrink-0">

@@ -1,0 +1,21 @@
+<html>
+  <body>
+    <h2>Invito a RASI</h2>
+    <p>
+      Sei stato invitato a creare un account
+      {{ if eq .Data.ruolo "admin" }}
+        come <strong>Amministratore</strong>.
+      {{ else if eq .Data.ruolo "operatore" }}
+        come <strong>Operatore</strong>.
+      {{ else if eq .Data.ruolo "collecting" }}
+        come <strong>Collecting</strong>.
+      {{ else if eq .Data.ruolo "artista" }}
+        come <strong>Artista</strong>.
+      {{ else }}
+        sulla piattaforma.
+      {{ end }}
+    </p>
+    <p>Segui il link per accettare l'invito e impostare la password.</p>
+    <p><a href="{{ .ConfirmationURL }}">Accetta invito</a></p>
+  </body>
+</html>

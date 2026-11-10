@@ -48,7 +48,7 @@
   - `export function groupEpisodiByStagione<T extends EpisodioStagioneFields>(episodi: T[]): EpisodiStagioneGroup<T>[]`
   - `export function formatStagioneHeader(stagione: number | null, count: number): string`
 
-- [ ] **Step 1: Scrivere i test che falliscono**
+- [x] **Step 1: Scrivere i test che falliscono**
 
 ```ts
 import {
