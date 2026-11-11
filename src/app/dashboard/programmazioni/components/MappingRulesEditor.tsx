@@ -6,6 +6,7 @@ import { Badge } from '@/shared/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { Plus, X, Wand2 } from 'lucide-react'
 import {
+  distinctRuleResults,
   resolveFieldValue,
   type FieldRule,
 } from '@/features/programmazioni/services/import-mapping.service'
@@ -28,6 +29,11 @@ interface MappingRulesEditorProps {
   rules: Record<string, FieldRule>
   onChange: (rules: Record<string, FieldRule>) => void
   previewRow?: Record<string, any>
+  /**
+   * Righe campione del file. Se presenti, l'anteprima mostra i risultati
+   * distinti su più righe (film e serie), non solo sulla prima.
+   */
+  sampleRows?: Record<string, any>[]
 }
 
 export default function MappingRulesEditor({
@@ -35,6 +41,7 @@ export default function MappingRulesEditor({
   rules,
   onChange,
   previewRow = {},
+  sampleRows,
 }: MappingRulesEditorProps) {
   const hasSeriesShape = useMemo(
     () => columns.includes('NOME_SERIE') && columns.includes('TITOLO'),
@@ -105,13 +112,23 @@ export default function MappingRulesEditor({
           const rule = rules[field]
           const sources = rule?.sources ?? []
           const available = columns.filter(c => !sources.includes(c))
-          const resolvedRaw = rule ? resolveFieldValue(previewRow, rule) : undefined
-          const resolved =
-            typeof resolvedRaw === 'string'
+          const normalize = (value: unknown) =>
+            typeof value === 'string'
               ? EPISODE_FIELDS.has(field)
-                ? normalizeTitleStrict(resolvedRaw)
-                : normalizeTitle(resolvedRaw)
-              : resolvedRaw
+                ? normalizeTitleStrict(value)
+                : normalizeTitle(value)
+              : value
+          let previewText = '— (vuoto)'
+          if (rule && sampleRows && sampleRows.length > 0) {
+            const { values, empty } = distinctRuleResults(sampleRows, rule)
+            const shown = values.map(v => String(normalize(v)))
+            previewText = shown.length > 0
+              ? shown.join(' · ') + (empty > 0 ? ` (vuoto in ${empty} di ${sampleRows.length} righe)` : '')
+              : `— (vuoto in tutte le ${sampleRows.length} righe)`
+          } else if (rule) {
+            const resolved = normalize(resolveFieldValue(previewRow, rule))
+            previewText = resolved === undefined ? '— (vuoto)' : String(resolved)
+          }
           return (
             <div key={field} className="bg-white border rounded p-2 space-y-2">
               <div className="flex items-center gap-2">
@@ -161,8 +178,8 @@ export default function MappingRulesEditor({
                   </SelectContent>
                 </Select>
                 {rule && (
-                  <span className="ml-auto truncate max-w-[220px]" title={resolved === undefined ? '' : String(resolved)}>
-                    anteprima: <strong>{resolved === undefined ? '— (vuoto)' : String(resolved)}</strong>
+                  <span className="ml-auto truncate max-w-[360px]" title={previewText}>
+                    anteprima: <strong>{previewText}</strong>
                   </span>
                 )}
               </div>

@@ -81,13 +81,51 @@ const MOJIBAKE_PAIRS: ReadonlyArray<readonly [string, string]> = [
 ]
 
 /**
+ * cp1252 per i byte 0x80–0x9F. I byte non definiti (0x81, 0x8D, 0x8F, 0x90,
+ * 0x9D) restano il carattere di controllo con lo stesso codice, come fanno
+ * Windows e la decodifica latin1.
+ */
+const CP1252_HIGH: Readonly<Record<number, string>> = {
+  0x80: '€', 0x82: '‚', 0x83: 'ƒ', 0x84: '„', 0x85: '…', 0x86: '†', 0x87: '‡',
+  0x88: 'ˆ', 0x89: '‰', 0x8a: 'Š', 0x8b: '‹', 0x8c: 'Œ', 0x8e: 'Ž',
+  0x91: '‘', 0x92: '’', 0x93: '“', 0x94: '”', 0x95: '•', 0x96: '–', 0x97: '—',
+  0x98: '˜', 0x99: '™', 0x9a: 'š', 0x9b: '›', 0x9c: 'œ', 0x9e: 'ž', 0x9f: 'Ÿ',
+}
+
+/**
+ * Lettere accentate a due byte UTF-8 lette come cp1252 o latin1:
+ * U+00C0–U+00FF (primo byte c3 → `Ã`) e Latin Extended-A U+0100–U+017F
+ * (ō, ł, ń, ś, ž, č, ğ, ş…: primo byte c4/c5 → `Ä`/`Å`).
+ * Esempio dal file PLEX: «Yasujirō» → «YasujirÅ\u008d».
+ * Si generano entrambe le letture del secondo byte (cp1252 e latin1), quando
+ * sono diverse: la tabella scritta a mano sopra copre solo la lettura cp1252
+ * del primo blocco.
+ */
+function twoByteMojibakePairs(): Array<readonly [string, string]> {
+  const pairs: Array<readonly [string, string]> = []
+  for (let code = 0xc0; code <= 0x17f; code += 1) {
+    const lead = 0xc0 | (code >> 6)
+    const trail = 0x80 | (code & 0x3f)
+    const leadChar = String.fromCharCode(lead)
+    const target = String.fromCharCode(code)
+    const latin1 = leadChar + String.fromCharCode(trail)
+    pairs.push([latin1, target])
+    const cp1252 = CP1252_HIGH[trail]
+    if (cp1252) pairs.push([leadChar + cp1252, target])
+  }
+  return pairs
+}
+
+const MOJIBAKE_PAIRS_TWO_BYTE = twoByteMojibakePairs()
+
+/**
  * Cheap pre-check: any mojibake-lead char present? `Ã` (U+00C3) and `â`
  * (U+00E2) start the two- and three-byte UTF-8 sequences whose cp1252-
  * misread produces mojibake. Substitution is a strict bigram/trigram match,
  * so a literal `Ã` followed by a non-mojibake char (e.g. Vietnamese `BÃCH`)
  * stays unchanged.
  */
-const MOJIBAKE_SENTINEL_RX = /Ã|â€/
+const MOJIBAKE_SENTINEL_RX = /Ã|â€|Ä|Å/
 
 /** Parse a value as a finite number; returns null if not coercible. */
 function parseNumber(value: unknown): number | null {
@@ -294,6 +332,11 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     let out = value
     for (const [from, to] of MOJIBAKE_PAIRS) {
       if (out.includes(from)) out = out.split(from).join(to)
+    }
+    if (/[ÃÄÅ]/.test(out)) {
+      for (const [from, to] of MOJIBAKE_PAIRS_TWO_BYTE) {
+        if (out.includes(from)) out = out.split(from).join(to)
+      }
     }
     return out
   },

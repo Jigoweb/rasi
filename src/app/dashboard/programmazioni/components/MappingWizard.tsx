@@ -23,7 +23,9 @@ import {
   type ImportMappingConfig,
   type DetectColumnsResult,
   type FieldRule,
+  type ColumnSample,
 } from '@/features/programmazioni/services/import-mapping.service'
+import { suggestMappingFromHeaders } from '@/features/programmazioni/utils/header-suggestions'
 import MappingRulesEditor from './MappingRulesEditor'
 
 interface MappingWizardProps {
@@ -38,6 +40,40 @@ interface MappingWizardProps {
 
 const IGNORE = '__ignore__'
 const NO_TRANSFORM = '__none__'
+
+/**
+ * Anteprima di una colonna: primo valore non vuoto e quante righe sono piene
+ * nel campione. In un file misto film/serie la prima riga può essere un film,
+ * con i campi episodio vuoti: per questo non si mostra solo la prima riga.
+ */
+function ColumnPreview({
+  hasPreview,
+  sample,
+  fallback,
+}: {
+  hasPreview: boolean
+  sample?: ColumnSample
+  fallback: unknown
+}) {
+  if (!hasPreview) return <>—</>
+  if (!sample) return <span className="block truncate">{String(fallback ?? '')}</span>
+  if (sample.filled === 0) {
+    return (
+      <span className="text-xs text-amber-600" data-testid="column-preview-empty">
+        vuota nelle prime {sample.scanned} righe
+      </span>
+    )
+  }
+  return (
+    <div title={sample.examples.join('\n')}>
+      <span className="block truncate text-gray-700">{String(sample.first)}</span>
+      <span className="block truncate text-[10px] text-gray-400">
+        {sample.filled} su {sample.scanned} righe piene
+        {sample.examples.length > 1 ? ` · es. ${sample.examples.slice(1).join(', ')}` : ''}
+      </span>
+    </div>
+  )
+}
 
 function detectedFromConfig(config: ImportMappingConfig): DetectColumnsResult {
   const columns = new Set(config.colonne_rilevate ?? [])
@@ -75,6 +111,8 @@ export default function MappingWizard({
   const [saving, setSaving] = useState(false)
   const [showRemapUpload, setShowRemapUpload] = useState(false)
   const [removedColumns, setRemovedColumns] = useState<string[]>([])
+  /** Colonne mappate automaticamente dall'intestazione e non ancora toccate dall'operatore. */
+  const [suggestedColumns, setSuggestedColumns] = useState<Set<string>>(new Set())
 
   // Reset on open
   useEffect(() => {
@@ -89,6 +127,7 @@ export default function MappingWizard({
     setSaving(false)
     setShowRemapUpload(false)
     setRemovedColumns([])
+    setSuggestedColumns(new Set())
   }, [open, initialConfig])
 
   // Prefill auto-detect se file passato
@@ -125,10 +164,19 @@ export default function MappingWizard({
         setRules(rules)
         setTransforms(reconciled.transforms)
       } else {
+        // Emittente nuova: si propongono i campi riconosciuti dalle intestazioni.
+        const suggested = suggestMappingFromHeaders(r.columns)
+        const suggestedTransforms: Record<string, TransformName> = {}
+        for (const [column, target] of Object.entries(suggested)) {
+          if (!isDateTargetField(target)) continue
+          const transform = suggestDateTransform(r.samples?.[column]?.first ?? r.preview[0]?.[column])
+          if (transform) suggestedTransforms[column] = transform
+        }
         setRemovedColumns([])
-        setMapping({})
+        setMapping(suggested)
         setRules({})
-        setTransforms({})
+        setTransforms(suggestedTransforms)
+        setSuggestedColumns(new Set(Object.keys(suggested)))
       }
       setShowRemapUpload(false)
       setStep(2)
@@ -149,6 +197,8 @@ export default function MappingWizard({
 
   const previewRow = detected?.preview?.[0] ?? {}
   const hasPreview = Boolean(detected?.preview?.length)
+  /** Primo valore non vuoto della colonna (non solo la prima riga del file). */
+  const sampleValue = (column: string) => detected?.samples?.[column]?.first ?? previewRow[column]
 
   const stepLabel =
     step === 1
@@ -160,6 +210,12 @@ export default function MappingWizard({
         : 'Conferma'
 
   const handleSelect = (sourceCol: string, target: string) => {
+    setSuggestedColumns(prev => {
+      if (!prev.has(sourceCol)) return prev
+      const next = new Set(prev)
+      next.delete(sourceCol)
+      return next
+    })
     setMapping(prev => {
       const next = { ...prev }
       if (target === IGNORE || !target) {
@@ -193,7 +249,7 @@ export default function MappingWizard({
     if (isDateField) {
       setTransforms(prev => {
         if (prev[sourceCol]) return prev // non sovrascrivere scelta esistente
-        const suggested = suggestDateTransform(previewRow[sourceCol])
+        const suggested = suggestDateTransform(sampleValue(sourceCol))
         if (!suggested) return prev
         return { ...prev, [sourceCol]: suggested }
       })
@@ -417,6 +473,11 @@ export default function MappingWizard({
                               })}
                             </SelectContent>
                           </Select>
+                          {suggestedColumns.has(col) && mapping[col] && (
+                            <span className="text-[10px] text-emerald-600 mt-1 block">
+                              suggerito dall&apos;intestazione
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           {mapping[col] ? (
@@ -441,7 +502,7 @@ export default function MappingWizard({
                                 const target = mapping[col]
                                 const isDate = isDateTargetField(target)
                                 if (!isDate) return null
-                                const suggested = suggestDateTransform(previewRow[col])
+                                const suggested = suggestDateTransform(sampleValue(col))
                                 if (suggested && transforms[col] === suggested) {
                                   return <span className="text-[10px] text-emerald-600 mt-1 block">suggerito dall&apos;anteprima</span>
                                 }
@@ -452,8 +513,8 @@ export default function MappingWizard({
                             <span className="text-xs text-gray-400">—</span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-gray-500 max-w-[200px] truncate">
-                          {hasPreview ? String(previewRow[col] ?? '') : '—'}
+                        <td className="px-3 py-2 text-gray-500 max-w-[240px]">
+                          <ColumnPreview hasPreview={hasPreview} sample={detected.samples?.[col]} fallback={previewRow[col]} />
                         </td>
                       </tr>
                     )
@@ -466,6 +527,7 @@ export default function MappingWizard({
               rules={rules}
               onChange={setRules}
               previewRow={previewRow}
+              sampleRows={detected.sampleRows}
             />
           </div>
         )}

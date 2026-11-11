@@ -1,4 +1,4 @@
-import { applyMapping, applyMappingWithTransforms, buildLegacyPayload, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, summarizeImportMapping, reconcileImportMappingColumns, columnNamesFromParsedRows, mappedRemovedColumns, diffColumns, type FieldRule, type ImportMappingConfig } from './import-mapping.service'
+import { applyMapping, applyMappingWithTransforms, buildColumnSamples, distinctRuleResults, buildLegacyPayload, isBlankValue, getRowValue, resolveFieldValue, resolveFieldValueWithSource, validateImportRules, summarizeImportMapping, reconcileImportMappingColumns, columnNamesFromParsedRows, mappedRemovedColumns, diffColumns, type FieldRule, type ImportMappingConfig } from './import-mapping.service'
 
 describe('applyMapping with title normalization', () => {
   const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
@@ -534,5 +534,60 @@ describe('applyMapping absent-data normalization', () => {
     const rules: Record<string, FieldRule> = { titolo: { sources: ['A', 'B'] } }
     const out = applyMapping(rows, {}, ctx, rules)
     expect(out[0].titolo).toBe('Fallback Title')
+  })
+})
+
+describe('buildColumnSamples (anteprima del wizard di mapping)', () => {
+  // Come il file PLEX AVOD: la prima riga è un film, gli episodi sono più sotto.
+  const rows = [
+    { 'TV/Film': 'FILM', 'Episode Name': null, 'Season Number': null, 'Episode Number': null, 'Programme Title': 'Late Spring', Vuota: null },
+    { 'TV/Film': 'SERIE', 'Episode Name': 'The Worst Night', 'Season Number': '1', 'Episode Number': '6', 'Programme Title': '21 Jump Street', Vuota: '' },
+    { 'TV/Film': 'SERIE', 'Episode Name': 'Target Practice', 'Season Number': '1', 'Episode Number': '13', 'Programme Title': 'Drone Wars', Vuota: 'n/a' },
+    { 'TV/Film': 'SERIE', 'Episode Name': 'The Gunmen', 'Season Number': 0, 'Episode Number': '19', 'Programme Title': 'Bonanza', Vuota: '   ' },
+  ]
+  const columns = ['TV/Film', 'Episode Name', 'Season Number', 'Episode Number', 'Programme Title', 'Vuota']
+
+  it('usa il primo valore non vuoto anche se la prima riga è un film', () => {
+    const samples = buildColumnSamples(rows, columns)
+    expect(samples['Episode Name'].first).toBe('The Worst Night')
+    expect(samples['Episode Number'].first).toBe('6')
+    expect(samples['Programme Title'].first).toBe('Late Spring')
+  })
+
+  it('conta le righe piene e raccoglie esempi distinti', () => {
+    const samples = buildColumnSamples(rows, columns)
+    expect(samples['Episode Name']).toMatchObject({ filled: 3, scanned: 4 })
+    expect(samples['Episode Name'].examples).toEqual(['The Worst Night', 'Target Practice', 'The Gunmen'])
+    expect(samples['TV/Film'].examples).toEqual(['FILM', 'SERIE'])
+  })
+
+  it('0 non è vuoto; null, spazi e marcatori assenti sì', () => {
+    const samples = buildColumnSamples(rows, columns)
+    expect(samples['Season Number']).toMatchObject({ filled: 3 })
+    expect(samples['Season Number'].examples).toEqual(['1', '0'])
+    expect(samples.Vuota).toMatchObject({ first: undefined, filled: 0, examples: [] })
+  })
+
+  it('rispetta i limiti di righe analizzate ed esempi', () => {
+    const samples = buildColumnSamples(rows, columns, { scan: 2, examples: 1 })
+    expect(samples['Episode Name']).toMatchObject({ filled: 1, scanned: 2, examples: ['The Worst Night'] })
+  })
+})
+
+describe('distinctRuleResults', () => {
+  it('mostra i risultati di una regola su righe diverse (film e serie)', () => {
+    const rows = [
+      { NOME_SERIE: null, TITOLO: 'Late Spring' },
+      { NOME_SERIE: '21 Jump Street', TITOLO: 'The Worst Night' },
+      { NOME_SERIE: '21 Jump Street', TITOLO: 'Target Practice' },
+      { NOME_SERIE: null, TITOLO: null },
+    ]
+    const result = distinctRuleResults(rows, { sources: ['NOME_SERIE', 'TITOLO'] })
+    expect(result.values).toEqual(['Late Spring', '21 Jump Street'])
+    expect(result.empty).toBe(1)
+
+    const episodio = distinctRuleResults(rows, { sources: ['TITOLO'], onlyIfPresent: 'NOME_SERIE' })
+    expect(episodio.values).toEqual(['The Worst Night', 'Target Practice'])
+    expect(episodio.empty).toBe(2)
   })
 })

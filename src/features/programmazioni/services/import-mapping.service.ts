@@ -63,10 +63,30 @@ export interface ReconcileImportMappingColumnsResult {
   removedColumns: string[]
 }
 
+/** Valori di esempio di una colonna, calcolati sulle prime righe del file campione. */
+export interface ColumnSample {
+  /** Primo valore non vuoto (grezzo, come letto dal file). */
+  first: unknown
+  /** Fino a `examples` valori distinti non vuoti, come testo. */
+  examples: string[]
+  /** Righe con la colonna valorizzata tra quelle analizzate. */
+  filled: number
+  /** Righe analizzate. */
+  scanned: number
+}
+
 export interface DetectColumnsResult {
   columns: string[]
+  /** Prime 5 righe del file (compatibilità). */
   preview: Record<string, any>[]
+  /** Per colonna: primo valore non vuoto ed esempi sulle prime COLUMN_SAMPLE_SCAN righe. */
+  samples?: Record<string, ColumnSample>
+  /** Prime COLUMN_SAMPLE_SCAN righe, per le anteprime delle regole avanzate. */
+  sampleRows?: Record<string, any>[]
 }
+
+/** Righe analizzate per l'anteprima del wizard di mapping. */
+export const COLUMN_SAMPLE_SCAN = 500
 
 export interface ColumnDiff {
   added: string[]
@@ -234,7 +254,7 @@ function sheetToJsonRows(ws: XLSX.WorkSheet): Record<string, any>[] {
 }
 
 /**
- * Estrae nomi colonna e prime 5 righe da file XLSX o CSV.
+ * Estrae nomi colonna, prime 5 righe ed esempi per colonna da file XLSX o CSV.
  */
 export async function detectColumns(file: File): Promise<DetectColumnsResult> {
   const lower = file.name.toLowerCase()
@@ -245,7 +265,7 @@ export async function detectColumns(file: File): Promise<DetectColumnsResult> {
     const result = Papa.parse<Record<string, any>>(text, {
       header: true,
       skipEmptyLines: true,
-      preview: 50,
+      preview: COLUMN_SAMPLE_SCAN,
     })
     rows = result.data
   } else if (lower.match(/\.xlsx?$/)) {
@@ -261,7 +281,67 @@ export async function detectColumns(file: File): Promise<DetectColumnsResult> {
 
   const columns = columnNamesFromParsedRows(rows)
   const preview = rows.slice(0, 5)
-  return { columns, preview }
+  const sampleRows = rows.slice(0, COLUMN_SAMPLE_SCAN)
+  const samples = buildColumnSamples(sampleRows, columns)
+  return { columns, preview, samples, sampleRows }
+}
+
+/**
+ * Esempi per colonna sulle prime `scan` righe.
+ *
+ * L'anteprima del wizard mostrava solo la prima riga del file: in un file misto
+ * film/serie la prima riga può essere un film, con titolo, stagione e numero
+ * episodio vuoti per natura, e la colonna sembrava non letta. Qui si prende il
+ * primo valore non vuoto e si conta quante righe sono valorizzate.
+ * "Vuoto" segue isBlankValue (null, spazi, marcatori come n/a): 0 non è vuoto.
+ */
+export function buildColumnSamples(
+  rows: Record<string, unknown>[],
+  columns: string[],
+  options: { scan?: number; examples?: number } = {},
+): Record<string, ColumnSample> {
+  const scanLimit = options.scan ?? COLUMN_SAMPLE_SCAN
+  const maxExamples = options.examples ?? 3
+  const scanned = rows.slice(0, scanLimit)
+  const out: Record<string, ColumnSample> = {}
+  for (const column of columns) {
+    let first: unknown = undefined
+    let filled = 0
+    const examples: string[] = []
+    for (const row of scanned) {
+      const value = row?.[column]
+      if (isBlankValue(value)) continue
+      filled += 1
+      if (first === undefined) first = value
+      const text = String(value).trim()
+      if (examples.length < maxExamples && !examples.includes(text)) examples.push(text)
+    }
+    out[column] = { first, examples, filled, scanned: scanned.length }
+  }
+  return out
+}
+
+/**
+ * Risultati distinti di una regola avanzata sulle righe campione, per
+ * l'anteprima: in un file misto si vedono sia il caso film sia il caso serie.
+ */
+export function distinctRuleResults(
+  rows: Record<string, any>[],
+  rule: FieldRule,
+  max = 3,
+): { values: string[]; empty: number } {
+  const values: string[] = []
+  let empty = 0
+  for (const row of rows) {
+    const value = resolveFieldValue(row, rule)
+    if (isBlankValue(value)) {
+      empty += 1
+      continue
+    }
+    const text = String(value).trim()
+    if (values.length < max && !values.includes(text)) values.push(text)
+  }
+  return { values, empty }
 }
 
 /**

@@ -5,6 +5,7 @@ import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
 import { isAbsentMarker, isBlankValue } from '../lib/absent-data.js'
 import { excelFractionToHHMMSS, normalizeExcelTimeFractionCells } from '../lib/excel-time.js'
+import { applyTransform as applySharedTransform, isKnownTransform } from '../lib/transforms.js'
 
 export interface FieldRule {
   sources: string[]
@@ -249,10 +250,31 @@ function resolveFieldValueWithSource(
   return { value: undefined, source: null }
 }
 
+const DATE_FIELDS = new Set(['data_trasmissione', 'data_inizio', 'data_fine'])
+
+/**
+ * Anno-mese (`2024-12`, `2024/12`) → primo giorno del mese. I report mensili
+ * delle piattaforme (es. PLEX «Timestamp Month») indicano il periodo: prima il
+ * valore arrivava così com'era e la data restava vuota.
+ * Copia di yearMonthToFirstDay in src/features/programmazioni/utils/coercion.ts.
+ */
+export function yearMonthToFirstDay(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const match = value.trim().match(/^(\d{4})[-/](\d{1,2})$/)
+  if (!match) return null
+  const month = Number(match[2])
+  if (month < 1 || month > 12) return null
+  return `${match[1]}-${String(month).padStart(2, '0')}-01`
+}
+
 function coerce(field: string, value: unknown): unknown {
   if (value === null || value === undefined || value === '') return undefined
   if (field === 'ora_inizio' || field === 'ora_fine') {
     return coerceTime(value)
+  }
+  if (DATE_FIELDS.has(field)) {
+    const yearMonth = yearMonthToFirstDay(value)
+    if (yearMonth) return yearMonth
   }
   if (INTEGER_FIELDS.has(field)) {
     const numberValue = Number(String(value).replace(',', '.'))
@@ -286,103 +308,22 @@ function coerceTime(value: unknown): string | undefined {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function hhmmssToMinutes(value: unknown): number | null {
-  if (value === null || value === undefined) return null
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  if (trimmed === '') return null
-  const match = trimmed.match(/^(\d{1,2}):(\d{2}):(\d{2})$/)
-  if (!match) return null
-  const h = Number(match[1])
-  const m = Number(match[2])
-  const s = Number(match[3])
-  if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isFinite(s)) return null
-  return Math.round(h * 60 + m + s / 60)
-}
-
-function usDateShortToIso(value: unknown): string | null {
-  if (value === null || value === undefined) return null
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  if (trimmed === '') return null
-  const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
-  if (!match) return null
-  const mm = match[1].padStart(2, '0')
-  const dd = match[2].padStart(2, '0')
-  const yy = parseInt(match[3], 10)
-  const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
-  return `${yyyy}-${mm}-${dd}`
-}
-
-function euDateShortToIso(value: unknown): string | null {
-  if (value === null || value === undefined) return null
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  if (trimmed === '') return null
-  const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
-  if (!match) return null
-  const dd = match[1].padStart(2, '0')
-  const mm = match[2].padStart(2, '0')
-  const yy = parseInt(match[3], 10)
-  const yyyy = yy > 50 ? `19${match[3]}` : `20${match[3]}`
-  return `${yyyy}-${mm}-${dd}`
-}
-
+/**
+ * Trasformazione configurata nel mapping. Usa la stessa implementazione del
+ * wizard (`../lib/transforms.ts`, copia di src/features/programmazioni/utils/transforms.ts):
+ * prima il worker ne gestiva solo una parte e le altre (es. mojibake_repair)
+ * restavano senza effetto.
+ * Nomi sconosciuti o legacy (es. `null_if_ND`): comportamento precedente,
+ * nessuna eccezione.
+ */
 function applyTransform(name: string | undefined, value: unknown): unknown {
   if (!name) return value
-  switch (name) {
-    case 'hhmmss_to_minutes':
-      return hhmmssToMinutes(value)
-    case 'fractional_day_to_minutes': {
-      const n = Number(value)
-      return Number.isFinite(n) ? Math.round(n * 24 * 60) : null
-    }
-    case 'excel_fraction_to_time': {
-      const n = Number(value)
-      return Number.isFinite(n) ? excelFractionToHHMMSS(n) : null
-    }
-    case 'us_date_short':
-      return usDateShortToIso(value)
-    case 'eu_date_short':
-      return euDateShortToIso(value)
-    case 'us_date_to_iso': {
-      if (typeof value !== 'string') return null
-      const match = value.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-      if (!match) return null
-      return `${match[3]}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`
-    }
-    case 'eu_date_to_iso': {
-      if (typeof value !== 'string') return null
-      const match = value.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
-      if (!match) return null
-      return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`
-    }
-    case 'iso_date': {
-      if (typeof value !== 'string') return null
-      const match = value.trim().match(/^(\d{4})[-/](\d{2})[-/](\d{2})$/)
-      if (!match) return null
-      return `${match[1]}-${match[2]}-${match[3]}`
-    }
-    case 'excel_serial_to_iso': {
-      const n = Number(value)
-      if (!Number.isFinite(n)) return null
-      const days = Math.trunc(n)
-      if (days < 1) return null
-      const ms = Date.UTC(1899, 11, 30) + days * 86400000
-      const d = new Date(ms)
-      if (Number.isNaN(d.getTime())) return null
-      const yyyy = d.getUTCFullYear()
-      const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
-      const dd = String(d.getUTCDate()).padStart(2, '0')
-      return `${yyyy}-${mm}-${dd}`
-    }
-    default:
-      // Fallback legacy: nomi che contengono minutes/seconds → durata
-      if (name.includes('minutes') || name.includes('seconds') || name.includes('duration')) {
-        return coerce('durata_minuti', value)
-      }
-      return value
+  if (isKnownTransform(name)) return applySharedTransform(name, value)
+  // Fallback legacy: nomi che contengono minutes/seconds → durata
+  if (name.includes('minutes') || name.includes('seconds') || name.includes('duration')) {
+    return coerce('durata_minuti', value)
   }
+  return value
 }
 
 function normalizeTitle(value: string): string {
