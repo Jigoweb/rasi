@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState, ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, ReactNode } from 'react'
 import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { getOperaById, getPartecipazioniByOperaId, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
+import { getOperaById, listPartecipazioniByOpera, listAllPartecipazioniByOpera, PARTECIPAZIONI_PAGE_SIZE, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, formatReleaseDateForDb, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
 import { ArrowLeft, Film, Tv, FileText, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Copy, ExternalLink } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
@@ -37,6 +37,7 @@ import { EpisodiImportActions } from './components/episodi-import-actions'
 import { EpisodiByStagione } from './components/episodi-by-stagione'
 import { listCastEsterno } from '@/features/opere/services/cast-esterno.service'
 import { buildCastExportRows, castExportFileName } from '@/features/opere/lib/cast-export'
+import { ListPager } from '@/shared/components/list-pager'
 import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 
 type Opera = Database['public']['Tables']['opere']['Row']
@@ -56,6 +57,12 @@ export default function OperaDetailPage() {
 
   const [opera, setOpera] = useState<Opera | null>(null)
   const [partecipazioni, setPartecipazioni] = useState<any[]>([])
+  const [partecipazioniTotal, setPartecipazioniTotal] = useState(0)
+  const [partecipazioniTotalOpera, setPartecipazioniTotalOpera] = useState(0)
+  const [partecipazioniPage, setPartecipazioniPage] = useState(1)
+  const [partecipazioniLoading, setPartecipazioniLoading] = useState(false)
+  const [partecipazioniError, setPartecipazioniError] = useState<string | null>(null)
+  const [debouncedPartecipazioniSearch, setDebouncedPartecipazioniSearch] = useState('')
   const [episodi, setEpisodi] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,6 +174,42 @@ export default function OperaDetailPage() {
   })
   const [isSavingEpisodio, setIsSavingEpisodio] = useState(false)
   const { beginLoad } = useInitialPageLoad(operaId)
+  const partecipazioniPageRef = useRef(1)
+  const partecipazioniRequest = useRef(0)
+  const loadPartecipazioniRef = useRef<(page: number) => Promise<{ error: { message: string } | null }>>(async () => ({ error: null }))
+
+  const loadPartecipazioni = useCallback(async (page: number) => {
+    const requestId = partecipazioniRequest.current + 1
+    partecipazioniRequest.current = requestId
+    setPartecipazioniLoading(true)
+    const result = await listPartecipazioniByOpera({
+      operaId,
+      page,
+      search: debouncedPartecipazioniSearch,
+      ruoloId: partecipazioniFilterRuolo,
+      episodio: partecipazioniFilterEpisodio,
+    })
+    if (requestId !== partecipazioniRequest.current) return result
+    setPartecipazioniLoading(false)
+    if (result.error) {
+      setPartecipazioniError('Errore nel caricamento delle partecipazioni')
+      return result
+    }
+    setPartecipazioniError(null)
+    setPartecipazioni(result.data)
+    setPartecipazioniTotal(result.total)
+    setPartecipazioniTotalOpera(result.totalOpera)
+    return result
+  }, [operaId, debouncedPartecipazioniSearch, partecipazioniFilterRuolo, partecipazioniFilterEpisodio])
+
+  useEffect(() => {
+    loadPartecipazioniRef.current = loadPartecipazioni
+  }, [loadPartecipazioni])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedPartecipazioniSearch(partecipazioniSearchQuery), 300)
+    return () => window.clearTimeout(timer)
+  }, [partecipazioniSearchQuery])
 
   const fetchData = useCallback(async (options?: { silent?: boolean }) => {
     const load = beginLoad()
@@ -196,27 +239,8 @@ export default function OperaDetailPage() {
         })
       }
 
-      const { data: pData, error: pErr } = await getPartecipazioniByOperaId(operaId)
-      if (pErr) throw pErr
-      
-      // Ordina partecipazioni: per opere con episodi ordina per stagione/episodio, altrimenti per nome artista
-      const sortedPartecipazioni = [...(pData || [])].sort((a: any, b: any) => {
-        if (oData && operaHaEpisodi(oData)) {
-          const stagA = a.episodi?.numero_stagione ?? 9999
-          const stagB = b.episodi?.numero_stagione ?? 9999
-          if (stagA !== stagB) return stagA - stagB
-          
-          const epA = a.episodi?.numero_episodio ?? 9999
-          const epB = b.episodi?.numero_episodio ?? 9999
-          if (epA !== epB) return epA - epB
-        }
-        
-        // Poi ordina per nome artista
-        const nomeA = `${a.artisti?.cognome || ''} ${a.artisti?.nome || ''}`.toLowerCase()
-        const nomeB = `${b.artisti?.cognome || ''} ${b.artisti?.nome || ''}`.toLowerCase()
-        return nomeA.localeCompare(nomeB)
-      })
-      setPartecipazioni(sortedPartecipazioni)
+      const partecipazioniResult = await loadPartecipazioniRef.current(partecipazioniPageRef.current)
+      if (partecipazioniResult.error) throw partecipazioniResult.error
 
       if (oData && operaHaEpisodi(oData)) {
         const { data: eData, error: eErr } = await getEpisodiByOperaId(operaId)
@@ -240,6 +264,25 @@ export default function OperaDetailPage() {
       if (data) setRuoli(data)
     })
   }, [operaId, fetchData])
+
+  const skipPartecipazioniFilterEffect = useRef(true)
+  useEffect(() => {
+    if (skipPartecipazioniFilterEffect.current) {
+      skipPartecipazioniFilterEffect.current = false
+      return
+    }
+    partecipazioniPageRef.current = 1
+    setPartecipazioniPage(1)
+    setSelectedPartecipazioniIds(new Set())
+    void loadPartecipazioni(1)
+  }, [debouncedPartecipazioniSearch, partecipazioniFilterRuolo, partecipazioniFilterEpisodio, loadPartecipazioni])
+
+  const goToPartecipazioniPage = (page: number) => {
+    partecipazioniPageRef.current = page
+    setPartecipazioniPage(page)
+    setSelectedPartecipazioniIds(new Set())
+    void loadPartecipazioni(page)
+  }
 
   // Fetch individuazioni quando si apre il dialog bulk delete
   useEffect(() => {
@@ -323,42 +366,9 @@ export default function OperaDetailPage() {
     }
   }
 
-  // Filtra partecipazioni in base alla ricerca e filtri
-  const filteredPartecipazioni = partecipazioni.filter((p: any) => {
-    // Filtro ricerca testuale
-    if (partecipazioniSearchQuery.trim()) {
-      const query = partecipazioniSearchQuery.toLowerCase()
-      const matchesSearch = (
-        p.artisti?.nome?.toLowerCase().includes(query) ||
-        p.artisti?.cognome?.toLowerCase().includes(query) ||
-        p.artisti?.nome_arte?.toLowerCase().includes(query) ||
-        p.ruoli_tipologie?.nome?.toLowerCase().includes(query) ||
-        p.personaggio?.toLowerCase().includes(query) ||
-        p.note?.toLowerCase().includes(query) ||
-        p.episodi?.titolo_episodio?.toLowerCase().includes(query) ||
-        p.episodi?.titolo_episodio_originale?.toLowerCase().includes(query)
-      )
-      if (!matchesSearch) return false
-    }
-    
-    // Filtro tipo opera (dalla partecipazione non abbiamo direttamente il tipo, ma possiamo filtrarlo se necessario)
-    // Nota: nella pagina opere, il tipo è sempre lo stesso per tutte le partecipazioni (quello dell'opera)
-    // Quindi questo filtro potrebbe non essere necessario qui, ma lo lasciamo per coerenza
-    
-    // Filtro ruolo
-    if (partecipazioniFilterRuolo && p.ruoli_tipologie?.id !== partecipazioniFilterRuolo) {
-      return false
-    }
-
-    if (partecipazioniFilterEpisodio === '__serie__' && p.episodio_id) {
-      return false
-    }
-    if (partecipazioniFilterEpisodio && partecipazioniFilterEpisodio !== '__serie__' && p.episodio_id !== partecipazioniFilterEpisodio) {
-      return false
-    }
-    
-    return true
-  })
+  const partecipazioniFiltrate = Boolean(
+    partecipazioniSearchQuery.trim() || partecipazioniFilterRuolo || partecipazioniFilterEpisodio,
+  )
 
   // Multi-select handlers for partecipazioni
   const toggleSelectPartecipazione = (id: string) => {
@@ -374,11 +384,9 @@ export default function OperaDetailPage() {
   }
 
   const toggleSelectAllPartecipazioni = () => {
-    if (selectedPartecipazioniIds.size === filteredPartecipazioni.length) {
-      setSelectedPartecipazioniIds(new Set())
-    } else {
-      setSelectedPartecipazioniIds(new Set(filteredPartecipazioni.map((p: any) => p.id)))
-    }
+    const pageIds = partecipazioni.map((p: any) => p.id)
+    const allSelected = pageIds.length > 0 && pageIds.every((id: string) => selectedPartecipazioniIds.has(id))
+    setSelectedPartecipazioniIds(allSelected ? new Set() : new Set(pageIds))
   }
 
   const clearPartecipazioniSelection = () => {
@@ -418,11 +426,15 @@ export default function OperaDetailPage() {
     if (!opera) return
     setIsExportingCast(true)
     try {
-      const { data: castEsterno, error: castError } = await listCastEsterno(operaId)
+      const [{ data: allPartecipazioni, error: partecipazioniExportError }, { data: castEsterno, error: castError }] = await Promise.all([
+        listAllPartecipazioniByOpera(operaId),
+        listCastEsterno(operaId),
+      ])
+      if (partecipazioniExportError) throw partecipazioniExportError
       if (castError) throw castError
       const ruoliById = new Map(ruoli.map((ruolo) => [ruolo.id, ruolo.nome]))
       const rows = buildCastExportRows(
-        partecipazioni,
+        allPartecipazioni,
         (castEsterno ?? []).map((row) => ({
           ...row,
           ruoloNome: row.ruolo_id ? ruoliById.get(row.ruolo_id) ?? null : null,
@@ -1423,7 +1435,7 @@ export default function OperaDetailPage() {
               Partecipazioni
             </div>
             <Badge variant="secondary">
-              {(partecipazioni || []).length} {(partecipazioni || []).length === 1 ? 'artista' : 'artisti'}
+              {partecipazioniTotalOpera.toLocaleString('it-IT')} {partecipazioniTotalOpera === 1 ? 'artista' : 'artisti'}
             </Badge>
           </CardTitle>
         </CardHeader>
@@ -1499,7 +1511,7 @@ export default function OperaDetailPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setIsPartecipazioniSelectionMode(true)}
-                  disabled={(partecipazioni || []).length === 0}
+                  disabled={partecipazioniTotalOpera === 0}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Elimina
@@ -1523,9 +1535,9 @@ export default function OperaDetailPage() {
             <div className="mx-4 mb-4 mt-2 bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center justify-between gap-4 shadow-sm transition-all">
               <div className="flex items-center gap-3">
                 <CheckboxUI 
-                  checked={selectedPartecipazioniIds.size === filteredPartecipazioni.length && filteredPartecipazioni.length > 0}
+                  checked={partecipazioni.length > 0 && partecipazioni.every((p: any) => selectedPartecipazioniIds.has(p.id))}
                   onCheckedChange={toggleSelectAllPartecipazioni}
-                  disabled={filteredPartecipazioni.length === 0}
+                  disabled={partecipazioni.length === 0}
                 />
                 <span className="text-sm font-medium text-foreground">
                   {selectedPartecipazioniIds.size === 0 
@@ -1547,19 +1559,22 @@ export default function OperaDetailPage() {
           )}
         </div>
         
-        <CardContent className="p-0">
-          {filteredPartecipazioni.length === 0 ? (
+        <CardContent className={`p-0 ${partecipazioniLoading ? 'opacity-60' : ''}`}>
+          {partecipazioniError && (
+            <p className="px-4 py-3 text-sm text-destructive">{partecipazioniError}</p>
+          )}
+          {partecipazioni.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
               <p>
-                {partecipazioniSearchQuery.trim() 
-                  ? 'Nessuna partecipazione trovata per la ricerca' 
+                {partecipazioniFiltrate
+                  ? 'Nessuna partecipazione trovata per la ricerca'
                   : 'Nessuna partecipazione trovata per quest\'opera'}
               </p>
             </div>
           ) : (
             <div className="divide-y">
-              {filteredPartecipazioni.map((p: any) => {
+              {partecipazioni.map((p: any) => {
                 const isSelected = selectedPartecipazioniIds.has(p.id)
                 
                 return (
@@ -1666,6 +1681,14 @@ export default function OperaDetailPage() {
               })}
             </div>
           )}
+          <ListPager
+            page={partecipazioniPage}
+            pageSize={PARTECIPAZIONI_PAGE_SIZE}
+            total={partecipazioniTotal}
+            onPageChange={goToPartecipazioniPage}
+            disabled={partecipazioniLoading}
+            label="Pagine partecipazioni"
+          />
         </CardContent>
       </Card>
 

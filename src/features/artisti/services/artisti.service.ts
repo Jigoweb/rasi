@@ -1,4 +1,5 @@
 import { codicePaeseTokenOr, type StatoIscrizione } from '@/features/artisti/lib/artista-display'
+import { fetchAllPages } from '@/shared/lib/postgrest-page'
 import { supabase } from '@/shared/lib/supabase-client'
 
 export type ArtistaFieldFilter =
@@ -139,10 +140,7 @@ export const getArtistaById = async (id: string) => {
  * @param artistaId - The ID of the artist.
  * @returns An object with data and error properties.
  */
-export const getPartecipazioniByArtistaId = async (artistaId: string) => {
-  const { data, error } = await supabase
-    .from('partecipazioni')
-    .select(`
+const PARTECIPAZIONI_ARTISTA_SELECT = `
       id,
       personaggio,
       note,
@@ -172,11 +170,20 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         numero_episodio,
         numero_stagione
       )
-    `)
-    .eq('artista_id', artistaId)
-    .order('created_at', { ascending: false })
+    `
 
-  return { data, error }
+export const getPartecipazioniByArtistaId = async (artistaId: string) => {
+  const result = await fetchAllPages((from, to) =>
+    supabase
+      .from('partecipazioni')
+      .select(PARTECIPAZIONI_ARTISTA_SELECT)
+      .eq('artista_id', artistaId)
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
+  if (result.error) return { data: null, error: result.error }
+  return { data: result.data, error: null }
 }
 
 export const createArtista = async (

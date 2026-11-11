@@ -1,6 +1,16 @@
 import { supabase } from '@/shared/lib/supabase-client'
 import type { TipoOpera } from '@/shared/lib/opere-utils'
+import { fetchAllPages, POSTGREST_MAX_ROWS } from '@/shared/lib/postgrest-page'
 import { OPERE_INCOMPLETE_OR } from './opere-health'
+import {
+  parsePartecipazioniPage,
+  toPartecipazioniRpcArgs,
+  type PartecipazioneScheda,
+  type PartecipazioniListParams,
+} from './partecipazioni-page'
+
+export type { PartecipazioneScheda, PartecipazioniListParams } from './partecipazioni-page'
+export { PARTECIPAZIONI_PAGE_SIZE } from './partecipazioni-page'
 
 export { OPERE_INCOMPLETE_OR } from './opere-health'
 
@@ -333,27 +343,39 @@ export const deleteIndividuazioniByOperaId = async (operaId: string) => {
   return { error }
 }
 
-export const getPartecipazioniByOperaId = async (operaId: string) => {
-  const { data, error } = await supabase
-    .from('partecipazioni')
-    .select(`
-      id,
-      personaggio,
-      note,
-      created_at,
-      artista_id,
-      opera_id,
-      episodio_id,
-      ruolo_id,
-      artisti ( id, nome, cognome, nome_arte, codice_ipn ),
-      ruoli_tipologie ( id, nome, descrizione ),
-      episodi ( id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale )
-    `)
-    .eq('opera_id', operaId)
-    .order('created_at', { ascending: false })
-
-  return { data, error }
+/**
+ * Una pagina di partecipazioni dell'opera. Ricerca, ruolo ed episodio sono
+ * applicati nel database: il totale è il conteggio filtrato, non la lunghezza
+ * della pagina. `totalOpera` è il conteggio senza filtri (il badge della scheda).
+ */
+export const listPartecipazioniByOpera = async (params: PartecipazioniListParams) => {
+  const { data, error } = await supabase.rpc('list_partecipazioni_opera', toPartecipazioniRpcArgs(params))
+  if (error) {
+    return { data: [] as PartecipazioneScheda[], total: 0, totalOpera: 0, error }
+  }
+  const page = parsePartecipazioniPage(data)
+  return { data: page.rows, total: page.total, totalOpera: page.totalOpera, error: null }
 }
+
+/**
+ * Tutte le partecipazioni dell'opera, a blocchi da max_rows. Serve all'export:
+ * la scheda non deve chiamarla per dipingere la lista.
+ */
+export const listAllPartecipazioniByOpera = async (operaId: string) => {
+  const all: PartecipazioneScheda[] = []
+  for (let page = 1; page <= 200; page += 1) {
+    const result = await listPartecipazioniByOpera({ operaId, page, pageSize: POSTGREST_MAX_ROWS })
+    if (result.error) return { data: [] as PartecipazioneScheda[], error: result.error }
+    all.push(...result.data)
+    if (result.data.length < POSTGREST_MAX_ROWS || all.length >= result.total) {
+      return { data: all, error: null }
+    }
+  }
+  return { data: [] as PartecipazioneScheda[], error: { message: 'Lettura interrotta: risultato troppo grande' } }
+}
+
+/** @deprecated La scheda usa `listPartecipazioniByOpera`. Resta per l'export e i chiamanti che vogliono l'elenco intero, già paginato. */
+export const getPartecipazioniByOperaId = (operaId: string) => listAllPartecipazioniByOpera(operaId)
 
 export const updatePartecipazione = async (
   id: string,
@@ -587,15 +609,21 @@ export const checkPartecipazioniDuplicate = async (
   return duplicateIndices
 }
 
-export const getEpisodiByOperaId = async (operaId: string) => {
-  const { data, error } = await supabase
-    .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, alias_titoli, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
-    .eq('opera_id', operaId)
-    .order('numero_stagione', { ascending: true })
-    .order('numero_episodio', { ascending: true })
+const EPISODI_SELECT = 'id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, alias_titoli, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati'
 
-  return { data, error }
+export const getEpisodiByOperaId = async (operaId: string) => {
+  const result = await fetchAllPages((from, to) =>
+    supabase
+      .from('episodi')
+      .select(EPISODI_SELECT)
+      .eq('opera_id', operaId)
+      .order('numero_stagione', { ascending: true })
+      .order('numero_episodio', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
+  if (result.error) return { data: null, error: result.error }
+  return { data: result.data, error: null }
 }
 
 export const createEpisodio = async (
