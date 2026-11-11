@@ -131,6 +131,33 @@ const MOJIBAKE_PAIRS_TWO_BYTE = twoByteMojibakePairs()
  */
 const MOJIBAKE_SENTINEL_RX = /Ã|â€|Ä|Å/
 
+/**
+ * Ripara il testo con caratteri rotti (UTF-8 letto come cp1252/latin1):
+ * «SalomÃ©» → «Salomé», «YasujirÅ\u008d» → «Yasujirō».
+ * Si applica in automatico a tutti i campi di testo dell'import
+ * (TEXT_REPAIR_FIELDS): il cliente non deve sceglierla. Sostituisce solo
+ * sequenze precise; un testo corretto resta identico.
+ */
+export function repairMojibake(value: string): string {
+  if (!MOJIBAKE_SENTINEL_RX.test(value)) return value
+  let out = value
+  for (const [from, to] of MOJIBAKE_PAIRS) {
+    if (out.includes(from)) out = out.split(from).join(to)
+  }
+  if (/[ÃÄÅ]/.test(out)) {
+    for (const [from, to] of MOJIBAKE_PAIRS_TWO_BYTE) {
+      if (out.includes(from)) out = out.split(from).join(to)
+    }
+  }
+  return out
+}
+
+/** Campi template di testo su cui la riparazione dei caratteri è automatica. */
+export const TEXT_REPAIR_FIELDS: ReadonlySet<string> = new Set([
+  'titolo', 'titolo_originale', 'titolo_episodio', 'titolo_episodio_originale',
+  'regia', 'production', 'canale', 'emittente',
+])
+
 /** Parse a value as a finite number; returns null if not coercible. */
 function parseNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
@@ -329,21 +356,7 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     return `${str.slice(0, 4)}-${str.slice(4, 6)}-${str.slice(6, 8)}`
   },
 
-  mojibake_repair: (value) => {
-    if (value === null || value === undefined) return value
-    if (typeof value !== 'string') return value
-    if (!MOJIBAKE_SENTINEL_RX.test(value)) return value
-    let out = value
-    for (const [from, to] of MOJIBAKE_PAIRS) {
-      if (out.includes(from)) out = out.split(from).join(to)
-    }
-    if (/[ÃÄÅ]/.test(out)) {
-      for (const [from, to] of MOJIBAKE_PAIRS_TWO_BYTE) {
-        if (out.includes(from)) out = out.split(from).join(to)
-      }
-    }
-    return out
-  },
+  mojibake_repair: (value) => (typeof value === 'string' ? repairMojibake(value) : value),
 
   nbsp_to_space: (value) => {
     if (value === null || value === undefined) return value
@@ -381,7 +394,7 @@ export const TRANSFORM_LABELS: Record<TransformName, string> = {
   us_date_short: 'Data US MM/DD/YY (anno 2 cifre) → ISO',
   excel_serial_to_iso: 'Data seriale Excel → ISO',
   excel_fraction_to_time: 'Orario frazione Excel → HH:MM:SS',
-  mojibake_repair: 'Ripara mojibake (encoding)',
+  mojibake_repair: 'Ripara caratteri rotti (già automatico)',
   nbsp_to_space: 'Spazio unicode → spazio normale',
   year_range_first: 'Range anni → primo anno',
   year_range_parse: 'Range anni → inizio + fine (2021-2024)',
@@ -402,8 +415,10 @@ const TIME_TRANSFORMS: TransformName[] = [
   'excel_fraction_to_time',
 ]
 
+// mojibake_repair non è nel menu: è automatica sui campi di testo
+// (repairMojibake). Resta valida nei mapping già salvati.
 const GENERIC_TRANSFORMS: TransformName[] = [
-  'mojibake_repair', 'nbsp_to_space',
+  'nbsp_to_space',
 ]
 
 /** Campi template di tipo data (destinazioni che accettano transform data). */

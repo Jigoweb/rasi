@@ -5,7 +5,7 @@ import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
 import { isAbsentMarker, isBlankValue } from '../lib/absent-data.js'
 import { excelFractionToHHMMSS, normalizeExcelTimeFractionCells } from '../lib/excel-time.js'
-import { applyTransform as applySharedTransform, isKnownTransform } from '../lib/transforms.js'
+import { applyTransform as applySharedTransform, isKnownTransform, repairMojibake, TEXT_REPAIR_FIELDS } from '../lib/transforms.js'
 
 export interface FieldRule {
   sources: string[]
@@ -284,7 +284,10 @@ function coerce(field: string, value: unknown): unknown {
     const numberValue = Number(String(value).replace(',', '.'))
     return Number.isFinite(numberValue) ? numberValue : undefined
   }
-  return String(value).trim()
+  const text = String(value).trim()
+  // Riparazione automatica dei caratteri rotti sui campi di testo (stessa
+  // funzione del wizard): non dipende più da una scelta nel mapping.
+  return TEXT_REPAIR_FIELDS.has(field) ? repairMojibake(text) : text
 }
 
 function coerceTime(value: unknown): string | undefined {
