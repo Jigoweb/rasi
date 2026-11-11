@@ -4,7 +4,7 @@ import '@testing-library/jest-dom'
 import OperaDetailPage from './page'
 import {
   getOperaById,
-  getPartecipazioniByOperaId,
+  listPartecipazioniByOpera,
   updatePartecipazione,
 } from '@/features/opere/services/opere.service'
 
@@ -15,7 +15,9 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/features/opere/services/opere.service', () => ({
   getOperaById: jest.fn(async () => ({ data: { id: 'uuid-opera', codice_opera: 'OP001', titolo: 'Opera Test', titolo_originale: 'Originale', tipo: 'film', anno_produzione: 2020, imdb_tconst: null }, error: null })),
-  getPartecipazioniByOperaId: jest.fn(async () => ({ data: [], error: null })),
+  PARTECIPAZIONI_PAGE_SIZE: 50,
+  listPartecipazioniByOpera: jest.fn(async () => ({ data: [], total: 0, totalOpera: 0, error: null })),
+  listAllPartecipazioniByOpera: jest.fn(async () => ({ data: [], error: null })),
   getEpisodiByOperaId: jest.fn(async () => ({ data: [], error: null })),
   getRuoliTipologie: jest.fn(async () => ({ data: [], error: null })),
   updatePartecipazione: jest.fn(async () => ({ error: null })),
@@ -148,7 +150,7 @@ describe('OperaDetailPage', () => {
       .mockImplementationOnce(() => new Promise((resolve) => {
         releaseRefresh = resolve
       }))
-    ;(getPartecipazioniByOperaId as jest.Mock).mockResolvedValue({
+    ;(listPartecipazioniByOpera as jest.Mock).mockResolvedValue({
       data: [{
         id: 'p1',
         personaggio: null,
@@ -157,6 +159,8 @@ describe('OperaDetailPage', () => {
         artisti: { id: 'a1', nome: 'Anna', cognome: 'Neri' },
         ruoli_tipologie: { id: 'r1', nome: 'Attore' },
       }],
+      total: 1,
+      totalOpera: 1,
       error: null,
     })
     ;(updatePartecipazione as jest.Mock).mockResolvedValue({ error: null })
@@ -181,6 +185,49 @@ describe('OperaDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Opera Test' })).toBeInTheDocument()
     })
+  })
+
+  it('mostra il totale oltre 1000 e chiede la pagina successiva senza caricare tutte le righe', async () => {
+    const user = userEvent.setup()
+    const row = {
+      id: 'p1',
+      personaggio: null,
+      note: null,
+      ruolo_id: 'r1',
+      artisti: { id: 'a1', nome: 'Anna', cognome: 'Neri' },
+      ruoli_tipologie: { id: 'r1', nome: 'Attore' },
+    }
+    ;(listPartecipazioniByOpera as jest.Mock).mockResolvedValue({
+      data: [row],
+      total: 1551,
+      totalOpera: 1551,
+      error: null,
+    })
+
+    render(<OperaDetailPage />)
+
+    expect(await screen.findByText(`${(1551).toLocaleString('it-IT')} artisti`)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Anna Neri' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Pagine partecipazioni')).toHaveTextContent(
+      `1–50 di ${(1551).toLocaleString('it-IT')}`,
+    )
+    await waitFor(() => {
+      expect(listPartecipazioniByOpera).toHaveBeenCalledTimes(1)
+    })
+    expect(listPartecipazioniByOpera).toHaveBeenCalledWith(expect.objectContaining({
+      operaId: 'uuid-opera',
+      page: 1,
+    }))
+
+    await user.click(screen.getByRole('button', { name: 'Successiva' }))
+
+    await waitFor(() => {
+      expect(listPartecipazioniByOpera).toHaveBeenCalledWith(expect.objectContaining({
+        operaId: 'uuid-opera',
+        page: 2,
+      }))
+    })
+    expect(listPartecipazioniByOpera).toHaveBeenCalledTimes(2)
   })
 })
 

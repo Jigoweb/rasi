@@ -1,6 +1,7 @@
 import { supabase } from '@/shared/lib/supabase-client'
 import type { Database, Json } from '@/shared/lib/supabase'
 import type { TipoReferente } from '@/features/artisti/lib/artista-display'
+import { chunkIds, fetchAllPages } from '@/shared/lib/postgrest-page'
 
 export type ArtistaReferente = Database['public']['Tables']['artisti_referenti']['Row']
 export type ArtistaReferenteInput = Omit<
@@ -85,18 +86,23 @@ export const deleteArtistaReferente = async (id: string) => {
 
 /** Righe di cast esterno che portano il nome (o il nconst IMDb) dell'artista. */
 export const cercaCastEsternoPerArtista = async (artistaId: string) => {
-  const { data, error } = await supabase.rpc('cerca_cast_esterno_per_artista', {
-    p_artista_id: artistaId,
-  })
-  const rows = data ?? []
-  if (error || rows.length === 0) return { data: [] as CastEsternoCorrispondente[], error }
+  const loaded = await fetchAllPages((from, to) =>
+    supabase.rpc('cerca_cast_esterno_per_artista', { p_artista_id: artistaId }).range(from, to),
+  )
+  if (loaded.error || loaded.data.length === 0) {
+    return { data: [] as CastEsternoCorrispondente[], error: loaded.error }
+  }
+  const rows = loaded.data
 
   // Attore o doppiatore: serve per proporre il ruolo RASI giusto.
-  const { data: ruoli } = await supabase
-    .from('cast_esterno')
-    .select('id, ruolo')
-    .in('id', rows.map((row) => row.cast_id))
-  const ruoloById = new Map((ruoli ?? []).map((row) => [row.id, row.ruolo]))
+  // Gli id si spezzano: un `.in()` con migliaia di uuid supera la query string.
+  const ruoli: { id: string; ruolo: string }[] = []
+  for (const ids of chunkIds(rows.map((row) => row.cast_id))) {
+    const { data, error } = await supabase.from('cast_esterno').select('id, ruolo').in('id', ids)
+    if (error) return { data: [] as CastEsternoCorrispondente[], error }
+    ruoli.push(...(data ?? []))
+  }
+  const ruoloById = new Map(ruoli.map((row) => [row.id, row.ruolo]))
 
   return {
     data: rows.map((row) => ({ ...row, ruolo: ruoloById.get(row.cast_id) ?? 'attore' })),

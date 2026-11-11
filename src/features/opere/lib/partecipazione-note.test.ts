@@ -5,7 +5,8 @@ import {
   splitPartecipazionePayload,
 } from './partecipazione-note'
 import { FULL_DATABASE_PARTECIPAZIONI_SELECT } from '@/features/report/services/report-export.service'
-import { PARTECIPAZIONI_OPERA_SELECT } from '@/features/opere/services/opere.service'
+import fs from 'fs'
+import path from 'path'
 
 function columnLines(select: string): string[] {
   return select.split('\n').map((line) => line.trim().replace(/,$/, '')).filter(Boolean)
@@ -53,9 +54,21 @@ describe('partecipazione notes', () => {
   })
 
   it('asks staff queries for the note table and not for a note column', () => {
-    for (const select of [PARTECIPAZIONI_OPERA_SELECT, FULL_DATABASE_PARTECIPAZIONI_SELECT]) {
-      expect(select).toContain('partecipazioni_note (note)')
-      expect(columnLines(select)).not.toContain('note')
-    }
+    const select = FULL_DATABASE_PARTECIPAZIONI_SELECT
+    expect(select).toContain('partecipazioni_note (note)')
+    expect(columnLines(select)).not.toContain('note')
+  })
+
+  it('the opera RPC reads the note from partecipazioni_note, not from partecipazioni', () => {
+    const migration = fs.readFileSync(
+      path.resolve(
+        __dirname,
+        '../../../../supabase/migrations/20261111155000_list_partecipazioni_opera_note_separate.sql',
+      ),
+      'utf8',
+    ).replace(/--.*$/gm, '')
+    expect(migration).toMatch(/LEFT JOIN public\.partecipazioni_note n ON n\.partecipazione_id = p\.id/)
+    expect(migration).not.toMatch(/\bp\.note\b/)
+    expect(migration).toMatch(/SECURITY INVOKER/)
   })
 })

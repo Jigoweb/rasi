@@ -14,13 +14,17 @@ jest.mock('@/shared/contexts/auth-context', () => ({
 
 jest.mock('@/features/opere/services/opere.service', () => ({
   getOperaById: jest.fn(async () => ({ data: { id: 'uuid-opera', codice_opera: 'OP001', titolo: 'Opera Test', titolo_originale: 'Originale', tipo: 'film', anno_produzione: 2020, imdb_tconst: null }, error: null })),
-  getPartecipazioniByOperaId: jest.fn(async () => ({ data: [], error: null })),
+  PARTECIPAZIONI_PAGE_SIZE: 50,
+  listPartecipazioniByOpera: jest.fn(async () => ({ data: [], total: 0, totalOpera: 0, error: null })),
+  listAllPartecipazioniByOpera: jest.fn(async () => ({ data: [], error: null })),
   getEpisodiByOperaId: jest.fn(async () => ({ data: [], error: null })),
   getRuoliTipologie: jest.fn(async () => ({ data: [], error: null })),
 }))
 
 jest.mock('@/features/opere/services/cast-esterno.service', () => ({
+  CAST_ESTERNO_PAGE_SIZE: 50,
   listCastEsterno: jest.fn(async () => ({ data: [], error: null })),
+  listCastEsternoPage: jest.fn(async () => ({ data: [], count: 0, total: 0, error: null })),
   listCastEsternoArtistiCorrispondenti: jest.fn(async () => ({ data: [], error: null })),
   createCastEsterno: jest.fn(),
   updateCastEsterno: jest.fn(),

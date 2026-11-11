@@ -194,7 +194,8 @@ describe('Artisti Service', () => {
     it('should call supabase.from("partecipazioni").select(...).eq("artista_id", artistId).order(...)', async () => {
       const artistId = '1'
       const mockData = [{ id: '1', titolo: 'Opera 1' }]
-      mockOrder.mockResolvedValue({ data: mockData, error: null })
+      const range = jest.fn().mockResolvedValue({ data: mockData, error: null })
+      mockOrder.mockReturnValue({ order: mockOrder, range })
 
       const { data } = await getPartecipazioniByArtistaId(artistId)
 
@@ -202,12 +203,15 @@ describe('Artisti Service', () => {
       expect(mockSelect).toHaveBeenCalledWith(expect.stringContaining('opere'))
       expect(mockSelect).toHaveBeenCalledWith(expect.stringContaining('stato_validazione'))
       expect(mockEq).toHaveBeenCalledWith('artista_id', artistId)
-      expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false })
+      expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false, nullsFirst: false })
+      expect(mockOrder).toHaveBeenCalledWith('id', { ascending: true })
+      expect(range).toHaveBeenCalledWith(0, 999)
       expect(data).toEqual(mockData)
     })
 
     it('does not request partecipazione notes for the artist area', async () => {
-      mockOrder.mockResolvedValue({ data: [], error: null })
+      const range = jest.fn().mockResolvedValue({ data: [], error: null })
+      mockOrder.mockReturnValue({ order: mockOrder, range })
 
       await getPartecipazioniByArtistaId('art-1')
 
@@ -218,16 +222,32 @@ describe('Artisti Service', () => {
     })
 
     it('flattens staff notes from the separate table and drops the embed', async () => {
-      mockOrder.mockResolvedValue({
+      const range = jest.fn().mockResolvedValue({
         data: [{ id: 'p1', personaggio: 'Ada', partecipazioni_note: { note: 'solo staff' } }],
         error: null,
       })
+      mockOrder.mockReturnValue({ order: mockOrder, range })
 
       const { data } = await getPartecipazioniByArtistaId('art-1', { includeNote: true })
 
       const select = mockSelect.mock.calls.at(-1)?.[0] as string
       expect(select).toContain('partecipazioni_note (note)')
       expect(data).toEqual([{ id: 'p1', personaggio: 'Ada', note: 'solo staff' }])
+    })
+
+    it('continua oltre le 1000 righe di PostgREST', async () => {
+      const first = Array.from({ length: 1000 }, (_, index) => ({ id: `p${index}` }))
+      const range = jest.fn()
+        .mockResolvedValueOnce({ data: first, error: null })
+        .mockResolvedValueOnce({ data: [{ id: 'p1000' }], error: null })
+      mockOrder.mockReturnValue({ order: mockOrder, range })
+
+      const { data, error } = await getPartecipazioniByArtistaId('artist')
+
+      expect(error).toBeNull()
+      expect(data).toHaveLength(1001)
+      expect(range).toHaveBeenNthCalledWith(1, 0, 999)
+      expect(range).toHaveBeenNthCalledWith(2, 1000, 1999)
     })
   })
 

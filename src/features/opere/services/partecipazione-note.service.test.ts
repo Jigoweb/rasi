@@ -50,7 +50,7 @@ function builder(table: string) {
 }
 
 jest.mock('@/shared/lib/supabase-client', () => ({
-  supabase: { from: jest.fn() },
+  supabase: { from: jest.fn(), rpc: jest.fn() },
 }))
 
 describe('partecipazione note writes', () => {
@@ -61,17 +61,23 @@ describe('partecipazione note writes', () => {
     ;(supabase.from as jest.Mock).mockImplementation((table: string) => builder(table))
   })
 
-  it('loads opera cast notes from partecipazioni_note', async () => {
-    results.push({
-      data: [{ id: 'p1', personaggio: 'Ada', partecipazioni_note: { note: 'staff' } }],
+  it('loads opera cast notes through list_partecipazioni_opera', async () => {
+    ;(supabase.rpc as jest.Mock).mockResolvedValueOnce({
+      data: {
+        total: 1,
+        total_opera: 1,
+        rows: [{ id: 'p1', personaggio: 'Ada', note: 'staff' }],
+      },
       error: null,
     })
 
     const { data } = await getPartecipazioniByOperaId('opera-1')
 
-    expect(supabase.from).toHaveBeenCalledWith('partecipazioni')
-    expect(calls[0]?.payload).toEqual(expect.stringContaining('partecipazioni_note (note)'))
-    expect(data).toEqual([{ id: 'p1', personaggio: 'Ada', note: 'staff' }])
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'list_partecipazioni_opera',
+      expect.objectContaining({ p_opera_id: 'opera-1' }),
+    )
+    expect(data).toEqual([expect.objectContaining({ id: 'p1', personaggio: 'Ada', note: 'staff' })])
   })
 
   it('updates the partecipazione without the note column and upserts the note', async () => {

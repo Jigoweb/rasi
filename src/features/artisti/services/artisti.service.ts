@@ -1,4 +1,5 @@
 import { codicePaeseTokenOr, type StatoIscrizione } from '@/features/artisti/lib/artista-display'
+import { fetchAllPages } from '@/shared/lib/postgrest-page'
 import { supabase } from '@/shared/lib/supabase-client'
 import {
   flattenPartecipazioneNote,
@@ -174,9 +175,10 @@ export const PARTECIPAZIONI_ARTISTA_SELECT = `
         numero_stagione
       )
     `
-
 /**
  * Partecipazioni di un artista, con opera, ruolo ed episodio.
+ * Legge a blocchi da max_rows (ordine stabile con id in coda), così non si
+ * ferma alle prime 1000 righe di PostgREST.
  * includeNote è solo per le schede staff: aggiunge l'embed RLS e lo
  * riporta sul campo note. L'area personale non passa il flag.
  */
@@ -189,15 +191,19 @@ export const getPartecipazioniByArtistaId = async (
       ${PARTECIPAZIONE_NOTE_EMBED}`
     : PARTECIPAZIONI_ARTISTA_SELECT
 
-  const { data, error } = await supabase
-    .from('partecipazioni')
-    .select(select)
-    .eq('artista_id', artistaId)
-    .order('created_at', { ascending: false })
-
-  if (!options?.includeNote || error || !data) return { data, error }
-  const rows = data as unknown as Array<{ partecipazioni_note?: PartecipazioneNoteEmbed }>
-  return { data: rows.map((row) => flattenPartecipazioneNote(row)), error }
+  const result = await fetchAllPages((from, to) =>
+    supabase
+      .from('partecipazioni')
+      .select(select)
+      .eq('artista_id', artistaId)
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
+  if (result.error) return { data: null, error: result.error }
+  if (!options?.includeNote) return { data: result.data, error: null }
+  const rows = result.data as unknown as Array<{ partecipazioni_note?: PartecipazioneNoteEmbed }>
+  return { data: rows.map((row) => flattenPartecipazioneNote(row)), error: null }
 }
 
 export const createArtista = async (

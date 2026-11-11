@@ -4,7 +4,7 @@ import '@testing-library/jest-dom'
 import { CastEsternoPanel } from './cast-esterno-panel'
 import {
   createCastEsterno,
-  listCastEsterno,
+  listCastEsternoPage,
   updateCastEsterno,
 } from '@/features/opere/services/cast-esterno.service'
 
@@ -13,7 +13,7 @@ jest.mock('@/features/opere/services/external/imdb.service', () => ({
 }))
 
 jest.mock('@/features/opere/services/cast-esterno.service', () => ({
-  listCastEsterno: jest.fn(),
+  listCastEsternoPage: jest.fn(),
   listCastEsternoArtistiCorrispondenti: jest.fn(async () => ({ data: [{ cast_id: 'c1', artista_id: 'a1', artista_nome: 'Mario Rossi' }], error: null })),
   createCastEsterno: jest.fn(async () => ({ data: null, error: null })),
   updateCastEsterno: jest.fn(async () => ({ data: null, error: null })),
@@ -55,7 +55,7 @@ beforeEach(() => {
 
 describe('CastEsternoPanel', () => {
   it('edits name, character and primarietà of a manual entry', async () => {
-    ;(listCastEsterno as jest.Mock).mockResolvedValue({ data: [row()], error: null })
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({ data: [row()], error: null })
     const user = userEvent.setup()
     render(<CastEsternoPanel operaId="op1" imdbTconst={null} />)
 
@@ -83,7 +83,7 @@ describe('CastEsternoPanel', () => {
 
   it('keeps the saved cast visible while the list reloads', async () => {
     let releaseReload: (value: unknown) => void = () => {}
-    ;(listCastEsterno as jest.Mock)
+    ;(listCastEsternoPage as jest.Mock)
       .mockResolvedValueOnce({ data: [row()], error: null })
       .mockImplementationOnce(() => new Promise((resolve) => {
         releaseReload = resolve
@@ -96,7 +96,7 @@ describe('CastEsternoPanel', () => {
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Salva' }))
 
     await waitFor(() => {
-      expect(listCastEsterno).toHaveBeenCalledTimes(2)
+      expect(listCastEsternoPage).toHaveBeenCalledTimes(2)
     })
     expect(screen.getByText('Mario Rossi')).toBeInTheDocument()
 
@@ -105,14 +105,14 @@ describe('CastEsternoPanel', () => {
   })
 
   it('shows an existing RASI artist with the same name', async () => {
-    ;(listCastEsterno as jest.Mock).mockResolvedValue({ data: [row()], error: null })
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({ data: [row()], error: null })
     render(<CastEsternoPanel operaId="op1" imdbTconst={null} />)
 
     expect(await screen.findByText(/In anagrafica: Mario Rossi/)).toHaveAttribute('href', '/dashboard/artisti/a1')
   })
 
   it('groups series cast by episode', async () => {
-    ;(listCastEsterno as jest.Mock).mockResolvedValue({
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({
       data: [row({ id: 'c2', nome: 'Anna Verdi', episodio_id: 'e2' }), row({ id: 'c3', nome: 'Luca Neri' })],
       error: null,
     })
@@ -126,7 +126,7 @@ describe('CastEsternoPanel', () => {
   })
 
   it('adds a whole-series entry when no episode is selected', async () => {
-    ;(listCastEsterno as jest.Mock).mockResolvedValue({ data: [], error: null })
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({ data: [], error: null })
     render(<CastEsternoPanel operaId="op1" imdbTconst={null} episodi={episodi} />)
 
     fireEvent.change(await screen.findByLabelText('Nome cast esterno'), { target: { value: 'Paolo Gialli' } })
