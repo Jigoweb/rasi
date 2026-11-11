@@ -2,6 +2,7 @@ import {
   normalizeDashboardRpcPayload,
   loadDashboardHealthData,
   loadDashboardPrimaryData,
+  loadDashboardRpcData,
   loadDashboardSecondaryData,
   type DashboardDataDeps,
 } from './dashboard-data.service'
@@ -214,5 +215,64 @@ describe('dashboard data service', () => {
       impact: 'matching',
     })
     expect(payload.health.opereMetrics[0].impact).toBe('matching')
+  })
+
+  it('replaces the RPC available-amount metric with the net distributed amount', async () => {
+    const rpcStats = {
+      artisti_attivi: 10,
+      opere_totali: 20,
+      episodi_totali: 5,
+      opere_film: 12,
+      opere_serie_tv: 8,
+      programmazioni_mese: 30,
+      campagne_attive: 2,
+      importo_distribuito: 9999,
+      tasso_matching: 90,
+    }
+    const supabase = {
+      rpc: jest.fn().mockResolvedValue({
+        data: {
+          stats: rpcStats,
+          totalArtisti: 10,
+          totalOpere: 20,
+          individuazioniTotal: 200,
+          health: { artistiMetrics: [], opereMetrics: [] },
+        },
+        error: null,
+      }),
+      from(table: string) {
+        const builder = {
+          select() { return builder },
+          order() { return builder },
+          range() {
+            if (table === 'campagne_ripartizione') {
+              return Promise.resolve({
+                data: [
+                  { id: 'distribuita', stato: 'distribuita' },
+                  { id: 'approvata', stato: 'approvata' },
+                ],
+                error: null,
+              })
+            }
+            return Promise.resolve({
+              data: [
+                { campagna_ripartizione_id: 'distribuita', importo_netto: '12.5' },
+                { campagna_ripartizione_id: 'approvata', importo_netto: 400 },
+              ],
+              error: null,
+            })
+          },
+        }
+        return builder
+      },
+    }
+
+    const result = await loadDashboardRpcData(supabase as never, {
+      firstDay: '2026-11-01',
+      lastDay: '2026-11-30',
+    })
+
+    expect(result.primary.stats.importo_distribuito).toBe(12.5)
+    expect(result.primary.stats.campagne_attive).toBe(2)
   })
 })
