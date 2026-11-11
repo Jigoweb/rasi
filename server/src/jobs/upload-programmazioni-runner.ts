@@ -74,6 +74,53 @@ export async function upsertProgrammazioniChunk(
   }
 }
 
+/** Codici Postgres transitori: statement timeout, lock timeout. */
+const TRANSIENT_PG_CODES = new Set(['57014', '55P03'])
+const TRANSIENT_MESSAGE_RX =
+  /statement timeout|canceling statement|lock timeout|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|\b50[234]\b/i
+
+/**
+ * Errori per cui ha senso ritentare lo stesso blocco. Il caso reale: PLEX AVOD
+ * 2024 (11/11/2026) si è fermato al blocco 75 di 153 con «canceling statement
+ * due to statement timeout» (limite 8 s del ruolo API) e il file è stato perso.
+ */
+export function isTransientChunkError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  if (typeof code === 'string' && TRANSIENT_PG_CODES.has(code)) return true
+  return typeof message === 'string' && TRANSIENT_MESSAGE_RX.test(message)
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Inserisce un blocco ritentando sugli errori transitori. È sicuro ripetere:
+ * ogni riga ha import_row_uid deterministico e l'upsert ignora i duplicati,
+ * quindi un tentativo parzialmente riuscito non crea doppioni.
+ */
+export async function upsertChunkWithRetry(
+  payloads: ProgrammazioneImportPayload[],
+  options: {
+    delaysMs?: number[]
+    sleep?: (ms: number) => Promise<void>
+    upsert?: typeof upsertProgrammazioniChunk
+    onRetry?: (attempt: number, error: unknown) => void
+  } = {},
+): Promise<Awaited<ReturnType<typeof upsertProgrammazioniChunk>>> {
+  const delays = options.delaysMs ?? [2000, 5000, 10000]
+  const sleep = options.sleep ?? defaultSleep
+  const upsert = options.upsert ?? upsertProgrammazioniChunk
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await upsert(payloads)
+    } catch (error) {
+      if (attempt >= delays.length || !isTransientChunkError(error)) throw error
+      options.onRetry?.(attempt + 1, error)
+      await sleep(delays[attempt])
+    }
+  }
+}
+
 export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promise<void> {
   const {
     jobId,
@@ -125,7 +172,12 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
 
       if (payloads.length > 0) {
         try {
-          const { attempted, insertedExact, duplicateSkippedExact } = await upsertProgrammazioniChunk(payloads)
+          const { attempted, insertedExact, duplicateSkippedExact } = await upsertChunkWithRetry(payloads, {
+            onRetry: (attempt, error) => {
+              const message = error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error)
+              console.warn(`[upload-programmazioni] job ${jobId} blocco ${offset / chunkSize + 1}: nuovo tentativo ${attempt} dopo «${message}»`)
+            },
+          })
           righeInserite += insertedExact ?? attempted
           righeDuplicateSaltate += duplicateSkippedExact ?? 0
         } catch (error: any) {

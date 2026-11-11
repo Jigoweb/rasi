@@ -245,3 +245,70 @@ describe('upload programmazioni runner', () => {
     })
   })
 })
+
+describe('upsertChunkWithRetry', () => {
+  let runner: typeof import('./upload-programmazioni-runner.js')
+  const payloads = [{ campagna_programmazione_id: 'c', emittente_id: 'e', import_row_uid: 'u', titolo: 'T' }]
+  const ok = { attempted: 1, insertedExact: null, duplicateSkippedExact: null }
+
+  beforeEach(async () => {
+    runner = await import('./upload-programmazioni-runner.js')
+  })
+
+  it('ritenta sullo statement timeout e poi riesce', async () => {
+    let calls = 0
+    const waits: number[] = []
+    const result = await runner.upsertChunkWithRetry(payloads, {
+      delaysMs: [1, 2, 3],
+      sleep: async (ms) => { waits.push(ms) },
+      upsert: async () => {
+        calls += 1
+        if (calls < 3) throw { code: '57014', message: 'canceling statement due to statement timeout' }
+        return ok
+      },
+    })
+    assert.deepEqual(result, ok)
+    assert.equal(calls, 3)
+    assert.deepEqual(waits, [1, 2])
+  })
+
+  it('non ritenta gli errori non transitori', async () => {
+    let calls = 0
+    await assert.rejects(
+      runner.upsertChunkWithRetry(payloads, {
+        delaysMs: [1, 2],
+        sleep: async () => {},
+        upsert: async () => {
+          calls += 1
+          throw { code: '23502', message: 'null value in column "titolo"' }
+        },
+      }),
+      (error: { code?: string }) => error.code === '23502',
+    )
+    assert.equal(calls, 1)
+  })
+
+  it('si arrende dopo l\'ultimo tentativo', async () => {
+    let calls = 0
+    await assert.rejects(
+      runner.upsertChunkWithRetry(payloads, {
+        delaysMs: [1, 1],
+        sleep: async () => {},
+        upsert: async () => {
+          calls += 1
+          throw new Error('fetch failed')
+        },
+      }),
+    )
+    assert.equal(calls, 3)
+  })
+
+  it('riconosce gli errori transitori', () => {
+    assert.equal(runner.isTransientChunkError({ code: '57014', message: 'x' }), true)
+    assert.equal(runner.isTransientChunkError({ code: '55P03', message: 'x' }), true)
+    assert.equal(runner.isTransientChunkError(new Error('socket hang up')), true)
+    assert.equal(runner.isTransientChunkError({ message: 'Bad gateway 502' }), true)
+    assert.equal(runner.isTransientChunkError({ code: '23505', message: 'duplicate key' }), false)
+    assert.equal(runner.isTransientChunkError(null), false)
+  })
+})
