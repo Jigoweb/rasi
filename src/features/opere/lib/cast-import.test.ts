@@ -145,6 +145,68 @@ describe('classifyCastImport', () => {
     expect(notMatched.ok && notMatched.rows[0]).toMatchObject({ status: 'valid', action: 'cast_esterno' })
   })
 
+  it('matches by name when every artist IPN is empty and flags homonyms without picking one', () => {
+    const artisti = [
+      { id: 'h1', nome: 'Mario', cognome: 'Rossi', codice_ipn: null },
+      { id: 'h2', nome: 'Mario', cognome: 'Rossi', codice_ipn: '   ' },
+      { id: 'u1', nome: 'Anna', cognome: 'Verdi', codice_ipn: '' },
+    ]
+    const unique = classify(
+      [row({ Nome: ' anna ', Cognome: 'Verdi', IPN: '', Ruolo: 'Comprimario' })],
+      { artisti },
+    )
+    expect(unique.ok && unique.rows[0]).toMatchObject({
+      status: 'valid',
+      action: 'partecipazione',
+      artistaId: 'u1',
+    })
+
+    const homonyms = classify(
+      [row({ Nome: 'Mario', Cognome: 'Rossi', IPN: '', Ruolo: 'Comprimario' })],
+      { artisti },
+    )
+    expect(homonyms.ok && homonyms.rows[0]).toMatchObject({
+      status: 'skipped',
+      alert: CAST_IMPORT_ALERTS.artistNameAmbiguous,
+      included: false,
+    })
+    expect(homonyms.ok && homonyms.rows[0]).not.toHaveProperty('artistaId')
+    expect(buildCastImportInserts('opera-1', homonyms.ok ? homonyms.rows : [], 0).partecipazioni).toEqual([])
+
+    const fileStillHasIpn = classify(
+      [row({ Nome: 'Anna', Cognome: 'Verdi', IPN: 'NON-IN-ANAGRAFICA', Ruolo: 'Comprimario' })],
+      { artisti },
+    )
+    expect(fileStillHasIpn.ok && fileStillHasIpn.rows[0]).toMatchObject({
+      status: 'valid',
+      action: 'partecipazione',
+      artistaId: 'u1',
+    })
+
+    const fileIpnHomonyms = classify(
+      [row({ Nome: 'Mario', Cognome: 'Rossi', IPN: 'NON-IN-ANAGRAFICA', Ruolo: 'Comprimario' })],
+      { artisti },
+    )
+    expect(fileIpnHomonyms.ok && fileIpnHomonyms.rows[0]).toMatchObject({
+      status: 'skipped',
+      alert: CAST_IMPORT_ALERTS.artistNameAmbiguous,
+    })
+    expect(fileIpnHomonyms.ok && fileIpnHomonyms.rows[0]).not.toHaveProperty('artistaId')
+
+    const unknown = classify(
+      [row({ Nome: 'Giulia', Cognome: 'Bianchi', IPN: 'NON-IN-ANAGRAFICA', Ruolo: 'Comprimario' })],
+      { artisti },
+    )
+    expect(unknown.ok && unknown.rows[0]).toMatchObject({ status: 'valid', action: 'cast_esterno' })
+    expect(unknown.ok && unknown.rows[0]).not.toHaveProperty('artistaId')
+  })
+
+  it('does not attach a file IPN to the same name when that artist already has a different IPN', () => {
+    const result = classify([row({ Nome: 'Mario', Cognome: 'Rossi', IPN: 'ALTRO', Ruolo: 'Comprimario' })])
+    expect(result.ok && result.rows[0]).toMatchObject({ status: 'valid', action: 'cast_esterno' })
+    expect(result.ok && result.rows[0]).not.toHaveProperty('artistaId')
+  })
+
   it('skips a missing episode and never describes a new episode', () => {
     const result = classify([row({ Nome: 'Giulia', Cognome: 'Bianchi', IPN: '', Ruolo: 'Comprimario', Stagione: '3', Episodio: '1' })])
     expect(result.ok).toBe(true)
