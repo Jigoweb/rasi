@@ -21,6 +21,8 @@ import {
   validateArtistaSelfUpdate,
 } from '@/features/artisti/lib/artista-self-update'
 import { updateArtista } from '@/features/artisti/services/artisti.service'
+import { dirittiLabelsInOrdine } from '@/features/artisti/lib/diritti-order'
+import type { AmbitoArtista } from '@/features/artisti/lib/artista-display'
 import type { Database } from '@/shared/lib/supabase'
 
 type ArtistaRecord = {
@@ -40,6 +42,7 @@ type ArtistaRecord = {
   is_rasi?: boolean | null
   imdb_nconst?: string | null
   codice_paese?: string | null
+  ambito?: AmbitoArtista | null
   diritti_attivi?: string[] | null
   ragione_sociale?: string | null
   forma_giuridica?: string | null
@@ -323,11 +326,11 @@ export function ProfiloDatiTab({ artista, onArtistaUpdated }: Props) {
           <CardContent className="space-y-3 px-4 text-sm">
             <InfoRow label="IMDB" value={artista.imdb_nconst} />
             <InfoRow label="Codice Paese" value={artista.codice_paese} />
-            {artista.diritti_attivi && artista.diritti_attivi.length > 0 && (
+            {dirittiLabelsInOrdine(artista.diritti_attivi, artista.ambito).length > 0 && (
               <div className="flex justify-between gap-4">
                 <span className="text-gray-500 shrink-0">Diritti attivi</span>
                 <div className="flex gap-1 flex-wrap justify-end">
-                  {artista.diritti_attivi.map((d) => (
+                  {dirittiLabelsInOrdine(artista.diritti_attivi, artista.ambito).map((d) => (
                     <Badge key={d} variant="outline" className="text-xs">
                       {d}
                     </Badge>
