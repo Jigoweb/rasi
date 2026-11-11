@@ -84,33 +84,36 @@ checks AS (
     COALESCE((SELECT qual FROM pol WHERE policyname = 'Permetti lettura di tutte le pagine agli autenticati'), 'assente')
 
   UNION ALL
-  SELECT 'dodici policy di scrittura admin',
+  SELECT 'dodici policy di scrittura',
     CASE WHEN (
       SELECT count(*) FROM pol
       WHERE policyname IN (
         'pages_insert_admin', 'pages_update_admin', 'pages_delete_admin',
         'documents_insert_admin', 'documents_update_admin', 'documents_delete_admin',
         'bandi_news_insert_admin', 'bandi_news_update_admin', 'bandi_news_delete_admin',
-        'opera_aliases_insert_admin', 'opera_aliases_update_admin', 'opera_aliases_delete_admin'
+        'opera_aliases_insert_staff', 'opera_aliases_update_staff', 'opera_aliases_delete_staff'
       )
     ) = 12 THEN 'ok' ELSE 'fail' END,
-    (SELECT count(*)::text FROM pol WHERE policyname LIKE '%_admin' AND cmd <> 'SELECT')
+    (SELECT count(*)::text FROM pol WHERE cmd IN ('INSERT', 'UPDATE', 'DELETE'))
 
   UNION ALL
-  SELECT 'scritture: solo admin, initplan, niente auth.role()',
+  SELECT 'CMS: solo admin, initplan, niente auth.role()',
     CASE WHEN NOT EXISTS (
       SELECT 1 FROM pol
-      WHERE cmd IN ('INSERT', 'UPDATE', 'DELETE')
+      WHERE tablename IN ('pages', 'documents', 'bandi_news')
+        AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
         AND (
           (cmd = 'INSERT' AND (
             with_check !~* 'select\s+(public\.)?get_user_role\s*\('
             OR with_check !~* '''admin''::(public\.)?ruolo_utente'
+            OR with_check LIKE '%operatore%'
             OR with_check LIKE '%auth.role()%'
             OR qual <> ''
           ))
           OR (cmd = 'DELETE' AND (
             qual !~* 'select\s+(public\.)?get_user_role\s*\('
             OR qual !~* '''admin''::(public\.)?ruolo_utente'
+            OR qual LIKE '%operatore%'
             OR qual LIKE '%auth.role()%'
             OR with_check <> ''
           ))
@@ -119,18 +122,71 @@ checks AS (
             OR with_check !~* 'select\s+(public\.)?get_user_role\s*\('
             OR qual !~* '''admin''::(public\.)?ruolo_utente'
             OR with_check !~* '''admin''::(public\.)?ruolo_utente'
+            OR qual LIKE '%operatore%'
+            OR with_check LIKE '%operatore%'
             OR qual LIKE '%auth.role()%'
             OR with_check LIKE '%auth.role()%'
           ))
         )
     ) AND (
-      SELECT count(*) FROM pol WHERE cmd IN ('INSERT', 'UPDATE', 'DELETE')
-    ) = 12
+      SELECT count(*) FROM pol
+      WHERE tablename IN ('pages', 'documents', 'bandi_news')
+        AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
+    ) = 9
     THEN 'ok' ELSE 'fail' END,
     COALESCE((
       SELECT string_agg(tablename || '.' || policyname || ' ' || cmd, ', ')
       FROM pol
-      WHERE cmd IN ('INSERT', 'UPDATE', 'DELETE')
+      WHERE tablename IN ('pages', 'documents', 'bandi_news')
+        AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
+    ), '')
+
+  UNION ALL
+  SELECT 'opera_aliases: admin e operatore, initplan',
+    CASE WHEN NOT EXISTS (
+      SELECT 1 FROM pol
+      WHERE tablename = 'opera_aliases'
+        AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
+        AND (
+          (cmd = 'INSERT' AND (
+            with_check !~* 'select\s+(public\.)?get_user_role\s*\('
+            OR with_check !~* '''admin''::(public\.)?ruolo_utente'
+            OR with_check !~* '''operatore''::(public\.)?ruolo_utente'
+            OR with_check LIKE '%auth.role()%'
+            OR qual <> ''
+          ))
+          OR (cmd = 'DELETE' AND (
+            qual !~* 'select\s+(public\.)?get_user_role\s*\('
+            OR qual !~* '''admin''::(public\.)?ruolo_utente'
+            OR qual !~* '''operatore''::(public\.)?ruolo_utente'
+            OR qual LIKE '%auth.role()%'
+            OR with_check <> ''
+          ))
+          OR (cmd = 'UPDATE' AND (
+            qual !~* 'select\s+(public\.)?get_user_role\s*\('
+            OR with_check !~* 'select\s+(public\.)?get_user_role\s*\('
+            OR qual !~* '''admin''::(public\.)?ruolo_utente'
+            OR with_check !~* '''admin''::(public\.)?ruolo_utente'
+            OR qual !~* '''operatore''::(public\.)?ruolo_utente'
+            OR with_check !~* '''operatore''::(public\.)?ruolo_utente'
+            OR qual LIKE '%auth.role()%'
+            OR with_check LIKE '%auth.role()%'
+          ))
+        )
+    ) AND (
+      SELECT count(*) FROM pol
+      WHERE tablename = 'opera_aliases'
+        AND policyname IN (
+          'opera_aliases_insert_staff',
+          'opera_aliases_update_staff',
+          'opera_aliases_delete_staff'
+        )
+    ) = 3
+    THEN 'ok' ELSE 'fail' END,
+    COALESCE((
+      SELECT string_agg(policyname || ' ' || cmd || ' ' || COALESCE(NULLIF(with_check, ''), qual), ' | ')
+      FROM pol
+      WHERE tablename = 'opera_aliases' AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
     ), '')
 )
 SELECT controllo, esito, dettaglio
@@ -156,10 +212,27 @@ BEGIN
   FROM pol
   WHERE cmd = 'ALL'
      OR (
-       cmd IN ('INSERT', 'UPDATE', 'DELETE')
+       tablename IN ('pages', 'documents', 'bandi_news')
+       AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
        AND (
          COALESCE(NULLIF(with_check, ''), qual) !~* 'select\s+(public\.)?get_user_role\s*\('
          OR COALESCE(NULLIF(with_check, ''), qual) !~* '''admin''::(public\.)?ruolo_utente'
+         OR COALESCE(NULLIF(with_check, ''), qual) LIKE '%operatore%'
+         OR COALESCE(NULLIF(with_check, ''), qual) LIKE '%auth.role()%'
+       )
+     )
+     OR (
+       tablename = 'opera_aliases'
+       AND cmd IN ('INSERT', 'UPDATE', 'DELETE')
+       AND (
+         policyname NOT IN (
+           'opera_aliases_insert_staff',
+           'opera_aliases_update_staff',
+           'opera_aliases_delete_staff'
+         )
+         OR COALESCE(NULLIF(with_check, ''), qual) !~* 'select\s+(public\.)?get_user_role\s*\('
+         OR COALESCE(NULLIF(with_check, ''), qual) !~* '''admin''::(public\.)?ruolo_utente'
+         OR COALESCE(NULLIF(with_check, ''), qual) !~* '''operatore''::(public\.)?ruolo_utente'
          OR COALESCE(NULLIF(with_check, ''), qual) LIKE '%auth.role()%'
        )
      );

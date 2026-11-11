@@ -42,6 +42,9 @@ DROP POLICY IF EXISTS bandi_news_delete_admin ON public.bandi_news;
 DROP POLICY IF EXISTS opera_aliases_insert_admin ON public.opera_aliases;
 DROP POLICY IF EXISTS opera_aliases_update_admin ON public.opera_aliases;
 DROP POLICY IF EXISTS opera_aliases_delete_admin ON public.opera_aliases;
+DROP POLICY IF EXISTS opera_aliases_insert_staff ON public.opera_aliases;
+DROP POLICY IF EXISTS opera_aliases_update_staff ON public.opera_aliases;
+DROP POLICY IF EXISTS opera_aliases_delete_staff ON public.opera_aliases;
 
 DROP POLICY IF EXISTS "Permetti gestione admin pages" ON public.pages;
 DROP POLICY IF EXISTS "Permetti gestione admin documents" ON public.documents;

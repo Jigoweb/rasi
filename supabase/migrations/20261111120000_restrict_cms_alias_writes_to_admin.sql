@@ -4,9 +4,12 @@
 -- auth.role() = 'authenticated': qualunque utente loggato (artista,
 -- operatore, readonly, admin) poteva fare INSERT, UPDATE e DELETE.
 --
--- Da qui in poi la scrittura è solo per get_user_role() = 'admin',
+-- pages, documents e bandi_news: scrittura solo per get_user_role() = 'admin',
 -- la stessa condizione già usata da ruoli_tipologie_write_policy,
 -- parametri_ripartizione_write_policy e audit_log_select_policy.
+-- opera_aliases: admin oppure operatore, come opere_write_policy e le
+-- altre tabelle dello staff. Decisione di Matteo: l'operatore deve
+-- poter scrivere gli alias.
 -- La chiamata sta in (select ...) così Postgres la valuta una volta
 -- (initplan), come le altre policy da sistemare.
 --
@@ -109,18 +112,26 @@ CREATE POLICY bandi_news_delete_admin
   FOR DELETE
   USING ((select public.get_user_role()) = 'admin'::public.ruolo_utente);
 
-CREATE POLICY opera_aliases_insert_admin
+CREATE POLICY opera_aliases_insert_staff
   ON public.opera_aliases
   FOR INSERT
-  WITH CHECK ((select public.get_user_role()) = 'admin'::public.ruolo_utente);
+  WITH CHECK (
+    (select public.get_user_role()) IN ('admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente)
+  );
 
-CREATE POLICY opera_aliases_update_admin
+CREATE POLICY opera_aliases_update_staff
   ON public.opera_aliases
   FOR UPDATE
-  USING ((select public.get_user_role()) = 'admin'::public.ruolo_utente)
-  WITH CHECK ((select public.get_user_role()) = 'admin'::public.ruolo_utente);
+  USING (
+    (select public.get_user_role()) IN ('admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente)
+  )
+  WITH CHECK (
+    (select public.get_user_role()) IN ('admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente)
+  );
 
-CREATE POLICY opera_aliases_delete_admin
+CREATE POLICY opera_aliases_delete_staff
   ON public.opera_aliases
   FOR DELETE
-  USING ((select public.get_user_role()) = 'admin'::public.ruolo_utente);
+  USING (
+    (select public.get_user_role()) IN ('admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente)
+  );

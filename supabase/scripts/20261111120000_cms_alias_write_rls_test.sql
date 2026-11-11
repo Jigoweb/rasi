@@ -1,4 +1,5 @@
 -- Prova RLS sulle scritture di pages, documents, bandi_news, opera_aliases.
+-- CMS: solo admin. opera_aliases: admin e operatore. Artista e anon no.
 -- Gira in una transazione che fa sempre ROLLBACK: non lascia utenti né righe.
 --
 -- Utenti sintetici, email @example.invalid, creati qui e annullati dal
@@ -237,42 +238,72 @@ BEGIN
       RAISE NOTICE 'FAIL % bandi_news DELETE righe=%', v_role, v_n;
     END IF;
 
-    BEGIN
-      INSERT INTO public.opera_aliases (opera_id, alias_titolo, alias_titolo_norm, source)
-      VALUES (v_opera, 'Tentativo alias ' || v_role, 'tentativo', 'manual');
-      v_fail := v_fail + 1;
-      RAISE NOTICE 'FAIL % opera_aliases INSERT riuscito', v_role;
-    EXCEPTION WHEN insufficient_privilege THEN
-      GET STACKED DIAGNOSTICS v_sqlerrm = MESSAGE_TEXT;
-      IF v_sqlerrm ILIKE '%row-level security%' THEN
+    IF v_role = 'artista' THEN
+      BEGIN
+        INSERT INTO public.opera_aliases (opera_id, alias_titolo, alias_titolo_norm, source)
+        VALUES (v_opera, 'Tentativo alias artista', 'tentativo artista', 'manual');
+        v_fail := v_fail + 1;
+        RAISE NOTICE 'FAIL artista opera_aliases INSERT riuscito';
+      EXCEPTION WHEN insufficient_privilege THEN
+        GET STACKED DIAGNOSTICS v_sqlerrm = MESSAGE_TEXT;
+        IF v_sqlerrm ILIKE '%row-level security%' THEN
+          v_pass := v_pass + 1;
+          RAISE NOTICE 'PASS artista opera_aliases INSERT negato da RLS';
+        ELSE
+          v_fail := v_fail + 1;
+          RAISE NOTICE 'FAIL artista opera_aliases INSERT %', v_sqlerrm;
+        END IF;
+      END;
+
+      UPDATE public.opera_aliases SET notes = 'tentativo artista' WHERE id = v_alias;
+      GET DIAGNOSTICS v_n = ROW_COUNT;
+      IF v_n = 0 THEN
         v_pass := v_pass + 1;
-        RAISE NOTICE 'PASS % opera_aliases INSERT negato da RLS', v_role;
+        RAISE NOTICE 'PASS artista opera_aliases UPDATE 0 righe';
       ELSE
         v_fail := v_fail + 1;
-        RAISE NOTICE 'FAIL % opera_aliases INSERT %', v_role, v_sqlerrm;
+        RAISE NOTICE 'FAIL artista opera_aliases UPDATE righe=%', v_n;
       END IF;
-    END;
 
-    UPDATE public.opera_aliases SET notes = 'tentativo ' || v_role WHERE id = v_alias;
-    GET DIAGNOSTICS v_n = ROW_COUNT;
-    IF v_n = 0 THEN
-      v_pass := v_pass + 1;
-      RAISE NOTICE 'PASS % opera_aliases UPDATE 0 righe', v_role;
-    ELSE
-      v_fail := v_fail + 1;
-      RAISE NOTICE 'FAIL % opera_aliases UPDATE righe=%', v_role, v_n;
-    END IF;
-
-    DELETE FROM public.opera_aliases WHERE id = v_alias;
-    GET DIAGNOSTICS v_n = ROW_COUNT;
-    IF v_n = 0 THEN
-      v_pass := v_pass + 1;
-      RAISE NOTICE 'PASS % opera_aliases DELETE 0 righe', v_role;
-    ELSE
-      v_fail := v_fail + 1;
-      RAISE NOTICE 'FAIL % opera_aliases DELETE righe=%', v_role, v_n;
+      DELETE FROM public.opera_aliases WHERE id = v_alias;
+      GET DIAGNOSTICS v_n = ROW_COUNT;
+      IF v_n = 0 THEN
+        v_pass := v_pass + 1;
+        RAISE NOTICE 'PASS artista opera_aliases DELETE 0 righe';
+      ELSE
+        v_fail := v_fail + 1;
+        RAISE NOTICE 'FAIL artista opera_aliases DELETE righe=%', v_n;
+      END IF;
     END IF;
   END LOOP;
+
+  -- L'ultima iterazione lascia il ruolo operatore. Può scrivere gli alias.
+  IF public.get_user_role()::text IS DISTINCT FROM 'operatore' THEN
+    RAISE EXCEPTION 'atteso ruolo operatore prima della scrittura alias, trovato %', public.get_user_role();
+  END IF;
+
+  INSERT INTO public.opera_aliases (opera_id, alias_titolo, alias_titolo_norm, source)
+  VALUES (v_opera, 'Alias operatore RLS', 'alias operatore rls', 'manual')
+  RETURNING id INTO v_new_alias;
+  UPDATE public.opera_aliases SET notes = 'nota operatore' WHERE id = v_new_alias;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  SELECT notes INTO v_title FROM public.opera_aliases WHERE id = v_new_alias;
+  IF v_n = 1 AND v_title = 'nota operatore' THEN
+    v_pass := v_pass + 1;
+    RAISE NOTICE 'PASS operatore opera_aliases INSERT+UPDATE';
+  ELSE
+    v_fail := v_fail + 1;
+    RAISE NOTICE 'FAIL operatore opera_aliases INSERT+UPDATE n=% notes=%', v_n, v_title;
+  END IF;
+  DELETE FROM public.opera_aliases WHERE id = v_new_alias;
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  IF v_n = 1 THEN
+    v_pass := v_pass + 1;
+    RAISE NOTICE 'PASS operatore opera_aliases DELETE';
+  ELSE
+    v_fail := v_fail + 1;
+    RAISE NOTICE 'FAIL operatore opera_aliases DELETE n=%', v_n;
+  END IF;
 
   -- Lettura artista: come prima della migration.
   EXECUTE 'RESET ROLE';
@@ -381,6 +412,22 @@ BEGIN
     v_fail := v_fail + 1;
     RAISE NOTICE 'FAIL anon vede opera_aliases count=%', v_n;
   END IF;
+
+  BEGIN
+    INSERT INTO public.opera_aliases (opera_id, alias_titolo, alias_titolo_norm, source)
+    VALUES (v_opera, 'Alias anon RLS', 'alias anon rls', 'manual');
+    v_fail := v_fail + 1;
+    RAISE NOTICE 'FAIL anon opera_aliases INSERT riuscito';
+  EXCEPTION WHEN insufficient_privilege THEN
+    GET STACKED DIAGNOSTICS v_sqlerrm = MESSAGE_TEXT;
+    IF v_sqlerrm ILIKE '%row-level security%' THEN
+      v_pass := v_pass + 1;
+      RAISE NOTICE 'PASS anon opera_aliases INSERT negato da RLS';
+    ELSE
+      v_fail := v_fail + 1;
+      RAISE NOTICE 'FAIL anon opera_aliases INSERT %', v_sqlerrm;
+    END IF;
+  END;
 
   -- Admin: INSERT, UPDATE, DELETE sulle quattro tabelle.
   EXECUTE 'RESET ROLE';
