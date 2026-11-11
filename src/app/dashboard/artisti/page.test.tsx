@@ -23,7 +23,12 @@ jest.mock('@/features/artisti/services/artisti.service', () => ({
 
 const mockArtisti = [
   { id: '1', nome: 'Mario', cognome: 'Rossi', codice_artista: 'A001', nome_arte: 'Mario', stato: 'attivo', 'dat-iscrizione': '2023-01-15T00:00:00.000Z', 'dat-nascita': '1980-05-20', codice_fiscale: 'RSSMRA80M20H501U', data_inizio_mandato: '2023-01-15T00:00:00.000Z', is_rasi: true, ambito: null, diritti_attivi: ['Art. 73 - AU - BR BROADCASTING'] },
-  { id: '2', nome: 'Luigi', cognome: 'Verdi', codice_artista: 'A002', nome_arte: 'Gigi', stato: 'sospeso', 'dat-iscrizione': '2022-11-30T00:00:00.000Z', 'dat-nascita': '1992-02-10', codice_fiscale: 'VRDLGU92B10H501Z', data_inizio_mandato: '2022-11-30T00:00:00.000Z', is_rasi: true, ambito: 'cinema', diritti_attivi: null },
+  { id: '2', nome: 'Luigi', cognome: 'Verdi', codice_artista: 'A002', nome_arte: 'Gigi', stato: 'sospeso', 'dat-iscrizione': '2022-11-30T00:00:00.000Z', 'dat-nascita': '1992-02-10', codice_fiscale: 'VRDLGU92B10H501Z', data_inizio_mandato: '2022-11-30T00:00:00.000Z', is_rasi: true, ambito: 'cinema', diritti_attivi: [
+    'Art. 73 - AU - BR BROADCASTING',
+    'Art. 180-bis - ALL - RR RETRANSMISSION RIGHTS',
+    'Art 84 comma 2 - AV - BR BROADCASTING',
+    'Art. 72, comma 1, lett. c) Art. 80, comma 2, lett. f) - AL - LLE LENDING',
+  ] },
   { id: '3', nome: 'Anna', cognome: 'Bianchi', codice_artista: 'A003', nome_arte: 'Annetta', stato: 'inattivo', 'dat-iscrizione': '2024-03-10T00:00:00.000Z', 'dat-nascita': '1988-09-05', codice_fiscale: 'BNCFBA88P05H501A', data_inizio_mandato: '2024-03-10T00:00:00.000Z', is_rasi: false },
 ];
 
@@ -101,6 +106,21 @@ describe('ArtistiPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Mario Rossi').length).toBeGreaterThan(0)
     })
+  });
+
+  it('shows an artist rights in the order of the stored ambito', async () => {
+    render(<ArtistiPage />);
+    const ordered = [
+      'Art 84 comma 2 - AV - BR BROADCASTING',
+      'Art. 72, comma 1, lett. c) Art. 80, comma 2, lett. f) - AL - LLE LENDING',
+      'Art. 180-bis - ALL - RR RETRANSMISSION RIGHTS',
+      'Art. 73 - AU - BR BROADCASTING',
+    ].join('; ')
+
+    await waitFor(() => {
+      expect(screen.getAllByTitle(ordered).length).toBeGreaterThan(0)
+    })
+    expect(screen.getAllByTitle(ordered)[0]).toHaveTextContent(/^Art 84 comma 2 - AV - BR BROADCASTING/)
   });
 
   it('loads country codes used by artisti for the Paese filter', async () => {
