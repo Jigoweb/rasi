@@ -1116,7 +1116,6 @@ export type Database = {
           episodio_id: string | null
           id: string
           metadati: Json | null
-          note: string | null
           note_validazione: string | null
           opera_id: string
           parametri_personalizzati: Json | null
@@ -1137,7 +1136,6 @@ export type Database = {
           episodio_id?: string | null
           id?: string
           metadati?: Json | null
-          note?: string | null
           note_validazione?: string | null
           opera_id: string
           parametri_personalizzati?: Json | null
@@ -1158,7 +1156,6 @@ export type Database = {
           episodio_id?: string | null
           id?: string
           metadati?: Json | null
-          note?: string | null
           note_validazione?: string | null
           opera_id?: string
           parametri_personalizzati?: Json | null
@@ -1199,6 +1196,45 @@ export type Database = {
             columns: ["ruolo_id"]
             isOneToOne: false
             referencedRelation: "ruoli_tipologie"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partecipazioni_note_partecipazione_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "partecipazioni_note"
+            referencedColumns: ["partecipazione_id"]
+          },
+        ]
+      }
+      partecipazioni_note: {
+        Row: {
+          created_at: string
+          note: string
+          partecipazione_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          note: string
+          partecipazione_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          note?: string
+          partecipazione_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partecipazioni_note_partecipazione_id_fkey"
+            columns: ["partecipazione_id"]
+            isOneToOne: true
+            referencedRelation: "partecipazioni"
             referencedColumns: ["id"]
           },
         ]

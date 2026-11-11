@@ -237,7 +237,6 @@ export default function ProfiloArtistaPage() {
                     <TableHead>Ruolo</TableHead>
                     <TableHead>Personaggio</TableHead>
                     <TableHead>Episodio</TableHead>
-                    <TableHead>Note</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -256,9 +255,6 @@ export default function ProfiloArtistaPage() {
                         {p.episodi
                           ? `S${p.episodi.numero_stagione}E${p.episodi.numero_episodio}${episodeTitleLabel(p.episodi) ? ` - ${episodeTitleLabel(p.episodi)}` : ''}`
                           : '-'}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate text-gray-600">
-                        {p.note || '-'}
                       </TableCell>
                     </TableRow>
                   ))}

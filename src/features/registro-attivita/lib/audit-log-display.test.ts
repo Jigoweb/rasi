@@ -12,6 +12,7 @@ describe('audit log display', () => {
     expect(formatAzione('UPDATE')).toBe('Modifica')
     expect(formatAzione('LOGIN')).toBe('Accesso')
     expect(formatTabella('cast_esterno')).toBe('Cast esterno')
+    expect(formatTabella('partecipazioni_note')).toBe('Note partecipazione')
     expect(formatTabella('nuova_tabella')).toBe('nuova_tabella')
     expect(formatCampo('luogo_nascita')).toBe('Luogo nascita')
   })

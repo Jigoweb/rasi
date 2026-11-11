@@ -727,7 +727,6 @@ export type PartecipazioneInsert = {
   episodio_id: string | null
   ruolo_id: string
   personaggio: string | null
-  note: null
 }
 
 export type CastEsternoInsert = {
@@ -778,7 +777,6 @@ export function buildCastImportInserts(
         episodio_id: row.episodioId,
         ruolo_id: row.ruoloId,
         personaggio,
-        note: null,
       })
       continue
     }

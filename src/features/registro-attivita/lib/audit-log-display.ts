@@ -17,6 +17,7 @@ export const TABELLA_LABELS: Record<string, string> = {
   episodi: 'Episodi',
   opera_aliases: 'Alias opere',
   partecipazioni: 'Partecipazioni',
+  partecipazioni_note: 'Note partecipazione',
   cast_esterno: 'Cast esterno',
   ruoli_tipologie: 'Ruoli',
   emittenti: 'Emittenti',

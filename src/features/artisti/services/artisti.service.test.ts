@@ -1,5 +1,5 @@
 import { supabase } from '@/shared/lib/supabase-client'
-import { getArtisti, getArtistaById, getCodiciPaeseArtisti, getPartecipazioniByArtistaId, createArtista, updateArtista, ARTISTI_INCOMPLETE_OR } from './artisti.service'
+import { getArtisti, getArtistaById, getCodiciPaeseArtisti, getPartecipazioniByArtistaId, createArtista, updateArtista, ARTISTI_INCOMPLETE_OR, PARTECIPAZIONI_ARTISTA_SELECT } from './artisti.service'
 import type { TablesInsert, TablesUpdate } from '@/shared/lib/supabase'
 
 const mockSingle: jest.Mock = jest.fn()
@@ -203,6 +203,30 @@ describe('Artisti Service', () => {
       expect(mockEq).toHaveBeenCalledWith('artista_id', artistId)
       expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false })
       expect(data).toEqual(mockData)
+    })
+
+    it('does not request partecipazione notes for the artist area', async () => {
+      mockOrder.mockResolvedValue({ data: [], error: null })
+
+      await getPartecipazioniByArtistaId('art-1')
+
+      const select = mockSelect.mock.calls.at(-1)?.[0] as string
+      expect(select).toBe(PARTECIPAZIONI_ARTISTA_SELECT)
+      expect(select).not.toContain('partecipazioni_note')
+      expect(select.split('\n').map((line) => line.trim().replace(/,$/, ''))).not.toContain('note')
+    })
+
+    it('flattens staff notes from the separate table and drops the embed', async () => {
+      mockOrder.mockResolvedValue({
+        data: [{ id: 'p1', personaggio: 'Ada', partecipazioni_note: { note: 'solo staff' } }],
+        error: null,
+      })
+
+      const { data } = await getPartecipazioniByArtistaId('art-1', { includeNote: true })
+
+      const select = mockSelect.mock.calls.at(-1)?.[0] as string
+      expect(select).toContain('partecipazioni_note (note)')
+      expect(data).toEqual([{ id: 'p1', personaggio: 'Ada', note: 'solo staff' }])
     })
   })
 
