@@ -596,6 +596,7 @@ describe('buildCastImportInserts', () => {
     expect(inserts.partecipazioni).toEqual([
       expect.objectContaining({ artista_id: 'a1', opera_id: 'opera-1', ruolo_id: 'r-comp', episodio_id: null, personaggio: null }),
     ])
+    expect(inserts.partecipazioni[0]).not.toHaveProperty('note')
     expect(inserts.castEsterno).toEqual([
       expect.objectContaining({
         opera_id: 'opera-1',

@@ -145,7 +145,7 @@ export default function ArtistaProfiloPage() {
       setArtista(artistaData)
 
       // Fetch partecipazioni with related data
-      const { data: partecipazioniData, error: partecipazioniError } = await getPartecipazioniByArtistaId(artistaId);
+      const { data: partecipazioniData, error: partecipazioniError } = await getPartecipazioniByArtistaId(artistaId, { includeNote: true });
 
       if (partecipazioniError) throw partecipazioniError
 

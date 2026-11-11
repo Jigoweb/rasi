@@ -1,54 +1,15 @@
 import { supabase } from '@/shared/lib/supabase-client'
+import { flattenPartecipazioneNote, PARTECIPAZIONE_NOTE_EMBED, partecipazioneNoteText } from '@/features/opere/lib/partecipazione-note'
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-export interface ExportProgress {
-  fetched: number
-  total: number
-  percentage: number
-  phase: 'fetching' | 'formatting' | 'generating' | 'done'
-  estimatedTimeRemaining?: number
-}
-
-/**
- * Export completo della banca dati: partecipazioni con opere, episodi, artisti e ruoli.
- * Ogni riga = 1 partecipazione (artista + opera + eventuale episodio + ruolo).
- * Usa cursor-based pagination per gestire grandi dataset.
- */
-export const getFullDatabaseExport = async (
-  onProgress?: (progress: ExportProgress) => void,
-  signal?: AbortSignal
-) => {
-  try {
-    if (signal?.aborted) throw new Error('Export cancelled')
-
-    // Count totale partecipazioni
-    const { count: totalCount, error: countError } = await supabase
-      .from('partecipazioni')
-      .select('*', { count: 'exact', head: true })
-
-    if (countError) return { data: null, error: countError }
-
-    const total = totalCount || 0
-    if (total === 0) return { data: [], error: null }
-
-    const batchSize = 500
-    const allData: any[] = []
-    let lastId: string | null = null
-    let hasMore = true
-    const startTime = Date.now()
-
-    while (hasMore) {
-      if (signal?.aborted) throw new Error('Export cancelled')
-
-      let query = supabase
-        .from('partecipazioni')
-        .select(`
+/** Export staff. La nota arriva da partecipazioni_note, non dalla colonna tolta. */
+export const FULL_DATABASE_PARTECIPAZIONI_SELECT = `
           id,
           personaggio,
-          note,
           opera_id,
           episodio_id,
+          ${PARTECIPAZIONE_NOTE_EMBED},
           opere (
             codice_opera,
             titolo,
@@ -103,7 +64,50 @@ export const getFullDatabaseExport = async (
             nome,
             categoria
           )
-        `)
+        `
+
+export interface ExportProgress {
+  fetched: number
+  total: number
+  percentage: number
+  phase: 'fetching' | 'formatting' | 'generating' | 'done'
+  estimatedTimeRemaining?: number
+}
+
+/**
+ * Export completo della banca dati: partecipazioni con opere, episodi, artisti e ruoli.
+ * Ogni riga = 1 partecipazione (artista + opera + eventuale episodio + ruolo).
+ * Usa cursor-based pagination per gestire grandi dataset.
+ */
+export const getFullDatabaseExport = async (
+  onProgress?: (progress: ExportProgress) => void,
+  signal?: AbortSignal
+) => {
+  try {
+    if (signal?.aborted) throw new Error('Export cancelled')
+
+    // Count totale partecipazioni
+    const { count: totalCount, error: countError } = await supabase
+      .from('partecipazioni')
+      .select('*', { count: 'exact', head: true })
+
+    if (countError) return { data: null, error: countError }
+
+    const total = totalCount || 0
+    if (total === 0) return { data: [], error: null }
+
+    const batchSize = 500
+    const allData: any[] = []
+    let lastId: string | null = null
+    let hasMore = true
+    const startTime = Date.now()
+
+    while (hasMore) {
+      if (signal?.aborted) throw new Error('Export cancelled')
+
+      let query = supabase
+        .from('partecipazioni')
+        .select(FULL_DATABASE_PARTECIPAZIONI_SELECT)
         .order('id', { ascending: true })
         .limit(batchSize)
 
@@ -116,7 +120,7 @@ export const getFullDatabaseExport = async (
       if (error) return { data: null, error }
 
       if (data && data.length > 0) {
-        allData.push(...data)
+        allData.push(...data.map((row) => flattenPartecipazioneNote(row)))
         lastId = data[data.length - 1].id
         hasMore = data.length === batchSize
 
@@ -218,7 +222,7 @@ export const formatFullDatabaseExport = (rows: any[]) => {
       'Ruolo': ruolo?.nome || '',
       'Categoria Ruolo': ruolo?.categoria || '',
       'Personaggio': row.personaggio || '',
-      'Note': row.note || '',
+      'Note': partecipazioneNoteText(row),
     }
   })
 }
