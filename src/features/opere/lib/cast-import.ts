@@ -280,6 +280,16 @@ type ArtistMatch =
   | { kind: 'ambiguous' }
   | { kind: 'ambiguous-name' }
 
+function matchByNameWithoutIpn(
+  sameName: (artist: CastArtist) => boolean,
+  artisti: CastArtist[],
+): ArtistMatch {
+  const byName = artisti.filter((artist) => sameName(artist) && !normalizeIpn(artist.codice_ipn))
+  if (byName.length === 1) return { kind: 'rasi', artist: byName[0] }
+  if (byName.length > 1) return { kind: 'ambiguous-name' }
+  return { kind: 'esterno' }
+}
+
 function matchArtist(nome: string, cognome: string, ipn: string, artisti: CastArtist[]): ArtistMatch {
   const ipnKey = normalizeIpn(ipn)
   const nameKey = personKey(nome, cognome)
@@ -287,19 +297,20 @@ function matchArtist(nome: string, cognome: string, ipn: string, artisti: CastAr
 
   if (ipnKey) {
     const byIpn = artisti.filter((artist) => normalizeIpn(artist.codice_ipn) === ipnKey)
-    if (byIpn.length === 0) return { kind: 'esterno' }
     if (byIpn.length > 1) {
       const full = byIpn.filter(sameName)
       if (full.length === byIpn.length) return { kind: 'ambiguous' }
       return { kind: 'ipn-conflict' }
     }
-    return sameName(byIpn[0]) ? { kind: 'rasi', artist: byIpn[0] } : { kind: 'ipn-conflict' }
+    if (byIpn.length === 1) {
+      return sameName(byIpn[0]) ? { kind: 'rasi', artist: byIpn[0] } : { kind: 'ipn-conflict' }
+    }
+    // Nessun artista ha questo IPN (anagrafica azzerata, oppure codice nuovo).
+    // Si torna a nome e cognome fra gli artisti senza IPN: un solo nome si collega,
+    // due omonimi si segnalano e non se ne sceglie uno.
   }
 
-  const byName = artisti.filter((artist) => sameName(artist) && !normalizeIpn(artist.codice_ipn))
-  if (byName.length === 1) return { kind: 'rasi', artist: byName[0] }
-  if (byName.length > 1) return { kind: 'ambiguous-name' }
-  return { kind: 'esterno' }
+  return matchByNameWithoutIpn(sameName, artisti)
 }
 
 function rejected(fields: RowFields, alert: string): ClassifiedCastRow {
