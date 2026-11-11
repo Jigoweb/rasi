@@ -9,25 +9,23 @@
 -- ruoli_tipologie_select_policy.
 --
 -- public_form_submissions: la policy FOR ALL TO authenticated (USING true /
--- WITH CHECK true) diventa SELECT + UPDATE. Non si aggiunge un INSERT true:
--- l'INSERT resta quello con il controllo su kind. Il GRANT della tabella non
--- include DELETE, e questa migration non aggiunge una policy DELETE.
+-- WITH CHECK true) diventa SELECT + UPDATE + DELETE, tutte con true.
+-- Non si aggiunge un INSERT true: l'INSERT resta quello con il controllo
+-- su kind, e il CHECK della tabella ammette gli stessi kind.
 --
--- Le policy CMS / opera_aliases restano auth.role() = 'authenticated'.
--- Restringerle allo staff è una scelta di prodotto, non di questo split.
+-- pages, documents, bandi_news e opera_aliases non si toccano. Le loro
+-- write FOR ALL le restringe la PR #62.
+--
+-- Letture. Sulle tabelle staff la policy SELECT copre già il USING della
+-- write (è true, oppure include admin/operatore). L'unica eccezione è
+-- parametri_ripartizione: il SELECT esistente è solo la finestra
+-- valido_dal/valido_al, mentre la FOR ALL faceva vedere all'admin anche
+-- le righe fuori finestra. Si aggiunge una SELECT equivalente, senza
+-- modificare parametri_ripartizione_select_policy. Su ruoli_tipologie
+-- config_tables_public_read è già true, quindi la FOR ALL non aggiungeva
+-- righe in lettura: non si crea una terza SELECT.
+--
 -- Ruoli invariati: TO public, tranne il form che resta TO authenticated.
---
--- Effetto voluto: il USING della write non entra più nell'OR del SELECT.
--- Dove la policy SELECT è già larga almeno quanto la write (opere,
--- programmazioni, documenti, bandi, alias, tabelle staff) chi legge non
--- cambia. Due casi no, perché il SELECT è più stretto della vecchia FOR ALL:
---   pages: una bozza (is_published = false) non è più visibile né
---   aggiornabile dal ruolo authenticated. La lista dashboard usa la service
---   role; il salvataggio in PageForm usa il client utente.
---   parametri_ripartizione: l'admin non vede e non aggiorna più le righe
---   fuori da valido_dal/valido_al.
--- Non si toccano le policy *_select_policy: allargarle è un'altra modifica,
--- e la PR #53 le altera per nome.
 --
 -- Non contiene CREATE INDEX CONCURRENTLY: resta un'unica transazione.
 -- Non applicare al progetto produzione jdflzupcfwdcajxfobfj senza OK esplicito.
@@ -118,10 +116,6 @@ WHERE schemaname = 'public'
       ('ripartizioni', 'ripartizioni_dettaglio_write_policy'),
       ('parametri_ripartizione', 'parametri_ripartizione_write_policy'),
       ('ruoli_tipologie', 'ruoli_tipologie_write_policy'),
-      ('bandi_news', 'Permetti gestione admin bandi_news'),
-      ('documents', 'Permetti gestione admin documents'),
-      ('pages', 'Permetti gestione admin pages'),
-      ('opera_aliases', 'opera_aliases_write_admin'),
       ('public_form_submissions', 'Utenti autenticati leggono e aggiornano submissions')
   );
 
@@ -156,10 +150,6 @@ BEGIN
       ('ripartizioni', 'ripartizioni_dettaglio_write_policy', '{public}', 'staff_any', 'using'),
       ('parametri_ripartizione', 'parametri_ripartizione_write_policy', '{public}', 'staff_admin', 'using'),
       ('ruoli_tipologie', 'ruoli_tipologie_write_policy', '{public}', 'staff_admin', 'using'),
-      ('bandi_news', 'Permetti gestione admin bandi_news', '{public}', 'cms', 'using'),
-      ('documents', 'Permetti gestione admin documents', '{public}', 'cms', 'using'),
-      ('pages', 'Permetti gestione admin pages', '{public}', 'cms', 'using'),
-      ('opera_aliases', 'opera_aliases_write_admin', '{public}', 'cms', 'both'),
       ('public_form_submissions', 'Utenti autenticati leggono e aggiornano submissions', '{authenticated}', 'form_true', 'both')
     ) AS t(tablename, policyname, roles_expected, expr_kind, check_kind)
   LOOP
@@ -185,7 +175,6 @@ BEGIN
     v_expected := CASE r.expr_kind
       WHEN 'staff_any' THEN $k$get_user_role=anyarray['admin','operatore']$k$
       WHEN 'staff_admin' THEN $k$get_user_role='admin'$k$
-      WHEN 'cms' THEN $k$auth.role='authenticated'$k$
       WHEN 'form_true' THEN 'true'
     END;
 
@@ -239,7 +228,6 @@ DECLARE
   v_expr text;
   v_staff_any text := $e$(select public.get_user_role()) = ANY (ARRAY['admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente])$e$;
   v_staff_admin text := $e$(select public.get_user_role()) = 'admin'::public.ruolo_utente$e$;
-  v_cms text := $e$(select auth.role()) = 'authenticated'$e$;
 BEGIN
   FOR r IN
     SELECT *
@@ -259,17 +247,12 @@ BEGIN
       ('programmazioni', 'programmazioni_write_policy', 'programmazioni_insert_policy', 'programmazioni_update_policy', 'programmazioni_delete_policy', 'staff_any'),
       ('ripartizioni', 'ripartizioni_dettaglio_write_policy', 'ripartizioni_dettaglio_insert_policy', 'ripartizioni_dettaglio_update_policy', 'ripartizioni_dettaglio_delete_policy', 'staff_any'),
       ('parametri_ripartizione', 'parametri_ripartizione_write_policy', 'parametri_ripartizione_insert_policy', 'parametri_ripartizione_update_policy', 'parametri_ripartizione_delete_policy', 'staff_admin'),
-      ('ruoli_tipologie', 'ruoli_tipologie_write_policy', 'ruoli_tipologie_insert_policy', 'ruoli_tipologie_update_policy', 'ruoli_tipologie_delete_policy', 'staff_admin'),
-      ('bandi_news', 'Permetti gestione admin bandi_news', 'Permetti gestione admin bandi_news_insert', 'Permetti gestione admin bandi_news_update', 'Permetti gestione admin bandi_news_delete', 'cms'),
-      ('documents', 'Permetti gestione admin documents', 'Permetti gestione admin documents_insert', 'Permetti gestione admin documents_update', 'Permetti gestione admin documents_delete', 'cms'),
-      ('pages', 'Permetti gestione admin pages', 'Permetti gestione admin pages_insert', 'Permetti gestione admin pages_update', 'Permetti gestione admin pages_delete', 'cms'),
-      ('opera_aliases', 'opera_aliases_write_admin', 'opera_aliases_insert_admin', 'opera_aliases_update_admin', 'opera_aliases_delete_admin', 'cms')
+      ('ruoli_tipologie', 'ruoli_tipologie_write_policy', 'ruoli_tipologie_insert_policy', 'ruoli_tipologie_update_policy', 'ruoli_tipologie_delete_policy', 'staff_admin')
     ) AS t(tablename, old_policy, insert_policy, update_policy, delete_policy, expr_kind)
   LOOP
     v_expr := CASE r.expr_kind
       WHEN 'staff_any' THEN v_staff_any
       WHEN 'staff_admin' THEN v_staff_admin
-      WHEN 'cms' THEN v_cms
     END;
 
     EXECUTE format('DROP POLICY %I ON public.%I', r.old_policy, r.tablename);
@@ -302,6 +285,18 @@ CREATE POLICY "Utenti autenticati aggiornano submissions"
   FOR UPDATE TO authenticated
   USING (true)
   WITH CHECK (true);
+
+CREATE POLICY "Utenti autenticati cancellano submissions"
+  ON public.public_form_submissions
+  FOR DELETE TO authenticated
+  USING (true);
+
+-- La FOR ALL di parametri_ripartizione era anche una SELECT per l'admin,
+-- oltre la finestra di validità. La policy di lettura esistente non si modifica.
+CREATE POLICY parametri_ripartizione_admin_select_policy
+  ON public.parametri_ripartizione
+  FOR SELECT TO public
+  USING ((select public.get_user_role()) = 'admin'::public.ruolo_utente);
 
 DO $a3_post$
 DECLARE
@@ -360,26 +355,15 @@ BEGIN
       ('ruoli_tipologie', 'ruoli_tipologie_insert_policy', 'INSERT', '{public}', 'staff_admin', false, true),
       ('ruoli_tipologie', 'ruoli_tipologie_update_policy', 'UPDATE', '{public}', 'staff_admin', true, true),
       ('ruoli_tipologie', 'ruoli_tipologie_delete_policy', 'DELETE', '{public}', 'staff_admin', true, false),
-      ('bandi_news', 'Permetti gestione admin bandi_news_insert', 'INSERT', '{public}', 'cms', false, true),
-      ('bandi_news', 'Permetti gestione admin bandi_news_update', 'UPDATE', '{public}', 'cms', true, true),
-      ('bandi_news', 'Permetti gestione admin bandi_news_delete', 'DELETE', '{public}', 'cms', true, false),
-      ('documents', 'Permetti gestione admin documents_insert', 'INSERT', '{public}', 'cms', false, true),
-      ('documents', 'Permetti gestione admin documents_update', 'UPDATE', '{public}', 'cms', true, true),
-      ('documents', 'Permetti gestione admin documents_delete', 'DELETE', '{public}', 'cms', true, false),
-      ('pages', 'Permetti gestione admin pages_insert', 'INSERT', '{public}', 'cms', false, true),
-      ('pages', 'Permetti gestione admin pages_update', 'UPDATE', '{public}', 'cms', true, true),
-      ('pages', 'Permetti gestione admin pages_delete', 'DELETE', '{public}', 'cms', true, false),
-      ('opera_aliases', 'opera_aliases_insert_admin', 'INSERT', '{public}', 'cms', false, true),
-      ('opera_aliases', 'opera_aliases_update_admin', 'UPDATE', '{public}', 'cms', true, true),
-      ('opera_aliases', 'opera_aliases_delete_admin', 'DELETE', '{public}', 'cms', true, false),
+      ('parametri_ripartizione', 'parametri_ripartizione_admin_select_policy', 'SELECT', '{public}', 'staff_admin', true, false),
       ('public_form_submissions', 'Utenti autenticati leggono submissions', 'SELECT', '{authenticated}', 'form_true', true, false),
-      ('public_form_submissions', 'Utenti autenticati aggiornano submissions', 'UPDATE', '{authenticated}', 'form_true', true, true)
+      ('public_form_submissions', 'Utenti autenticati aggiornano submissions', 'UPDATE', '{authenticated}', 'form_true', true, true),
+      ('public_form_submissions', 'Utenti autenticati cancellano submissions', 'DELETE', '{authenticated}', 'form_true', true, false)
     ) AS t(tablename, policyname, cmd, roles_expected, expr_kind, needs_qual, needs_check)
   LOOP
     v_expected := CASE r.expr_kind
       WHEN 'staff_any' THEN $k$get_user_role=anyarray['admin','operatore']$k$
       WHEN 'staff_admin' THEN $k$get_user_role='admin'$k$
-      WHEN 'cms' THEN $k$auth.role='authenticated'$k$
       WHEN 'form_true' THEN 'true'
     END;
 
@@ -427,10 +411,6 @@ BEGIN
           ('ripartizioni', 'ripartizioni_dettaglio_write_policy'),
           ('parametri_ripartizione', 'parametri_ripartizione_write_policy'),
           ('ruoli_tipologie', 'ruoli_tipologie_write_policy'),
-          ('bandi_news', 'Permetti gestione admin bandi_news'),
-          ('documents', 'Permetti gestione admin documents'),
-          ('pages', 'Permetti gestione admin pages'),
-          ('opera_aliases', 'opera_aliases_write_admin'),
           ('public_form_submissions', 'Utenti autenticati leggono e aggiornano submissions')
       )
   ) THEN

@@ -7,8 +7,11 @@
 -- Le 12 policy che in origine avevano solo USING tornano senza WITH CHECK
 -- (per FOR ALL Postgres usa USING anche come check).
 --
--- Non tocca le policy di SELECT, né "Anonimi possono inserire submissions
--- pubbliche". Su public_form_submissions torna la FOR ALL TO authenticated.
+-- Non tocca le policy SELECT già presenti prima di questa migration, né
+-- "Anonimi possono inserire submissions pubbliche", né le write di pages,
+-- documents, bandi_news e opera_aliases (PR #62).
+-- Elimina parametri_ripartizione_admin_select_policy, creata dallo split.
+-- Su public_form_submissions torna la FOR ALL TO authenticated.
 --
 -- Se la PR #53 era già stata applicata prima di questo split, il rollback
 -- ripristina le write policy SENZA il wrap (select ...). Il wrap sulle
@@ -72,18 +75,8 @@ BEGIN
       ('ruoli_tipologie', 'ruoli_tipologie_insert_policy'),
       ('ruoli_tipologie', 'ruoli_tipologie_update_policy'),
       ('ruoli_tipologie', 'ruoli_tipologie_delete_policy'),
-      ('bandi_news', 'Permetti gestione admin bandi_news_insert'),
-      ('bandi_news', 'Permetti gestione admin bandi_news_update'),
-      ('bandi_news', 'Permetti gestione admin bandi_news_delete'),
-      ('documents', 'Permetti gestione admin documents_insert'),
-      ('documents', 'Permetti gestione admin documents_update'),
-      ('documents', 'Permetti gestione admin documents_delete'),
-      ('pages', 'Permetti gestione admin pages_insert'),
-      ('pages', 'Permetti gestione admin pages_update'),
-      ('pages', 'Permetti gestione admin pages_delete'),
-      ('opera_aliases', 'opera_aliases_insert_admin'),
-      ('opera_aliases', 'opera_aliases_update_admin'),
-      ('opera_aliases', 'opera_aliases_delete_admin'),
+      ('parametri_ripartizione', 'parametri_ripartizione_admin_select_policy'),
+      ('public_form_submissions', 'Utenti autenticati cancellano submissions'),
       ('public_form_submissions', 'Utenti autenticati leggono submissions'),
       ('public_form_submissions', 'Utenti autenticati aggiornano submissions')
     ) AS t(tablename, policyname)
@@ -110,7 +103,6 @@ DECLARE
   v_expr text;
   v_staff_any text := $e$get_user_role() IN ('admin', 'operatore')$e$;
   v_staff_admin text := $e$get_user_role() = 'admin'$e$;
-  v_cms text := $e$auth.role() = 'authenticated'$e$;
 BEGIN
   FOR r IN
     SELECT *
@@ -130,17 +122,12 @@ BEGIN
       ('programmazioni', 'programmazioni_write_policy', 'programmazioni_insert_policy', 'programmazioni_update_policy', 'programmazioni_delete_policy', 'staff_any', 'using'),
       ('ripartizioni', 'ripartizioni_dettaglio_write_policy', 'ripartizioni_dettaglio_insert_policy', 'ripartizioni_dettaglio_update_policy', 'ripartizioni_dettaglio_delete_policy', 'staff_any', 'using'),
       ('parametri_ripartizione', 'parametri_ripartizione_write_policy', 'parametri_ripartizione_insert_policy', 'parametri_ripartizione_update_policy', 'parametri_ripartizione_delete_policy', 'staff_admin', 'using'),
-      ('ruoli_tipologie', 'ruoli_tipologie_write_policy', 'ruoli_tipologie_insert_policy', 'ruoli_tipologie_update_policy', 'ruoli_tipologie_delete_policy', 'staff_admin', 'using'),
-      ('bandi_news', 'Permetti gestione admin bandi_news', 'Permetti gestione admin bandi_news_insert', 'Permetti gestione admin bandi_news_update', 'Permetti gestione admin bandi_news_delete', 'cms', 'using'),
-      ('documents', 'Permetti gestione admin documents', 'Permetti gestione admin documents_insert', 'Permetti gestione admin documents_update', 'Permetti gestione admin documents_delete', 'cms', 'using'),
-      ('pages', 'Permetti gestione admin pages', 'Permetti gestione admin pages_insert', 'Permetti gestione admin pages_update', 'Permetti gestione admin pages_delete', 'cms', 'using'),
-      ('opera_aliases', 'opera_aliases_write_admin', 'opera_aliases_insert_admin', 'opera_aliases_update_admin', 'opera_aliases_delete_admin', 'cms', 'both')
+      ('ruoli_tipologie', 'ruoli_tipologie_write_policy', 'ruoli_tipologie_insert_policy', 'ruoli_tipologie_update_policy', 'ruoli_tipologie_delete_policy', 'staff_admin', 'using')
     ) AS t(tablename, old_policy, insert_policy, update_policy, delete_policy, expr_kind, check_kind)
   LOOP
     v_expr := CASE r.expr_kind
       WHEN 'staff_any' THEN v_staff_any
       WHEN 'staff_admin' THEN v_staff_admin
-      WHEN 'cms' THEN v_cms
     END;
 
     EXECUTE format('DROP POLICY %I ON public.%I', r.insert_policy, r.tablename);
@@ -162,9 +149,14 @@ BEGIN
 END
 $rollback_split$;
 
+DROP POLICY parametri_ripartizione_admin_select_policy
+  ON public.parametri_ripartizione;
+
 DROP POLICY "Utenti autenticati leggono submissions"
   ON public.public_form_submissions;
 DROP POLICY "Utenti autenticati aggiornano submissions"
+  ON public.public_form_submissions;
+DROP POLICY "Utenti autenticati cancellano submissions"
   ON public.public_form_submissions;
 
 CREATE POLICY "Utenti autenticati leggono e aggiornano submissions"
@@ -198,10 +190,6 @@ BEGIN
       ('ripartizioni', 'ripartizioni_dettaglio_write_policy'),
       ('parametri_ripartizione', 'parametri_ripartizione_write_policy'),
       ('ruoli_tipologie', 'ruoli_tipologie_write_policy'),
-      ('bandi_news', 'Permetti gestione admin bandi_news'),
-      ('documents', 'Permetti gestione admin documents'),
-      ('pages', 'Permetti gestione admin pages'),
-      ('opera_aliases', 'opera_aliases_write_admin'),
       ('public_form_submissions', 'Utenti autenticati leggono e aggiornano submissions')
     ) AS t(tablename, policyname)
   LOOP

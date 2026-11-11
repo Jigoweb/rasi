@@ -5,6 +5,10 @@
 -- sono fail. Le espressioni sono confrontate dopo aver tolto spazi, cast,
 -- qualificatore public. e il rewrite di pg_get_expr
 -- "( SELECT funzione() AS funzione )".
+--
+-- pages, documents, bandi_news e opera_aliases_write_admin devono restare
+-- FOR ALL: questa migration non le tocca (le copre la PR #62). Il controllo
+-- vale se #62 non è già applicata.
 
 WITH norm AS (
   SELECT
@@ -95,20 +99,10 @@ expected AS (
     ('ruoli_tipologie', 'ruoli_tipologie_insert_policy', 'INSERT', '{public}', $k$get_user_role='admin'$k$, false, true),
     ('ruoli_tipologie', 'ruoli_tipologie_update_policy', 'UPDATE', '{public}', $k$get_user_role='admin'$k$, true, true),
     ('ruoli_tipologie', 'ruoli_tipologie_delete_policy', 'DELETE', '{public}', $k$get_user_role='admin'$k$, true, false),
-    ('bandi_news', 'Permetti gestione admin bandi_news_insert', 'INSERT', '{public}', $k$auth.role='authenticated'$k$, false, true),
-    ('bandi_news', 'Permetti gestione admin bandi_news_update', 'UPDATE', '{public}', $k$auth.role='authenticated'$k$, true, true),
-    ('bandi_news', 'Permetti gestione admin bandi_news_delete', 'DELETE', '{public}', $k$auth.role='authenticated'$k$, true, false),
-    ('documents', 'Permetti gestione admin documents_insert', 'INSERT', '{public}', $k$auth.role='authenticated'$k$, false, true),
-    ('documents', 'Permetti gestione admin documents_update', 'UPDATE', '{public}', $k$auth.role='authenticated'$k$, true, true),
-    ('documents', 'Permetti gestione admin documents_delete', 'DELETE', '{public}', $k$auth.role='authenticated'$k$, true, false),
-    ('pages', 'Permetti gestione admin pages_insert', 'INSERT', '{public}', $k$auth.role='authenticated'$k$, false, true),
-    ('pages', 'Permetti gestione admin pages_update', 'UPDATE', '{public}', $k$auth.role='authenticated'$k$, true, true),
-    ('pages', 'Permetti gestione admin pages_delete', 'DELETE', '{public}', $k$auth.role='authenticated'$k$, true, false),
-    ('opera_aliases', 'opera_aliases_insert_admin', 'INSERT', '{public}', $k$auth.role='authenticated'$k$, false, true),
-    ('opera_aliases', 'opera_aliases_update_admin', 'UPDATE', '{public}', $k$auth.role='authenticated'$k$, true, true),
-    ('opera_aliases', 'opera_aliases_delete_admin', 'DELETE', '{public}', $k$auth.role='authenticated'$k$, true, false),
+    ('parametri_ripartizione', 'parametri_ripartizione_admin_select_policy', 'SELECT', '{public}', $k$get_user_role='admin'$k$, true, false),
     ('public_form_submissions', 'Utenti autenticati leggono submissions', 'SELECT', '{authenticated}', 'true', true, false),
-    ('public_form_submissions', 'Utenti autenticati aggiornano submissions', 'UPDATE', '{authenticated}', 'true', true, true)
+    ('public_form_submissions', 'Utenti autenticati aggiornano submissions', 'UPDATE', '{authenticated}', 'true', true, true),
+    ('public_form_submissions', 'Utenti autenticati cancellano submissions', 'DELETE', '{authenticated}', 'true', true, false)
   ) AS t(tablename, policyname, cmd, roles, expr_n, needs_qual, needs_check)
 ),
 dropped AS (
@@ -130,11 +124,19 @@ dropped AS (
     ('ripartizioni', 'ripartizioni_dettaglio_write_policy'),
     ('parametri_ripartizione', 'parametri_ripartizione_write_policy'),
     ('ruoli_tipologie', 'ruoli_tipologie_write_policy'),
-    ('bandi_news', 'Permetti gestione admin bandi_news'),
-    ('documents', 'Permetti gestione admin documents'),
-    ('pages', 'Permetti gestione admin pages'),
-    ('opera_aliases', 'opera_aliases_write_admin'),
-    ('public_form_submissions', 'Utenti autenticati leggono e aggiornano submissions')
+    ('public_form_submissions', 'Utenti autenticati leggono e aggiornano submissions'),
+    ('bandi_news', 'Permetti gestione admin bandi_news_insert'),
+    ('bandi_news', 'Permetti gestione admin bandi_news_update'),
+    ('bandi_news', 'Permetti gestione admin bandi_news_delete'),
+    ('documents', 'Permetti gestione admin documents_insert'),
+    ('documents', 'Permetti gestione admin documents_update'),
+    ('documents', 'Permetti gestione admin documents_delete'),
+    ('pages', 'Permetti gestione admin pages_insert'),
+    ('pages', 'Permetti gestione admin pages_update'),
+    ('pages', 'Permetti gestione admin pages_delete'),
+    ('opera_aliases', 'opera_aliases_insert_admin'),
+    ('opera_aliases', 'opera_aliases_update_admin'),
+    ('opera_aliases', 'opera_aliases_delete_admin')
   ) AS t(tablename, policyname)
 ),
 kept AS (
@@ -146,7 +148,12 @@ kept AS (
     ('opere', 'opere_select_policy', 'SELECT'),
     ('partecipazioni', 'partecipazioni_select_policy', 'SELECT'),
     ('programmazioni', 'programmazioni_select_policy', 'SELECT'),
-    ('opera_aliases', 'opera_aliases_read_all', 'SELECT')
+    ('parametri_ripartizione', 'parametri_ripartizione_select_policy', 'SELECT'),
+    ('opera_aliases', 'opera_aliases_read_all', 'SELECT'),
+    ('opera_aliases', 'opera_aliases_write_admin', 'ALL'),
+    ('pages', 'Permetti gestione admin pages', 'ALL'),
+    ('documents', 'Permetti gestione admin documents', 'ALL'),
+    ('bandi_news', 'Permetti gestione admin bandi_news', 'ALL')
   ) AS t(tablename, policyname, cmd)
 ),
 report AS (
