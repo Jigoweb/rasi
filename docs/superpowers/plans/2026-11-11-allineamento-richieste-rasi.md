@@ -36,6 +36,40 @@ Decisioni già prese con Matteo:
 
 ---
 
+## Rilascio fase 0 (prossimo passo: Supabase ricollegato tramite il connettore claude.ai)
+
+**Stato del lavoro.** La fase 0 è pronta sul branch `claude/exciting-goodall-t754w5`: #64, #65, #66 e #54 integrate, A5, blocco colonne e correzione della RPC (`20261111155000`). I test sono verdi.
+
+**Cosa ho verificato in produzione, in sola lettura** (progetto `jdflzupcfwdcajxfobfj`):
+- Nessuna delle quattro migration è applicata: c'è ancora `partecipazioni.note`, mancano `partecipazioni_note`, `list_partecipazioni_opera` e il trigger.
+- Le policy sono quelle di `20261020212235`.
+- #53 **non** è applicata. Va aggiornata (ramo artista senza validazione) prima di applicarla, altrimenti annulla A5.
+- Nessuna funzione o vista legge `partecipazioni.note`, quindi il DROP di #65 è sicuro. Ci sono 20 partecipazioni con nota da spostare.
+- Pinco Panco ha un utente collegato e una partecipazione a «test»; artista e opera sono entrambi `da_validare`. La causa di A5 è confermata.
+- L'opera più grande ha 1.551 partecipazioni.
+- Su Vercel ogni merge su `main` va direttamente in produzione (`trae_rasi_7kb7`, team jigo). Le migration in produzione sono registrate con `apply_migration` e il nome del file.
+
+**Sequenza** (riduce al minimo la finestra in cui codice e database non coincidono):
+1. Apro la PR della fase 0 verso `main`, con il template del repo, e controllo la CI.
+2. Prima del merge applico con `apply_migration` le due migration compatibili con il codice attuale:
+   - `20261111143000_partecipazioni_oltre_max_rows`: aggiunge solo la RPC.
+   - `20261111170000_artista_repertorio_e_blocco_colonne`: allarga la vista dell'artista e aggiunge il trigger. Il form attuale usa solo campi consentiti.
+3. Verifica in sola lettura:
+   - Testo della policy e presenza del trigger.
+   - In una transazione con ROLLBACK, impersonando l'utente di Pinco Panco: count = 1.
+   - `list_partecipazioni_opera` sull'opera da 1.551 restituisce `total_opera` = 1551.
+4. Merge della PR, poi attendo che il deploy di produzione sia READY.
+5. Appena il deploy è READY applico `20261111150000_partecipazioni_note_nascoste_artista` e `20261111155000_list_partecipazioni_opera_note_separate`. Per un minuto o due la scheda partecipazioni (lista e note) può dare errore: il codice nuovo usa `partecipazioni_note` prima che esista.
+6. Verifica:
+   - 20 righe in `partecipazioni_note` e colonna eliminata.
+   - La RPC risponde e restituisce la nota.
+   - L'artista non legge `partecipazioni_note`.
+   - `get_advisors` (security) senza avvisi nuovi.
+   - Log runtime di Vercel senza errori.
+7. Chiudo #64, #65, #66 e #54 con un commento che rimanda alla PR della fase 0. Segnalo su #53 la modifica necessaria.
+
+**Rollback:** redeploy del commit precedente con `request_rollback` su Vercel, più lo script `supabase/rollback/20261111150000_…` di #65 per le note. Per A5 e il trigger basta ricreare la policy precedente e fare `DROP TRIGGER`.
+
 ## Fase 0 — Chiudere le bozze e i difetti rapidi (circa 2 giorni)
 
 1. **Rilasciare #64, #65, #66, #54** in quest'ordine, con rebase su `main` e verifica delle migration su DB locale (`scripts/dev/bootstrap-local-supabase.sh`) prima della produzione. Note:
