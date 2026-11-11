@@ -158,7 +158,8 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         titolo_originale,
         tipo,
         has_episodes,
-        anno_produzione
+        anno_produzione,
+        stato_validazione
       ),
       ruoli_tipologie (
         id,

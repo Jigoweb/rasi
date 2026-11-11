@@ -76,6 +76,9 @@ export function validateArtistaSelfUpdate(
 /**
  * Builds a whitelist-only update payload for artist self-service.
  * Never includes mandato / IPN / societari / stato fields.
+ * Il database applica lo stesso elenco con il trigger
+ * artisti_artista_colonne_consentite (migration 20261111170000): se si aggiunge
+ * un campo qui, va aggiunto anche lì (lo verifica artista-self-update.test.ts).
  */
 export function buildArtistaSelfUpdatePayload(
   form: ArtistaSelfUpdateForm,

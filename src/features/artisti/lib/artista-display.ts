@@ -166,3 +166,15 @@ export function tipoReferentePerStato(stato: string | null | undefined): TipoRef
   if (stato === 'deceduto') return 'erede'
   return null
 }
+
+/**
+ * Repertorio dell'artista: una partecipazione su opera non ancora validata
+ * da RASI resta visibile all'artista, con l'etichetta «In verifica».
+ * Senza dato sull'opera (embed assente) non si mostra l'etichetta.
+ */
+export function isPartecipazioneInVerifica(
+  opera: { stato_validazione?: string | null } | null | undefined
+): boolean {
+  if (!opera || !('stato_validazione' in opera)) return false
+  return opera.stato_validazione !== 'validato'
+}

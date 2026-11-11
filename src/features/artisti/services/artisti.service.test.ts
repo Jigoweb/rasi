@@ -200,6 +200,7 @@ describe('Artisti Service', () => {
 
       expect(supabase.from).toHaveBeenCalledWith('partecipazioni')
       expect(mockSelect).toHaveBeenCalledWith(expect.stringContaining('opere'))
+      expect(mockSelect).toHaveBeenCalledWith(expect.stringContaining('stato_validazione'))
       expect(mockEq).toHaveBeenCalledWith('artista_id', artistId)
       expect(mockOrder).toHaveBeenCalledWith('created_at', { ascending: false })
       expect(data).toEqual(mockData)
