@@ -85,13 +85,31 @@ export function validateTime(timeStr: any): string | undefined {
 }
 
 /**
- * Valida una data in formati comuni (ISO, DD/MM/YY, DD/MM/YYYY, DD-MM-YY, DD-MM-YYYY)
+ * Anno-mese (`2024-12`, `2024/12`, `2024-1`) → primo giorno del mese (`2024-12-01`).
+ * I report mensili delle piattaforme (es. PLEX «Timestamp Month») indicano il
+ * periodo, non il giorno. Altri formati: null.
+ * Copia nel worker: server/src/jobs/programmazioni-import-core.ts.
+ */
+export function yearMonthToFirstDay(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const match = value.trim().match(/^(\d{4})[-/](\d{1,2})$/)
+  if (!match) return null
+  const month = Number(match[2])
+  if (month < 1 || month > 12) return null
+  return `${match[1]}-${String(month).padStart(2, '0')}-01`
+}
+
+/**
+ * Valida una data in formati comuni (ISO, anno-mese, DD/MM/YY, DD/MM/YYYY, DD-MM-YY, DD-MM-YYYY)
  * e la normalizza a YYYY-MM-DD. Anni <=50 → 2000+, >50 → 1900+.
  */
 export function validateDate(dateStr: any): string | undefined {
   if (!dateStr) return undefined
   const str = String(dateStr).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
+
+  const yearMonth = yearMonthToFirstDay(str)
+  if (yearMonth) return yearMonth
 
   const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
   if (slashMatch) {

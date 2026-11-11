@@ -145,6 +145,19 @@ describe('mojibake_repair', () => {
     expect(applyTransform('mojibake_repair', 'Baarìa')).toBe('Baarìa')
     expect(applyTransform('mojibake_repair', 'House Of The Dragon')).toBe('House Of The Dragon')
   })
+  it('repairs Latin Extended-A letters (ō, ł, ž, ş) and latin1 C1 variants', () => {
+    // «Yasujirō Ozu» dal file PLEX AVOD: ō = c5 8d, il secondo byte è un controllo
+    expect(applyTransform('mojibake_repair', 'Yasujir\u00c5\u008d Ozu')).toBe('Yasujirō Ozu')
+    expect(applyTransform('mojibake_repair', 'Kie\u00c5\u203aÅ\u203aowski')).toBe('Kieśśowski')
+    expect(applyTransform('mojibake_repair', 'Ã\u0081rpÃ¡d MiklÃ³s')).toBe('Árpád Miklós')
+    expect(applyTransform('mojibake_repair', 'Ã\u0085ke \u00c5\u0081Ã³d\u00c5\u00ba')).toBe('Åke Łódź')
+    expect(applyTransform('mojibake_repair', 'Ã…ke \u00c5\u201aÃ³d\u00c5\u00ba')).toBe('Åke łódź')
+    expect(applyTransform('mojibake_repair', 'Ba\u00c5\u0178ak')).toBe('Başak')
+    expect(applyTransform('mojibake_repair', 'Ä\u008cesk\u00c3\u00bd')).toBe('Český')
+  })
+  it('leaves real Å/Ä text alone', () => {
+    expect(applyTransform('mojibake_repair', 'Åsa Ärger')).toBe('Åsa Ärger')
+  })
   it('leaves Ã not followed by mojibake bigram alone', () => {
     expect(applyTransform('mojibake_repair', 'BÃCH (Vietnamese surname)'))
       .toBe('BÃCH (Vietnamese surname)')

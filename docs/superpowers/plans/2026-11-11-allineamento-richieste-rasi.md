@@ -36,7 +36,81 @@ Decisioni già prese con Matteo:
 
 ---
 
-## Rilascio fase 0 (prossimo passo: Supabase ricollegato tramite il connettore claude.ai)
+## Intervento urgente prima della fase 1 — anteprima vuota nel mapping import (segnalazione dalla call dell'11/11)
+
+**Context.** Durante il mapping del file `PLEX AVOD 2024.xlsx` (nuova emittente PLEX, `EMT_31`, ancora senza mapping), le colonne Episode Name, Season Number ed Episode Number hanno l'anteprima vuota. Il cliente pensa che la piattaforma non le legga e lo considera bloccante. Lo stesso era successo con Sky.
+
+**Causa verificata nel codice.**
+- `detectColumns` (`src/features/programmazioni/services/import-mapping.service.ts`) rileva tutte le colonne correttamente e conserva le prime 5 righe (`preview`).
+- `MappingWizard.tsx` mostra però solo `detected.preview[0]`, cioè la prima riga del file. Nel file Plex è un FILM («Late Spring», 1949), e per un film quei tre campi sono vuoti per natura. Le righe SERIE, invece, li hanno valorizzati.
+- La stessa riga alimenta anche il suggerimento delle trasformazioni di data (`suggestDateTransform`) e l'anteprima delle «Regole avanzate titoli» (`MappingRulesEditor`). Anche lì, con un file misto film/serie, il risultato è fuorviante.
+
+**L'import non perde dati.** Si legge per nome di colonna, quindi basta mappare quelle colonne. In produzione il mapping Sky salvato include già titolo, numero episodio e stagione, e le programmazioni Sky hanno oltre 330.000 righe con quei campi valorizzati. Il blocco è solo nell'anteprima, che porta l'operatore a lasciare «ignora».
+
+**Correzione** (piccola, solo frontend e funzioni pure, nessuna migration):
+1. **Campioni per colonna.** Nuova funzione pura `buildColumnSamples(rows, columns, { scan: 500, examples: 3 })` in `import-mapping.service.ts`. Per ogni colonna restituisce il primo valore non vuoto, fino a 3 esempi distinti e il conteggio delle righe piene sul totale analizzato. Riusa `isBlankValue`, già presente e testata nello stesso file.
+   - `detectColumns` restituisce anche `samples`; `preview` resta per compatibilità.
+   - Per i CSV la lettura di campionamento passa da `preview: 50` a 500 righe. Per gli Excel il foglio è già letto per intero: si analizzano le prime 500 righe.
+2. **Colonna «Anteprima» nel wizard** (`MappingWizard.tsx`): mostra il primo valore non vuoto e, sotto, in piccolo «32 su 500 righe piene», con gli altri esempi al passaggio del mouse. Se la colonna è vuota in tutto il campione, scritta ambra «vuota nelle prime 500 righe».
+3. **Suggerimento date e regole avanzate.**
+   - `suggestDateTransform` usa il primo valore non vuoto della colonna.
+   - `MappingRulesEditor` riceve le righe campione e mostra il risultato della regola su un massimo di 3 righe con esito diverso. Così si vedono sia il caso film sia il caso serie.
+4. **Suggerimento automatico del mapping**, solo su colonne non ancora mappate e solo senza configurazione salvata. Non sovrascrive mai una scelta. Alias di intestazione, confrontati senza maiuscole, spazi e parentesi:
+
+   | Intestazione | Campo |
+   |---|---|
+   | Episode Name / Titolo episodio | `titolo_episodio` |
+   | Season Number / Stagione | `numero_stagione` |
+   | Episode Number / Numero episodio | `numero_episodio` |
+   | Programme Title / Title / Titolo | `titolo` |
+   | Duration (mins) / Durata | `durata_minuti` |
+   | Number of Streams / Views | `views` |
+   | Release Year / Anno | `anno` |
+   | Director / Regia | `regia` |
+   | TV/Film / Tipo | `tipo` |
+
+   I campi suggeriti sono marcati «suggerito» e si cambiano dal menu come oggi.
+5. **Caratteri rotti.** Nel file «Yasujirō Ozu» arriva come «YasujirÅ…». Si estende `mojibake_repair` (`src/features/programmazioni/utils/transforms.ts`) alle sequenze UTF-8 a due byte con prima lettera `Å`/`Ä` (ō, ł, ń, ś, ž, č…) e si aggiorna `MOJIBAKE_SENTINEL_RX`. La trasformazione si applica dal menu «Trasformazione» su titolo e regia. «TrÃ³caire» → «Trócaire» è già coperto.
+
+**Test.**
+- Unit su `buildColumnSamples`: file misto con la prima riga film, colonne episodio piene più sotto, colonna sempre vuota, valori 0 e `"0"` che non contano come vuoti (stesso criterio di `isBlankValue`).
+- Unit su `suggestMappingFromHeaders`: header Plex e Sky, nessuna sovrascrittura del mapping esistente.
+- Casi `mojibake_repair` per ō/ł/ž in `transforms.test.ts`.
+- Test del componente (Testing Library) con un file misto: le tre colonne episodio mostrano un valore e il conteggio.
+- `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
+
+**Verifica end-to-end.** Avvio l'app in locale e con Playwright carico nel wizard un file Excel sintetico con le stesse 11 colonne del file Plex (prima riga film, poi righe serie): le colonne episodio devono mostrare valori e conteggi e risultare già suggerite. Dopo il rilascio chiedo al cliente di riaprire il mapping di PLEX con il suo file.
+
+**Rilascio.** PR dedicata dal branch `claude/exciting-goodall-t754w5`, ripartito da `main` perché #68 è già unita. Solo codice, nessuna migration, quindi il merge basta.
+
+**Stato dei punti 1–5:** già scritti in locale, non ancora committati. I test passano: servizio 56, wizard 3, trasformazioni 57.
+
+### Aggiornamento 11/11 sera — cosa è emerso dall'upload PLEX in corso
+
+Il cliente ha salvato il mapping PLEX alle 14:35 (corretto: colonne episodio mappate, `mojibake_repair` su titolo e nome episodio) e alle 14:51 ha lanciato l'upload «PLEX AVOD 2024», ancora in corso. Dalle prime 23.000 righe, lette in produzione in sola lettura, risultano tre problemi:
+
+| Problema | Evidenza | Causa |
+|---|---|---|
+| Caratteri rotti salvati | 239 righe su 5.500 (es. «SalomÃ©», «MarialÃ©») | Il worker (`server/src/jobs/programmazioni-import-core.ts`, `applyTransform`) gestisce solo 9 delle 21 trasformazioni del wizard. `mojibake_repair` cade nel `default` e il valore resta invariato. Mancano anche `nbsp_to_space`, `netflix_episode_nbr`, `yyyymmdd_int_to_iso`, `year_range_*`, `seconds/milliseconds/fractional_hours_to_minutes`, `iso8601_duration_to_minutes`, `rti_apostrophe_minutes`, `decimal_minutes_to_int`. Alcune di queste finiscono nel ramo legacy «minutes» e producono valori sbagliati, non solo invariati. |
+| `data_trasmissione` vuota su tutte le righe | 23.000 su 23.000 senza data | «Timestamp Month» vale `2024-12` (anno-mese) e la validazione delle date accetta solo date complete. |
+| Episodi | Per ora 0 righe serie | Il file è ordinato con prima i film e poi le serie: non è un errore. Il mapping è corretto e la logica del worker è generica, quindi le colonne episodio verranno lette. Da ricontrollare a fine upload. |
+
+**Interventi aggiuntivi, nella stessa PR:**
+6. **Trasformazioni del worker allineate all'app.**
+   - `src/features/programmazioni/utils/transforms.ts` diventa la fonte di riferimento. Si copia in `server/src/lib/transforms.ts` (lo stesso schema già usato per `absent-data.ts` ed `excel-time.ts`) insieme alla dipendenza `year-parse.ts`.
+   - `applyTransform` del worker usa questa copia. Per i nomi sconosciuti o legacy (es. `null_if_ND`, salvato per TIM VISION TVOD) mantiene il comportamento attuale: valore invariato o ramo legacy «minutes». Niente eccezioni.
+   - Test di parità nell'app: importa le due implementazioni e confronta l'output di ogni trasformazione su un insieme di valori campione. Fallisce se le due copie divergono.
+7. **Date anno-mese.**
+   - Nell'app (`validateDate` in `src/features/programmazioni/utils/coercion.ts`) e nel worker (`coerce` dei campi data), `YYYY-MM` e `YYYY/MM` diventano il primo giorno del mese (`2024-12` → `2024-12-01`): è il periodo del report mensile delle piattaforme. Oggi quei valori diventano vuoti, quindi nessun dato esistente peggiora.
+   - Test anche con una cella Excel di tipo data formattata `yyyy-mm`.
+8. **Dati PLEX già caricati.**
+   - Finché le correzioni non sono in produzione (app su Vercel e worker su Railway), non si lancia l'individuazione sulla campagna «PLEX AVOD 2024».
+   - Dopo il deploy: si elimina la campagna con la funzione esistente (`delete_campagna_programmazione_safe`) e il cliente ricarica lo stesso file. In alternativa, con OK esplicito, una correzione SQL mirata dei titoli; la data però non si recupera, perché il valore originale non viene salvato.
+   - Verifica a fine upload: righe serie con numero episodio e stagione, zero titoli con `Ã`/`Å`, `data_trasmissione` valorizzata.
+
+**Rilascio del worker.** Il worker gira su Railway: dopo il merge controllo che il deploy del worker parta e riporti il commit nuovo. Il connettore Railway in questa sessione non è collegato, quindi può servire una conferma dalla dashboard.
+
+## Rilascio fase 0 — completato l'11/11 (PR #68)
 
 **Stato del lavoro.** La fase 0 è pronta sul branch `claude/exciting-goodall-t754w5`: #64, #65, #66 e #54 integrate, A5, blocco colonne e correzione della RPC (`20261111155000`). I test sono verdi.
 

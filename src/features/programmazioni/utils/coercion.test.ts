@@ -1,4 +1,4 @@
-import { validateTime, validateDate, coerce } from './coercion'
+import { validateTime, validateDate, coerce, yearMonthToFirstDay } from './coercion'
 
 describe('validateTime', () => {
   it('normalizza HH:MM e HH:MM:SS', () => {
@@ -37,5 +37,20 @@ describe('validateDate', () => {
   it('normalizza ISO e slash', () => {
     expect(validateDate('2015-06-01')).toBe('2015-06-01')
     expect(validateDate('6/1/15')).toBe('2015-01-06')
+  })
+  it('anno-mese diventa il primo giorno del mese (report mensili, es. PLEX)', () => {
+    expect(validateDate('2024-12')).toBe('2024-12-01')
+    expect(validateDate('2024/3')).toBe('2024-03-01')
+  })
+})
+
+describe('yearMonthToFirstDay', () => {
+  it('accetta solo anno-mese con mese valido', () => {
+    expect(yearMonthToFirstDay(' 2024-12 ')).toBe('2024-12-01')
+    expect(yearMonthToFirstDay('2024-13')).toBeNull()
+    expect(yearMonthToFirstDay('2024-00')).toBeNull()
+    expect(yearMonthToFirstDay('2024-12-05')).toBeNull()
+    expect(yearMonthToFirstDay('12-2024')).toBeNull()
+    expect(yearMonthToFirstDay(202412)).toBeNull()
   })
 })
