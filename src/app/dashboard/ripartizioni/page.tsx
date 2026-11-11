@@ -4,16 +4,21 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/shared/lib/supabase'
 import { Database } from '@/shared/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Card, CardContent } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
-import { Badge } from '@/shared/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/shared/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { EmptyState, PageErrorState, PageLoadingState } from '@/shared/components/page-states'
 import { SearchInput } from '@/shared/components/search-input'
 import { clickableRowClassName, handleClickableRowKeyDown } from '@/shared/lib/clickable-row'
-import { MoreHorizontal, Eye, Download, Filter, Play, Pause, CheckCircle, Clock, AlertCircle, Euro, Calendar } from 'lucide-react'
+import { MoreHorizontal, Eye, Download, Filter, Calendar } from 'lucide-react'
+import { RipartizioneStatusBadge } from '@/features/ripartizioni/components/RipartizioneStatusBadge'
+import { buildRipartizioniCsv } from '@/features/ripartizioni/lib/ripartizioni-csv'
+import {
+  RIPARTIZIONE_STATUS_LABELS,
+  RIPARTIZIONE_STATUSES,
+} from '@/shared/lib/dashboard-status-vocabulary'
 
 type CampagnaRipartizione = Database['public']['Tables']['campagne_ripartizione']['Row']
 
@@ -68,25 +73,6 @@ export default function RipartizioniPage() {
     setStatusFilter('all')
   }
 
-  const getStatusBadge = (stato: string | null) => {
-    switch (stato) {
-      case 'pianificata':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200"><Clock className="h-3 w-3 mr-1" />Pianificata</Badge>
-      case 'in_corso':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200"><Play className="h-3 w-3 mr-1" />In Corso</Badge>
-      case 'completata':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200"><CheckCircle className="h-3 w-3 mr-1" />Completata</Badge>
-      case 'distribuita':
-        return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200"><Euro className="h-3 w-3 mr-1" />Distribuita</Badge>
-      case 'sospesa':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200"><Pause className="h-3 w-3 mr-1" />Sospesa</Badge>
-      case 'annullata':
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200"><AlertCircle className="h-3 w-3 mr-1" />Annullata</Badge>
-      default:
-        return stato ? <Badge variant="outline">{stato}</Badge> : null
-    }
-  }
-
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '—'
     return new Date(dateString).toLocaleDateString('it-IT')
@@ -99,19 +85,16 @@ export default function RipartizioniPage() {
   }
 
   const exportCsv = () => {
-    const rows = [
-      ['Nome', 'Stato', 'Periodo Inizio', 'Periodo Fine', 'Importo Disponibile', 'Descrizione'].join(','),
-      ...filtered.map(c => [
-        `"${c.nome}"`,
-        c.stato || '',
-        c.periodo_riferimento_inizio ? formatDate(c.periodo_riferimento_inizio) : '',
-        c.periodo_riferimento_fine ? formatDate(c.periodo_riferimento_fine) : '',
-        c.importo_totale_disponibile ?? '',
-        `"${c.descrizione || ''}"`,
-      ].join(',')),
-    ].join('\n')
+    const rows = buildRipartizioniCsv(filtered.map(c => ({
+      nome: c.nome,
+      stato: c.stato,
+      periodoInizio: c.periodo_riferimento_inizio ? formatDate(c.periodo_riferimento_inizio) : '',
+      periodoFine: c.periodo_riferimento_fine ? formatDate(c.periodo_riferimento_fine) : '',
+      importoDisponibile: c.importo_totale_disponibile ?? '',
+      descrizione: c.descrizione,
+    })))
 
-    const blob = new Blob(['\uFEFF' + rows], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob([rows], { type: 'text/csv;charset=utf-8' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -173,12 +156,11 @@ export default function RipartizioniPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Tutti gli stati</SelectItem>
-                <SelectItem value="pianificata">Pianificata</SelectItem>
-                <SelectItem value="in_corso">In Corso</SelectItem>
-                <SelectItem value="completata">Completata</SelectItem>
-                <SelectItem value="distribuita">Distribuita</SelectItem>
-                <SelectItem value="sospesa">Sospesa</SelectItem>
-                <SelectItem value="annullata">Annullata</SelectItem>
+                {RIPARTIZIONE_STATUSES.map(stato => (
+                  <SelectItem key={stato} value={stato}>
+                    {RIPARTIZIONE_STATUS_LABELS[stato]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button variant="outline" onClick={resetFilters} disabled={!hasActiveFilters}>
@@ -227,7 +209,7 @@ export default function RipartizioniPage() {
                     onKeyDown={(event) => handleClickableRowKeyDown(event, () => router.push(`/dashboard/ripartizioni/${c.id}`))}
                   >
                     <TableCell className="font-medium">{c.nome}</TableCell>
-                    <TableCell>{getStatusBadge(c.stato)}</TableCell>
+                    <TableCell><RipartizioneStatusBadge stato={c.stato} /></TableCell>
                     <TableCell className="text-sm">{formatDate(c.periodo_riferimento_inizio)}</TableCell>
                     <TableCell className="text-sm">{formatDate(c.periodo_riferimento_fine)}</TableCell>
                     <TableCell className="text-sm font-mono">{formatImporto(c.importo_totale_disponibile)}</TableCell>
@@ -285,7 +267,7 @@ export default function RipartizioniPage() {
                         <p className="text-sm text-muted-foreground line-clamp-2">{c.descrizione || 'Nessuna descrizione'}</p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        {getStatusBadge(c.stato)}
+                        <RipartizioneStatusBadge stato={c.stato} />
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           <Calendar className="h-3.5 w-3.5" />
                           {formatDate(c.periodo_riferimento_inizio)} - {formatDate(c.periodo_riferimento_fine)}

@@ -1,5 +1,11 @@
 import { codicePaeseTokenOr, type StatoIscrizione } from '@/features/artisti/lib/artista-display'
+import { fetchAllPages } from '@/shared/lib/postgrest-page'
 import { supabase } from '@/shared/lib/supabase-client'
+import {
+  flattenPartecipazioneNote,
+  PARTECIPAZIONE_NOTE_EMBED,
+  type PartecipazioneNoteEmbed,
+} from '@/features/opere/lib/partecipazione-note'
 
 export type ArtistaFieldFilter =
   | { field: 'nome_arte' | 'codice_fiscale' | 'imdb_nconst' | 'data_nascita' | 'luogo_nascita'; hasValue: boolean }
@@ -135,17 +141,12 @@ export const getArtistaById = async (id: string) => {
 }
 
 /**
- * Fetches all participations for a given artist, including related work, role, and episode details.
- * @param artistaId - The ID of the artist.
- * @returns An object with data and error properties.
+ * Colonne del repertorio artista. Nessuna nota: il testo sta in
+ * partecipazioni_note e questa select non lo chiede.
  */
-export const getPartecipazioniByArtistaId = async (artistaId: string) => {
-  const { data, error } = await supabase
-    .from('partecipazioni')
-    .select(`
+export const PARTECIPAZIONI_ARTISTA_SELECT = `
       id,
       personaggio,
-      note,
       created_at,
       artista_id,
       opera_id,
@@ -158,7 +159,8 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         titolo_originale,
         tipo,
         has_episodes,
-        anno_produzione
+        anno_produzione,
+        stato_validazione
       ),
       ruoli_tipologie (
         id,
@@ -172,11 +174,36 @@ export const getPartecipazioniByArtistaId = async (artistaId: string) => {
         numero_episodio,
         numero_stagione
       )
-    `)
-    .eq('artista_id', artistaId)
-    .order('created_at', { ascending: false })
+    `
+/**
+ * Partecipazioni di un artista, con opera, ruolo ed episodio.
+ * Legge a blocchi da max_rows (ordine stabile con id in coda), così non si
+ * ferma alle prime 1000 righe di PostgREST.
+ * includeNote è solo per le schede staff: aggiunge l'embed RLS e lo
+ * riporta sul campo note. L'area personale non passa il flag.
+ */
+export const getPartecipazioniByArtistaId = async (
+  artistaId: string,
+  options?: { includeNote?: boolean },
+) => {
+  const select = options?.includeNote
+    ? `${PARTECIPAZIONI_ARTISTA_SELECT},
+      ${PARTECIPAZIONE_NOTE_EMBED}`
+    : PARTECIPAZIONI_ARTISTA_SELECT
 
-  return { data, error }
+  const result = await fetchAllPages((from, to) =>
+    supabase
+      .from('partecipazioni')
+      .select(select)
+      .eq('artista_id', artistaId)
+      .order('created_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
+  if (result.error) return { data: null, error: result.error }
+  if (!options?.includeNote) return { data: result.data, error: null }
+  const rows = result.data as unknown as Array<{ partecipazioni_note?: PartecipazioneNoteEmbed }>
+  return { data: rows.map((row) => flattenPartecipazioneNote(row)), error: null }
 }
 
 export const createArtista = async (

@@ -5,7 +5,8 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Database } from '@/shared/lib/supabase'
-import { AMBITO_LABELS, STATO_LABELS, STATO_OPTIONS, deriveAmbitoFromDiritti, formatStatoLabel, shouldShowFineMandato, type AmbitoArtista } from '@/features/artisti/lib/artista-display'
+import { AMBITO_LABELS, STATO_LABELS, STATO_OPTIONS, deriveAmbitoFromDiritti, formatStatoLabel, resolveAmbito, shouldShowFineMandato, type AmbitoArtista } from '@/features/artisti/lib/artista-display'
+import { orderByDirittoLabel, orderDirittiLabels } from '@/features/artisti/lib/diritti-order'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -946,18 +947,22 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
 
   const renderStep5 = () => {
     const selectedDiritti = form.watch('diritti_attivi') || []
-    
-    // Raggruppa i diritti per categoria
-    const dirittiPerCategoria = dirittiData.diritti.reduce((acc, diritto) => {
-      const categoria = diritto.categoria || 'Altro'
-      if (!acc[categoria]) {
-        acc[categoria] = []
-      }
-      acc[categoria].push(diritto)
-      return acc
-    }, {} as Record<string, Diritto[]>)
+    const ambitoField = form.watch('ambito')
+    const ambitoOrdine = ambitoField ? ambitoField : null
+    const dirittiInOrdine = ambitoOrdine
+      ? orderByDirittoLabel(dirittiData.diritti, ambitoOrdine, (diritto) => diritto.nome)
+      : dirittiData.diritti
 
-    // Ottieni i nomi delle categorie
+    // Senza ambito esplicito resta l'ordine del catalogo, raggruppato per tipo di diritto.
+    const dirittiPerCategoria = ambitoOrdine
+      ? null
+      : dirittiData.diritti.reduce((acc, diritto) => {
+        const categoria = diritto.categoria || 'Altro'
+        if (!acc[categoria]) acc[categoria] = []
+        acc[categoria].push(diritto)
+        return acc
+      }, {} as Record<string, Diritto[]>)
+
     const getCategoriaNome = (codice: string) => {
       const categoria = dirittiData.categorie.find(c => c.codice === codice)
       return categoria?.nome || codice
@@ -1001,34 +1006,41 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       }
     }
 
+    const renderDirittoOption = (diritto: Diritto) => (
+      <label
+        key={diritto.codice}
+        className="flex items-start gap-3 px-4 py-2 hover:bg-accent/50 cursor-pointer transition-colors"
+      >
+        <Checkbox
+          checked={selectedDiritti.includes(diritto.nome)}
+          onCheckedChange={() => handleToggleDiritto(diritto.nome)}
+          className="mt-0.5 flex-shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium">{diritto.nome}</div>
+        </div>
+      </label>
+    )
+
     return (
       <div className="w-full h-full flex flex-col gap-2">
-        {/* Lista scrollabile dei diritti */}
         <div className="border rounded-md flex-1 overflow-y-scroll min-h-0">
-          {Object.entries(dirittiPerCategoria).map(([categoriaCodice, diritti]) => (
-            <div key={categoriaCodice} className="border-b last:border-b-0">
-              <div className="sticky top-0 bg-muted px-4 py-1.5 text-xs font-semibold text-foreground uppercase tracking-wide z-10 border-b">
-                {getCategoriaNome(categoriaCodice)}
-              </div>
-              <div className="divide-y">
-                {diritti.map((diritto) => (
-                  <label
-                    key={diritto.codice}
-                    className="flex items-start gap-3 px-4 py-2 hover:bg-accent/50 cursor-pointer transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedDiritti.includes(diritto.nome)}
-                      onCheckedChange={() => handleToggleDiritto(diritto.nome)}
-                      className="mt-0.5 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">{diritto.nome}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
+          {ambitoOrdine ? (
+            <div className="divide-y">
+              {dirittiInOrdine.map(renderDirittoOption)}
             </div>
-          ))}
+          ) : (
+            Object.entries(dirittiPerCategoria ?? {}).map(([categoriaCodice, diritti]) => (
+              <div key={categoriaCodice} className="border-b last:border-b-0">
+                <div className="sticky top-0 bg-muted px-4 py-1.5 text-xs font-semibold text-foreground uppercase tracking-wide z-10 border-b">
+                  {getCategoriaNome(categoriaCodice)}
+                </div>
+                <div className="divide-y">
+                  {diritti.map(renderDirittoOption)}
+                </div>
+              </div>
+            ))
+          )}
         </div>
         
         {/* Contatore */}
@@ -1143,7 +1155,10 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
               <div>
                 <h4 className="font-medium text-sm mb-2">Diritti Attivi ({formData.diritti_attivi.length})</h4>
                 <div className="text-sm text-muted-foreground">
-                  {formData.diritti_attivi.map((nome) => (
+                  {orderDirittiLabels(
+                    formData.diritti_attivi,
+                    resolveAmbito(formData.ambito ? formData.ambito : null, formData.diritti_attivi),
+                  ).map((nome) => (
                     <div key={nome}>• {nome}</div>
                   ))}
                 </div>

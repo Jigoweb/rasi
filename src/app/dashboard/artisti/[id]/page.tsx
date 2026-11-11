@@ -34,11 +34,11 @@ import { canManageArtistiContatti } from '@/shared/lib/auth-permissions'
 import { computeArtistaAlerts, etaAnni } from '@/features/artisti/lib/artista-alerts'
 import {
   AMBITO_LABELS,
-  parseDirittiAttivi,
   resolveAmbito,
   shouldShowFineMandato,
   type AmbitoArtista,
 } from '@/features/artisti/lib/artista-display'
+import { dirittiLabelsInOrdine } from '@/features/artisti/lib/diritti-order'
 
 type Artista = Database['public']['Tables']['artisti']['Row']
 
@@ -145,7 +145,7 @@ export default function ArtistaProfiloPage() {
       setArtista(artistaData)
 
       // Fetch partecipazioni with related data
-      const { data: partecipazioniData, error: partecipazioniError } = await getPartecipazioniByArtistaId(artistaId);
+      const { data: partecipazioniData, error: partecipazioniError } = await getPartecipazioniByArtistaId(artistaId, { includeNote: true });
 
       if (partecipazioniError) throw partecipazioniError
 
@@ -663,11 +663,11 @@ export default function ArtistaProfiloPage() {
             </div>
           </div>
 
-          {parseDirittiAttivi(artista.diritti_attivi).length > 0 && (
+          {dirittiLabelsInOrdine(artista.diritti_attivi, artista.ambito).length > 0 && (
             <div className="mt-6 pt-6 border-t">
               <h3 className="text-sm font-semibold mb-3">Diritti Attivi</h3>
               <div className="flex flex-wrap gap-2">
-                {parseDirittiAttivi(artista.diritti_attivi).map((diritto) => (
+                {dirittiLabelsInOrdine(artista.diritti_attivi, artista.ambito).map((diritto) => (
                   <Badge key={diritto} variant="outline" className="text-xs">
                     {diritto}
                   </Badge>

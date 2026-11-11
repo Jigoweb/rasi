@@ -4,30 +4,62 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/shared/lib/supabase'
+import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
-import { Badge } from '@/shared/components/ui/badge'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
+import { PageErrorState } from '@/shared/components/page-states'
+import { RipartizioneStatusBadge } from '@/features/ripartizioni/components/RipartizioneStatusBadge'
+import { classifyRipartizioneLoadError } from '@/features/ripartizioni/lib/ripartizione-detail-state'
 import { ArrowLeft, Calendar, Euro } from 'lucide-react'
+
+type CampagnaRipartizione = Database['public']['Tables']['campagne_ripartizione']['Row']
 
 export default function RipartizioneDettaglioPage() {
   const params = useParams()
   const id = Array.isArray(params?.id) ? params?.id[0] : (params?.id as string)
-  const [campagna, setCampagna] = useState<any | null>(null)
+  const [campagna, setCampagna] = useState<CampagnaRipartizione | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   const fetchCampagna = useCallback(async () => {
+    if (!id) {
+      setCampagna(null)
+      setLoadFailed(false)
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
-    const { data, error } = await supabase
-      .from('campagne_ripartizione')
-      .select('*')
-      .eq('id', id)
-      .single()
-    if (!error) setCampagna(data)
-    setLoading(false)
+    setLoadFailed(false)
+    try {
+      const { data, error } = await supabase
+        .from('campagne_ripartizione')
+        .select('*')
+        .eq('id', id)
+        .single()
+      const outcome = classifyRipartizioneLoadError(error)
+      if (outcome === 'failed') {
+        console.error('Error fetching campagna ripartizione:', error)
+        setCampagna(null)
+        setLoadFailed(true)
+      } else if (outcome === 'missing') {
+        setCampagna(null)
+        setLoadFailed(false)
+      } else {
+        setCampagna(data)
+        setLoadFailed(false)
+      }
+    } catch (error) {
+      console.error('Error fetching campagna ripartizione:', error)
+      setCampagna(null)
+      setLoadFailed(true)
+    } finally {
+      setLoading(false)
+    }
   }, [id])
 
-  useEffect(() => { if (id) fetchCampagna() }, [id, fetchCampagna])
+  useEffect(() => { fetchCampagna() }, [fetchCampagna])
 
   const formatDate = (d: string | null) =>
     d ? new Date(d).toLocaleDateString('it-IT') : '—'
@@ -71,14 +103,20 @@ export default function RipartizioneDettaglioPage() {
         </Button>
       </div>
 
-      {campagna ? (
+      {loadFailed ? (
+        <PageErrorState
+          title="Non siamo riusciti a caricare la campagna"
+          description="Si è verificato un errore durante la lettura del dettaglio. La campagna potrebbe esistere comunque: riprova."
+          onRetry={fetchCampagna}
+        />
+      ) : campagna ? (
         <Card className="gap-4 py-4">
           <CardHeader><CardTitle>{campagna.nome}</CardTitle></CardHeader>
           <CardContent className="space-y-4 px-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <div className="text-sm font-medium text-gray-500">Stato</div>
-                <div className="mt-1"><Badge variant="outline">{campagna.stato || '—'}</Badge></div>
+                <div className="mt-1"><RipartizioneStatusBadge stato={campagna.stato} /></div>
               </div>
               <div>
                 <div className="text-sm font-medium text-gray-500">Importo Totale Disponibile</div>

@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import {
   validateArtistaSelfUpdate,
   buildArtistaSelfUpdatePayload,
@@ -120,5 +122,47 @@ describe('buildArtistaSelfUpdatePayload', () => {
     expect(payload.data_nascita).toBeNull()
     expect(payload.luogo_nascita).toBeNull()
     expect(payload.tipologia).toBeNull()
+  })
+})
+
+describe('allineamento con il trigger artisti_artista_colonne_consentite', () => {
+  const migration = fs.readFileSync(
+    path.resolve(
+      __dirname,
+      '../../../../supabase/migrations/20261111170000_artista_repertorio_e_blocco_colonne.sql'
+    ),
+    'utf8'
+  )
+  const match = migration.match(/v_consentite text\[\] := ARRAY\[([\s\S]*?)\];/)
+  const consentite = new Set(
+    (match?.[1] ?? '')
+      .split('\n')
+      .map((line) => line.replace(/--.*$/, ''))
+      .join(' ')
+      .match(/'([a-z_]+)'/g)
+      ?.map((token) => token.replace(/'/g, '')) ?? []
+  )
+
+  it('ogni campo del payload artista è consentito dal trigger', () => {
+    const payload = buildArtistaSelfUpdatePayload(baseForm())
+    expect(consentite.size).toBeGreaterThan(0)
+    for (const key of Object.keys(payload)) {
+      expect(consentite.has(key)).toBe(true)
+    }
+  })
+
+  it('il trigger non consente stato, mandato, diritti, IPN e validazione', () => {
+    for (const key of [
+      'stato',
+      'data_inizio_mandato',
+      'data_fine_mandato',
+      'diritti_attivi',
+      'codice_ipn',
+      'stato_validazione',
+      'is_rasi',
+      'ambito',
+    ]) {
+      expect(consentite.has(key)).toBe(false)
+    }
   })
 })

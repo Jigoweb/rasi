@@ -1,6 +1,20 @@
 import { supabase } from '@/shared/lib/supabase-client'
+import {
+  samePartecipazioneKey,
+  splitPartecipazionePayload,
+} from '@/features/opere/lib/partecipazione-note'
 import type { TipoOpera } from '@/shared/lib/opere-utils'
+import { fetchAllPages, POSTGREST_MAX_ROWS } from '@/shared/lib/postgrest-page'
 import { OPERE_INCOMPLETE_OR } from './opere-health'
+import {
+  parsePartecipazioniPage,
+  toPartecipazioniRpcArgs,
+  type PartecipazioneScheda,
+  type PartecipazioniListParams,
+} from './partecipazioni-page'
+
+export type { PartecipazioneScheda, PartecipazioniListParams } from './partecipazioni-page'
+export { PARTECIPAZIONI_PAGE_SIZE } from './partecipazioni-page'
 
 export { OPERE_INCOMPLETE_OR } from './opere-health'
 
@@ -333,27 +347,61 @@ export const deleteIndividuazioniByOperaId = async (operaId: string) => {
   return { error }
 }
 
-export const getPartecipazioniByOperaId = async (operaId: string) => {
-  const { data, error } = await supabase
-    .from('partecipazioni')
-    .select(`
-      id,
-      personaggio,
-      note,
-      created_at,
-      artista_id,
-      opera_id,
-      episodio_id,
-      ruolo_id,
-      artisti ( id, nome, cognome, nome_arte, codice_ipn ),
-      ruoli_tipologie ( id, nome, descrizione ),
-      episodi ( id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale )
-    `)
-    .eq('opera_id', operaId)
-    .order('created_at', { ascending: false })
-
-  return { data, error }
+/**
+ * Una pagina di partecipazioni dell'opera. Ricerca, ruolo ed episodio sono
+ * applicati nel database: il totale è il conteggio filtrato, non la lunghezza
+ * della pagina. `totalOpera` è il conteggio senza filtri (il badge della scheda).
+ */
+export const listPartecipazioniByOpera = async (params: PartecipazioniListParams) => {
+  const { data, error } = await supabase.rpc('list_partecipazioni_opera', toPartecipazioniRpcArgs(params))
+  if (error) {
+    return { data: [] as PartecipazioneScheda[], total: 0, totalOpera: 0, error }
+  }
+  const page = parsePartecipazioniPage(data)
+  return { data: page.rows, total: page.total, totalOpera: page.totalOpera, error: null }
 }
+
+/**
+ * Note delle partecipazioni: tabella partecipazioni_note (solo staff, RLS).
+ * Testo vuoto o null cancella la riga.
+ */
+export const savePartecipazioneNote = async (partecipazioneId: string, note: string | null) => {
+  if (note == null || note === '') {
+    const { error } = await supabase
+      .from('partecipazioni_note')
+      .delete()
+      .eq('partecipazione_id', partecipazioneId)
+    return { error }
+  }
+
+  const { error } = await supabase
+    .from('partecipazioni_note')
+    .upsert(
+      { partecipazione_id: partecipazioneId, note },
+      { onConflict: 'partecipazione_id' },
+    )
+  return { error }
+}
+
+/**
+ * Tutte le partecipazioni dell'opera, a blocchi da max_rows. Serve all'export:
+ * la scheda non deve chiamarla per dipingere la lista.
+ */
+export const listAllPartecipazioniByOpera = async (operaId: string) => {
+  const all: PartecipazioneScheda[] = []
+  for (let page = 1; page <= 200; page += 1) {
+    const result = await listPartecipazioniByOpera({ operaId, page, pageSize: POSTGREST_MAX_ROWS })
+    if (result.error) return { data: [] as PartecipazioneScheda[], error: result.error }
+    all.push(...result.data)
+    if (result.data.length < POSTGREST_MAX_ROWS || all.length >= result.total) {
+      return { data: all, error: null }
+    }
+  }
+  return { data: [] as PartecipazioneScheda[], error: { message: 'Lettura interrotta: risultato troppo grande' } }
+}
+
+/** @deprecated La scheda usa `listPartecipazioniByOpera`. Resta per l'export e i chiamanti che vogliono l'elenco intero, già paginato. */
+export const getPartecipazioniByOperaId = (operaId: string) => listAllPartecipazioniByOpera(operaId)
 
 export const updatePartecipazione = async (
   id: string,
@@ -364,14 +412,27 @@ export const updatePartecipazione = async (
     episodio_id?: string | null
   }
 ) => {
-  const { data, error } = await supabase
-    .from('partecipazioni')
-    .update(payload)
-    .eq('id', id)
-    .select('*')
-    .single()
+  const { partecipazione, note } = splitPartecipazionePayload(payload)
+  let data: Record<string, unknown> | null = null
 
-  return { data, error }
+  if (Object.keys(partecipazione).length > 0) {
+    const updated = await supabase
+      .from('partecipazioni')
+      .update(partecipazione)
+      .eq('id', id)
+      .select('*')
+      .single()
+    if (updated.error) return { data: updated.data, error: updated.error }
+    data = updated.data
+  }
+
+  if (note !== undefined) {
+    const saved = await savePartecipazioneNote(id, note)
+    if (saved.error) return { data, error: saved.error }
+    if (data) data = { ...data, note }
+  }
+
+  return { data, error: null }
 }
 
 export const deletePartecipazione = async (id: string) => {
@@ -477,19 +538,64 @@ export const createPartecipazione = async (payload: {
   personaggio?: string | null
   note?: string | null
 }) => {
+  const { partecipazione, note } = splitPartecipazionePayload(payload)
   const { data, error } = await supabase
     .from('partecipazioni')
-    .insert(payload)
+    .insert(partecipazione)
     .select('*')
     .single()
 
-  return { data, error }
+  if (error || !data) return { data, error }
+  if (note) {
+    const saved = await savePartecipazioneNote(data.id, note)
+    if (saved.error) return { data, error: saved.error }
+  }
+
+  return { data: { ...data, note: note ?? null }, error: null }
 }
 
 /**
  * Crea multiple partecipazioni in batch
  * Gestisce automaticamente i duplicati (ignora quelli che violano il constraint UNIQUE)
  */
+async function attachPartecipazioneNotes<T extends {
+  id: string
+  artista_id?: string
+  opera_id?: string
+  ruolo_id?: string
+  episodio_id?: string | null
+}>(
+  rows: T[],
+  sources: Array<{
+    artista_id: string
+    opera_id: string
+    episodio_id?: string | null
+    ruolo_id: string
+    note?: string | null
+  }>,
+) {
+  const withNotes = rows.map((row) => {
+    const source = sources.find((item) => samePartecipazioneKey(item, row))
+    const note = source && Object.prototype.hasOwnProperty.call(source, 'note') ? (source.note ?? null) : null
+    return { row, note }
+  })
+  const noteRows = withNotes
+    .filter((item): item is typeof item & { note: string } => Boolean(item.note))
+    .map((item) => ({ partecipazione_id: item.row.id, note: item.note }))
+
+  if (noteRows.length > 0) {
+    const { error } = await supabase
+      .from('partecipazioni_note')
+      .upsert(noteRows, { onConflict: 'partecipazione_id' })
+    if (error) return { data: withNotes.map((item) => item.row), error }
+  }
+
+  return {
+    data: withNotes.map((item) => ({ ...item.row, note: item.note })),
+    error: null,
+  }
+}
+
 export const createPartecipazioniMultiple = async (
   partecipazioni: Array<{
     artista_id: string
@@ -504,10 +610,12 @@ export const createPartecipazioniMultiple = async (
     return { data: [], error: null, duplicates: [] }
   }
 
+  const rows = partecipazioni.map((row) => splitPartecipazionePayload(row).partecipazione)
+
   // Tentativo di inserimento batch
   const { data, error } = await supabase
     .from('partecipazioni')
-    .insert(partecipazioni)
+    .insert(rows)
     .select('*')
 
   // Se c'è un errore di constraint unique, proviamo a inserire una alla volta
@@ -516,10 +624,10 @@ export const createPartecipazioniMultiple = async (
     const results: any[] = []
     const duplicates: Array<{ index: number; partecipazione: typeof partecipazioni[0] }> = []
     
-    for (let i = 0; i < partecipazioni.length; i++) {
+    for (let i = 0; i < rows.length; i++) {
       const { data: singleData, error: singleError } = await supabase
         .from('partecipazioni')
-        .insert(partecipazioni[i])
+        .insert(rows[i])
         .select('*')
         .single()
       
@@ -531,14 +639,21 @@ export const createPartecipazioniMultiple = async (
           return { data: results, error: singleError, duplicates }
         }
       } else if (singleData) {
-        results.push(singleData)
+        const note = partecipazioni[i].note
+        if (note) {
+          const saved = await savePartecipazioneNote(singleData.id, note)
+          if (saved.error) return { data: results, error: saved.error, duplicates }
+        }
+        results.push({ ...singleData, note: note ?? null })
       }
     }
     
     return { data: results, error: duplicates.length > 0 ? null : error, duplicates }
   }
 
-  return { data: data || [], error, duplicates: [] }
+  if (error || !data) return { data: data || [], error, duplicates: [] }
+  const attached = await attachPartecipazioneNotes(data, partecipazioni)
+  return { data: attached.data, error: attached.error, duplicates: [] }
 }
 
 /**
@@ -587,15 +702,21 @@ export const checkPartecipazioniDuplicate = async (
   return duplicateIndices
 }
 
-export const getEpisodiByOperaId = async (operaId: string) => {
-  const { data, error } = await supabase
-    .from('episodi')
-    .select('id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, alias_titoli, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati')
-    .eq('opera_id', operaId)
-    .order('numero_stagione', { ascending: true })
-    .order('numero_episodio', { ascending: true })
+const EPISODI_SELECT = 'id, numero_stagione, numero_episodio, titolo_episodio, titolo_episodio_originale, alias_titoli, descrizione, data_prima_messa_in_onda, durata_minuti, imdb_tconst, codice_isan, metadati'
 
-  return { data, error }
+export const getEpisodiByOperaId = async (operaId: string) => {
+  const result = await fetchAllPages((from, to) =>
+    supabase
+      .from('episodi')
+      .select(EPISODI_SELECT)
+      .eq('opera_id', operaId)
+      .order('numero_stagione', { ascending: true })
+      .order('numero_episodio', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to),
+  )
+  if (result.error) return { data: null, error: result.error }
+  return { data: result.data, error: null }
 }
 
 export const createEpisodio = async (

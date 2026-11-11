@@ -27,14 +27,16 @@ import {
   type RuoloCast,
 } from '@/features/opere/lib/cast-esterno'
 import {
+  CAST_ESTERNO_PAGE_SIZE,
   createCastEsterno,
   deleteCastEsterno,
-  listCastEsterno,
+  listCastEsternoPage,
   listCastEsternoArtistiCorrispondenti,
   replaceCastEsterno,
   updateCastEsterno,
   type CastEsternoRow,
 } from '@/features/opere/services/cast-esterno.service'
+import { ListPager } from '@/shared/components/list-pager'
 import { Edit, Info, Loader2, MoreHorizontal, Plus, Search, Trash2, Tv, UserCheck, Users } from 'lucide-react'
 
 /** Valore Select per "intera opera/serie" (Radix non accetta value vuoto). */
@@ -83,6 +85,9 @@ export function CastEsternoPanel({
 }) {
   const hasEpisodi = episodi.length > 0
   const [rows, setRows] = useState<CastEsternoRow[]>([])
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [filteredCount, setFilteredCount] = useState(0)
   const [draft, setDraft] = useState<{ rows: CastEsternoInput[]; episodioId: string | null } | null>(null)
   const [manual, setManual] = useState<CastEsternoInput>(emptyDraft())
   const [manualEpisodi, setManualEpisodi] = useState<string[]>([])
@@ -116,15 +121,24 @@ export function CastEsternoPanel({
   const reload = useCallback(async () => {
     const load = beginLoad()
     if (load.initial) setLoading(true)
-    const [{ data, error: loadError }, { data: matches }] = await Promise.all([
-      listCastEsterno(operaId),
-      listCastEsternoArtistiCorrispondenti(operaId),
-    ])
-    if (loadError) setError(loadError.message)
+    const pageResult = await listCastEsternoPage(operaId, {
+      page,
+      soloSerie: scope === SERIE_SCOPE,
+      episodioId: scope !== ALL_SCOPE && scope !== SERIE_SCOPE ? scope : null,
+    })
+    const loaded = pageResult.data ?? []
+    if (pageResult.error) setError(pageResult.error.message)
     else {
-      setRows(data ?? [])
+      setError(null)
+      setRows(loaded)
+      setTotal(pageResult.total ?? loaded.length)
+      setFilteredCount(pageResult.count ?? loaded.length)
       load.markLoaded()
     }
+    const ids = loaded.map((row) => row.id)
+    const { data: matches } = ids.length > 0
+      ? await listCastEsternoArtistiCorrispondenti(operaId, ids)
+      : { data: [] }
     const byCast = new Map<string, ArtistaCorrispondente[]>()
     for (const match of matches ?? []) {
       const list = byCast.get(match.cast_id) ?? []
@@ -133,21 +147,15 @@ export function CastEsternoPanel({
     }
     setCorrispondenti(byCast)
     if (load.initial) setLoading(false)
-  }, [operaId, beginLoad])
+  }, [operaId, beginLoad, page, scope])
 
   useEffect(() => {
     void reload()
   }, [reload])
 
-  const visibleRows = useMemo(() => {
-    if (!hasEpisodi || scope === ALL_SCOPE) return rows
-    const episodioId = scopeToEpisodioId(scope)
-    return rows.filter((row) => (row.episodio_id ?? null) === episodioId)
-  }, [rows, scope, hasEpisodi])
-
   const groups = useMemo(
-    () => (hasEpisodi ? groupCastByEpisodio(visibleRows, episodi) : [{ episodio: null, rows: visibleRows }]),
-    [visibleRows, episodi, hasEpisodi],
+    () => (hasEpisodi ? groupCastByEpisodio(rows, episodi) : [{ episodio: null, rows }]),
+    [rows, episodi, hasEpisodi],
   )
 
   const scopeEpisodio = scope === ALL_SCOPE || scope === SERIE_SCOPE ? null : episodiById.get(scope) ?? null
@@ -214,7 +222,7 @@ export function CastEsternoPanel({
           ...manual,
           nome,
           personaggio: manual.personaggio?.trim() || null,
-          ordine: rows.length + index,
+          ordine: total + index,
         },
         episodioId,
       )
@@ -355,7 +363,7 @@ export function CastEsternoPanel({
     : scopeEpisodio
       ? 'Questo episodio non ha un tconst IMDb'
       : 'Collega prima un tconst IMDb all\'opera'
-  const isCastEmpty = !loading && rows.length === 0 && !draft
+  const isCastEmpty = !loading && total === 0 && !draft
 
   const downloadButton = (
     <Button
@@ -378,7 +386,7 @@ export function CastEsternoPanel({
             <CardTitle className="flex items-center">
               <Users className="mr-2 h-5 w-5" />
               Cast esterno
-              <Badge variant="secondary" className="ml-2">{rows.length}</Badge>
+              <Badge variant="secondary" className="ml-2">{total.toLocaleString('it-IT')}</Badge>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -411,7 +419,7 @@ export function CastEsternoPanel({
               <Tv className="inline h-4 w-4 mr-1" />
               Mostra
             </Label>
-            <Select value={scope} onValueChange={setScope}>
+            <Select value={scope} onValueChange={(value) => { setScope(value); setPage(1) }}>
               <SelectTrigger id="cast-esterno-scope" className="w-full sm:w-[320px]" aria-label="Episodio da mostrare">
                 <SelectValue />
               </SelectTrigger>
@@ -480,8 +488,8 @@ export function CastEsternoPanel({
 
         {loading ? (
           <div className="h-16 animate-pulse rounded bg-muted" />
-        ) : draft ? null : visibleRows.length === 0 ? (
-          rows.length === 0 ? (
+        ) : draft ? null : filteredCount === 0 ? (
+          total === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-4 py-10 text-center">
               <Users className="h-8 w-8 text-muted-foreground" aria-hidden />
               <p className="text-sm text-muted-foreground">Nessun cast esterno salvato.</p>
@@ -505,6 +513,16 @@ export function CastEsternoPanel({
               </div>
             ))}
           </div>
+        )}
+        {!draft && (
+          <ListPager
+            page={page}
+            pageSize={CAST_ESTERNO_PAGE_SIZE}
+            total={filteredCount}
+            onPageChange={setPage}
+            disabled={loading || busy}
+            label="Pagine cast esterno"
+          />
         )}
 
         <div className={`grid grid-cols-1 gap-2 items-end border-t pt-4 ${hasEpisodi ? 'sm:grid-cols-[1fr_1fr_160px_1fr_auto]' : 'sm:grid-cols-[1fr_1fr_180px_auto]'}`}>

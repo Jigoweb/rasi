@@ -4,6 +4,7 @@ import {
   formatAmbitoLabel,
   formatDirittiCompact,
   formatPaeseOption,
+  isPartecipazioneInVerifica,
   paesiOptionsInUso,
   parseDirittiAttivi,
   resolveAmbito,
@@ -131,6 +132,24 @@ describe('artista-display', () => {
       expect(shouldShowFineMandato('minorenne')).toBe(false)
       expect(shouldShowFineMandato('attivo')).toBe(false)
       expect(shouldShowFineMandato(null)).toBe(false)
+    })
+  })
+
+  describe('isPartecipazioneInVerifica', () => {
+    it('is true for opere not yet validated', () => {
+      expect(isPartecipazioneInVerifica({ stato_validazione: 'da_validare' })).toBe(true)
+      expect(isPartecipazioneInVerifica({ stato_validazione: 'respinto' })).toBe(true)
+      expect(isPartecipazioneInVerifica({ stato_validazione: null })).toBe(true)
+    })
+
+    it('is false for validated opere', () => {
+      expect(isPartecipazioneInVerifica({ stato_validazione: 'validato' })).toBe(false)
+    })
+
+    it('is false when the opera or the field is missing', () => {
+      expect(isPartecipazioneInVerifica(null)).toBe(false)
+      expect(isPartecipazioneInVerifica(undefined)).toBe(false)
+      expect(isPartecipazioneInVerifica({})).toBe(false)
     })
   })
 })

@@ -28,7 +28,6 @@ import {
   formatDirittiCompact,
   formatPaeseOption,
   paesiOptionsInUso,
-  parseDirittiAttivi,
   resolveAmbito,
   shouldShowFineMandato,
   type PaeseCatalogo,
@@ -38,6 +37,7 @@ import {
   formatStatoLabel,
   type StatoIscrizione,
 } from '@/features/artisti/lib/artista-display'
+import { dirittiLabelsInOrdine } from '@/features/artisti/lib/diritti-order'
 import dirittiCatalog from '../../../../public/diritti-artisti.json'
 import paesiCatalog from '../../../../public/codici-paesi-iso3166-alpha3.json'
 
@@ -383,15 +383,30 @@ export default function ArtistiPage() {
     return new Date(dateString).toLocaleDateString('it-IT')
   }
 
-  const renderDirittiCell = (diritti: Artista['diritti_attivi']) => {
-    const { labels, remaining, total } = formatDirittiCompact(diritti, 1)
+  const dirittiLabelsOf = (artista: Artista) =>
+    dirittiLabelsInOrdine(artista.diritti_attivi, artista.ambito)
+
+  const renderDirittiCell = (artista: Artista) => {
+    const all = dirittiLabelsOf(artista)
+    const { labels, remaining, total } = formatDirittiCompact(all, 1)
     if (total === 0) return <span className="text-muted-foreground">—</span>
-    const allLabels = parseDirittiAttivi(diritti).join('; ')
     return (
-      <span className="text-xs" title={allLabels}>
+      <span className="text-xs" title={all.join('; ')}>
         {labels[0]}
         {remaining > 0 ? ` +${remaining}` : ''}
       </span>
+    )
+  }
+
+  const renderDirittiPreview = (artista: Artista) => {
+    const diritti = dirittiLabelsOf(artista)
+    const compact = formatDirittiCompact(diritti, 2)
+    if (diritti.length === 0) return null
+    return (
+      <p title={diritti.join('; ')}>
+        Diritti: {compact.labels.join(', ')}
+        {compact.remaining > 0 ? ` +${compact.remaining}` : ''}
+      </p>
     )
   }
 
@@ -473,7 +488,7 @@ export default function ArtistiPage() {
         csvCell(indirizzo?.cap),
         csvCell(indirizzo?.citta),
         csvCell(indirizzo?.provincia),
-        csvCell(parseDirittiAttivi(diritti).join('; ')),
+        csvCell(dirittiLabelsInOrdine(diritti, a.ambito).join('; ')),
         csvCell(a.componente_stabile_gruppo_orchestra),
         csvCell(codiciEst && typeof codiciEst === 'object'
           ? Object.entries(codiciEst).map(([k, v]) => `${k}:${v}`).join('; ')
@@ -789,7 +804,7 @@ export default function ArtistiPage() {
                           {artista.codice_paese || '—'}
                         </TableCell>
                         <TableCell>
-                          {renderDirittiCell(artista.diritti_attivi)}
+                          {renderDirittiCell(artista)}
                         </TableCell>
                         <TableCell>
                           {formatDate(artista.data_inizio_mandato)}
@@ -875,14 +890,7 @@ export default function ArtistiPage() {
                             {shouldShowFineMandato(artista.stato) && (
                               <p>Fine mandato: {formatDate(artista.data_fine_mandato)}</p>
                             )}
-                            {parseDirittiAttivi(artista.diritti_attivi).length > 0 && (
-                              <p title={parseDirittiAttivi(artista.diritti_attivi).join('; ')}>
-                                Diritti: {formatDirittiCompact(artista.diritti_attivi, 2).labels.join(', ')}
-                                {formatDirittiCompact(artista.diritti_attivi, 2).remaining > 0
-                                  ? ` +${formatDirittiCompact(artista.diritti_attivi, 2).remaining}`
-                                  : ''}
-                              </p>
-                            )}
+                            {renderDirittiPreview(artista)}
                             <p>Mandato iniziato il {formatDate(artista.data_inizio_mandato)}</p>
                           </div>
                         </div>

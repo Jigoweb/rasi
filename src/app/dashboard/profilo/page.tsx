@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { getArtistaById, getPartecipazioniByArtistaId } from '@/features/artisti/services/artisti.service'
+import { isPartecipazioneInVerifica } from '@/features/artisti/lib/artista-display'
 import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 import { supabase } from '@/shared/lib/supabase-client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -237,13 +238,23 @@ export default function ProfiloArtistaPage() {
                     <TableHead>Ruolo</TableHead>
                     <TableHead>Personaggio</TableHead>
                     <TableHead>Episodio</TableHead>
-                    <TableHead>Note</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {partecipazioni.map((p: any) => (
                     <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.opere?.titolo || '-'}</TableCell>
+                      <TableCell className="font-medium">
+                        {p.opere?.titolo || '-'}
+                        {isPartecipazioneInVerifica(p.opere) && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-2 text-xs"
+                            title="Partecipazione registrata, in attesa di verifica da parte di RASI"
+                          >
+                            In verifica
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">
                           {p.opere?.tipo || '-'}
@@ -256,9 +267,6 @@ export default function ProfiloArtistaPage() {
                         {p.episodi
                           ? `S${p.episodi.numero_stagione}E${p.episodi.numero_episodio}${episodeTitleLabel(p.episodi) ? ` - ${episodeTitleLabel(p.episodi)}` : ''}`
                           : '-'}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate text-gray-600">
-                        {p.note || '-'}
                       </TableCell>
                     </TableRow>
                   ))}

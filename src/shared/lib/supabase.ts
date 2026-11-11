@@ -1116,7 +1116,6 @@ export type Database = {
           episodio_id: string | null
           id: string
           metadati: Json | null
-          note: string | null
           note_validazione: string | null
           opera_id: string
           parametri_personalizzati: Json | null
@@ -1137,7 +1136,6 @@ export type Database = {
           episodio_id?: string | null
           id?: string
           metadati?: Json | null
-          note?: string | null
           note_validazione?: string | null
           opera_id: string
           parametri_personalizzati?: Json | null
@@ -1158,7 +1156,6 @@ export type Database = {
           episodio_id?: string | null
           id?: string
           metadati?: Json | null
-          note?: string | null
           note_validazione?: string | null
           opera_id?: string
           parametri_personalizzati?: Json | null
@@ -1199,6 +1196,45 @@ export type Database = {
             columns: ["ruolo_id"]
             isOneToOne: false
             referencedRelation: "ruoli_tipologie"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partecipazioni_note_partecipazione_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "partecipazioni_note"
+            referencedColumns: ["partecipazione_id"]
+          },
+        ]
+      }
+      partecipazioni_note: {
+        Row: {
+          created_at: string
+          note: string
+          partecipazione_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          note: string
+          partecipazione_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          note?: string
+          partecipazione_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partecipazioni_note_partecipazione_id_fkey"
+            columns: ["partecipazione_id"]
+            isOneToOne: true
+            referencedRelation: "partecipazioni"
             referencedColumns: ["id"]
           },
         ]
@@ -1513,8 +1549,20 @@ export type Database = {
           corrispondenza: string
         }[]
       }
+      list_partecipazioni_opera: {
+        Args: {
+          p_opera_id: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string | null
+          p_ruolo_id?: string | null
+          p_episodio_id?: string | null
+          p_senza_episodio?: boolean
+        }
+        Returns: Json
+      }
       cast_esterno_artisti_corrispondenti: {
-        Args: { p_opera_id: string }
+        Args: { p_opera_id: string; p_cast_ids?: string[] | null }
         Returns: {
           cast_id: string
           artista_id: string
