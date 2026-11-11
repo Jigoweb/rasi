@@ -193,6 +193,13 @@ describe('programmazioni import — file misto PLEX (trasformazioni e date anno-
     assert.equal(serie.titolo_episodio, 'The Trócaire Box')
   })
 
+  it('ripara i caratteri anche senza trasformazione nel mapping (automatico)', () => {
+    const [film, serie] = build({})
+    assert.equal(film.titolo, 'Salomé')
+    assert.equal(film.regia, 'Yasujirō Ozu')
+    assert.equal(serie.titolo_episodio, 'The Trócaire Box')
+  })
+
   it('legge stagione ed episodio dalle righe serie e la data anno-mese', () => {
     const [film, serie] = build({})
     assert.equal(film.data_trasmissione, '2024-12-01')
@@ -206,7 +213,7 @@ describe('programmazioni import — file misto PLEX (trasformazioni e date anno-
 
   it('nomi di trasformazione sconosciuti o legacy non bloccano l\'import', () => {
     const [film] = build({ DIRECTOR: 'null_if_ND', 'Duration (mins)': 'legacy_seconds_to_minutes' })
-    assert.equal(film.regia, 'YasujirÅ\u008d Ozu')
+    assert.equal(film.regia, 'Yasujirō Ozu')
     assert.equal(film.durata_minuti, 108)
   })
 

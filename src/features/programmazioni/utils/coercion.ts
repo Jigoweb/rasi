@@ -4,6 +4,7 @@
  */
 
 import { excelFractionToHHMMSS } from './excel-time'
+import { repairMojibake, TEXT_REPAIR_FIELDS } from './transforms'
 
 /**
  * Normalizza una chiave colonna (lowercase + trim).
@@ -149,6 +150,7 @@ export function validateDate(dateStr: any): string | undefined {
  */
 export function coerce(key: string, value: any): any {
   if (value === undefined || value === null || value === '') return undefined
+  if (typeof value === 'string' && TEXT_REPAIR_FIELDS.has(key)) return repairMojibake(value)
   switch (key) {
     case 'numero_episodio':
     case 'numero_stagione':

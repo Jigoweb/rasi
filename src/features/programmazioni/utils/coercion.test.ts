@@ -44,6 +44,19 @@ describe('validateDate', () => {
   })
 })
 
+describe('coerce — riparazione automatica dei caratteri rotti', () => {
+  it('ripara i campi di testo senza bisogno di una trasformazione nel mapping', () => {
+    expect(coerce('titolo', 'SalomÃ©')).toBe('Salomé')
+    expect(coerce('regia', 'Yasujir\u00c5\u008d Ozu')).toBe('Yasujirō Ozu')
+    expect(coerce('titolo_episodio', 'The TrÃ³caire Box')).toBe('The Trócaire Box')
+  })
+  it('lascia invariati testi corretti e campi non di testo', () => {
+    expect(coerce('titolo', 'Åsa Ärger')).toBe('Åsa Ärger')
+    expect(coerce('titolo', 'Baarìa')).toBe('Baarìa')
+    expect(coerce('anno', '1949')).toBe(1949)
+  })
+})
+
 describe('yearMonthToFirstDay', () => {
   it('accetta solo anno-mese con mese valido', () => {
     expect(yearMonthToFirstDay(' 2024-12 ')).toBe('2024-12-01')

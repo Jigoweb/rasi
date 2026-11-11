@@ -330,8 +330,16 @@ describe('transform metadata', () => {
 
   it('transformsForField: campo senza transform dedicati → solo generici', () => {
     const t = transformsForField('titolo')
-    expect(t).toContain('mojibake_repair')
+    expect(t).toContain('nbsp_to_space')
     expect(t).not.toContain('us_date_to_iso')
+  })
+
+  it('mojibake_repair non è nel menu: è automatica sui campi di testo', () => {
+    for (const field of ['titolo', 'regia', 'data_trasmissione', 'durata_minuti']) {
+      expect(transformsForField(field)).not.toContain('mojibake_repair')
+    }
+    // resta valida per i mapping già salvati
+    expect(isKnownTransform('mojibake_repair')).toBe(true)
   })
 })
 

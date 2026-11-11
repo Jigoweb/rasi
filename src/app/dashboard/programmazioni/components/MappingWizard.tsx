@@ -491,7 +491,13 @@ export default function MappingWizard({
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value={NO_TRANSFORM}>— nessuna —</SelectItem>
-                                  {transformsForField(mapping[col]).map(t => (
+                                  {[
+                                    ...transformsForField(mapping[col]),
+                                    // voce salvata non più nel menu (es. mojibake_repair, ora automatica)
+                                    ...(transforms[col] && !transformsForField(mapping[col]).includes(transforms[col])
+                                      ? [transforms[col]]
+                                      : []),
+                                  ].map(t => (
                                     <SelectItem key={t} value={t}>
                                       {TRANSFORM_LABELS[t]}
                                     </SelectItem>
