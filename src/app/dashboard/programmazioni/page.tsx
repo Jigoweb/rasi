@@ -57,6 +57,7 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
 import { Search, Plus, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react'
 import { notifyError, notifySuccess } from '@/shared/lib/toast'
+import { useAuth } from '@/shared/contexts/auth-context'
 
 type ImportRow = Record<string, unknown>
 type ArtistOption = {
@@ -130,6 +131,8 @@ const formSchema = z.object({
 
 export default function ProgrammazioniPage() {
   const router = useRouter()
+  // Operatore base: programmazioni in sola lettura (la RLS blocca comunque le scritture).
+  const { canWriteOutsideOpere } = useAuth()
   const [currentTab, setCurrentTab] = useState<'programmazioni' | 'emittenti'>('programmazioni')
   
   // New Programmazione Modal State
@@ -975,13 +978,17 @@ export default function ProgrammazioniPage() {
               <Download className="h-4 w-4 mr-2" />
               Esporta CSV
             </Button>
-            <Button variant="outline" onClick={() => setIsBulkOpen(true)}>
-              Import bulk
-            </Button>
-            <Button onClick={() => setIsNewModalOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuova Programmazione
-            </Button>
+            {canWriteOutsideOpere && (
+              <>
+                <Button variant="outline" onClick={() => setIsBulkOpen(true)}>
+                  Import bulk
+                </Button>
+                <Button onClick={() => setIsNewModalOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nuova Programmazione
+                </Button>
+              </>
+            )}
           </div>
           {/* Filters */}
           <Card className="gap-4 py-4">
@@ -1109,7 +1116,7 @@ export default function ProgrammazioniPage() {
             processingJobMap={processingJobMap}
             loadingProgressMap={loadingProgressMap}
             isCampagnaProcessing={isCampagnaProcessing}
-            canStartProcess={canStartProcess}
+            canStartProcess={(id: string) => canWriteOutsideOpere && canStartProcess(id)}
             fetchProcessingProgress={fetchProcessingProgress}
             onUpload={(campagna) => {
               setSelectedCampagna(campagna)

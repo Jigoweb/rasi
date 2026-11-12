@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import Papa from 'papaparse'
-import { readAuthoritativeUserRole } from '@/shared/lib/auth-permissions'
+import { canEditOpereSection, readAuthoritativeUserRole } from '@/shared/lib/auth-permissions'
 import { operaHaEpisodi } from '@/shared/lib/opere-utils'
 import { readTabularMatrix, type TabularMatrixErrorCode } from '@/shared/lib/tabular-file'
 
@@ -161,8 +161,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function canImportEpisodi(
   user: { app_metadata?: unknown; user_metadata?: unknown } | null | undefined,
 ): boolean {
-  const role = readAuthoritativeUserRole(user)
-  return role === 'admin' || role === 'operatore'
+  // Per Operatore base e Tirocinante la route controlla anche che l'opera non sia validata.
+  return canEditOpereSection(readAuthoritativeUserRole(user))
 }
 
 export function episodiTemplateFileName(

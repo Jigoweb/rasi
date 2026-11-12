@@ -57,7 +57,7 @@ export function EpisodiImportActions({
   episodi,
   onImported,
 }: EpisodiImportActionsProps) {
-  const { isAdmin, isOperatore } = useAuth()
+  const { canEditOpereSection } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
   const requestRef = useRef(0)
   const [open, setOpen] = useState(false)
@@ -68,7 +68,7 @@ export function EpisodiImportActions({
   const [existingKeys, setExistingKeys] = useState<EpisodeKey[]>([])
   const [summary, setSummary] = useState<EpisodiImportSummary | null>(null)
 
-  if (!isAdmin && !isOperatore) return null
+  if (!canEditOpereSection) return null
 
   const downloadTemplate = async (ext: 'xlsx' | 'csv') => {
     try {

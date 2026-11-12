@@ -1,16 +1,45 @@
-export type UserRole = 'admin' | 'operatore' | 'collecting' | 'artista'
+/**
+ * Ruoli applicativi. Livelli operatore (resoconto RASI del 26/10, punto C5):
+ * - operatore       → «Operatore pro»: tutto, compresa la validazione delle opere
+ * - operatore_base  → legge tutto, scrive solo nella sezione Opere, mai su opere validate
+ * - tirocinante     → solo sezione Opere, mai su opere validate; degli artisti vede
+ *                     solo i dati per la ricerca nel cast
+ * Il blocco vero è nella RLS (migration 20261112090100); qui si decide cosa mostrare.
+ */
+export type UserRole =
+  | 'admin'
+  | 'operatore'
+  | 'operatore_base'
+  | 'tirocinante'
+  | 'collecting'
+  | 'artista'
 
 export const VALID_USER_ROLES: UserRole[] = [
   'admin',
   'operatore',
+  'operatore_base',
+  'tirocinante',
   'collecting',
   'artista',
 ]
 
 export type RolePermissions = {
   isAdmin: boolean
+  /** Operatore pro (ruolo `operatore`). */
   isOperatore: boolean
+  isOperatoreBase: boolean
+  isTirocinante: boolean
   isArtista: boolean
+  /** Admin o Operatore pro: pieni poteri sui dati. */
+  isStaff: boolean
+  /** Legge tutta la banca dati (staff + Operatore base). */
+  canReadBancaDati: boolean
+  /** Lavora nella sezione Opere (staff + Operatore base + Tirocinante). */
+  canEditOpereSection: boolean
+  /** Valida o svalida un'opera ed elimina opere. */
+  canValidateOpere: boolean
+  /** Scrive fuori dalla sezione Opere (artisti, programmazioni, individuazioni…). */
+  canWriteOutsideOpere: boolean
   canManageUsers: boolean
   canEditRoles: boolean
 }
@@ -102,13 +131,57 @@ export function mergeAppMetadataWithArtistaLink(
   return merged
 }
 
+const STAFF_ROLES = new Set<string>(['admin', 'operatore'])
+const BANCA_DATI_READER_ROLES = new Set<string>(['admin', 'operatore', 'operatore_base'])
+const OPERE_EDITOR_ROLES = new Set<string>(['admin', 'operatore', 'operatore_base', 'tirocinante'])
+
+/** Admin o Operatore pro. */
+export function isStaffRole(role: string | null | undefined): boolean {
+  return !!role && STAFF_ROLES.has(role)
+}
+
+/** Staff + Operatore base: legge tutta la banca dati. */
+export function canReadBancaDati(role: string | null | undefined): boolean {
+  return !!role && BANCA_DATI_READER_ROLES.has(role)
+}
+
+/** Staff + Operatore base + Tirocinante: lavora nella sezione Opere. */
+export function canEditOpereSection(role: string | null | undefined): boolean {
+  return !!role && OPERE_EDITOR_ROLES.has(role)
+}
+
+/**
+ * Il ruolo può modificare questa opera (dati, episodi, cast, cast esterno)?
+ * Staff sempre; Operatore base e Tirocinante solo se l'opera non è validata.
+ * Stessa regola di public.opera_modificabile() nel database.
+ */
+export function canEditOpera(
+  role: string | null | undefined,
+  statoValidazione: string | null | undefined,
+): boolean {
+  if (isStaffRole(role)) return true
+  return canEditOpereSection(role) && statoValidazione !== 'validato'
+}
+
+/** Messaggio per chi prova a modificare un'opera validata senza essere Operatore pro. */
+export const OPERA_VALIDATA_ERROR =
+  "Opera validata: solo un Operatore pro o un amministratore può modificarla"
+
 export function getRolePermissions(role: UserRole): RolePermissions {
+  const isStaff = isStaffRole(role)
   return {
     isAdmin: role === 'admin',
     isOperatore: role === 'operatore',
+    isOperatoreBase: role === 'operatore_base',
+    isTirocinante: role === 'tirocinante',
     isArtista: role === 'artista',
-    canManageUsers: role === 'admin' || role === 'operatore',
-    canEditRoles: role === 'admin' || role === 'operatore',
+    isStaff,
+    canReadBancaDati: canReadBancaDati(role),
+    canEditOpereSection: canEditOpereSection(role),
+    canValidateOpere: isStaff,
+    canWriteOutsideOpere: isStaff,
+    canManageUsers: isStaff,
+    canEditRoles: isStaff,
   }
 }
 
@@ -117,7 +190,7 @@ export function rolesAssignableBy(actorRole: UserRole): UserRole[] {
     return [...VALID_USER_ROLES]
   }
   if (actorRole === 'operatore') {
-    return ['operatore', 'collecting', 'artista']
+    return ['operatore', 'operatore_base', 'tirocinante', 'collecting', 'artista']
   }
   return []
 }
@@ -128,10 +201,10 @@ export function rolesAssignableBy(actorRole: UserRole): UserRole[] {
  */
 export function rolesInvitableBy(actorRole: UserRole): UserRole[] {
   if (actorRole === 'admin') {
-    return ['admin', 'operatore', 'artista']
+    return ['admin', 'operatore', 'operatore_base', 'tirocinante', 'artista']
   }
   if (actorRole === 'operatore') {
-    return ['operatore', 'artista']
+    return ['operatore', 'operatore_base', 'tirocinante', 'artista']
   }
   return []
 }
@@ -166,9 +239,13 @@ export function canActorChangeTargetRole(
   return { ok: true }
 }
 
-/** Template e import del cast in scheda opera: solo admin e operatore. */
+/**
+ * Template e import del cast in scheda opera: chi lavora nella sezione Opere.
+ * Per Operatore base e Tirocinante serve anche un'opera non validata
+ * (canEditOpera, controllato lato server prima di scrivere).
+ */
 export function canManageOperaCast(role: string | null | undefined): boolean {
-  return role === 'admin' || role === 'operatore'
+  return canEditOpereSection(role)
 }
 
 /** Recupero contatti e dati di regime: solo admin e operatore. */

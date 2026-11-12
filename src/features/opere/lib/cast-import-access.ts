@@ -18,7 +18,7 @@ export function authorizeCastImport(user: CastImportPrincipal): CastImportAccess
     return {
       ok: false,
       status: 403,
-      error: 'Solo amministratori e operatori possono gestire il cast',
+      error: 'Il tuo ruolo non può gestire il cast',
     }
   }
   return { ok: true }

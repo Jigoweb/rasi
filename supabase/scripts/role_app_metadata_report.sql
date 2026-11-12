@@ -2,7 +2,7 @@
 -- Eseguirlo PRIMA della migration 20261020123230_role_app_metadata.sql
 -- e di nuovo DOPO, come verifica.
 --
--- Ruoli attesi: admin, operatore, artista, readonly, collecting.
+-- Ruoli attesi: admin, operatore (Operatore pro), operatore_base, tirocinante, artista, readonly, collecting.
 -- collecting è un ruolo applicativo: get_user_role() non lo restituisce
 -- (non è nell'enum ruolo_utente) e le policy lo trattano come assente.
 --
@@ -28,12 +28,12 @@ SELECT 'anomaly_count' AS report,
 FROM (
   SELECT CASE
            WHEN COALESCE(raw_user_meta_data->>'ruolo', '') NOT IN
-                ('admin', 'operatore', 'artista', 'readonly', 'collecting')
+                ('admin', 'operatore', 'operatore_base', 'tirocinante', 'artista', 'readonly', 'collecting')
              THEN 'user_metadata_missing_or_unexpected'
            WHEN COALESCE(raw_app_meta_data->>'ruolo', '') = ''
              THEN 'app_metadata_missing'
            WHEN COALESCE(raw_app_meta_data->>'ruolo', '') NOT IN
-                ('admin', 'operatore', 'artista', 'readonly', 'collecting')
+                ('admin', 'operatore', 'operatore_base', 'tirocinante', 'artista', 'readonly', 'collecting')
              THEN 'app_metadata_unexpected'
            WHEN (raw_app_meta_data->>'ruolo') IS DISTINCT FROM (raw_user_meta_data->>'ruolo')
              THEN 'app_user_mismatch'

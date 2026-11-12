@@ -19,7 +19,7 @@ import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
 import { getOperaById, listPartecipazioniByOpera, listAllPartecipazioniByOpera, PARTECIPAZIONI_PAGE_SIZE, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, formatReleaseDateForDb, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
-import { ArrowLeft, Film, Tv, FileText, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Copy, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Film, Tv, FileText, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Copy, ExternalLink, Lock } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/shared/components/ui/dropdown-menu'
 import { Textarea } from '@/shared/components/ui/textarea'
@@ -30,7 +30,7 @@ import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/componen
 import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { useAuth } from '@/shared/contexts/auth-context'
-import { canManageOperaCast } from '@/shared/lib/auth-permissions'
+import { canEditOpera, canManageOperaCast } from '@/shared/lib/auth-permissions'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
 import { CastImportActions } from './components/cast-import-actions'
 import { EpisodiImportActions } from './components/episodi-import-actions'
@@ -52,10 +52,13 @@ function parseCommaSeparatedAliases(value: string): string[] | null {
 export default function OperaDetailPage() {
   const params = useParams()
   const operaId = params.id as string
-  const { isAdmin, userRole } = useAuth()
-  const canManageCast = canManageOperaCast(userRole)
+  const { isAdmin, userRole, canValidateOpere, canReadBancaDati } = useAuth()
 
   const [opera, setOpera] = useState<Opera | null>(null)
+  // Operatore base e Tirocinante: modifiche solo su opere non validate
+  // (stessa regola di public.opera_modificabile nella RLS).
+  const canEditThisOpera = !!opera && canEditOpera(userRole, opera.stato_validazione)
+  const canManageCast = canManageOperaCast(userRole) && canEditThisOpera
   const [partecipazioni, setPartecipazioni] = useState<any[]>([])
   const [partecipazioniTotal, setPartecipazioniTotal] = useState(0)
   const [partecipazioniTotalOpera, setPartecipazioniTotalOpera] = useState(0)
@@ -1099,7 +1102,7 @@ export default function OperaDetailPage() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                disabled={isUpdatingTipo}
+                disabled={isUpdatingTipo || !canEditThisOpera}
                 aria-label="Cambia tipo opera"
                 className="inline-flex items-center gap-1 rounded-md transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
               >
@@ -1123,6 +1126,19 @@ export default function OperaDetailPage() {
           {getStatoValidazioneBadge(opera.stato_validazione)}
         </div>
       </div>
+
+      {!canEditThisOpera && opera.stato_validazione === 'validato' && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Opera validata: solo un Operatore pro o un amministratore può modificarla.
+            Puoi consultare dati, episodi e cast.
+          </span>
+        </div>
+      )}
 
       <Card className="gap-4 py-4">
         <CardHeader>
@@ -1251,11 +1267,11 @@ export default function OperaDetailPage() {
           </dl>
           <div className="mt-6 pt-4 border-t flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleSearchImdb}>
+              <Button variant="outline" onClick={handleSearchImdb} disabled={!canEditThisOpera}>
                 <Search className="mr-2 h-4 w-4" />
                 Importa da OMDb
               </Button>
-              <Button onClick={() => setShowEditForm(true)}>
+              <Button onClick={() => setShowEditForm(true)} disabled={!canEditThisOpera}>
                 <Edit className="mr-2 h-4 w-4" />
                 Modifica
               </Button>
@@ -1296,7 +1312,7 @@ export default function OperaDetailPage() {
                   variant="secondary" 
                   size="sm" 
                   onClick={handleOpenImportDialog} 
-                  disabled={loadingImdbData || opera?.stato_validazione === 'validato'}
+                  disabled={loadingImdbData || opera?.stato_validazione === 'validato' || !canEditThisOpera}
                   title={opera?.stato_validazione === 'validato' ? 'L\'opera è già validata. Modifica manualmente lo stato per abilitare l\'import da IMDb.' : ''}
                 >
                   {loadingImdbData ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
@@ -1396,18 +1412,20 @@ export default function OperaDetailPage() {
                   Titolo originale opera: {opera.titolo_originale ? <span className="italic">{opera.titolo_originale}</span> : 'Non indicato'}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <EpisodiImportActions
-                  operaId={operaId}
-                  operaTitolo={opera.titolo}
-                  episodi={episodi}
-                  onImported={fetchData}
-                />
-                <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Aggiungi episodio
-                </Button>
-              </div>
+              {canEditThisOpera && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <EpisodiImportActions
+                    operaId={operaId}
+                    operaTitolo={opera.titolo}
+                    episodi={episodi}
+                    onImported={fetchData}
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Aggiungi episodio
+                  </Button>
+                </div>
+              )}
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -1415,11 +1433,14 @@ export default function OperaDetailPage() {
               episodi={episodi || []}
               onEdit={openEditEpisodioDialog}
               onDelete={openDeleteEpisodioDialog}
+              readOnly={!canEditThisOpera}
               emptyActions={
-                <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Aggiungi il primo episodio
-                </Button>
+                canEditThisOpera ? (
+                  <Button type="button" variant="outline" size="sm" onClick={openAddEpisodioDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Aggiungi il primo episodio
+                  </Button>
+                ) : undefined
               }
             />
           </CardContent>
@@ -1498,6 +1519,7 @@ export default function OperaDetailPage() {
                   void fetchData({ silent: true })
                 }}
               />
+              {canEditThisOpera && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1506,7 +1528,8 @@ export default function OperaDetailPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Aggiungi
               </Button>
-              {!isPartecipazioniSelectionMode ? (
+              )}
+              {!canEditThisOpera ? null : !isPartecipazioniSelectionMode ? (
                 <Button
                   variant="outline"
                   size="sm"
@@ -1605,9 +1628,10 @@ export default function OperaDetailPage() {
                           <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
                             <Link 
                               href={`/dashboard/artisti/${p.artisti?.id}`}
-                              className="font-semibold hover:text-primary transition-colors"
+                              className={canReadBancaDati ? 'font-semibold hover:text-primary transition-colors' : 'font-semibold cursor-default'}
                               onClick={(e) => {
-                                if (isPartecipazioniSelectionMode) {
+                                // Il Tirocinante non apre l'anagrafica artisti.
+                                if (isPartecipazioniSelectionMode || !canReadBancaDati) {
                                   e.preventDefault()
                                   e.stopPropagation()
                                 }
@@ -1620,6 +1644,7 @@ export default function OperaDetailPage() {
                             </Badge>
                           </div>
                           
+                          {canEditThisOpera && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button 
@@ -1645,6 +1670,7 @@ export default function OperaDetailPage() {
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          )}
                         </div>
                         
                         {/* Riga 2: Nome d'arte / Episodio / Personaggio */}
@@ -1699,6 +1725,8 @@ export default function OperaDetailPage() {
         imdbTconst={opera.imdb_tconst}
         episodi={episodi}
         ruoliTipologie={ruoli}
+        readOnly={!canEditThisOpera}
+        linkArtisti={canReadBancaDati}
       />
 
       
@@ -2038,7 +2066,8 @@ export default function OperaDetailPage() {
                 />
               </div>
 
-              {/* Stato (solo modifica) */}
+              {/* Stato (solo modifica): solo admin e Operatore pro validano */}
+              {canValidateOpere && (
               <FormField
                 control={form.control}
                 name="stato_validazione"
@@ -2058,6 +2087,7 @@ export default function OperaDetailPage() {
                   </FormItem>
                 )}
               />
+              )}
 
               {/* Footer */}
               <div className="flex justify-end gap-3 pt-4 border-t">

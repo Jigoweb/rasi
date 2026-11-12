@@ -16,7 +16,9 @@ export type { UserRole }
 // I ruoli disponibili nell'applicazione con le relative etichette
 export const AVAILABLE_ROLES: { value: UserRole; label: string; description: string; color: string }[] = [
   { value: 'admin', label: 'Amministratore', description: 'Accesso completo a tutte le funzionalità', color: 'blue' },
-  { value: 'operatore', label: 'Operatore', description: 'Gestione artisti, opere e individuazioni', color: 'purple' },
+  { value: 'operatore', label: 'Operatore pro', description: 'Gestione completa, compresa la validazione delle opere', color: 'purple' },
+  { value: 'operatore_base', label: 'Operatore base', description: 'Legge tutto, modifica solo le opere non validate', color: 'indigo' },
+  { value: 'tirocinante', label: 'Tirocinante', description: 'Solo sezione Opere, modifica solo le opere non validate', color: 'teal' },
   { value: 'collecting', label: 'Collecting', description: 'Accesso alle funzionalità di collecting', color: 'green' },
   { value: 'artista', label: 'Artista', description: 'Accesso al proprio profilo e repertorio', color: 'orange' },
 ]
@@ -27,8 +29,15 @@ interface AuthContextType {
   userRole: UserRole
   artistaId: string | null
   isAdmin: boolean
-  isOperatore: boolean
+  isOperatore: boolean     // Operatore pro
+  isOperatoreBase: boolean
+  isTirocinante: boolean
   isArtista: boolean
+  isStaff: boolean               // admin o Operatore pro
+  canReadBancaDati: boolean      // staff + Operatore base
+  canEditOpereSection: boolean   // staff + Operatore base + Tirocinante
+  canValidateOpere: boolean      // staff
+  canWriteOutsideOpere: boolean  // staff
   canManageUsers: boolean // admin o operatore possono vedere utenti
   canEditRoles: boolean   // admin e operatore possono modificare ruoli (con limiti API/UI)
   signOut: () => Promise<void>
@@ -72,7 +81,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const userRole = useMemo(() => getUserRole(user), [user])
   const artistaId = useMemo(() => getUserArtistaId(user), [user])
   const permissions = useMemo(() => getRolePermissions(userRole), [userRole])
-  const { isAdmin, isOperatore, isArtista, canManageUsers, canEditRoles } = permissions
 
   useEffect(() => {
     let cancelled = false
@@ -128,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, userRole, artistaId, isAdmin, isOperatore, isArtista, canManageUsers, canEditRoles, signOut }}>
+    <AuthContext.Provider value={{ user, loading, userRole, artistaId, ...permissions, signOut }}>
       {children}
     </AuthContext.Provider>
   )

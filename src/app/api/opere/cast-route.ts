@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeCastImport } from '@/features/opere/lib/cast-import-access'
+import { readAuthoritativeUserRole } from '@/shared/lib/auth-permissions'
 import type { Database } from '@/shared/lib/supabase'
 
 export type CastRouteClient = SupabaseClient<Database>
@@ -11,7 +12,7 @@ type CookieToSet = { name: string; value: string; options: CookieOptions }
 
 export async function requireCastManager(
   req: NextRequest,
-): Promise<{ ok: true; client: CastRouteClient } | { ok: false; response: NextResponse }> {
+): Promise<{ ok: true; client: CastRouteClient; role: string | null } | { ok: false; response: NextResponse }> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !anon) {
@@ -33,7 +34,7 @@ export async function requireCastManager(
     if (!access.ok) {
       return { ok: false, response: NextResponse.json({ error: access.error }, { status: access.status }) }
     }
-    return { ok: true, client }
+    return { ok: true, client, role: readAuthoritativeUserRole(data.user) }
   }
 
   const cookieStore = await cookies()
@@ -56,7 +57,7 @@ export async function requireCastManager(
   if (!access.ok) {
     return { ok: false, response: NextResponse.json({ error: access.error }, { status: access.status }) }
   }
-  return { ok: true, client }
+  return { ok: true, client, role: readAuthoritativeUserRole(data.user) }
 }
 
 export function contentDisposition(filename: string): string {

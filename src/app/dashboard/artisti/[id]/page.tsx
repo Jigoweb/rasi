@@ -83,7 +83,7 @@ interface Partecipazione {
 export default function ArtistaProfiloPage() {
   const params = useParams()
   const artistaId = params.id as string
-  const { isAdmin, userRole } = useAuth()
+  const { isAdmin, userRole, canWriteOutsideOpere } = useAuth()
   const canSeeDatiRiservati = canManageArtistiContatti(userRole)
 
   const [artista, setArtista] = useState<Artista | null>(null)
@@ -494,10 +494,12 @@ export default function ArtistaProfiloPage() {
                 </Link>
               </Button>
             )}
-            <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
-              <Pencil className="mr-2 h-4 w-4" />
-              Modifica
-            </Button>
+            {canWriteOutsideOpere && (
+              <Button onClick={() => setShowEditArtistaDialog(true)} size="sm">
+                <Pencil className="mr-2 h-4 w-4" />
+                Modifica
+              </Button>
+            )}
           </div>
         </div>
       </div>

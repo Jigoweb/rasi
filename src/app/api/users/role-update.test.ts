@@ -33,6 +33,16 @@ describe('validateRoleChange', () => {
     })
   })
 
+  it.each(['operatore_base', 'tirocinante'])('allows operatore pro to assign %s', (newRole) => {
+    const result = validateRoleChange({
+      ...base,
+      actorIsAdmin: false,
+      targetCurrentRole: 'operatore',
+      newRole,
+    })
+    expect(result).toEqual({ ok: true, ruolo: newRole, actorRole: 'operatore' })
+  })
+
   it('blocks operatore from assigning admin', () => {
     const result = validateRoleChange({
       ...base,

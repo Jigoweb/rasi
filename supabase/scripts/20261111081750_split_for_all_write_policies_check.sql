@@ -23,7 +23,7 @@ WITH norm AS (
       regexp_replace(
         regexp_replace(
           lower(regexp_replace(coalesce(qual, ''), '\s+', '', 'g')),
-          '\(select(get_user_role|auth\.role|auth\.uid)\(\)as(get_user_role|role|uid)\)',
+          '\(select(get_user_role|auth\.role|auth\.uid|is_staff|is_staff_reader|is_opere_editor)\(\)as(get_user_role|role|uid|is_staff|is_staff_reader|is_opere_editor)\)',
           '\1()',
           'g'
         ),
@@ -36,7 +36,7 @@ WITH norm AS (
       regexp_replace(
         regexp_replace(
           lower(regexp_replace(coalesce(with_check, ''), '\s+', '', 'g')),
-          '\(select(get_user_role|auth\.role|auth\.uid)\(\)as(get_user_role|role|uid)\)',
+          '\(select(get_user_role|auth\.role|auth\.uid|is_staff|is_staff_reader|is_opere_editor)\(\)as(get_user_role|role|uid|is_staff|is_staff_reader|is_opere_editor)\)',
           '\1()',
           'g'
         ),
@@ -48,7 +48,7 @@ WITH norm AS (
   FROM pg_policies
   WHERE schemaname = 'public'
 ),
-expected AS (
+expected_base AS (
   SELECT *
   FROM (VALUES
     ('alert_prese_visione'::text, 'alert_prese_visione_insert_policy'::text, 'INSERT'::text, '{public}'::text, $k$get_user_role=anyarray['admin','operatore']$k$, false, true),
@@ -104,6 +104,35 @@ expected AS (
     ('public_form_submissions', 'Utenti autenticati aggiornano submissions', 'UPDATE', '{authenticated}', 'true', true, true),
     ('public_form_submissions', 'Utenti autenticati cancellano submissions', 'DELETE', '{authenticated}', 'true', true, false)
   ) AS t(tablename, policyname, cmd, roles, expr_n, needs_qual, needs_check)
+),
+-- 20261112090100_restrizioni_ruoli_operatore ha riscritto le policy di scrittura
+-- della sezione Opere (operatore base e tirocinante, mai su opere validate).
+-- Se quella migration non è applicata, queste righe vanno ignorate.
+override AS (
+  SELECT *
+  FROM (VALUES
+    ('opere'::text, 'opere_insert_policy'::text, NULL::text, 'is_opere_editor'::text),
+    ('opere', 'opere_update_policy', 'opera_modificabileid', 'is_opere_editor'),
+    ('opere', 'opere_delete_policy', 'is_staff', NULL),
+    ('episodi', 'episodi_insert_policy', NULL, 'opera_modificabileopera_id'),
+    ('episodi', 'episodi_update_policy', 'opera_modificabileopera_id', 'opera_modificabileopera_id'),
+    ('episodi', 'episodi_delete_policy', 'opera_modificabileopera_id', NULL),
+    ('partecipazioni', 'partecipazioni_insert_policy', NULL, 'opera_modificabileopera_id'),
+    ('partecipazioni', 'partecipazioni_update_policy', 'opera_modificabileopera_id', 'opera_modificabileopera_id'),
+    ('partecipazioni', 'partecipazioni_delete_policy', 'opera_modificabileopera_id', NULL),
+    ('cast_esterno', 'cast_esterno_insert_policy', NULL, 'opera_modificabileopera_id'),
+    ('cast_esterno', 'cast_esterno_update_policy', 'opera_modificabileopera_id', 'opera_modificabileopera_id'),
+    ('cast_esterno', 'cast_esterno_delete_policy', 'opera_modificabileopera_id', NULL)
+  ) AS o(tablename, policyname, qual_n, check_n)
+),
+expected AS (
+  SELECT
+    b.tablename, b.policyname, b.cmd, b.roles,
+    COALESCE(o.qual_n, b.expr_n) AS expr_n,
+    COALESCE(o.check_n, b.expr_n) AS check_expr_n,
+    b.needs_qual, b.needs_check
+  FROM expected_base b
+  LEFT JOIN override o USING (tablename, policyname)
 ),
 dropped AS (
   SELECT *
@@ -168,7 +197,7 @@ report AS (
       WHEN n.cmd IS DISTINCT FROM e.cmd THEN 'fail'
       WHEN e.needs_qual AND n.qual_n IS DISTINCT FROM e.expr_n THEN 'fail'
       WHEN NOT e.needs_qual AND n.qual IS NOT NULL THEN 'fail'
-      WHEN e.needs_check AND n.check_n IS DISTINCT FROM e.expr_n THEN 'fail'
+      WHEN e.needs_check AND n.check_n IS DISTINCT FROM e.check_expr_n THEN 'fail'
       WHEN NOT e.needs_check AND n.with_check IS NOT NULL THEN 'fail'
       ELSE 'ok'
     END AS esito

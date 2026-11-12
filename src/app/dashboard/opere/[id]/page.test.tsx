@@ -13,6 +13,12 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
 }))
 
+let mockRole = 'admin'
+jest.mock('@/shared/contexts/auth-context', () => {
+  const { getRolePermissions } = jest.requireActual('@/shared/lib/auth-permissions')
+  return { useAuth: () => ({ userRole: mockRole, ...getRolePermissions(mockRole) }) }
+})
+
 jest.mock('@/features/opere/services/opere.service', () => ({
   getOperaById: jest.fn(async () => ({ data: { id: 'uuid-opera', codice_opera: 'OP001', titolo: 'Opera Test', titolo_originale: 'Originale', tipo: 'film', anno_produzione: 2020, imdb_tconst: null }, error: null })),
   PARTECIPAZIONI_PAGE_SIZE: 50,
@@ -41,6 +47,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockRole = 'admin'
 })
 
 describe('OperaDetailPage', () => {
@@ -135,6 +142,7 @@ describe('OperaDetailPage', () => {
   })
 
   it('renders opera title', async () => {
+    mockRole = 'collecting'
     render(<OperaDetailPage />)
     await waitFor(() => {
       expect(screen.getByText('Opera Test')).toBeInTheDocument()
@@ -228,6 +236,51 @@ describe('OperaDetailPage', () => {
       }))
     })
     expect(listPartecipazioniByOpera).toHaveBeenCalledTimes(2)
+  })
+  describe('restrizioni Operatore base e Tirocinante', () => {
+    it.each(['operatore_base', 'tirocinante'])('%s: opera validata in sola lettura con banner', async (role) => {
+      mockRole = role
+      ;(getOperaById as jest.Mock).mockResolvedValue({
+        data: { ...operaFixture, stato_validazione: 'validato' },
+        error: null,
+      })
+      render(<OperaDetailPage />)
+
+      expect(await screen.findByText(/Opera validata: solo un Operatore pro/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Modifica$/ })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /Importa da OMDb/ })).toBeDisabled()
+      // né partecipazioni né cast esterno
+      expect(screen.queryAllByRole('button', { name: /^Aggiungi$/ })).toHaveLength(0)
+      expect(screen.getByRole('button', { name: 'Cambia tipo opera' })).toBeDisabled()
+    })
+
+    it.each(['operatore_base', 'tirocinante'])('%s: opera da validare modificabile, senza banner', async (role) => {
+      mockRole = role
+      ;(getOperaById as jest.Mock).mockResolvedValue({
+        data: { ...operaFixture, stato_validazione: 'da_validare' },
+        error: null,
+      })
+      render(<OperaDetailPage />)
+
+      expect(await screen.findByRole('heading', { name: 'Opera Test' })).toBeInTheDocument()
+      expect(screen.queryByText(/Opera validata: solo un Operatore pro/)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Modifica$/ })).toBeEnabled()
+      // «Aggiungi» di partecipazioni e cast esterno
+      expect(screen.getAllByRole('button', { name: /^Aggiungi$/ })).toHaveLength(2)
+    })
+
+    it('Operatore pro modifica anche un\'opera validata', async () => {
+      mockRole = 'operatore'
+      ;(getOperaById as jest.Mock).mockResolvedValue({
+        data: { ...operaFixture, stato_validazione: 'validato' },
+        error: null,
+      })
+      render(<OperaDetailPage />)
+
+      expect(await screen.findByRole('heading', { name: 'Opera Test' })).toBeInTheDocument()
+      expect(screen.queryByText(/Opera validata: solo un Operatore pro/)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Modifica$/ })).toBeEnabled()
+    })
   })
 })
 

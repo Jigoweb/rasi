@@ -257,7 +257,8 @@ function ArtistiFilterPopover({
 }
 
 export default function ArtistiPage() {
-  const { userRole } = useAuth()
+  // Operatore base: anagrafica in sola lettura (la RLS blocca comunque le scritture).
+  const { userRole, canWriteOutsideOpere } = useAuth()
   const canImportContatti = canManageArtistiContatti(userRole)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -595,10 +596,12 @@ export default function ArtistiPage() {
               <Download className="h-4 w-4 mr-2" />
               Esporta CSV
             </Button>
-            <Button onClick={openCreateForm}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuovo Artista
-            </Button>
+            {canWriteOutsideOpere && (
+              <Button onClick={openCreateForm}>
+                <Plus className="h-4 w-4 mr-2" />
+                Nuovo Artista
+              </Button>
+            )}
           </div>
         </div>
         <div className="hidden lg:flex gap-2">
@@ -611,10 +614,12 @@ export default function ArtistiPage() {
             <Download className="h-4 w-4 mr-2" />
             Esporta CSV
           </Button>
-          <Button onClick={openCreateForm}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuovo Artista
-          </Button>
+          {canWriteOutsideOpere && (
+            <Button onClick={openCreateForm}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuovo Artista
+            </Button>
+          )}
         </div>
       </div>
 
@@ -821,16 +826,20 @@ export default function ArtistiPage() {
                                 <Eye className="h-4 w-4 mr-2" />
                                 Dettaglio
                               </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={(e) => { e.stopPropagation(); openEditForm(artista) }}
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Modifica
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(artista) }}>
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Elimina
-                              </DropdownMenuItem>
+                              {canWriteOutsideOpere && (
+                                <DropdownMenuItem 
+                                  onClick={(e) => { e.stopPropagation(); openEditForm(artista) }}
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Modifica
+                                </DropdownMenuItem>
+                              )}
+                              {canWriteOutsideOpere && (
+                                <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(artista) }}>
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Elimina
+                                </DropdownMenuItem>
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </TableCell>
@@ -905,14 +914,18 @@ export default function ArtistiPage() {
                               <Eye className="h-4 w-4 mr-2" />
                               Dettaglio
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(artista) }}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              Modifica
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(artista) }}>
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Elimina
-                            </DropdownMenuItem>
+                            {canWriteOutsideOpere && (
+                              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(artista) }}>
+                                <Edit className="h-4 w-4 mr-2" />
+                                Modifica
+                              </DropdownMenuItem>
+                            )}
+                            {canWriteOutsideOpere && (
+                              <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(artista) }}>
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Elimina
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -986,10 +999,12 @@ export default function ArtistiPage() {
                 <Button variant="outline" onClick={() => setShowDetails(false)}>
                   Chiudi
                 </Button>
-                <Button onClick={() => selectedArtist && openEditForm(selectedArtist)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Modifica
-                </Button>
+                {canWriteOutsideOpere && (
+                  <Button onClick={() => selectedArtist && openEditForm(selectedArtist)}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Modifica
+                  </Button>
+                )}
               </div>
             </div>
           )}

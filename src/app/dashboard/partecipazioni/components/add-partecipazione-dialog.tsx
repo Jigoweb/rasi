@@ -11,7 +11,8 @@ import { Label } from '@/shared/components/ui/label'
 import { Search, Loader2, AlertCircle, CheckCircle2, Tv, Film, X } from 'lucide-react'
 import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 import { getOpere, getEpisodiByOperaId } from '@/features/opere/services/opere.service'
-import { getArtisti } from '@/features/artisti/services/artisti.service'
+import { getArtisti, searchArtistiForCast } from '@/features/artisti/services/artisti.service'
+import { useAuth } from '@/shared/contexts/auth-context'
 import { getRuoliTipologie } from '@/features/opere/services/opere.service'
 import { createPartecipazioniMultiple, checkPartecipazioniDuplicate } from '@/features/opere/services/opere.service'
 import { Alert, AlertDescription } from '@/shared/components/ui/alert'
@@ -98,6 +99,7 @@ export function AddPartecipazioneDialog({
   const [episodiMap, setEpisodiMap] = useState<Map<string, Episodio[]>>(new Map())
   const [expandedOpere, setExpandedOpere] = useState<Set<string>>(new Set())
   const [duplicateIndices, setDuplicateIndices] = useState<number[]>([])
+  const { canReadBancaDati } = useAuth()
 
   // Carica ruoli all'apertura
   useEffect(() => {
@@ -120,7 +122,11 @@ export function AddPartecipazioneDialog({
           setLoadingItems(false)
         })
       } else {
-        getArtisti({ search: searchQuery }).then(({ data }) => {
+        // Il Tirocinante non legge l'anagrafica: cerca solo i nomi per il cast.
+        const loadArtisti = canReadBancaDati
+          ? getArtisti({ search: searchQuery })
+          : searchArtistiForCast(searchQuery)
+        loadArtisti.then(({ data }) => {
           setArtisti(data || [])
           setLoadingItems(false)
         }).catch(() => {
@@ -128,7 +134,7 @@ export function AddPartecipazioneDialog({
         })
       }
     }
-  }, [open, searchQuery, filterTipo, mode])
+  }, [open, searchQuery, filterTipo, mode, canReadBancaDati])
 
   // Carica episodi per le opere con episodi selezionate
   useEffect(() => {

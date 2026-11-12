@@ -25,6 +25,12 @@ jest.mock('@/shared/contexts/individuazione-process-context', () => ({
 }))
 
 // Mock papaparse
+let mockRole = 'operatore'
+jest.mock('@/shared/contexts/auth-context', () => {
+  const { getRolePermissions } = jest.requireActual('@/shared/lib/auth-permissions')
+  return { useAuth: () => ({ userRole: mockRole, ...getRolePermissions(mockRole) }) }
+})
+
 jest.mock('papaparse', () => ({
   parse: jest.fn()
 }))
@@ -74,6 +80,7 @@ window.HTMLElement.prototype.hasPointerCapture = jest.fn();
 describe('ProgrammazioniPage', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockRole = 'operatore'
     
     // Default mocks
     ;(getCampagneProgrammazione as jest.Mock).mockResolvedValue({ data: [], error: null })
@@ -136,6 +143,14 @@ describe('ProgrammazioniPage', () => {
   it('renders the page title', async () => {
     render(<ProgrammazioniPage />)
     expect(await screen.findByText('Programmazioni & Emittenti')).toBeInTheDocument()
+  })
+
+  it('nasconde nuova programmazione e import bulk all\'Operatore base', async () => {
+    mockRole = 'operatore_base'
+    render(<ProgrammazioniPage />)
+    expect(await screen.findByText('Programmazioni & Emittenti')).toBeInTheDocument()
+    expect(screen.queryByText('Nuova Programmazione')).not.toBeInTheDocument()
+    expect(screen.queryByText('Import bulk')).not.toBeInTheDocument()
   })
 
   it('opens the new programmazione modal when clicking the button', async () => {

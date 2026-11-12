@@ -37,6 +37,34 @@ describe("resolveMiddlewareRedirect", () => {
     ).toBeNull();
   });
 
+  it("keeps the tirocinante inside the Opere section", () => {
+    const tirocinante = { ruolo: "tirocinante" };
+    expect(resolveMiddlewareRedirect("/dashboard/opere", tirocinante)).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/opere/abc", tirocinante)).toBeNull();
+    for (const path of [
+      "/dashboard",
+      "/dashboard/artisti",
+      "/dashboard/artisti/abc",
+      "/dashboard/programmazioni",
+      "/dashboard/individuazioni",
+      "/dashboard/ripartizioni",
+      "/dashboard/utenti",
+      "/dashboard/cms/pages",
+      "/dashboard/opere-altro",
+    ]) {
+      expect(resolveMiddlewareRedirect(path, tirocinante)).toBe("/dashboard/opere");
+    }
+  });
+
+  it("lets the operatore base read the database but not manage users or the CMS", () => {
+    const base = { ruolo: "operatore_base" };
+    expect(resolveMiddlewareRedirect("/dashboard", base)).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/artisti", base)).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/programmazioni", base)).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/utenti", base)).toBe("/dashboard");
+    expect(resolveMiddlewareRedirect("/dashboard/cms/pages", base)).toBe("/dashboard");
+  });
+
   it("does not intercept other public routes", () => {
     expect(resolveMiddlewareRedirect("/contatti", null)).toBeNull();
     expect(resolveMiddlewareRedirect("/news/bando-rasi-2026", null)).toBeNull();
