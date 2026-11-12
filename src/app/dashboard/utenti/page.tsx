@@ -52,6 +52,8 @@ import {
   Search,
   X,
   UserCog,
+  UserCheck,
+  GraduationCap,
   Building2,
   Music2,
   MoreHorizontal,
@@ -449,6 +451,8 @@ export default function UtentiPage() {
       case 'purple': return 'bg-purple-100 text-purple-800 border-purple-200'
       case 'green': return 'bg-green-100 text-green-800 border-green-200'
       case 'orange': return 'bg-orange-100 text-orange-800 border-orange-200'
+      case 'indigo': return 'bg-indigo-100 text-indigo-800 border-indigo-200'
+      case 'teal': return 'bg-teal-100 text-teal-800 border-teal-200'
       default: return 'bg-gray-100 text-gray-800 border-gray-200'
     }
   }
@@ -457,6 +461,8 @@ export default function UtentiPage() {
     switch (ruolo) {
       case 'admin': return <Shield className="h-4 w-4" />
       case 'operatore': return <UserCog className="h-4 w-4" />
+      case 'operatore_base': return <UserCheck className="h-4 w-4" />
+      case 'tirocinante': return <GraduationCap className="h-4 w-4" />
       case 'collecting': return <Building2 className="h-4 w-4" />
       case 'artista': return <Music2 className="h-4 w-4" />
       default: return <Users className="h-4 w-4" />
@@ -531,7 +537,7 @@ export default function UtentiPage() {
       </div>
 
       {/* Stats Cards - Grid con tutte le card dei ruoli */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
         {/* Card Totale */}
         <Card className="gap-4 py-4">
           <CardHeader className="pb-2">
@@ -566,6 +572,8 @@ export default function UtentiPage() {
                 role.color === 'purple' ? 'text-purple-600' :
                 role.color === 'green' ? 'text-green-600' :
                 role.color === 'orange' ? 'text-orange-600' :
+                role.color === 'indigo' ? 'text-indigo-600' :
+                role.color === 'teal' ? 'text-teal-600' :
                 'text-gray-600'
               }`}>
                 {role.count}
@@ -829,7 +837,7 @@ export default function UtentiPage() {
           <CardTitle className="text-lg">Legenda Ruoli</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {AVAILABLE_ROLES.map((role) => (
               <div key={role.value} className="flex flex-col gap-2 p-3 rounded-lg bg-gray-50">
                 <Badge className={`${getRoleBadgeClass(role.value)} flex items-center gap-1 w-fit`}>

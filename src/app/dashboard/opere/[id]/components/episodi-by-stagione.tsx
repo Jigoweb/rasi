@@ -43,6 +43,8 @@ export type EpisodiByStagioneProps = {
   onEdit: (episodio: EpisodioListItem) => void
   onDelete: (episodio: EpisodioListItem) => void
   emptyActions?: ReactNode
+  /** Senza menu Modifica/Elimina (opera validata per Operatore base e Tirocinante). */
+  readOnly?: boolean
 }
 
 function EpisodioActionsMenu({
@@ -94,6 +96,7 @@ export function EpisodiByStagione({
   onEdit,
   onDelete,
   emptyActions,
+  readOnly = false,
 }: EpisodiByStagioneProps) {
   const [expanded, setExpanded] = useState<Set<StagioneKey>>(() => new Set())
   const groups = useMemo(() => groupEpisodiByStagione(episodi), [episodi])
@@ -217,7 +220,7 @@ export function EpisodiByStagione({
                             {e.codice_isan || <span className="text-muted-foreground">—</span>}
                           </TableCell>
                           <TableCell className="py-1.5 px-4 pr-6">
-                            <EpisodioActionsMenu episodio={e} onEdit={onEdit} onDelete={onDelete} />
+                            {!readOnly && <EpisodioActionsMenu episodio={e} onEdit={onEdit} onDelete={onDelete} />}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -245,7 +248,7 @@ export function EpisodiByStagione({
                             )}
                           </div>
                           <div className="shrink-0">
-                            <EpisodioActionsMenu episodio={e} onEdit={onEdit} onDelete={onDelete} />
+                            {!readOnly && <EpisodioActionsMenu episodio={e} onEdit={onEdit} onDelete={onDelete} />}
                           </div>
                         </div>
                         <div className="text-xs text-muted-foreground">

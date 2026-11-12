@@ -19,6 +19,11 @@ jest.mock('@/shared/contexts/export-process-context', () => ({
   ExportProcessProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
 
+jest.mock('@/shared/contexts/auth-context', () => {
+  const { getRolePermissions } = jest.requireActual('@/shared/lib/auth-permissions')
+  return { useAuth: () => ({ userRole: 'admin', ...getRolePermissions('admin') }) }
+})
+
 jest.mock('@/shared/lib/toast', () => ({
   notifyError: jest.fn(),
   notifySuccess: jest.fn(),

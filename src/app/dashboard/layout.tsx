@@ -37,7 +37,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const { user, loading, signOut, userRole, isAdmin, isArtista, canManageUsers } = useAuth()
+  const { user, loading, signOut, userRole, isAdmin, isArtista, isTirocinante, canManageUsers } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Menu items di base disponibili a tutti
@@ -62,8 +62,11 @@ export default function DashboardLayout({
     { name: 'Sito Pubblico', href: '/dashboard/cms/pages', icon: Globe },
   ]
 
-  // Combina i menu in base ai permessi
-  let menuItems = [...baseMenuItems]
+  // Combina i menu in base ai permessi. Il tirocinante lavora solo nella
+  // sezione Opere (il middleware blocca anche le altre pagine).
+  let menuItems = isTirocinante
+    ? baseMenuItems.filter((item) => item.href === '/dashboard/opere')
+    : [...baseMenuItems]
   
   if (canManageUsers) {
     menuItems = [...menuItems, ...operatorMenuItems]
@@ -91,6 +94,8 @@ export default function DashboardLayout({
       case 'purple': return 'bg-purple-100 text-purple-800'
       case 'green': return 'bg-green-100 text-green-800'
       case 'orange': return 'bg-orange-100 text-orange-800'
+      case 'indigo': return 'bg-indigo-100 text-indigo-800'
+      case 'teal': return 'bg-teal-100 text-teal-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }

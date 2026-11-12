@@ -77,11 +77,17 @@ export function CastEsternoPanel({
   imdbTconst,
   episodi = [],
   ruoliTipologie = [],
+  readOnly = false,
+  linkArtisti = true,
 }: {
   operaId: string
   imdbTconst: string | null
   episodi?: CastEsternoEpisodio[]
   ruoliTipologie?: { id: string; nome: string }[]
+  /** Solo consultazione: opera validata per Operatore base e Tirocinante. */
+  readOnly?: boolean
+  /** Link alla scheda artista (il Tirocinante non apre l'anagrafica). */
+  linkArtisti?: boolean
 }) {
   const hasEpisodi = episodi.length > 0
   const [rows, setRows] = useState<CastEsternoRow[]>([])
@@ -308,7 +314,7 @@ export function CastEsternoPanel({
           </div>
           {matches.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
-              {matches.map((match) => (
+              {matches.map((match) => linkArtisti ? (
                 <Link
                   key={match.artista_id}
                   href={`/dashboard/artisti/${match.artista_id}`}
@@ -318,6 +324,14 @@ export function CastEsternoPanel({
                   <UserCheck className="h-3 w-3" />
                   In anagrafica: {match.artista_nome}
                 </Link>
+              ) : (
+                <span
+                  key={match.artista_id}
+                  className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700"
+                >
+                  <UserCheck className="h-3 w-3" />
+                  In anagrafica: {match.artista_nome}
+                </span>
               ))}
             </div>
           )}
@@ -326,7 +340,7 @@ export function CastEsternoPanel({
         {row.ruolo_id && ruoliById.get(row.ruolo_id) && (
           <Badge variant="secondary">{ruoliById.get(row.ruolo_id)}</Badge>
         )}
-        <Select value={toRuoloPrimarieta(row.ruolo, row.primarieta)} onValueChange={(value) => changeRuoloPrimarieta(row, value)}>
+        <Select value={toRuoloPrimarieta(row.ruolo, row.primarieta)} onValueChange={(value) => changeRuoloPrimarieta(row, value)} disabled={readOnly}>
           <SelectTrigger className="w-full sm:w-[200px]" aria-label={`Ruolo di ${row.nome}`}>
             <SelectValue />
           </SelectTrigger>
@@ -336,6 +350,7 @@ export function CastEsternoPanel({
             ))}
           </SelectContent>
         </Select>
+        {!readOnly && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`Azioni per ${row.nome}`}>
@@ -353,6 +368,7 @@ export function CastEsternoPanel({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
     )
   }
@@ -365,7 +381,7 @@ export function CastEsternoPanel({
       : 'Collega prima un tconst IMDb all\'opera'
   const isCastEmpty = !loading && total === 0 && !draft
 
-  const downloadButton = (
+  const downloadButton = readOnly ? null : (
     <Button
       variant="outline"
       size="sm"
@@ -525,6 +541,8 @@ export function CastEsternoPanel({
           />
         )}
 
+        {!readOnly && (
+        <>
         <div className={`grid grid-cols-1 gap-2 items-end border-t pt-4 ${hasEpisodi ? 'sm:grid-cols-[1fr_1fr_160px_1fr_auto]' : 'sm:grid-cols-[1fr_1fr_180px_auto]'}`}>
           <Input
             value={manual.nome}
@@ -569,6 +587,8 @@ export function CastEsternoPanel({
           <p className="text-xs text-muted-foreground">
             Senza episodi selezionati il nome vale per tutta la serie. Con più episodi selezionati viene creata una riga per episodio.
           </p>
+        )}
+        </>
         )}
       </CardContent>
 

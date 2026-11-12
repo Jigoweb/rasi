@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/shared/lib/supabase'
+import { canEditOpera, OPERA_VALIDATA_ERROR, readAuthoritativeUserRole } from '@/shared/lib/auth-permissions'
 import {
   canImportEpisodi,
   confirmEpisodiDrafts,
@@ -21,6 +22,11 @@ export async function POST(
     const auth = await authorize(req)
     if (!auth.ok) {
       return NextResponse.json({ ok: false, error: auth.error }, { status: auth.status })
+    }
+
+    const editable = await checkOperaEditable(auth.token, auth.role, id)
+    if (!editable.ok) {
+      return NextResponse.json({ ok: false, error: editable.error }, { status: editable.status })
     }
 
     const contentType = req.headers.get('content-type') ?? ''
@@ -94,7 +100,7 @@ async function confirmFromJson(req: NextRequest, token: string, operaId: string)
 
 async function authorize(
   req: NextRequest,
-): Promise<{ ok: true; token: string } | { ok: false; status: number; error: string }> {
+): Promise<{ ok: true; token: string; role: string | null } | { ok: false; status: number; error: string }> {
   const token = bearerToken(req.headers.get('authorization'))
   if (!token) {
     return { ok: false, status: 401, error: 'Autenticazione richiesta.' }
@@ -117,10 +123,42 @@ async function authorize(
     return {
       ok: false,
       status: 403,
-      error: 'Accesso negato: solo amministratori e operatori possono importare gli episodi.',
+      error: 'Accesso negato: il tuo ruolo non può importare gli episodi.',
     }
   }
-  return { ok: true, token }
+  return { ok: true, token, role: readAuthoritativeUserRole(data.user) }
+}
+
+/**
+ * Operatore base e Tirocinante non modificano le opere validate. La RLS blocca
+ * comunque le scritture (opera_modificabile); qui si risponde con un messaggio
+ * chiaro prima di leggere il file. Opera assente: ci pensa l'import (404).
+ */
+async function checkOperaEditable(
+  token: string,
+  role: string | null,
+  operaId: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  if (canEditOpera(role, null) && canEditOpera(role, 'validato')) return { ok: true }
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !anonKey) {
+    return { ok: false, status: 500, error: 'Configurazione Supabase mancante.' }
+  }
+  const client = createClient<Database>(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { data, error } = await client
+    .from('opere')
+    .select('stato_validazione')
+    .eq('id', operaId)
+    .maybeSingle()
+  if (error) return { ok: false, status: 500, error: 'Lettura opera non riuscita.' }
+  if (data && !canEditOpera(role, data.stato_validazione)) {
+    return { ok: false, status: 403, error: OPERA_VALIDATA_ERROR }
+  }
+  return { ok: true }
 }
 
 function bearerToken(header: string | null): string | null {

@@ -28,6 +28,8 @@ import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera, mapImdbTypeToOperaTipo } from '@/features/opere/services/external/imdb.service'
 import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { notifyError, notifySuccess } from '@/shared/lib/toast'
+import { useAuth } from '@/shared/contexts/auth-context'
+import { canEditOpera } from '@/shared/lib/auth-permissions'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -271,6 +273,10 @@ function FilterPopover({
 
 export default function OperePage() {
   const router = useRouter()
+  // Operatore base e Tirocinante: niente eliminazione, niente modifica delle opere validate.
+  const { userRole, canEditOpereSection, canValidateOpere } = useAuth()
+  const canEditRow = (opera: { stato_validazione?: string | null }) =>
+    canEditOpera(userRole, opera.stato_validazione)
   const searchParams = useSearchParams()
   const [opere, setOpere] = useState<Opera[]>([])
   const [loading, setLoading] = useState(true)
@@ -852,10 +858,12 @@ export default function OperePage() {
               <Download className="h-4 w-4 mr-2" />
               Esporta Excel
             </Button>
-            <Button onClick={openCreateForm}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nuova Opera
-            </Button>
+            {canEditOpereSection && (
+              <Button onClick={openCreateForm}>
+                <Plus className="h-4 w-4 mr-2" />
+                Nuova Opera
+              </Button>
+            )}
           </div>
         </div>
         <div className="hidden lg:flex gap-2">
@@ -863,10 +871,12 @@ export default function OperePage() {
             <Download className="h-4 w-4 mr-2" />
             Esporta Excel
           </Button>
-          <Button onClick={openCreateForm}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nuova Opera
-          </Button>
+          {canEditOpereSection && (
+            <Button onClick={openCreateForm}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuova Opera
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1026,14 +1036,18 @@ export default function OperePage() {
                             <Eye className="h-4 w-4 mr-2" />
                             Dettaglio
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(opera) }}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            Modifica
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Elimina
-                          </DropdownMenuItem>
+                          {canEditRow(opera) && (
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(opera) }}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Modifica
+                            </DropdownMenuItem>
+                          )}
+                          {canValidateOpere && (
+                            <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Elimina
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -1098,14 +1112,18 @@ export default function OperePage() {
                           <Eye className="h-4 w-4 mr-2" />
                           Dettaglio
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(opera) }}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Modifica
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Elimina
-                        </DropdownMenuItem>
+                        {canEditRow(opera) && (
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); openEditForm(opera) }}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Modifica
+                          </DropdownMenuItem>
+                        )}
+                        {canValidateOpere && (
+                          <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); openDeleteDialog(opera) }}>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Elimina
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
@@ -1169,12 +1187,16 @@ export default function OperePage() {
                 <Button variant="outline" onClick={() => setShowDetails(false)}>
                   Chiudi
                 </Button>
-                <Button onClick={() => selectedOpera && openEditForm(selectedOpera)}>
+                <Button
+                  disabled={!selectedOpera || !canEditRow(selectedOpera)}
+                  onClick={() => selectedOpera && openEditForm(selectedOpera)}
+                >
                   <Edit className="h-4 w-4 mr-2" />
                   Modifica
                 </Button>
                 <Button
                   variant="secondary"
+                  disabled={!selectedOpera || !canEditRow(selectedOpera)}
                   onClick={async () => {
                     if (!selectedOpera?.imdb_tconst) return
                     const { ok, result } = await getTitleById(selectedOpera.imdb_tconst)

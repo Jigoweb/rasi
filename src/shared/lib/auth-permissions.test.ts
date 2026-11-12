@@ -10,6 +10,7 @@ import {
   readAuthoritativeUserRole,
   canManageOperaCast,
   canManageArtistiContatti,
+  canEditOpera,
 } from './auth-permissions'
 
 describe('auth-permissions', () => {
@@ -17,6 +18,8 @@ describe('auth-permissions', () => {
     it('returns valid roles as-is', () => {
       expect(resolveUserRole('admin')).toBe('admin')
       expect(resolveUserRole('operatore')).toBe('operatore')
+      expect(resolveUserRole('operatore_base')).toBe('operatore_base')
+      expect(resolveUserRole('tirocinante')).toBe('tirocinante')
       expect(resolveUserRole('collecting')).toBe('collecting')
       expect(resolveUserRole('artista')).toBe('artista')
     })
@@ -30,44 +33,84 @@ describe('auth-permissions', () => {
   })
 
   describe('getRolePermissions', () => {
-    it('admin has full user-management privileges', () => {
-      expect(getRolePermissions('admin')).toEqual({
-        isAdmin: true,
-        isOperatore: false,
-        isArtista: false,
-        canManageUsers: true,
-        canEditRoles: true,
+    const NONE = {
+      isAdmin: false,
+      isOperatore: false,
+      isOperatoreBase: false,
+      isTirocinante: false,
+      isArtista: false,
+      isStaff: false,
+      canReadBancaDati: false,
+      canEditOpereSection: false,
+      canValidateOpere: false,
+      canWriteOutsideOpere: false,
+      canManageUsers: false,
+      canEditRoles: false,
+    }
+    const STAFF = {
+      isStaff: true,
+      canReadBancaDati: true,
+      canEditOpereSection: true,
+      canValidateOpere: true,
+      canWriteOutsideOpere: true,
+      canManageUsers: true,
+      canEditRoles: true,
+    }
+
+    it('admin has full privileges', () => {
+      expect(getRolePermissions('admin')).toEqual({ ...NONE, ...STAFF, isAdmin: true })
+    })
+
+    it('operatore (Operatore pro) has full data privileges and manages users', () => {
+      expect(getRolePermissions('operatore')).toEqual({ ...NONE, ...STAFF, isOperatore: true })
+    })
+
+    it('operatore_base reads everything and writes only the Opere section, without validating', () => {
+      expect(getRolePermissions('operatore_base')).toEqual({
+        ...NONE,
+        isOperatoreBase: true,
+        canReadBancaDati: true,
+        canEditOpereSection: true,
       })
     })
 
-    it('operatore can manage users and edit roles', () => {
-      expect(getRolePermissions('operatore')).toEqual({
-        isAdmin: false,
-        isOperatore: true,
-        isArtista: false,
-        canManageUsers: true,
-        canEditRoles: true,
+    it('tirocinante works only in the Opere section', () => {
+      expect(getRolePermissions('tirocinante')).toEqual({
+        ...NONE,
+        isTirocinante: true,
+        canEditOpereSection: true,
       })
     })
 
     it('artista is walled to own area flags', () => {
-      expect(getRolePermissions('artista')).toEqual({
-        isAdmin: false,
-        isOperatore: false,
-        isArtista: true,
-        canManageUsers: false,
-        canEditRoles: false,
-      })
+      expect(getRolePermissions('artista')).toEqual({ ...NONE, isArtista: true })
     })
 
-    it('collecting has zero management privileges', () => {
-      expect(getRolePermissions('collecting')).toEqual({
-        isAdmin: false,
-        isOperatore: false,
-        isArtista: false,
-        canManageUsers: false,
-        canEditRoles: false,
-      })
+    it('collecting has zero privileges', () => {
+      expect(getRolePermissions('collecting')).toEqual(NONE)
+    })
+  })
+
+  describe('canEditOpera', () => {
+    it('lets staff edit validated and non-validated opere', () => {
+      for (const role of ['admin', 'operatore']) {
+        expect(canEditOpera(role, 'validato')).toBe(true)
+        expect(canEditOpera(role, 'da_validare')).toBe(true)
+      }
+    })
+
+    it('lets operatore_base and tirocinante edit only non-validated opere', () => {
+      for (const role of ['operatore_base', 'tirocinante']) {
+        expect(canEditOpera(role, 'validato')).toBe(false)
+        expect(canEditOpera(role, 'da_validare')).toBe(true)
+        expect(canEditOpera(role, null)).toBe(true)
+      }
+    })
+
+    it('denies everyone else', () => {
+      for (const role of ['artista', 'collecting', 'readonly', null, undefined]) {
+        expect(canEditOpera(role, 'da_validare')).toBe(false)
+      }
     })
   })
 
@@ -76,6 +119,8 @@ describe('auth-permissions', () => {
       expect(rolesAssignableBy('admin')).toEqual([
         'admin',
         'operatore',
+        'operatore_base',
+        'tirocinante',
         'collecting',
         'artista',
       ])
@@ -84,6 +129,8 @@ describe('auth-permissions', () => {
     it('operatore cannot assign admin', () => {
       expect(rolesAssignableBy('operatore')).toEqual([
         'operatore',
+        'operatore_base',
+        'tirocinante',
         'collecting',
         'artista',
       ])
@@ -92,21 +139,27 @@ describe('auth-permissions', () => {
     it('non-managers assign nothing', () => {
       expect(rolesAssignableBy('artista')).toEqual([])
       expect(rolesAssignableBy('collecting')).toEqual([])
+      expect(rolesAssignableBy('operatore_base')).toEqual([])
+      expect(rolesAssignableBy('tirocinante')).toEqual([])
     })
   })
 
   describe('rolesInvitableBy', () => {
-    it('admin can invite admin, operatore and artista', () => {
+    it('admin can invite admin, the three operator levels and artista', () => {
       expect(rolesInvitableBy('admin')).toEqual([
         'admin',
         'operatore',
+        'operatore_base',
+        'tirocinante',
         'artista',
       ])
     })
 
-    it('operatore can invite other operatori and artisti', () => {
+    it('operatore can invite operator levels and artisti', () => {
       expect(rolesInvitableBy('operatore')).toEqual([
         'operatore',
+        'operatore_base',
+        'tirocinante',
         'artista',
       ])
     })
@@ -114,6 +167,8 @@ describe('auth-permissions', () => {
     it('non-managers invite nothing', () => {
       expect(rolesInvitableBy('artista')).toEqual([])
       expect(rolesInvitableBy('collecting')).toEqual([])
+      expect(rolesInvitableBy('operatore_base')).toEqual([])
+      expect(rolesInvitableBy('tirocinante')).toEqual([])
     })
   })
 
@@ -246,9 +301,11 @@ describe('auth-permissions', () => {
   })
 
   describe('canManageOperaCast', () => {
-    it('is limited to admin and operatore', () => {
+    it('is limited to the Opere section roles', () => {
       expect(canManageOperaCast('admin')).toBe(true)
       expect(canManageOperaCast('operatore')).toBe(true)
+      expect(canManageOperaCast('operatore_base')).toBe(true)
+      expect(canManageOperaCast('tirocinante')).toBe(true)
       expect(canManageOperaCast('artista')).toBe(false)
       expect(canManageOperaCast('collecting')).toBe(false)
       expect(canManageOperaCast('readonly')).toBe(false)
@@ -260,6 +317,8 @@ describe('auth-permissions', () => {
     it('is limited to admin and operatore', () => {
       expect(canManageArtistiContatti('admin')).toBe(true)
       expect(canManageArtistiContatti('operatore')).toBe(true)
+      expect(canManageArtistiContatti('operatore_base')).toBe(false)
+      expect(canManageArtistiContatti('tirocinante')).toBe(false)
       expect(canManageArtistiContatti('artista')).toBe(false)
       expect(canManageArtistiContatti('collecting')).toBe(false)
       expect(canManageArtistiContatti('readonly')).toBe(false)

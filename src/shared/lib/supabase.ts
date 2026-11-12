@@ -1573,6 +1573,32 @@ export type Database = {
         Args: { p_artista_id: string; p_items: Json }
         Returns: number
       }
+      artisti_cast_lookup: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          nome: string
+          cognome: string
+          nome_arte: string | null
+          codice_ipn: string | null
+          imdb_nconst: string | null
+        }[]
+      }
+      cerca_artisti_per_cast: {
+        Args: { p_search: string; p_limit?: number }
+        Returns: {
+          id: string
+          nome: string
+          cognome: string
+          nome_arte: string | null
+          codice_ipn: string | null
+          imdb_nconst: string | null
+        }[]
+      }
+      is_staff: { Args: Record<PropertyKey, never>; Returns: boolean }
+      is_staff_reader: { Args: Record<PropertyKey, never>; Returns: boolean }
+      is_opere_editor: { Args: Record<PropertyKey, never>; Returns: boolean }
+      opera_modificabile: { Args: { p_opera_id: string }; Returns: boolean }
       get_alert_scadenze: {
         Args: { p_oggi?: string; p_giorni_documento?: number }
         Returns: {
@@ -1752,7 +1778,13 @@ export type Database = {
         | "daytime"
         | "notte"
       metodo_matching: "automatico" | "manuale" | "validato"
-      ruolo_utente: "admin" | "operatore" | "artista" | "readonly"
+      ruolo_utente:
+        | "admin"
+        | "operatore"
+        | "artista"
+        | "readonly"
+        | "operatore_base"
+        | "tirocinante"
       stato_campagna:
         | "pianificata"
         | "in_corso"
@@ -1926,7 +1958,7 @@ export const Constants = {
         "notte",
       ],
       metodo_matching: ["automatico", "manuale", "validato"],
-      ruolo_utente: ["admin", "operatore", "artista", "readonly"],
+      ruolo_utente: ["admin", "operatore", "artista", "readonly", "operatore_base", "tirocinante"],
       stato_campagna: [
         "pianificata",
         "in_corso",

@@ -80,14 +80,14 @@ describe('EpisodiImportActions', () => {
   })
 
   it('nasconde le azioni a chi non è admin o operatore', () => {
-    useAuth.mockReturnValue({ isAdmin: false, isOperatore: false })
+    useAuth.mockReturnValue({ canEditOpereSection: false })
     renderActions()
     expect(screen.queryByRole('button', { name: 'Scarica template episodi' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Importa episodi' })).not.toBeInTheDocument()
   })
 
   it('mostra anteprima e, dopo la conferma, il riepilogo senza aggiornare gli esistenti', async () => {
-    useAuth.mockReturnValue({ isAdmin: false, isOperatore: true })
+    useAuth.mockReturnValue({ canEditOpereSection: true })
     const user = userEvent.setup()
     const { onImported } = renderActions()
     ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, init: RequestInit) => {
@@ -144,7 +144,7 @@ describe('EpisodiImportActions', () => {
   })
 
   it('rivalida una riga segnalata e la include solo se l’operatore la spunta', async () => {
-    useAuth.mockReturnValue({ isAdmin: true, isOperatore: false })
+    useAuth.mockReturnValue({ canEditOpereSection: true })
     const user = userEvent.setup()
     renderActions()
     ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, init: RequestInit) => ({
@@ -178,7 +178,7 @@ describe('EpisodiImportActions', () => {
   })
 
   it('libera il duplicato se si esclude la prima riga e lo include solo dopo la spunta', async () => {
-    useAuth.mockReturnValue({ isAdmin: true, isOperatore: false })
+    useAuth.mockReturnValue({ canEditOpereSection: true })
     const user = userEvent.setup()
     renderActions()
     const duplicatePreview = {
@@ -237,7 +237,7 @@ describe('EpisodiImportActions', () => {
   })
 
   it('nel riepilogo conta gli episodi importati e quelli aggiornati', async () => {
-    useAuth.mockReturnValue({ isAdmin: true, isOperatore: false })
+    useAuth.mockReturnValue({ canEditOpereSection: true })
     const user = userEvent.setup()
     const { onImported } = renderActions()
     ;(global.fetch as jest.Mock).mockImplementation(async (_url: string, init: RequestInit) => ({

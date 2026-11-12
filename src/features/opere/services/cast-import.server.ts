@@ -41,7 +41,9 @@ async function fetchAll<T>(load: (from: number, to: number) => PromiseLike<PageR
 
 async function loadArtisti(client: Client): Promise<CastImportContext['artisti']> {
   const artisti = await fetchAll<{ id: string; nome: string | null; cognome: string | null; codice_ipn: string | null }>(
-    (from, to) => client.from('artisti').select('id, nome, cognome, codice_ipn').order('id').range(from, to),
+    // artisti_cast_lookup: stessi artisti della tabella per lo staff, ma il
+    // Tirocinante (che non legge artisti) vede solo i campi per il cast.
+    (from, to) => client.rpc('artisti_cast_lookup').select('id, nome, cognome, codice_ipn').order('id').range(from, to),
   )
   if (artisti.length > MAX_ARTISTS) {
     throw new Error('Anagrafica artisti troppo grande per il confronto completo di nome, cognome e IPN')

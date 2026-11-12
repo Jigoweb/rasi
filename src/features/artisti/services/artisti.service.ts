@@ -22,6 +22,18 @@ export const ARTISTI_INCOMPLETE_OR =
   'codice_ipn.is.null,codice_ipn.eq.,nome.is.null,nome.eq.,cognome.is.null,cognome.eq.,stato.is.null,imdb_nconst.is.null,imdb_nconst.eq.,data_nascita.is.null,codice_fiscale.is.null,codice_fiscale.eq.'
 
 /**
+ * Ricerca artisti per il cast di un'opera tramite cerca_artisti_per_cast:
+ * restituisce solo id, nomi, IPN e nconst. La usa il Tirocinante, che non
+ * legge la tabella artisti. Ricerca vuota → nessun risultato.
+ */
+export const searchArtistiForCast = async (search: string, limit = 50) => {
+  const term = search.trim()
+  if (!term) return { data: [], error: null }
+  const { data, error } = await supabase.rpc('cerca_artisti_per_cast', { p_search: term, p_limit: limit })
+  return { data: data ?? [], error }
+}
+
+/**
  * Fetches a list of artists with optional filtering.
  * @param filters - Optional filters for search, is_rasi (tipologia), and field filters.
  * @returns An object with data and error properties.

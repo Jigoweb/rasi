@@ -58,6 +58,15 @@ describe('validateUserInvite', () => {
     })
   })
 
+  it.each(['operatore_base', 'tirocinante'])('allows operatore pro to invite %s with email only', (ruolo) => {
+    const result = validateUserInvite({
+      actorIsAdmin: false,
+      email: 'nuovo@example.com',
+      ruolo,
+    })
+    expect(result).toEqual({ ok: true, email: 'nuovo@example.com', ruolo, artistaId: null })
+  })
+
   it('allows operatore to invite an artista with artista_id', () => {
     const result = validateUserInvite({
       actorIsAdmin: false,

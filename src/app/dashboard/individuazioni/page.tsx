@@ -26,8 +26,11 @@ import IndividuazioniTable from './components/IndividuazioniTable'
 import { useIndividuazioniDelete } from './hooks/useIndividuazioniDelete'
 import { useIndividuazioniFilters } from './hooks/useIndividuazioniFilters'
 import { useIndividuazioniList } from './hooks/useIndividuazioniList'
+import { useAuth } from '@/shared/contexts/auth-context'
 
 export default function IndividuazioniPage() {
+  // Operatore base: individuazioni in sola lettura (API e RLS ammettono solo admin e Operatore pro).
+  const { canWriteOutsideOpere } = useAuth()
   const router = useRouter()
   const [campagnaToEdit, setCampagnaToEdit] = useState<CampagnaIndividuazione | null>(null)
   const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
@@ -414,7 +417,7 @@ export default function IndividuazioniPage() {
         processingProgressMap={processingProgressMap}
         loadingProgressMap={loadingProgressMap}
         resumingId={resumingId}
-        canStartProcess={canStartProcess}
+        canStartProcess={(id: string) => canWriteOutsideOpere && canStartProcess(id)}
         onOpenDetail={campagnaId => router.push(`/dashboard/individuazioni/${campagnaId}`)}
         onOpenEdit={openEditDialog}
         onOpenDelete={openDeleteDialog}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCastManager, type CastRouteClient } from '@/app/api/opere/cast-route'
+import { canEditOpera, OPERA_VALIDATA_ERROR } from '@/shared/lib/auth-permissions'
 import { parseCastEdits } from '@/features/opere/lib/cast-import'
 import { commitCastEdits, previewCastFile, revalidateCastEdits } from '@/features/opere/services/cast-import.server'
 
@@ -17,9 +18,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Opera non valida' }, { status: 400 })
   }
 
-  const { data: opera, error: operaError } = await auth.client.from('opere').select('id').eq('id', id).maybeSingle()
+  const { data: opera, error: operaError } = await auth.client
+    .from('opere')
+    .select('id, stato_validazione')
+    .eq('id', id)
+    .maybeSingle()
   if (operaError) return NextResponse.json({ error: operaError.message }, { status: 500 })
   if (!opera) return NextResponse.json({ error: 'Opera non trovata' }, { status: 404 })
+  if (!canEditOpera(auth.role, opera.stato_validazione)) {
+    return NextResponse.json({ error: OPERA_VALIDATA_ERROR }, { status: 403 })
+  }
 
   const contentType = req.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {

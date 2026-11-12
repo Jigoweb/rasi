@@ -30,6 +30,14 @@ export function resolveMiddlewareRedirect(
     if (role === "artista" && !pathname.startsWith("/dashboard/profilo")) {
       return "/dashboard/profilo";
     }
+    // Il tirocinante lavora solo nella sezione Opere.
+    if (
+      role === "tirocinante" &&
+      pathname !== "/dashboard/opere" &&
+      !pathname.startsWith("/dashboard/opere/")
+    ) {
+      return "/dashboard/opere";
+    }
     if (
       pathname.startsWith("/dashboard/utenti") &&
       role !== "admin" &&
