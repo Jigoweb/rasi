@@ -15,18 +15,32 @@ export type CastEsternoPageOptions = {
   soloSerie?: boolean
 }
 
+/**
+ * L'ordine per stagione/episodio vale solo se `episodi` è nella select
+ * (altrimenti PostgREST risponde PGRST108). L'embed non è una colonna di cast_esterno.
+ */
+const CAST_ESTERNO_SELECT = '*, episodi(numero_stagione, numero_episodio)' as const
+
+/** Toglie l'embed usato solo per l'ordine, così non finisce in update, insert o export. */
+function withoutEpisodioEmbed(rows: readonly object[] | null | undefined): CastEsternoRow[] {
+  return (rows ?? []).map((row) => {
+    const { episodi: _episodi, ...rest } = row as CastEsternoRow & { episodi?: unknown }
+    return rest
+  })
+}
+
 function castEsternoBase(operaId: string, options?: { soloSerie?: boolean; episodioId?: string | null }, withCount = false) {
   let query = supabase
     .from('cast_esterno')
-    .select('*', withCount ? { count: 'exact' } : undefined)
+    .select(CAST_ESTERNO_SELECT, withCount ? { count: 'exact' } : undefined)
     .eq('opera_id', operaId)
 
   if (options?.soloSerie) query = query.is('episodio_id', null)
   else if (options?.episodioId) query = query.eq('episodio_id', options.episodioId)
 
   return query
-    .order('numero_stagione', { referencedTable: 'episodi', ascending: true, nullsFirst: true })
-    .order('numero_episodio', { referencedTable: 'episodi', ascending: true, nullsFirst: true })
+    .order('episodi(numero_stagione)', { ascending: true, nullsFirst: true })
+    .order('episodi(numero_episodio)', { ascending: true, nullsFirst: true })
     .order('ordine', { ascending: true })
     .order('nome', { ascending: true })
     .order('id', { ascending: true })
@@ -45,11 +59,16 @@ export const listCastEsternoPage = async (operaId: string, options: CastEsternoP
 
   if (pageResult.error) return { data: [] as CastEsternoRow[], count: 0, total: 0, error: pageResult.error }
   if (totalResult.error) {
-    return { data: pageResult.data ?? [], count: pageResult.count ?? 0, total: 0, error: totalResult.error }
+    return {
+      data: withoutEpisodioEmbed(pageResult.data),
+      count: pageResult.count ?? 0,
+      total: 0,
+      error: totalResult.error,
+    }
   }
 
   return {
-    data: pageResult.data ?? [],
+    data: withoutEpisodioEmbed(pageResult.data),
     count: pageResult.count ?? 0,
     total: totalResult.count ?? 0,
     error: null,
@@ -58,7 +77,11 @@ export const listCastEsternoPage = async (operaId: string, options: CastEsternoP
 
 /** Elenco completo, a blocchi. Lo usa l'export Excel, non il pannello. */
 export const listCastEsterno = async (operaId: string) => {
-  const result = await fetchAllPages<CastEsternoRow>((from, to) => castEsternoBase(operaId).range(from, to))
+  const result = await fetchAllPages<CastEsternoRow>(async (from, to) => {
+    const page = await castEsternoBase(operaId).range(from, to)
+    if (page.error) return { data: null, error: page.error }
+    return { data: withoutEpisodioEmbed(page.data), error: null }
+  })
   if (result.error) return { data: null, error: result.error }
   return { data: result.data, error: null }
 }
