@@ -76,7 +76,7 @@ LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT public.get_user_role() = ANY (ARRAY['admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente])
+  SELECT COALESCE(public.get_user_role() = ANY (ARRAY['admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente]), false)
 $$;
 
 -- Chi legge tutta la banca dati: staff + Operatore base.
@@ -86,9 +86,9 @@ LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT public.get_user_role() = ANY (ARRAY[
+  SELECT COALESCE(public.get_user_role() = ANY (ARRAY[
     'admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente, 'operatore_base'::public.ruolo_utente
-  ])
+  ]), false)
 $$;
 
 -- Chi lavora nella sezione Opere: staff + Operatore base + Tirocinante.
@@ -98,10 +98,10 @@ LANGUAGE sql
 STABLE
 SET search_path = public
 AS $$
-  SELECT public.get_user_role() = ANY (ARRAY[
+  SELECT COALESCE(public.get_user_role() = ANY (ARRAY[
     'admin'::public.ruolo_utente, 'operatore'::public.ruolo_utente,
     'operatore_base'::public.ruolo_utente, 'tirocinante'::public.ruolo_utente
-  ])
+  ]), false)
 $$;
 
 -- L'utente corrente può modificare l'opera (e i suoi episodi, cast, note)?
@@ -145,14 +145,20 @@ AS $$
   END
 $$;
 
-REVOKE ALL ON FUNCTION public.is_staff() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.is_staff_reader() FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.is_opere_editor() FROM PUBLIC, anon;
+-- I tre controlli di ruolo sono SECURITY INVOKER e restituiscono sempre true/false
+-- (mai NULL: un «NOT is_staff()» con ruolo nullo deve negare, non passare).
+-- Restano eseguibili da anon come get_user_role(): compaiono nelle policy SELECT
+-- TO public, e senza EXECUTE una query anonima su quelle tabelle darebbe errore
+-- invece di zero righe. Per anon restituiscono false.
+-- Le due funzioni SECURITY DEFINER sono usate solo nelle policy di scrittura.
+REVOKE ALL ON FUNCTION public.is_staff() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_staff_reader() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_opere_editor() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.opera_modificabile(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.partecipazione_modificabile(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.is_staff() TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.is_staff_reader() TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.is_opere_editor() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.is_staff() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.is_staff_reader() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.is_opere_editor() TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.opera_modificabile(uuid) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.partecipazione_modificabile(uuid) TO authenticated, service_role;
 
@@ -566,6 +572,15 @@ SELECT pg_temp.rasi_patch_function(
   'public.converti_cast_esterno_in_partecipazioni(uuid,jsonb)',
   $old$get_user_role() IS NULL OR get_user_role() NOT IN ('admin', 'operatore')$old$,
   $new$NOT public.is_opere_editor()$new$,
+  1
+);
+-- La funzione è SECURITY INVOKER: il tirocinante non legge artisti, quindi
+-- l'esistenza dell'artista si controlla sulla vista per il cast. Le scritture
+-- su partecipazioni e cast_esterno restano soggette alla RLS (opera_modificabile).
+SELECT pg_temp.rasi_patch_function(
+  'public.converti_cast_esterno_in_partecipazioni(uuid,jsonb)',
+  $old$SELECT 1 FROM public.artisti WHERE id = p_artista_id$old$,
+  $new$SELECT 1 FROM public.artisti_cast_lookup() a WHERE a.id = p_artista_id$new$,
   1
 );
 

@@ -71,12 +71,15 @@ BEGIN
     WHERE schemaname = 'public'
       AND tablename = 'partecipazioni_note'
       AND (
-        (qual IS NOT NULL AND qual !~* 'select\s+get_user_role\s*\(\s*\)\s+as\s+get_user_role')
-        OR (with_check IS NOT NULL AND with_check !~* 'select\s+get_user_role\s*\(\s*\)\s+as\s+get_user_role')
+        -- Dopo 20261112090100 le policy usano anche i controlli di ruolo
+        -- (select is_opere_editor()) e partecipazione_modificabile(partecipazione_id),
+        -- che dipende dalla riga e quindi non può essere un initplan.
+        (qual IS NOT NULL AND qual !~* '(select\s+(get_user_role|is_staff|is_staff_reader|is_opere_editor)\s*\(\s*\)\s+as\s+\w+|partecipazione_modificabile\s*\(\s*partecipazione_id\s*\))')
+        OR (with_check IS NOT NULL AND with_check !~* '(select\s+(get_user_role|is_staff|is_staff_reader|is_opere_editor)\s*\(\s*\)\s+as\s+\w+|partecipazione_modificabile\s*\(\s*partecipazione_id\s*\))')
       )
   ) THEN
     v_pass := v_pass + 1;
-    RAISE NOTICE 'PASS policy note spezzate e con (select get_user_role())';
+    RAISE NOTICE 'PASS policy note spezzate e con controlli di ruolo initplan o partecipazione_modificabile';
   ELSE
     v_fail := v_fail + 1;
     RAISE NOTICE 'FAIL policy note policies=% all=%', v_policies, v_all;
