@@ -48,6 +48,7 @@ describe("resolveMiddlewareRedirect", () => {
       "/dashboard/programmazioni",
       "/dashboard/individuazioni",
       "/dashboard/ripartizioni",
+      "/dashboard/approvazioni",
       "/dashboard/utenti",
       "/dashboard/cms/pages",
       "/dashboard/opere-altro",
@@ -61,7 +62,10 @@ describe("resolveMiddlewareRedirect", () => {
     expect(resolveMiddlewareRedirect("/dashboard", base)).toBeNull();
     expect(resolveMiddlewareRedirect("/dashboard/artisti", base)).toBeNull();
     expect(resolveMiddlewareRedirect("/dashboard/programmazioni", base)).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/approvazioni", base)).toBe("/dashboard");
     expect(resolveMiddlewareRedirect("/dashboard/utenti", base)).toBe("/dashboard");
+    expect(resolveMiddlewareRedirect("/dashboard/approvazioni", { ruolo: "admin" })).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/approvazioni", { ruolo: "operatore" })).toBeNull();
     expect(resolveMiddlewareRedirect("/dashboard/cms/pages", base)).toBe("/dashboard");
   });
 

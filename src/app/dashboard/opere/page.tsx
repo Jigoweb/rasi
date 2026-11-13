@@ -29,7 +29,9 @@ import { getTitleById, mapImdbToOpera, mapImdbTypeToOperaTipo } from '@/features
 import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { notifyError, notifySuccess } from '@/shared/lib/toast'
 import { useAuth } from '@/shared/contexts/auth-context'
-import { canEditOpera } from '@/shared/lib/auth-permissions'
+import { canEditOpera, mustProposeOpereChanges } from '@/shared/lib/auth-permissions'
+import { COLONNE_CONSENTITE, diffCampi } from '@/features/approvazioni/lib/modifica-payload'
+import { proponiModifica } from '@/features/approvazioni/services/proposte.service'
 
 type Opera = Database['public']['Tables']['opere']['Row']
 
@@ -750,7 +752,30 @@ export default function OperePage() {
         codici_esterni: values.imdb_tconst ? { imdb: values.imdb_tconst } : {},
       } as any
 
-      if (formMode === 'create') {
+      if (mustProposeOpereChanges(userRole)) {
+        if (formMode === 'create') {
+          const { error } = await proponiModifica({
+            entita: 'opera',
+            operazione: 'insert',
+            dopo: payload,
+          })
+          if (error) throw error
+          notifySuccess('Proposta inviata, in attesa di approvazione')
+        } else if (selectedOpera) {
+          const dopo = diffCampi(selectedOpera, payload, COLONNE_CONSENTITE.opera)
+          if (Object.keys(dopo).length > 0) {
+            const { error } = await proponiModifica({
+              entita: 'opera',
+              operazione: 'update',
+              operaId: selectedOpera.id,
+              entitaId: selectedOpera.id,
+              dopo,
+            })
+            if (error) throw error
+            notifySuccess('Modifica in attesa di approvazione')
+          }
+        }
+      } else if (formMode === 'create') {
         const { error } = await createOpera(payload)
         if (error) throw error
       } else if (selectedOpera) {

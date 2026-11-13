@@ -13,6 +13,8 @@ import { episodeTitleLabel } from '@/features/opere/lib/episodio-titoli'
 import { getOpere, getEpisodiByOperaId } from '@/features/opere/services/opere.service'
 import { getArtisti, searchArtistiForCast } from '@/features/artisti/services/artisti.service'
 import { useAuth } from '@/shared/contexts/auth-context'
+import { mustProposeOpereChanges } from '@/shared/lib/auth-permissions'
+import { proponiModifica } from '@/features/approvazioni/services/proposte.service'
 import { getRuoliTipologie } from '@/features/opere/services/opere.service'
 import { createPartecipazioniMultiple, checkPartecipazioniDuplicate } from '@/features/opere/services/opere.service'
 import { Alert, AlertDescription } from '@/shared/components/ui/alert'
@@ -99,7 +101,7 @@ export function AddPartecipazioneDialog({
   const [episodiMap, setEpisodiMap] = useState<Map<string, Episodio[]>>(new Map())
   const [expandedOpere, setExpandedOpere] = useState<Set<string>>(new Set())
   const [duplicateIndices, setDuplicateIndices] = useState<number[]>([])
-  const { canReadBancaDati } = useAuth()
+  const { canReadBancaDati, userRole } = useAuth()
 
   // Carica ruoli all'apertura
   useEffect(() => {
@@ -349,6 +351,35 @@ export function AddPartecipazioneDialog({
 
     setIsSaving(true)
     try {
+      if (mustProposeOpereChanges(userRole)) {
+        const operaIds = new Set(partecipazioniToCreate.map((row) => row.opera_id))
+        if (operaIds.size !== 1) {
+          setError('La proposta deve riguardare una sola opera.')
+          return
+        }
+        const { error: proposalError } = await proponiModifica({
+          entita: 'partecipazione',
+          operaId: partecipazioniToCreate[0]?.opera_id,
+          righe: partecipazioniToCreate.map((row) => ({
+            entita: 'partecipazione' as const,
+            operazione: 'insert' as const,
+            dopo: {
+              artista_id: row.artista_id,
+              opera_id: row.opera_id,
+              ruolo_id: row.ruolo_id,
+              episodio_id: row.episodio_id ?? null,
+              personaggio: row.personaggio ?? null,
+            },
+          })),
+        })
+        if (proposalError) {
+          setError(proposalError.message)
+          return
+        }
+        onSuccess()
+        handleClose()
+        return
+      }
       const { data, error: saveError, duplicates } = await createPartecipazioniMultiple(partecipazioniToCreate)
       
       if (saveError) {
