@@ -987,6 +987,8 @@ export type Database = {
           titolo_originale: string | null
           updated_at: string | null
           updated_by: string | null
+          validato_da: string | null
+          validato_il: string | null
         }
         Insert: {
           alias_titoli?: string[] | null
@@ -1010,6 +1012,8 @@ export type Database = {
           titolo_originale?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          validato_da?: string | null
+          validato_il?: string | null
         }
         Update: {
           alias_titoli?: string[] | null
@@ -1033,6 +1037,53 @@ export type Database = {
           titolo_originale?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          validato_da?: string | null
+          validato_il?: string | null
+        }
+        Relationships: []
+      }
+      modifiche_proposte: {
+        Row: {
+          id: string
+          entita: string
+          entita_id: string | null
+          opera_id: string | null
+          operazione: string
+          payload: Json
+          stato: string
+          proposta_da: string
+          revisionata_da: string | null
+          nota_revisione: string | null
+          creata_il: string
+          revisionata_il: string | null
+        }
+        Insert: {
+          id?: string
+          entita: string
+          entita_id?: string | null
+          opera_id?: string | null
+          operazione: string
+          payload: Json
+          stato?: string
+          proposta_da: string
+          revisionata_da?: string | null
+          nota_revisione?: string | null
+          creata_il?: string
+          revisionata_il?: string | null
+        }
+        Update: {
+          id?: string
+          entita?: string
+          entita_id?: string | null
+          opera_id?: string | null
+          operazione?: string
+          payload?: Json
+          stato?: string
+          proposta_da?: string
+          revisionata_da?: string | null
+          nota_revisione?: string | null
+          creata_il?: string
+          revisionata_il?: string | null
         }
         Relationships: []
       }
@@ -1521,6 +1572,24 @@ export type Database = {
       get_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["ruolo_utente"]
+      }
+      proponi_modifica: {
+        Args: {
+          p_entita: string
+          p_operazione: string
+          p_payload: Json
+          p_entita_id?: string | null
+          p_opera_id?: string | null
+        }
+        Returns: string
+      }
+      approva_modifica: {
+        Args: { p_id: string; p_nota?: string | null }
+        Returns: undefined
+      }
+      respingi_modifica: {
+        Args: { p_id: string; p_nota?: string | null }
+        Returns: undefined
       }
       apply_artisti_contatti_import: {
         Args: { p_patches: Json }

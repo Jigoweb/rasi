@@ -59,6 +59,7 @@ type ImportResponse = {
   summary: ImportSummary
   ruoli?: string[]
   error?: string
+  inAttesa?: boolean
 }
 
 type ServerRow = Omit<ImportRow, 'stagione' | 'episodio'> & {
@@ -369,6 +370,7 @@ export function CastImportActions({
 
           {summary && (
             <p className="text-sm">
+              {summary.inAttesa ? 'In attesa di approvazione. ' : ''}
               Importate {summary.summary.imported ?? 0}
               {typeof summary.summary.partecipazioni === 'number'
                 ? ` (${summary.summary.partecipazioni} partecipazioni RASI, ${summary.summary.castEsterno ?? 0} nuove nel cast esterno, ${summary.summary.aggiornamenti ?? 0} aggiornate)`

@@ -1,10 +1,10 @@
 /**
  * Ruoli applicativi. Livelli operatore (resoconto RASI del 26/10, punto C5):
  * - operatore       → «Operatore pro»: tutto, compresa la validazione delle opere
- * - operatore_base  → legge tutto, scrive solo nella sezione Opere, mai su opere validate
- * - tirocinante     → solo sezione Opere, mai su opere validate; degli artisti vede
- *                     solo i dati per la ricerca nel cast
- * Il blocco vero è nella RLS (migration 20261112090100); qui si decide cosa mostrare.
+ * - operatore_base  → legge tutto; nella sezione Opere propone modifiche, non scrive
+ * - tirocinante     → solo sezione Opere; propone modifiche, non scrive. Degli artisti
+ *                     vede solo i dati per la ricerca nel cast
+ * Il blocco vero è nella RLS (20261112090100 e 20261113115053); qui si decide cosa mostrare.
  */
 export type UserRole =
   | 'admin'
@@ -148,6 +148,11 @@ export function canReadBancaDati(role: string | null | undefined): boolean {
 /** Staff + Operatore base + Tirocinante: lavora nella sezione Opere. */
 export function canEditOpereSection(role: string | null | undefined): boolean {
   return !!role && OPERE_EDITOR_ROLES.has(role)
+}
+
+/** Operatore base e Tirocinante salvano nella coda, non sulle tabelle. */
+export function mustProposeOpereChanges(role: string | null | undefined): boolean {
+  return role === 'operatore_base' || role === 'tirocinante'
 }
 
 /**

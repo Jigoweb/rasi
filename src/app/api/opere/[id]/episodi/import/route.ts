@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '@/shared/lib/supabase'
-import { canEditOpera, OPERA_VALIDATA_ERROR, readAuthoritativeUserRole } from '@/shared/lib/auth-permissions'
+import { canEditOpera, mustProposeOpereChanges, OPERA_VALIDATA_ERROR, readAuthoritativeUserRole } from '@/shared/lib/auth-permissions'
+import { proponiModifica } from '@/features/approvazioni/services/proposte.service'
+import type { RigaBatch } from '@/features/approvazioni/lib/modifica-payload'
 import {
   canImportEpisodi,
   confirmEpisodiDrafts,
@@ -31,7 +33,7 @@ export async function POST(
 
     const contentType = req.headers.get('content-type') ?? ''
     if (contentType.toLowerCase().includes('application/json')) {
-      return confirmFromJson(req, auth.token, id)
+      return confirmFromJson(req, auth.token, id, auth.role)
     }
 
     let form: FormData
@@ -77,7 +79,7 @@ export async function POST(
   }
 }
 
-async function confirmFromJson(req: NextRequest, token: string, operaId: string) {
+async function confirmFromJson(req: NextRequest, token: string, operaId: string, role: string | null) {
   let body: unknown
   try {
     body = await req.json()
@@ -87,15 +89,72 @@ async function confirmFromJson(req: NextRequest, token: string, operaId: string)
   if (!body || typeof body !== 'object' || Array.isArray(body) || (body as { mode?: unknown }).mode !== 'confirm') {
     return NextResponse.json({ ok: false, error: 'Modalità non valida.' }, { status: 400 })
   }
+  if (!mustProposeOpereChanges(role)) {
+    const result = await confirmEpisodiDrafts({
+      store: createStore(token),
+      operaId,
+      rows: (body as { rows?: unknown }).rows,
+    })
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.error }, { status: result.status })
+    }
+    return NextResponse.json(result)
+  }
+
+  const bucket: RigaBatch[] = []
+  const client = userClient(token)
+  const base = createStore(token)
   const result = await confirmEpisodiDrafts({
-    store: createStore(token),
+    store: {
+      ...base,
+      async insertEpisode(row) {
+        bucket.push({ entita: 'episodio', operazione: 'insert', dopo: { ...row } })
+        return { ok: true }
+      },
+      async updateEpisode(input) {
+        const { data, error } = await client
+          .from('episodi')
+          .select('id')
+          .eq('opera_id', input.opera_id)
+          .eq('numero_stagione', input.numero_stagione)
+          .eq('numero_episodio', input.numero_episodio)
+          .maybeSingle()
+        if (error || !data) return { ok: false, message: error?.message || 'Episodio non trovato' }
+        bucket.push({
+          entita: 'episodio',
+          operazione: 'update',
+          entitaId: data.id,
+          dopo: input.patch,
+        })
+        return { ok: true }
+      },
+    },
     operaId,
     rows: (body as { rows?: unknown }).rows,
   })
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.error }, { status: result.status })
   }
-  return NextResponse.json(result)
+  if (bucket.length === 0) return NextResponse.json(result)
+  const { error } = await proponiModifica({
+    entita: 'episodio',
+    operaId,
+    righe: bucket,
+  }, client)
+  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 400 })
+  return NextResponse.json({ ...result, inAttesa: true })
+}
+
+function userClient(token: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !anonKey) {
+    throw new Error('Configurazione Supabase mancante')
+  }
+  return createClient<Database>(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 }
 
 async function authorize(

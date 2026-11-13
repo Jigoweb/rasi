@@ -7,6 +7,7 @@ import {
   listPartecipazioniByOpera,
   updatePartecipazione,
 } from '@/features/opere/services/opere.service'
+import { listProposteOpera } from '@/features/approvazioni/services/proposte.service'
 
 jest.mock('next/navigation', () => ({
   useParams: () => ({ id: 'uuid-opera' }),
@@ -18,6 +19,11 @@ jest.mock('@/shared/contexts/auth-context', () => {
   const { getRolePermissions } = jest.requireActual('@/shared/lib/auth-permissions')
   return { useAuth: () => ({ userRole: mockRole, ...getRolePermissions(mockRole) }) }
 })
+
+jest.mock('@/features/approvazioni/services/proposte.service', () => ({
+  listProposteOpera: jest.fn(async () => ({ data: [], error: null })),
+  proponiModifica: jest.fn(async () => ({ id: 'proposta-1', error: null })),
+}))
 
 jest.mock('@/features/opere/services/opere.service', () => ({
   getOperaById: jest.fn(async () => ({ data: { id: 'uuid-opera', codice_opera: 'OP001', titolo: 'Opera Test', titolo_originale: 'Originale', tipo: 'film', anno_produzione: 2020, imdb_tconst: null }, error: null })),
@@ -267,6 +273,21 @@ describe('OperaDetailPage', () => {
       expect(screen.getByRole('button', { name: /^Modifica$/ })).toBeEnabled()
       // «Aggiungi» di partecipazioni e cast esterno
       expect(screen.getAllByRole('button', { name: /^Aggiungi$/ })).toHaveLength(2)
+      expect(screen.queryByText(/In attesa di approvazione/)).not.toBeInTheDocument()
+    })
+
+    it('mostra il banner quando c\'è una proposta in attesa', async () => {
+      mockRole = 'operatore_base'
+      ;(getOperaById as jest.Mock).mockResolvedValue({
+        data: { ...operaFixture, stato_validazione: 'da_validare' },
+        error: null,
+      })
+      ;(listProposteOpera as jest.Mock).mockResolvedValue({
+        data: [{ id: 'p1', entita: 'opera', operazione: 'update', creata_il: '2026-11-13T10:00:00.000Z' }],
+        error: null,
+      })
+      render(<OperaDetailPage />)
+      expect(await screen.findByText(/In attesa di approvazione/)).toBeInTheDocument()
     })
 
     it('Operatore pro modifica anche un\'opera validata', async () => {
