@@ -26,6 +26,7 @@ describe('copie server delle trasformazioni import', () => {
   it.each([
     ['src/features/programmazioni/utils/transforms.ts', 'server/src/lib/transforms.ts'],
     ['src/features/programmazioni/utils/year-parse.ts', 'server/src/lib/year-parse.ts'],
+    ['src/features/programmazioni/utils/excel-time.ts', 'server/src/lib/excel-time.ts'],
   ])('%s e %s sono identiche', (app, server) => {
     expect(normalize(server)).toBe(normalize(app))
   })

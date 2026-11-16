@@ -3,9 +3,10 @@ import {
   buildProgrammazioniPayloads,
   parseProgrammazioniFile,
   type ProgrammazioneImportPayload,
+  type UnparsedValuesCollector,
   type UploadMappingSnapshot,
 } from './programmazioni-import-core.js'
-import { summarizeImportQuality } from './import-quality.js'
+import { summarizeImportQuality, withUnparsedValues } from './import-quality.js'
 import { patchUploadJob } from './upload-job-store.js'
 
 const BUCKET = 'programmazioni-uploads'
@@ -156,6 +157,7 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
     let righeInserite = 0
     let righeDuplicateSaltate = 0
     const qualityPayloads: ProgrammazioneImportPayload[] = []
+    const unparsed: UnparsedValuesCollector = {}
 
     for (let offset = 0; offset < rows.length; offset += chunkSize) {
       const chunk = rows.slice(offset, offset + chunkSize)
@@ -166,7 +168,8 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
           campagnaProgrammazioneId: campagneProgrammazioneId,
           emittenteId,
         },
-        offset + 1
+        offset + 1,
+        unparsed
       )
       qualityPayloads.push(...payloads)
 
@@ -194,7 +197,7 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
     }
 
     await releaseLock(campagneProgrammazioneId, userId, 'in_review')
-    const qualityReport = summarizeImportQuality(qualityPayloads)
+    const qualityReport = withUnparsedValues(summarizeImportQuality(qualityPayloads), unparsed)
     await patchUploadJob(jobId, {
       stato: 'completed',
       fase: 'completed',
@@ -203,7 +206,8 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
       righe_duplicate_saltate: righeDuplicateSaltate,
       quality_report: qualityReport,
     })
-    await removeUploadedFile(storagePath)
+    // Il file resta nel bucket per 60 giorni (upload-file-retention.ts): serve
+    // a «Correggi dati dal file» senza doverlo ricaricare.
   } catch (error: any) {
     try {
       await releaseLock(campagneProgrammazioneId, userId, 'in_review')

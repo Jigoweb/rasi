@@ -149,7 +149,86 @@ export function repairMojibake(value: string): string {
       if (out.includes(from)) out = out.split(from).join(to)
     }
   }
+  // «à» a fine parola: in UTF-8 è C3 A0, e A0 letto come latin1 è uno spazio
+  // non separabile che un trim o una normalizzazione degli spazi tolgono
+  // («città» → «cittÃ»). Si ripara solo dopo una lettera minuscola e prima di
+  // spazio, punteggiatura o fine testo: «BÃCH» e «IRMÃ» restano invariati.
+  if (out.includes('Ã')) {
+    out = out.replace(/(?<=\p{Ll})Ã(?=$|[\s.,;:!?)\]'"»”’…\-])/gu, 'à')
+  }
   return out
+}
+
+/**
+ * Orario da valori eterogenei → "HH:MM:SS", oppure null.
+ * Accetta: frazione di giorno Excel (numero o testo), Date, "HH:MM(:SS)",
+ * "HH.MM(.SS)", "H:MM AM/PM", data e ora insieme ("2024-12-01 19:30:00",
+ * "01/12/2024 19:30": si prende l'ora), "HHMM" a tre o quattro cifre ("2030").
+ * Ore oltre 24 (formato [h]:mm) vengono riportate nelle 24 ore.
+ */
+export function parseTimeValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number') {
+    return Number.isFinite(value) && value >= 0 ? excelFractionToHHMMSS(value) : null
+  }
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    return [value.getUTCHours(), value.getUTCMinutes(), value.getUTCSeconds()]
+      .map((n) => String(n).padStart(2, '0'))
+      .join(':')
+  }
+  const str = String(value).trim()
+  if (str === '') return null
+  if (/^0?\.\d+$/.test(str)) return excelFractionToHHMMSS(Number(str))
+  const compact = str.match(/^(\d{1,2})(\d{2})$/)
+  if (compact) return formatTime(Number(compact[1]), Number(compact[2]), 0, null)
+  const match = str.match(
+    /(?:^|[\sT])(\d{1,2})[:.](\d{2})(?:[:.](\d{2})(?:[.,]\d+)?)?(?:\s*([AaPp])\.?\s?[Mm]\.?)?\s*$/,
+  )
+  if (!match) return null
+  return formatTime(
+    Number(match[1]),
+    Number(match[2]),
+    match[3] ? Number(match[3]) : 0,
+    match[4] ? match[4].toUpperCase() : null,
+  )
+}
+
+function formatTime(hours: number, minutes: number, seconds: number, meridiem: string | null): string | null {
+  if (minutes > 59 || seconds > 59) return null
+  let h = hours
+  if (meridiem) {
+    if (h < 1 || h > 12) return null
+    if (meridiem === 'A') h = h === 12 ? 0 : h
+    else h = h === 12 ? 12 : h + 12
+  }
+  h %= 24
+  return [h, minutes, seconds].map((n) => String(n).padStart(2, '0')).join(':')
+}
+
+/**
+ * Date non ambigue → "YYYY-MM-DD", oppure null: ISO ("2024-12-01", anche con
+ * l'ora "2024-12-01 19:30:00" o "2024-12-01T19:30"), "2024/12/01" e anno-mese
+ * ("2024-12" → primo giorno del mese, il periodo dei report mensili).
+ * I formati con giorno e mese ambigui (01/12/24) non sono gestiti qui.
+ */
+export function parseIsoLikeDate(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const str = value.trim()
+  const full = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[\sT].*)?$/)
+  if (full) {
+    const month = Number(full[2])
+    const day = Number(full[3])
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null
+    return `${full[1]}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  }
+  const yearMonth = str.match(/^(\d{4})[-/](\d{1,2})$/)
+  if (yearMonth) {
+    const month = Number(yearMonth[2])
+    if (month < 1 || month > 12) return null
+    return `${yearMonth[1]}-${String(month).padStart(2, '0')}-01`
+  }
+  return null
 }
 
 /** Campi template di testo su cui la riparazione dei caratteri è automatica. */
@@ -262,7 +341,17 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
     const trimmed = value.trim()
     if (trimmed === '') return null
     const match = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
-    if (!match) return null
+    if (!match) {
+      // Gli stessi file arrivano anche con anno a due cifre (01/12/24), con la
+      // data già in ISO (celle data Excel) o con il solo anno-mese (2024-12).
+      const short = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/)
+      if (short) {
+        const yy = Number(short[3])
+        const yyyy = yy > 50 ? `19${short[3]}` : `20${short[3]}`
+        return `${yyyy}-${short[2].padStart(2, '0')}-${short[1].padStart(2, '0')}`
+      }
+      return parseIsoLikeDate(trimmed)
+    }
     const dd = match[1].padStart(2, '0')
     const mm = match[2].padStart(2, '0')
     const yyyy = match[3]
@@ -329,7 +418,9 @@ export const TRANSFORMS: Record<TransformName, TransformFn> = {
 
   excel_fraction_to_time: (value) => {
     const n = parseNumber(value)
-    if (n === null) return null
+    // Con la lettura Excel come testo l'orario arriva già formattato
+    // ("20:30:00", "8:30 PM"): Number() fallisce e prima il valore si perdeva.
+    if (n === null) return parseTimeValue(value)
     return excelFractionToHHMMSS(n)
   },
 
@@ -486,6 +577,24 @@ export function suggestDateTransform(sample: unknown): TransformName | null {
     if (n >= 10000 && n <= 100000) return 'excel_serial_to_iso'
   }
   return null
+}
+
+const RESCUE_DATE_FIELDS: ReadonlySet<string> = new Set(['data_trasmissione', 'data_inizio', 'data_fine'])
+const RESCUE_TIME_FIELDS: ReadonlySet<string> = new Set(['ora_inizio', 'ora_fine'])
+
+/**
+ * Una trasformazione di data o orario scelta nel mapping che non riconosce il
+ * valore restituisce null, e il valore si perdeva anche quando era leggibile
+ * (PLEX: «eu_date_to_iso» su date già in ISO o anno-mese → data vuota su tutte
+ * le righe). Se il risultato è vuoto ma il valore originale è una data non
+ * ambigua o un orario, si usa quello. Per gli altri campi non cambia nulla.
+ */
+export function rescueDateTimeTransform(field: string, transformed: unknown, raw: unknown): unknown {
+  if (transformed !== null && transformed !== undefined && transformed !== '') return transformed
+  if (raw === null || raw === undefined || raw === '') return transformed
+  if (RESCUE_DATE_FIELDS.has(field)) return parseIsoLikeDate(raw) ?? transformed
+  if (RESCUE_TIME_FIELDS.has(field)) return parseTimeValue(raw) ?? transformed
+  return transformed
 }
 
 /**

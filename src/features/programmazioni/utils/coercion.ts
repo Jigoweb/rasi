@@ -3,8 +3,7 @@
  * Estratto da page.tsx per condividere la logica con import-mapping.service.
  */
 
-import { excelFractionToHHMMSS } from './excel-time'
-import { repairMojibake, TEXT_REPAIR_FIELDS } from './transforms'
+import { parseIsoLikeDate, parseTimeValue, repairMojibake, TEXT_REPAIR_FIELDS } from './transforms'
 
 /**
  * Normalizza una chiave colonna (lowercase + trim).
@@ -60,29 +59,9 @@ export function templateFieldLabel(field: string): string {
  */
 export function validateTime(timeStr: any): string | undefined {
   if (timeStr === undefined || timeStr === null || timeStr === '') return undefined
-
-  if (typeof timeStr === 'number' && Number.isFinite(timeStr)) {
-    return excelFractionToHHMMSS(timeStr) ?? undefined
-  }
-
-  if (timeStr instanceof Date && !Number.isNaN(timeStr.getTime())) {
-    const h = timeStr.getUTCHours()
-    const m = timeStr.getUTCMinutes()
-    const s = timeStr.getUTCSeconds()
-    return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':')
-  }
-
-  const str = String(timeStr).trim()
-  if (!str) return undefined
-
-  const match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
-  if (!match) return undefined
-  let hours = parseInt(match[1], 10)
-  const minutes = parseInt(match[2], 10)
-  const seconds = match[3] ? parseInt(match[3], 10) : 0
-  if (minutes > 59 || seconds > 59) return undefined
-  if (hours >= 24) hours = hours % 24
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+  // Stessa logica del worker (parseTimeValue in transforms.ts): frazione Excel,
+  // HH:MM(:SS), HH.MM, AM/PM, data e ora insieme, HHMM.
+  return parseTimeValue(timeStr) ?? undefined
 }
 
 /**
@@ -108,6 +87,10 @@ export function validateDate(dateStr: any): string | undefined {
   if (!dateStr) return undefined
   const str = String(dateStr).trim()
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
+
+  // ISO anche con l'ora (celle data+ora Excel) e anno-mese.
+  const isoLike = parseIsoLikeDate(str)
+  if (isoLike) return isoLike
 
   const yearMonth = yearMonthToFirstDay(str)
   if (yearMonth) return yearMonth

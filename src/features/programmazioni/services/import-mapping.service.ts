@@ -1,6 +1,6 @@
 import { supabase } from '@/shared/lib/supabase'
 import * as XLSX from 'xlsx'
-import { normalizeExcelTimeFractionCells } from '../utils/excel-time'
+import { normalizeExcelDateCells, normalizeExcelTimeFractionCells } from '../utils/excel-time'
 import Papa from 'papaparse'
 import {
   coerce,
@@ -10,7 +10,7 @@ import {
 } from '../utils/coercion'
 import { applyEpisodeNormalizationToPayload } from '../utils/episode-normalization'
 import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
-import { applyTransform, isKnownTransform, type TransformName } from '../utils/transforms'
+import { applyTransform, isKnownTransform, rescueDateTimeTransform, type TransformName } from '../utils/transforms'
 import { isAbsentMarker, isBlankValue } from '../utils/absent-data'
 import { inferYearPolicyFromMapping } from '../utils/emittente-year-presets'
 import { mergeYearFieldsIntoPayload } from '../utils/year-policy'
@@ -250,6 +250,8 @@ export function columnNamesFromParsedRows(
 function sheetToJsonRows(ws: XLSX.WorkSheet): Record<string, any>[] {
   // Evita "1/0/00" da SheetJS su celle orario senza number-format (frazioni Excel).
   normalizeExcelTimeFractionCells(ws)
+  // Date e data+ora in ISO, come nel worker: anteprima e import vedono lo stesso valore.
+  normalizeExcelDateCells(ws)
   return XLSX.utils.sheet_to_json<Record<string, any>>(ws, EXCEL_JSON_OPTS)
 }
 
@@ -270,7 +272,7 @@ export async function detectColumns(file: File): Promise<DetectColumnsResult> {
     rows = result.data
   } else if (lower.match(/\.xlsx?$/)) {
     const buf = await file.arrayBuffer()
-    const wb = XLSX.read(buf)
+    const wb = XLSX.read(buf, { cellNF: true })
     const ws = wb.Sheets[wb.SheetNames[0]]
     rows = sheetToJsonRows(ws)
   } else {
@@ -364,7 +366,7 @@ export async function readAllRows(file: File): Promise<Record<string, any>[]> {
 
   if (lower.match(/\.xlsx?$/)) {
     const buf = await file.arrayBuffer()
-    const wb = XLSX.read(buf)
+    const wb = XLSX.read(buf, { cellNF: true })
     const ws = wb.Sheets[wb.SheetNames[0]]
     return sheetToJsonRows(ws)
   }
@@ -485,7 +487,7 @@ export function applyMapping(
       const rawName = sourceCol ? transforms?.[sourceCol] : undefined
       const transformName = isKnownTransform(rawName) ? rawName : null
       const cleaned = isAbsentMarker(rawValue) ? null : rawValue
-      const transformed = applyTransform(transformName, cleaned)
+      const transformed = rescueDateTimeTransform(field, applyTransform(transformName, cleaned), cleaned)
       const coerced = coerce(field, transformed)
       if (coerced !== undefined) {
         payload[field] = coerced
@@ -561,7 +563,7 @@ export function applyMappingWithTransforms(
       const raw = row[sourceCol] ?? row[sourceCol.trim()] ?? row[normalizeKey(sourceCol)]
       const rawName = config.transforms[sourceCol] || null
       const transformName = isKnownTransform(rawName) ? rawName : null
-      const transformed = applyTransform(transformName, raw)
+      const transformed = rescueDateTimeTransform(field, applyTransform(transformName, raw), raw)
       const coerced = coerce(field, transformed)
       if (coerced !== undefined && coerced !== null) payload[field] = coerced
     }
