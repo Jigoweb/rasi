@@ -23,11 +23,13 @@ import {
   Sparkles,
   Shield,
   Globe,
-  History
+  History,
+  ClipboardCheck
 } from 'lucide-react'
+import { contaOpereDaApprovare } from '@/features/approvazioni/services/approvazioni.service'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 
 
@@ -37,8 +39,21 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const { user, loading, signOut, userRole, isAdmin, isArtista, isTirocinante, canManageUsers } = useAuth()
+  const { user, loading, signOut, userRole, isAdmin, isArtista, isTirocinante, isStaff, canManageUsers } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Opere con modifiche di Operatori base e Tirocinanti da rivedere (fase 2b).
+  const [daApprovare, setDaApprovare] = useState(0)
+
+  useEffect(() => {
+    if (!isStaff) return
+    let cancelled = false
+    void contaOpereDaApprovare().then(({ data }) => {
+      if (!cancelled) setDaApprovare(data)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isStaff, pathname])
 
   // Menu items di base disponibili a tutti
   const baseMenuItems = [
@@ -53,6 +68,7 @@ export default function DashboardLayout({
 
   // Menu item per operatori e admin (chi può gestire utenti)
   const operatorMenuItems = [
+    { name: 'Da approvare', href: '/dashboard/approvazioni', icon: ClipboardCheck, badge: daApprovare },
     { name: 'Utenti', href: '/dashboard/utenti', icon: Shield },
   ]
 
@@ -208,6 +224,14 @@ export default function DashboardLayout({
                 >
                   <item.icon className="h-5 w-5" />
                   {item.name}
+                  {'badge' in item && typeof item.badge === 'number' && item.badge > 0 && (
+                    <span
+                      className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                      aria-label={`${item.badge} opere da approvare`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               )
             })}

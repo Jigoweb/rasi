@@ -65,6 +65,13 @@ describe("resolveMiddlewareRedirect", () => {
     expect(resolveMiddlewareRedirect("/dashboard/cms/pages", base)).toBe("/dashboard");
   });
 
+  it("lets only admin and Operatore pro open the review of operator changes", () => {
+    expect(resolveMiddlewareRedirect("/dashboard/approvazioni", { ruolo: "operatore" })).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/approvazioni/abc", { ruolo: "admin" })).toBeNull();
+    expect(resolveMiddlewareRedirect("/dashboard/approvazioni", { ruolo: "operatore_base" })).toBe("/dashboard");
+    expect(resolveMiddlewareRedirect("/dashboard/approvazioni", { ruolo: "tirocinante" })).toBe("/dashboard/opere");
+  });
+
   it("does not intercept other public routes", () => {
     expect(resolveMiddlewareRedirect("/contatti", null)).toBeNull();
     expect(resolveMiddlewareRedirect("/news/bando-rasi-2026", null)).toBeNull();

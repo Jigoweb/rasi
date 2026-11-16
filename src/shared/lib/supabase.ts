@@ -1598,6 +1598,38 @@ export type Database = {
           imdb_nconst: string | null
         }[]
       }
+      lista_opere_da_approvare: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          opera_id: string
+          titolo: string
+          stato_validazione: string
+          modifiche: number
+          autori: string[]
+          ultima_modifica: string
+        }[]
+      }
+      conta_opere_da_approvare: { Args: Record<PropertyKey, never>; Returns: number }
+      lista_modifiche_opera: {
+        Args: { p_opera_id: string }
+        Returns: {
+          id: number
+          occurred_at: string
+          user_email: string | null
+          user_ruolo: string | null
+          azione: string
+          tabella: string
+          record_id: string | null
+          record_label: string | null
+          campi_modificati: string[] | null
+          old_data: Json | null
+          new_data: Json | null
+          esito: string | null
+          revisionata_il: string | null
+        }[]
+      }
+      ripristina_modifica: { Args: { p_audit_log_id: number }; Returns: Json }
+      approva_modifiche_opera: { Args: { p_opera_id: string; p_valida?: boolean }; Returns: Json }
       is_staff: { Args: Record<PropertyKey, never>; Returns: boolean }
       is_staff_reader: { Args: Record<PropertyKey, never>; Returns: boolean }
       is_opere_editor: { Args: Record<PropertyKey, never>; Returns: boolean }
