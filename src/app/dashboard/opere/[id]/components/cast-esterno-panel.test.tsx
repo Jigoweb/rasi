@@ -4,6 +4,8 @@ import '@testing-library/jest-dom'
 import { CastEsternoPanel } from './cast-esterno-panel'
 import {
   createCastEsterno,
+  deleteCastEsternoMultiple,
+  findCastEsternoDuplicati,
   listCastEsternoPage,
   updateCastEsterno,
 } from '@/features/opere/services/cast-esterno.service'
@@ -19,6 +21,8 @@ jest.mock('@/features/opere/services/cast-esterno.service', () => ({
   updateCastEsterno: jest.fn(async () => ({ data: null, error: null })),
   deleteCastEsterno: jest.fn(async () => ({ error: null })),
   replaceCastEsterno: jest.fn(async () => ({ error: null })),
+  deleteCastEsternoMultiple: jest.fn(async () => ({ error: null })),
+  findCastEsternoDuplicati: jest.fn(async () => ({ data: [], error: null })),
 }))
 
 const row = (overrides: Record<string, unknown> = {}) => ({
@@ -139,5 +143,76 @@ describe('CastEsternoPanel', () => {
         null,
       )
     })
+  })
+
+  it('elimina più righe selezionate dopo la conferma', async () => {
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({
+      data: [row(), row({ id: 'c2', nome: 'Anna Verdi' }), row({ id: 'c3', nome: 'Luca Neri' })],
+      count: 3,
+      total: 3,
+      error: null,
+    })
+    const user = userEvent.setup()
+    render(<CastEsternoPanel operaId="op1" imdbTconst={null} />)
+
+    await user.click(await screen.findByRole('button', { name: /Elimina più righe/ }))
+    await user.click(screen.getByRole('checkbox', { name: 'Seleziona Mario Rossi' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Seleziona Luca Neri' }))
+    await user.click(screen.getByRole('button', { name: /Elimina selezionate/ }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Elimina 2 righe di cast esterno')).toBeInTheDocument()
+    expect(within(dialog).getByText('Luca Neri')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Elimina' }))
+
+    await waitFor(() => expect(deleteCastEsternoMultiple).toHaveBeenCalledWith(['c1', 'c3']))
+  })
+
+  it('in sola lettura non permette l\'eliminazione multipla', async () => {
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({ data: [row()], count: 1, total: 1, error: null })
+    render(<CastEsternoPanel operaId="op1" imdbTconst={null} readOnly />)
+    expect(await screen.findByText('Mario Rossi')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Elimina più righe/ })).not.toBeInTheDocument()
+  })
+
+  it('avvisa del doppione e inserisce solo con «Inserisci comunque»', async () => {
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({ data: [], error: null })
+    ;(findCastEsternoDuplicati as jest.Mock).mockResolvedValueOnce({
+      data: [{ id: 'c9', nome: 'Rossi Mario', personaggio: 'Il medico', episodio_id: 'e1' }],
+      error: null,
+    })
+    const user = userEvent.setup()
+    render(<CastEsternoPanel operaId="op1" imdbTconst={null} episodi={episodi} />)
+
+    fireEvent.change(await screen.findByLabelText('Nome cast esterno'), { target: { value: 'Mario Rossi' } })
+    fireEvent.click(screen.getByRole('button', { name: /Aggiungi/ }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/è già nel cast esterno/)).toBeInTheDocument()
+    expect(within(dialog).getByText('Rossi Mario')).toBeInTheDocument()
+    expect(createCastEsterno).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Inserisci comunque' }))
+    await waitFor(() => {
+      expect(createCastEsterno).toHaveBeenCalledWith('op1', expect.objectContaining({ nome: 'Mario Rossi' }), null)
+    })
+  })
+
+  it('con «Annulla» sull\'avviso doppione non inserisce nulla', async () => {
+    ;(listCastEsternoPage as jest.Mock).mockResolvedValue({ data: [], error: null })
+    ;(findCastEsternoDuplicati as jest.Mock).mockResolvedValueOnce({
+      data: [{ id: 'c9', nome: 'Mario Rossi', personaggio: null, episodio_id: null }],
+      error: null,
+    })
+    const user = userEvent.setup()
+    render(<CastEsternoPanel operaId="op1" imdbTconst={null} />)
+
+    fireEvent.change(await screen.findByLabelText('Nome cast esterno'), { target: { value: 'Mario Rossi' } })
+    fireEvent.click(screen.getByRole('button', { name: /Aggiungi/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Annulla' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(createCastEsterno).not.toHaveBeenCalled()
   })
 })

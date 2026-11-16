@@ -1,4 +1,5 @@
 import type { CastEsternoInput } from '@/features/opere/lib/cast-esterno'
+import { normalizePersonName } from '@/features/opere/lib/cast-import'
 import { supabase } from '@/shared/lib/supabase-client'
 import type { Database, Json } from '@/shared/lib/supabase'
 import { chunkIds, fetchAllPages, POSTGREST_MAX_ROWS } from '@/shared/lib/postgrest-page'
@@ -163,4 +164,56 @@ export const listCastEsternoArtistiCorrispondenti = async (operaId: string, cast
   }
 
   return { data: all, error: null }
+}
+
+/** Eliminazione multipla dal pannello cast esterno, a blocchi di id. */
+export const deleteCastEsternoMultiple = async (ids: string[]) => {
+  for (const chunk of chunkIds(ids)) {
+    const { error } = await supabase.from('cast_esterno').delete().in('id', chunk)
+    if (error) return { error }
+  }
+  return { error: null }
+}
+
+/**
+ * Chiave della persona per i doppioni: accenti, maiuscole e punteggiatura come
+ * nome_persona_key nel database, con i token ordinati («Rossi Mario» = «Mario Rossi»).
+ */
+export function personaKey(nome: string | null | undefined): string {
+  return normalizePersonName(nome).split(' ').filter(Boolean).sort().join(' ')
+}
+
+export type CastEsternoDuplicato = Pick<CastEsternoRow, 'id' | 'nome' | 'personaggio' | 'episodio_id'>
+
+/**
+ * Righe già presenti sulla stessa opera con la stessa persona e lo stesso
+ * ambito: gli episodi scelti, oppure tutta la serie (episodio null).
+ * Serve all'avviso prima dell'inserimento manuale.
+ */
+export const findCastEsternoDuplicati = async (
+  operaId: string,
+  nome: string,
+  episodioIds: (string | null)[],
+): Promise<{ data: CastEsternoDuplicato[]; error: { message: string } | null }> => {
+  const key = personaKey(nome)
+  if (!key) return { data: [], error: null }
+  const ids = episodioIds.filter((id): id is string => Boolean(id))
+  const includeSerie = episodioIds.some((id) => id === null)
+  const filters: string[] = []
+  if (includeSerie) filters.push('episodio_id.is.null')
+  if (ids.length > 0) filters.push(`episodio_id.in.(${ids.join(',')})`)
+  if (filters.length === 0) return { data: [], error: null }
+
+  const result = await fetchAllPages<CastEsternoDuplicato>(async (from, to) => {
+    const page = await supabase
+      .from('cast_esterno')
+      .select('id, nome, personaggio, episodio_id')
+      .eq('opera_id', operaId)
+      .or(filters.join(','))
+      .order('id', { ascending: true })
+      .range(from, to)
+    return { data: page.data as CastEsternoDuplicato[] | null, error: page.error }
+  })
+  if (result.error) return { data: [], error: result.error }
+  return { data: (result.data ?? []).filter((row) => personaKey(row.nome) === key), error: null }
 }
