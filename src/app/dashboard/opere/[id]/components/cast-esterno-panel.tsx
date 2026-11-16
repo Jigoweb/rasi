@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/components/ui/tooltip'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { MultiSelect } from '@/shared/components/ui/multi-select'
@@ -30,10 +31,13 @@ import {
   CAST_ESTERNO_PAGE_SIZE,
   createCastEsterno,
   deleteCastEsterno,
+  deleteCastEsternoMultiple,
+  findCastEsternoDuplicati,
   listCastEsternoPage,
   listCastEsternoArtistiCorrispondenti,
   replaceCastEsterno,
   updateCastEsterno,
+  type CastEsternoDuplicato,
   type CastEsternoRow,
 } from '@/features/opere/services/cast-esterno.service'
 import { ListPager } from '@/shared/components/list-pager'
@@ -103,6 +107,12 @@ export function CastEsternoPanel({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Eliminazione multipla: selezione sulla pagina visibile.
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  // Avviso doppioni nell'inserimento manuale.
+  const [duplicati, setDuplicati] = useState<CastEsternoDuplicato[] | null>(null)
 
   const episodiById = useMemo(() => new Map(episodi.map((episodio) => [episodio.id, episodio])), [episodi])
   const ruoliById = useMemo(() => new Map(ruoliTipologie.map((ruolo) => [ruolo.id, ruolo.nome])), [ruoliTipologie])
@@ -159,6 +169,53 @@ export function CastEsternoPanel({
     void reload()
   }, [reload])
 
+  // La selezione vale per la pagina e l'ambito visibili.
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [page, scope])
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const allPageSelected = rows.length > 0 && rows.every((row) => selectedIds.has(row.id))
+  const toggleSelectPage = () => {
+    setSelectedIds(allPageSelected ? new Set() : new Set(rows.map((row) => row.id)))
+  }
+  const exitSelection = () => {
+    setSelectionMode(false)
+    setSelectedIds(new Set())
+  }
+  const selectedRows = rows.filter((row) => selectedIds.has(row.id))
+
+  const deleteSelected = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    setBusy(true)
+    const { error: deleteError } = await deleteCastEsternoMultiple(ids)
+    setBusy(false)
+    setConfirmBulkDelete(false)
+    if (deleteError) {
+      setError(deleteError.message)
+      await reload()
+      return
+    }
+    exitSelection()
+    // Se la pagina resta vuota si torna alla precedente.
+    if (ids.length >= rows.length && page > 1) setPage(page - 1)
+    else await reload()
+  }
+
+  const episodioLabelOf = (episodioId: string | null) => {
+    if (!episodioId) return hasEpisodi ? 'Tutta la serie' : 'Opera'
+    const episodio = episodiById.get(episodioId)
+    return episodio ? formatEpisodioLabel(episodio) : 'Episodio'
+  }
+
   const groups = useMemo(
     () => (hasEpisodi ? groupCastByEpisodio(rows, episodi) : [{ episodio: null, rows }]),
     [rows, episodi, hasEpisodi],
@@ -214,13 +271,35 @@ export function CastEsternoPanel({
     await reload()
   }
 
+  // Nessun episodio scelto = cast dell'intera opera/serie; più episodi = una riga per episodio.
+  const manualTargets = (): (string | null)[] => (hasEpisodi && manualEpisodi.length > 0 ? manualEpisodi : [null])
+
+  /** Prima di inserire controlla se la stessa persona c'è già sulla stessa opera ed episodio. */
   const addManual = async () => {
     const nome = manual.nome.trim()
     if (!nome) return
     setBusy(true)
     setError(null)
-    // Nessun episodio scelto = cast dell'intera opera/serie; più episodi = una riga per episodio.
-    const targets: (string | null)[] = hasEpisodi && manualEpisodi.length > 0 ? manualEpisodi : [null]
+    const { data: trovati, error: lookupError } = await findCastEsternoDuplicati(operaId, nome, manualTargets())
+    setBusy(false)
+    if (lookupError) {
+      setError(lookupError.message)
+      return
+    }
+    if (trovati.length > 0) {
+      setDuplicati(trovati)
+      return
+    }
+    await insertManual()
+  }
+
+  const insertManual = async () => {
+    const nome = manual.nome.trim()
+    if (!nome) return
+    setDuplicati(null)
+    setBusy(true)
+    setError(null)
+    const targets = manualTargets()
     for (const [index, episodioId] of targets.entries()) {
       const { error: insertError } = await createCastEsterno(
         operaId,
@@ -305,6 +384,13 @@ export function CastEsternoPanel({
     const matches = corrispondenti.get(row.id) ?? []
     return (
       <div key={row.id} className="flex flex-col gap-2 rounded-md border px-3 py-2 sm:flex-row sm:items-center">
+        {selectionMode && (
+          <Checkbox
+            checked={selectedIds.has(row.id)}
+            onCheckedChange={() => toggleSelected(row.id)}
+            aria-label={`Seleziona ${row.nome}`}
+          />
+        )}
         <div className="min-w-0 flex-1">
           <div className="font-medium truncate">{row.nome}</div>
           <div className="text-sm text-muted-foreground truncate">
@@ -420,8 +506,39 @@ export function CastEsternoPanel({
               </Tooltip>
             </CardTitle>
           </div>
-          {!isCastEmpty && downloadButton}
+          {!isCastEmpty && (
+            <div className="flex flex-wrap items-center gap-2">
+              {!readOnly && !selectionMode && (
+                <Button variant="outline" size="sm" onClick={() => setSelectionMode(true)} disabled={busy || rows.length === 0}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Elimina più righe
+                </Button>
+              )}
+              {downloadButton}
+            </div>
+          )}
         </div>
+        {selectionMode && (
+          <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm" role="toolbar" aria-label="Selezione cast esterno">
+            <label className="flex items-center gap-2">
+              <Checkbox checked={allPageSelected} onCheckedChange={toggleSelectPage} aria-label="Seleziona tutta la pagina" />
+              Seleziona tutta la pagina
+            </label>
+            <span className="text-muted-foreground">{selectedIds.size} selezionat{selectedIds.size === 1 ? 'a' : 'e'}</span>
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" size="sm" onClick={exitSelection} disabled={busy}>Annulla</Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setConfirmBulkDelete(true)}
+                disabled={busy || selectedIds.size === 0}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Elimina selezionate
+              </Button>
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="px-4 space-y-4">
         {!imdbTconst && !hasEpisodi && (
@@ -591,6 +708,58 @@ export function CastEsternoPanel({
         </>
         )}
       </CardContent>
+
+      <Dialog open={confirmBulkDelete} onOpenChange={(open) => { if (!busy) setConfirmBulkDelete(open) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Elimina {selectedRows.length} righe di cast esterno</DialogTitle>
+            <DialogDescription>Le righe vengono eliminate da questa opera. L&apos;operazione non si può annullare.</DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-60 space-y-1 overflow-y-auto text-sm">
+            {selectedRows.map((row) => (
+              <li key={row.id}>
+                <span className="font-medium">{row.nome}</span>
+                <span className="text-muted-foreground"> · {episodioLabelOf(row.episodio_id)}</span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmBulkDelete(false)} disabled={busy}>Annulla</Button>
+            <Button variant="destructive" onClick={deleteSelected} disabled={busy}>
+              {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Elimina
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={duplicati !== null} onOpenChange={(open) => { if (!open && !busy) setDuplicati(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>«{manual.nome.trim()}» è già nel cast esterno</DialogTitle>
+            <DialogDescription>
+              Sulla stessa opera e sullo stesso episodio c&apos;è già questa persona. Controlla prima di inserirla di nuovo.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-60 space-y-1 overflow-y-auto text-sm" aria-label="Righe già presenti">
+            {(duplicati ?? []).map((row) => (
+              <li key={row.id}>
+                <span className="font-medium">{row.nome}</span>
+                <span className="text-muted-foreground">
+                  {' '}· {episodioLabelOf(row.episodio_id)}{row.personaggio ? ` · ${row.personaggio}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDuplicati(null)} disabled={busy}>Annulla</Button>
+            <Button onClick={insertManual} disabled={busy}>
+              {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Inserisci comunque
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editing !== null} onOpenChange={(open) => { if (!open) setEditing(null) }}>
         <DialogContent className="sm:max-w-md">
