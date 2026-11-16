@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCastManager, type CastRouteClient } from '@/app/api/opere/cast-route'
-import { canEditOpera, OPERA_VALIDATA_ERROR } from '@/shared/lib/auth-permissions'
+import { canEditOpera, mustProposeOpereChanges, OPERA_VALIDATA_ERROR } from '@/shared/lib/auth-permissions'
 import { parseCastEdits } from '@/features/opere/lib/cast-import'
-import { commitCastEdits, previewCastFile, revalidateCastEdits } from '@/features/opere/services/cast-import.server'
+import { commitCastEdits, previewCastFile, queueCastEdits, revalidateCastEdits } from '@/features/opere/services/cast-import.server'
 
 export const runtime = 'nodejs'
 
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const contentType = req.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {
-    return handleEdits(req, auth.client, id)
+    return handleEdits(req, auth.client, id, auth.role)
   }
 
   let form: FormData
@@ -72,6 +72,7 @@ async function handleEdits(
   req: NextRequest,
   client: CastRouteClient,
   operaId: string,
+  role: string | null,
 ) {
   let body: { mode?: unknown; rows?: unknown }
   try {
@@ -88,12 +89,15 @@ async function handleEdits(
   try {
     const result = body.mode === 'revalidate'
       ? await revalidateCastEdits(client, operaId, edits.edits)
-      : await commitCastEdits(client, operaId, edits.edits)
+      : mustProposeOpereChanges(role)
+        ? await queueCastEdits(client, operaId, edits.edits)
+        : await commitCastEdits(client, operaId, edits.edits)
     return NextResponse.json({
       mode: body.mode,
       rows: result.rows,
       summary: result.summary,
       ruoli: result.ruoli,
+      ...('inAttesa' in result ? { inAttesa: result.inAttesa } : {}),
     })
   } catch (cause) {
     return importError(cause)

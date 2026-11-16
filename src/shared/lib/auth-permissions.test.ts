@@ -11,6 +11,7 @@ import {
   canManageOperaCast,
   canManageArtistiContatti,
   canEditOpera,
+  mustProposeOpereChanges,
 } from './auth-permissions'
 
 describe('auth-permissions', () => {
@@ -88,6 +89,16 @@ describe('auth-permissions', () => {
 
     it('collecting has zero privileges', () => {
       expect(getRolePermissions('collecting')).toEqual(NONE)
+    })
+  })
+
+  describe('mustProposeOpereChanges', () => {
+    it('queues saves for operatore base and tirocinante only', () => {
+      expect(mustProposeOpereChanges('operatore_base')).toBe(true)
+      expect(mustProposeOpereChanges('tirocinante')).toBe(true)
+      expect(mustProposeOpereChanges('admin')).toBe(false)
+      expect(mustProposeOpereChanges('operatore')).toBe(false)
+      expect(mustProposeOpereChanges('artista')).toBe(false)
     })
   })
 

@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select'
-import { getOperaById, listPartecipazioniByOpera, listAllPartecipazioniByOpera, PARTECIPAZIONI_PAGE_SIZE, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById } from '@/features/opere/services/opere.service'
+import { getOperaById, listPartecipazioniByOpera, listAllPartecipazioniByOpera, PARTECIPAZIONI_PAGE_SIZE, getEpisodiByOperaId, upsertEpisodi, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, getRuoliTipologie, updateEpisodio, deleteEpisodio, createEpisodio, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds, getUserEmailById, savePartecipazioneNote } from '@/features/opere/services/opere.service'
 import { getTitleById, mapImdbToOpera, searchTitles, getTitleCredits, getEpisodesByTitleId, formatReleaseDateForDb, ImdbTitleDetails, ImdbEpisode, ImdbEpisodesResponse } from '@/features/opere/services/external/imdb.service'
 import { ArrowLeft, Film, Tv, FileText, User, BadgeInfo, PlayCircle, Search, Plus, Loader2, Download, Check, X, ArrowRight, ListVideo, ChevronDown, ChevronRight, Clapperboard, PenTool, Star, Users, Video, Music, History, MoreHorizontal, Edit, Trash2, Clock, Copy, ExternalLink, Lock } from 'lucide-react'
 import { Checkbox as CheckboxUI } from '@/shared/components/ui/checkbox'
@@ -30,7 +30,9 @@ import { AddPartecipazioneDialog } from '@/app/dashboard/partecipazioni/componen
 import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { useAuth } from '@/shared/contexts/auth-context'
-import { canEditOpera, canManageOperaCast } from '@/shared/lib/auth-permissions'
+import { canEditOpera, canManageOperaCast, mustProposeOpereChanges } from '@/shared/lib/auth-permissions'
+import { COLONNE_CONSENTITE, diffCampi, type RigaBatch } from '@/features/approvazioni/lib/modifica-payload'
+import { listProposteOpera, proponiModifica } from '@/features/approvazioni/services/proposte.service'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
 import { CastImportActions } from './components/cast-import-actions'
 import { EpisodiImportActions } from './components/episodi-import-actions'
@@ -58,7 +60,40 @@ export default function OperaDetailPage() {
   // Operatore base e Tirocinante: modifiche solo su opere non validate
   // (stessa regola di public.opera_modificabile nella RLS).
   const canEditThisOpera = !!opera && canEditOpera(userRole, opera.stato_validazione)
+  const proposeChanges = mustProposeOpereChanges(userRole)
   const canManageCast = canManageOperaCast(userRole) && canEditThisOpera
+  const [proposteInAttesa, setProposteInAttesa] = useState(0)
+
+  const refreshProposte = useCallback(async () => {
+    if (!proposeChanges) {
+      setProposteInAttesa(0)
+      return
+    }
+    const { data } = await listProposteOpera(operaId)
+    setProposteInAttesa(data.length)
+  }, [proposeChanges, operaId])
+
+  useEffect(() => {
+    void refreshProposte()
+  }, [refreshProposte])
+
+  const inviaProposta = async (input: {
+    entita: 'opera' | 'episodio' | 'partecipazione' | 'cast_esterno'
+    operazione?: 'insert' | 'update' | 'delete'
+    operaId?: string | null
+    entitaId?: string | null
+    dopo?: Record<string, unknown> | null
+    righe?: RigaBatch[] | null
+  }) => {
+    const { error } = await proponiModifica(input)
+    if (error) {
+      toast.error(error.message)
+      return false
+    }
+    toast.success('Modifica in attesa di approvazione')
+    await refreshProposte()
+    return true
+  }
   const [partecipazioni, setPartecipazioni] = useState<any[]>([])
   const [partecipazioniTotal, setPartecipazioniTotal] = useState(0)
   const [partecipazioniTotalOpera, setPartecipazioniTotalOpera] = useState(0)
@@ -324,6 +359,37 @@ export default function OperaDetailPage() {
     
     setIsSavingPartecipazione(true)
     try {
+      if (proposeChanges) {
+        const dopo = diffCampi(
+          {
+            ruolo_id: selectedPartecipazione.ruolo_id || selectedPartecipazione.ruoli_tipologie?.id || null,
+            personaggio: selectedPartecipazione.personaggio ?? null,
+          },
+          {
+            ruolo_id: editPartecipazioneForm.ruolo_id,
+            personaggio: editPartecipazioneForm.personaggio || null,
+          },
+          COLONNE_CONSENTITE.partecipazione,
+        )
+        if (Object.keys(dopo).length > 0) {
+          const ok = await inviaProposta({
+            entita: 'partecipazione',
+            operazione: 'update',
+            operaId,
+            entitaId: selectedPartecipazione.id,
+            dopo,
+          })
+          if (!ok) return
+        }
+        const nota = editPartecipazioneForm.note || null
+        if (nota !== (selectedPartecipazione.note || null)) {
+          const saved = await savePartecipazioneNote(selectedPartecipazione.id, nota)
+          if (saved.error) throw new Error(saved.error.message)
+        }
+        setShowEditPartecipazioneDialog(false)
+        fetchData()
+        return
+      }
       const { error } = await updatePartecipazione(selectedPartecipazione.id, {
         ruolo_id: editPartecipazioneForm.ruolo_id,
         personaggio: editPartecipazioneForm.personaggio || null,
@@ -351,6 +417,22 @@ export default function OperaDetailPage() {
     
     setIsDeletingPartecipazione(true)
     try {
+      if (proposeChanges) {
+        if (hasIndividuazioni) {
+          alert('Non puoi eliminare: ci sono individuazioni collegate. Chiedi a un Operatore pro.')
+          return
+        }
+        const ok = await inviaProposta({
+          entita: 'partecipazione',
+          operazione: 'delete',
+          operaId,
+          entitaId: selectedPartecipazione.id,
+        })
+        if (!ok) return
+        setShowDeletePartecipazioneDialog(false)
+        fetchData()
+        return
+      }
       if (shouldDeleteIndividuazioni) {
         const { error: indErr } = await deleteIndividuazioniByPartecipazioneId(selectedPartecipazione.id)
         if (indErr) throw indErr
@@ -406,6 +488,26 @@ export default function OperaDetailPage() {
 
     setIsBulkDeletingPartecipazioni(true)
     try {
+      if (proposeChanges) {
+        if (hasIndividuazioni) {
+          alert('Non puoi eliminare: ci sono individuazioni collegate. Chiedi a un Operatore pro.')
+          return
+        }
+        const ok = await inviaProposta({
+          entita: 'partecipazione',
+          operaId,
+          righe: ids.map((id) => ({
+            entita: 'partecipazione',
+            operazione: 'delete',
+            entitaId: id,
+          })),
+        })
+        if (!ok) return
+        setShowBulkDeletePartecipazioniDialog(false)
+        setSelectedPartecipazioniIds(new Set())
+        fetchData()
+        return
+      }
       if (shouldDeleteIndividuazioni) {
         const { error: indErr } = await deleteIndividuazioniByPartecipazioneIds(ids)
         if (indErr) throw indErr
@@ -495,6 +597,22 @@ export default function OperaDetailPage() {
         codice_isan: editEpisodioForm.codice_isan || null
       }
       
+      if (proposeChanges) {
+        const dopo = diffCampi(selectedEpisodio, updates, COLONNE_CONSENTITE.episodio)
+        if (Object.keys(dopo).length > 0) {
+          const ok = await inviaProposta({
+            entita: 'episodio',
+            operazione: 'update',
+            operaId,
+            entitaId: selectedEpisodio.id,
+            dopo,
+          })
+          if (!ok) return
+        }
+        setShowEditEpisodioDialog(false)
+        fetchData()
+        return
+      }
       const { error } = await updateEpisodio(selectedEpisodio.id, updates)
       
       if (error) {
@@ -557,6 +675,18 @@ export default function OperaDetailPage() {
         imdb_tconst: addEpisodioForm.imdb_tconst || null,
         codice_isan: addEpisodioForm.codice_isan || null
       }
+      if (proposeChanges) {
+        const ok = await inviaProposta({
+          entita: 'episodio',
+          operazione: 'insert',
+          operaId,
+          dopo: payload,
+        })
+        if (!ok) return
+        setShowAddEpisodioDialog(false)
+        fetchData()
+        return
+      }
       const { error } = await createEpisodio(payload)
       if (error) throw error
       setShowAddEpisodioDialog(false)
@@ -577,6 +707,19 @@ export default function OperaDetailPage() {
     if (!episodioToDelete) return
     setIsDeletingEpisodio(true)
     try {
+      if (proposeChanges) {
+        const ok = await inviaProposta({
+          entita: 'episodio',
+          operazione: 'delete',
+          operaId,
+          entitaId: episodioToDelete.id,
+        })
+        if (!ok) return
+        setShowDeleteEpisodioDialog(false)
+        setEpisodioToDelete(null)
+        fetchData()
+        return
+      }
       const { error } = await deleteEpisodio(episodioToDelete.id)
       if (error) throw error
       setShowDeleteEpisodioDialog(false)
@@ -799,6 +942,34 @@ export default function OperaDetailPage() {
           metadati: { imdb_rating: ep.rating },
         }))
       
+      if (proposeChanges) {
+        const righe: RigaBatch[] = episodesToImport.map((ep) => {
+          const existing = episodi.find((row) =>
+            row.numero_stagione === ep.numero_stagione && row.numero_episodio === ep.numero_episodio)
+          if (existing) {
+            return {
+              entita: 'episodio',
+              operazione: 'update',
+              entitaId: existing.id,
+              dopo: {
+                titolo_episodio: ep.titolo_episodio,
+                descrizione: ep.descrizione,
+                durata_minuti: ep.durata_minuti,
+                data_prima_messa_in_onda: ep.data_prima_messa_in_onda,
+                imdb_tconst: ep.imdb_tconst,
+                metadati: ep.metadati,
+              },
+            }
+          }
+          return { entita: 'episodio', operazione: 'insert', dopo: { opera_id: opera.id, ...ep } }
+        })
+        const { error } = await proponiModifica({ entita: 'episodio', operaId: opera.id, righe })
+        if (error) return { created: 0, updated: 0, errors: [error.message] }
+        toast.success('Modifica in attesa di approvazione')
+        await refreshProposte()
+        const created = righe.filter((riga) => riga.operazione === 'insert').length
+        return { created, updated: righe.length - created, errors: [] }
+      }
       const result = await upsertEpisodi(opera.id, episodesToImport)
       const { data: newEpisodi } = await getEpisodiByOperaId(opera.id)
       if (newEpisodi) setEpisodi(newEpisodi)
@@ -846,10 +1017,24 @@ export default function OperaDetailPage() {
       }
       
       if (Object.keys(updates).length > 0) {
+        if (proposeChanges) {
+          const dopo = diffCampi(opera, updates, COLONNE_CONSENTITE.opera)
+          if (Object.keys(dopo).length > 0) {
+            const ok = await inviaProposta({
+              entita: 'opera',
+              operazione: 'update',
+              operaId: opera.id,
+              entitaId: opera.id,
+              dopo,
+            })
+            if (!ok) return
+          }
+        } else {
         const { error: err } = await import('@/features/opere/services/opere.service').then(m => m.updateOpera(opera.id, updates))
         if (!err) {
           setOpera({ ...opera, ...updates })
           setPendingImdbTconst(null)
+        }
         }
       }
       
@@ -909,6 +1094,18 @@ export default function OperaDetailPage() {
     if (!opera || newTipo === opera.tipo || isUpdatingTipo) return
     const prevTipo = opera.tipo
     setIsUpdatingTipo(true)
+    if (proposeChanges) {
+      const ok = await inviaProposta({
+        entita: 'opera',
+        operazione: 'update',
+        operaId: opera.id,
+        entitaId: opera.id,
+        dopo: { tipo: newTipo },
+      })
+      setIsUpdatingTipo(false)
+      if (!ok) return
+      return
+    }
     setOpera({ ...opera, tipo: newTipo }) // optimistic
     const { error: err } = await import('@/features/opere/services/opere.service').then(m => m.updateOpera(opera.id, { tipo: newTipo }))
     setIsUpdatingTipo(false)
@@ -1056,6 +1253,22 @@ export default function OperaDetailPage() {
       stato_validazione: values.stato_validazione || 'da_validare',
       codici_esterni: values.imdb_tconst ? { imdb: values.imdb_tconst } : undefined,
     } as any
+    if (proposeChanges) {
+      const dopo = diffCampi(opera, payload, COLONNE_CONSENTITE.opera)
+      if (Object.keys(dopo).length === 0) {
+        setShowEditForm(false)
+        return
+      }
+      const ok = await inviaProposta({
+        entita: 'opera',
+        operazione: 'update',
+        operaId: opera.id,
+        entitaId: opera.id,
+        dopo,
+      })
+      if (ok) setShowEditForm(false)
+      return
+    }
     const { error: err } = await import('@/features/opere/services/opere.service').then(m => m.updateOpera(opera.id, payload))
     if (!err) {
       setOpera({ ...opera, ...payload })
@@ -1126,6 +1339,22 @@ export default function OperaDetailPage() {
           {getStatoValidazioneBadge(opera.stato_validazione)}
         </div>
       </div>
+
+      {proposeChanges && proposteInAttesa > 0 && (
+        <div
+          role="status"
+          className="rounded-md border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-950"
+        >
+          In attesa di approvazione
+          {proposteInAttesa > 1 ? ` (${proposteInAttesa})` : ''}.
+        </div>
+      )}
+
+      {opera.validato_il && (
+        <p className="text-sm text-muted-foreground">
+          Validata il {new Date(opera.validato_il).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}.
+        </p>
+      )}
 
       {!canEditThisOpera && opera.stato_validazione === 'validato' && (
         <div
@@ -1726,6 +1955,7 @@ export default function OperaDetailPage() {
         episodi={episodi}
         ruoliTipologie={ruoli}
         readOnly={!canEditThisOpera}
+        proposeChanges={proposeChanges && canEditThisOpera}
         linkArtisti={canReadBancaDati}
       />
 

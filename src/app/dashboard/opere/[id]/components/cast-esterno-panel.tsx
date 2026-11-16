@@ -37,7 +37,10 @@ import {
   type CastEsternoRow,
 } from '@/features/opere/services/cast-esterno.service'
 import { ListPager } from '@/shared/components/list-pager'
+import { proponiModifica } from '@/features/approvazioni/services/proposte.service'
+import { diffCampi, COLONNE_CONSENTITE, type RigaBatch } from '@/features/approvazioni/lib/modifica-payload'
 import { Edit, Info, Loader2, MoreHorizontal, Plus, Search, Trash2, Tv, UserCheck, Users } from 'lucide-react'
+import { toast } from 'sonner'
 
 /** Valore Select per "intera opera/serie" (Radix non accetta value vuoto). */
 const SERIE_SCOPE = '__serie__'
@@ -78,6 +81,7 @@ export function CastEsternoPanel({
   episodi = [],
   ruoliTipologie = [],
   readOnly = false,
+  proposeChanges = false,
   linkArtisti = true,
 }: {
   operaId: string
@@ -86,6 +90,8 @@ export function CastEsternoPanel({
   ruoliTipologie?: { id: string; nome: string }[]
   /** Solo consultazione: opera validata per Operatore base e Tirocinante. */
   readOnly?: boolean
+  /** Salva nella coda invece che sulla tabella. */
+  proposeChanges?: boolean
   /** Link alla scheda artista (il Tirocinante non apre l'anagrafica). */
   linkArtisti?: boolean
 }) {
@@ -198,6 +204,10 @@ export function CastEsternoPanel({
 
   const saveDraft = async () => {
     if (!draft) return
+    if (proposeChanges) {
+      setError('Il salvataggio che sostituisce il cast già presente non entra in coda. Aggiungi, modifica o elimina le singole righe, oppure importa il file.')
+      return
+    }
     setBusy(true)
     setError(null)
     const { error: saveError } = await replaceCastEsterno(
@@ -221,6 +231,32 @@ export function CastEsternoPanel({
     setError(null)
     // Nessun episodio scelto = cast dell'intera opera/serie; più episodi = una riga per episodio.
     const targets: (string | null)[] = hasEpisodi && manualEpisodi.length > 0 ? manualEpisodi : [null]
+    if (proposeChanges) {
+      const righe: RigaBatch[] = targets.map((episodioId, index) => ({
+        entita: 'cast_esterno',
+        operazione: 'insert',
+        dopo: {
+          opera_id: operaId,
+          episodio_id: episodioId,
+          nome,
+          personaggio: manual.personaggio?.trim() || null,
+          primarieta: manual.primarieta,
+          ruolo: manual.ruolo,
+          imdb_nconst: manual.imdb_nconst,
+          fonte: manual.fonte,
+          ordine: total + index,
+        },
+      }))
+      const { error: proposalError } = await proponiModifica({ entita: 'cast_esterno', operaId, righe })
+      setBusy(false)
+      if (proposalError) {
+        setError(proposalError.message)
+        return
+      }
+      toast.success('Modifica in attesa di approvazione')
+      setManual(emptyDraft())
+      return
+    }
     for (const [index, episodioId] of targets.entries()) {
       const { error: insertError } = await createCastEsterno(
         operaId,
@@ -264,13 +300,37 @@ export function CastEsternoPanel({
     }
     setBusy(true)
     setError(null)
-    const { error: updateError } = await updateCastEsterno(editing.row.id, {
+    const patch = {
       nome,
       personaggio: editing.personaggio.trim() || null,
       primarieta: editing.primarieta,
       ruolo: editing.ruolo,
       ...(hasEpisodi ? { episodio_id: scopeToEpisodioId(editing.episodioScope) } : {}),
-    })
+    }
+    if (proposeChanges) {
+      const dopo = diffCampi(editing.row, patch, COLONNE_CONSENTITE.cast_esterno)
+      if (Object.keys(dopo).length === 0) {
+        setBusy(false)
+        setEditing(null)
+        return
+      }
+      const { error: proposalError } = await proponiModifica({
+        entita: 'cast_esterno',
+        operazione: 'update',
+        operaId,
+        entitaId: editing.row.id,
+        dopo,
+      })
+      setBusy(false)
+      if (proposalError) {
+        setError(proposalError.message)
+        return
+      }
+      toast.success('Modifica in attesa di approvazione')
+      setEditing(null)
+      return
+    }
+    const { error: updateError } = await updateCastEsterno(editing.row.id, patch)
     setBusy(false)
     if (updateError) {
       setError(updateError.message)
@@ -282,6 +342,18 @@ export function CastEsternoPanel({
 
   const changeRuoloPrimarieta = async (row: CastEsternoRow, value: string) => {
     const patch = fromRuoloPrimarieta(value)
+    if (proposeChanges) {
+      const { error: proposalError } = await proponiModifica({
+        entita: 'cast_esterno',
+        operazione: 'update',
+        operaId,
+        entitaId: row.id,
+        dopo: patch,
+      })
+      if (proposalError) setError(proposalError.message)
+      else toast.success('Modifica in attesa di approvazione')
+      return
+    }
     setRows((current) => current.map((item) => (item.id === row.id ? { ...item, ...patch } : item)))
     const { error: updateError } = await updateCastEsterno(row.id, patch)
     if (updateError) {
@@ -292,6 +364,21 @@ export function CastEsternoPanel({
 
   const removeRow = async (id: string) => {
     setBusy(true)
+    if (proposeChanges) {
+      const { error: proposalError } = await proponiModifica({
+        entita: 'cast_esterno',
+        operazione: 'delete',
+        operaId,
+        entitaId: id,
+      })
+      setBusy(false)
+      if (proposalError) {
+        setError(proposalError.message)
+        return
+      }
+      toast.success('Modifica in attesa di approvazione')
+      return
+    }
     const { error: deleteError } = await deleteCastEsterno(id)
     setBusy(false)
     if (deleteError) {

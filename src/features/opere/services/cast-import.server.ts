@@ -19,6 +19,8 @@ import { RUOLO_PRIMARIETA_OPTIONS } from '@/features/opere/lib/cast-esterno'
 import { activeRuoloNames, buildCastTemplateCsv, buildCastTemplateXlsx } from '@/features/opere/lib/cast-template'
 import { parseTabularFile } from '@/shared/lib/tabular-file'
 import type { Database } from '@/shared/lib/supabase'
+import { proponiModifica } from '@/features/approvazioni/services/proposte.service'
+import type { RigaBatch } from '@/features/approvazioni/lib/modifica-payload'
 
 type Client = SupabaseClient<Database>
 const PAGE = 1000
@@ -123,6 +125,69 @@ export async function revalidateCastEdits(client: Client, operaId: string, edits
     edits,
   )
   return present(context, classified.rows)
+}
+
+export async function queueCastEdits(client: Client, operaId: string, edits: CastEditInput[]) {
+  const preview = await revalidateCastEdits(client, operaId, edits)
+  if (!preview.ok) return preview
+  const ordineQuery = await client
+    .from('cast_esterno')
+    .select('ordine')
+    .eq('opera_id', operaId)
+    .order('ordine', { ascending: false })
+    .limit(1)
+  if (ordineQuery.error) throw new Error(ordineQuery.error.message)
+  const startOrdine = (ordineQuery.data?.[0]?.ordine ?? -1) + 1
+  const inserts = buildCastImportInserts(operaId, preview.classified, startOrdine)
+  const righe: RigaBatch[] = [
+    ...inserts.partecipazioni.map(({ rowNumber: _rowNumber, ...payload }) => ({
+      entita: 'partecipazione' as const,
+      operazione: 'insert' as const,
+      dopo: payload,
+    })),
+    ...inserts.castEsterno.map(({ rowNumber: _rowNumber, ...payload }) => ({
+      entita: 'cast_esterno' as const,
+      operazione: 'insert' as const,
+      dopo: payload,
+    })),
+    ...inserts.aggiornamenti.map(({ rowNumber: _rowNumber, id, ...patch }) => ({
+      entita: 'cast_esterno' as const,
+      operazione: 'update' as const,
+      entitaId: id,
+      dopo: patch,
+    })),
+  ]
+  if (righe.length === 0) {
+    return {
+      ...presentQueued(preview),
+      inAttesa: false,
+    }
+  }
+  const prima = righe[0]
+  const { error } = await proponiModifica({
+    entita: prima?.entita ?? 'cast_esterno',
+    operaId,
+    righe,
+  }, client)
+  if (error) throw new Error(error.message)
+  return { ...presentQueued(preview), inAttesa: true }
+}
+
+function presentQueued(preview: Awaited<ReturnType<typeof revalidateCastEdits>> & { ok: true }) {
+  const summary = summarizeCastRows(preview.rows)
+  return {
+    ok: true as const,
+    rows: preview.rows,
+    summary: {
+      imported: summary.valid,
+      skipped: summary.skipped,
+      excluded: summary.excluded,
+      partecipazioni: summary.partecipazioni,
+      castEsterno: summary.castEsterno,
+      aggiornamenti: summary.aggiornamenti,
+    },
+    ruoli: preview.ruoli,
+  }
 }
 
 export async function commitCastEdits(client: Client, operaId: string, edits: CastEditInput[]) {

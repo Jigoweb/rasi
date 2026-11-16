@@ -153,6 +153,7 @@ export type EpisodiImportResponse =
       rows: ReviewedEpisodeRow[]
       alerts: EpisodiImportAlert[]
       existingKeys: EpisodeKey[]
+      inAttesa?: boolean
     }
   | { ok: false; status: number; error: string }
 

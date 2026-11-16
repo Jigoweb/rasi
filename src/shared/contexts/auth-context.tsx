@@ -17,8 +17,8 @@ export type { UserRole }
 export const AVAILABLE_ROLES: { value: UserRole; label: string; description: string; color: string }[] = [
   { value: 'admin', label: 'Amministratore', description: 'Accesso completo a tutte le funzionalità', color: 'blue' },
   { value: 'operatore', label: 'Operatore pro', description: 'Gestione completa, compresa la validazione delle opere', color: 'purple' },
-  { value: 'operatore_base', label: 'Operatore base', description: 'Legge tutto, modifica solo le opere non validate', color: 'indigo' },
-  { value: 'tirocinante', label: 'Tirocinante', description: 'Solo sezione Opere, modifica solo le opere non validate', color: 'teal' },
+  { value: 'operatore_base', label: 'Operatore base', description: 'Legge tutto. Le modifiche alle opere non validate vanno in approvazione', color: 'indigo' },
+  { value: 'tirocinante', label: 'Tirocinante', description: 'Solo sezione Opere. Le modifiche alle opere non validate vanno in approvazione', color: 'teal' },
   { value: 'collecting', label: 'Collecting', description: 'Accesso alle funzionalità di collecting', color: 'green' },
   { value: 'artista', label: 'Artista', description: 'Accesso al proprio profilo e repertorio', color: 'orange' },
 ]

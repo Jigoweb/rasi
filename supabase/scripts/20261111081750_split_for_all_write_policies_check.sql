@@ -105,24 +105,23 @@ expected_base AS (
     ('public_form_submissions', 'Utenti autenticati cancellano submissions', 'DELETE', '{authenticated}', 'true', true, false)
   ) AS t(tablename, policyname, cmd, roles, expr_n, needs_qual, needs_check)
 ),
--- 20261112090100_restrizioni_ruoli_operatore ha riscritto le policy di scrittura
--- della sezione Opere (operatore base e tirocinante, mai su opere validate).
--- Se quella migration non è applicata, queste righe vanno ignorate.
+-- 20261113115053_coda_approvazione_modifiche riserva la scrittura diretta
+-- della sezione Opere ad admin e Operatore pro (is_staff).
 override AS (
   SELECT *
   FROM (VALUES
-    ('opere'::text, 'opere_insert_policy'::text, NULL::text, 'is_opere_editor'::text),
-    ('opere', 'opere_update_policy', 'opera_modificabileid', 'is_opere_editor'),
+    ('opere'::text, 'opere_insert_policy'::text, NULL::text, 'is_staff'::text),
+    ('opere', 'opere_update_policy', 'is_staff', 'is_staff'),
     ('opere', 'opere_delete_policy', 'is_staff', NULL),
-    ('episodi', 'episodi_insert_policy', NULL, 'opera_modificabileopera_id'),
-    ('episodi', 'episodi_update_policy', 'opera_modificabileopera_id', 'opera_modificabileopera_id'),
-    ('episodi', 'episodi_delete_policy', 'opera_modificabileopera_id', NULL),
-    ('partecipazioni', 'partecipazioni_insert_policy', NULL, 'opera_modificabileopera_id'),
-    ('partecipazioni', 'partecipazioni_update_policy', 'opera_modificabileopera_id', 'opera_modificabileopera_id'),
-    ('partecipazioni', 'partecipazioni_delete_policy', 'opera_modificabileopera_id', NULL),
-    ('cast_esterno', 'cast_esterno_insert_policy', NULL, 'opera_modificabileopera_id'),
-    ('cast_esterno', 'cast_esterno_update_policy', 'opera_modificabileopera_id', 'opera_modificabileopera_id'),
-    ('cast_esterno', 'cast_esterno_delete_policy', 'opera_modificabileopera_id', NULL)
+    ('episodi', 'episodi_insert_policy', NULL, 'is_staff'),
+    ('episodi', 'episodi_update_policy', 'is_staff', 'is_staff'),
+    ('episodi', 'episodi_delete_policy', 'is_staff', NULL),
+    ('partecipazioni', 'partecipazioni_insert_policy', NULL, 'is_staff'),
+    ('partecipazioni', 'partecipazioni_update_policy', 'is_staff', 'is_staff'),
+    ('partecipazioni', 'partecipazioni_delete_policy', 'is_staff', NULL),
+    ('cast_esterno', 'cast_esterno_insert_policy', NULL, 'is_staff'),
+    ('cast_esterno', 'cast_esterno_update_policy', 'is_staff', 'is_staff'),
+    ('cast_esterno', 'cast_esterno_delete_policy', 'is_staff', NULL)
   ) AS o(tablename, policyname, qual_n, check_n)
 ),
 expected AS (

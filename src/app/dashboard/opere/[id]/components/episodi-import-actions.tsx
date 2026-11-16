@@ -62,6 +62,7 @@ export function EpisodiImportActions({
   const requestRef = useRef(0)
   const [open, setOpen] = useState(false)
   const [phase, setPhase] = useState<'preview' | 'summary'>('preview')
+  const [inAttesa, setInAttesa] = useState(false)
   const [loadingMode, setLoadingMode] = useState<'preview' | 'confirm' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [rows, setRows] = useState<ReviewedEpisodeRow[] | null>(null)
@@ -99,6 +100,7 @@ export function EpisodiImportActions({
     setRows(payload.rows.map(reviewedFromPayload))
     setExistingKeys(payload.existingKeys ?? [])
     setSummary(nextPhase === 'summary' ? payload.summary : null)
+    setInAttesa(Boolean(payload.inAttesa))
     setPhase(nextPhase)
   }
 
@@ -276,7 +278,9 @@ export function EpisodiImportActions({
             </DialogTitle>
             <DialogDescription>
               {phase === 'summary'
-                ? 'Sono stati importati gli episodi nuovi e aggiornati quelli già presenti, solo se inclusi e ancora validi. Le celle vuote non hanno cancellato i valori esistenti.'
+                ? inAttesa
+                  ? 'In attesa di approvazione. Le righe non sono state scritte: un Operatore pro deve approvarle.'
+                  : 'Sono stati importati gli episodi nuovi e aggiornati quelli già presenti, solo se inclusi e ancora validi. Le celle vuote non hanno cancellato i valori esistenti.'
                 : 'Le righe segnalate sono evidenziate con il motivo. Puoi correggere stagione, episodio, titolo italiano, titolo originale, titoli alternativi, IMDb tconst, durata e data: la riga viene ricontrollata subito e puoi includerla o escluderla. Gli episodi già presenti possono essere aggiornati. Le celle vuote non cancellano i valori esistenti. Non viene scritto nulla prima della conferma.'}
             </DialogDescription>
           </DialogHeader>

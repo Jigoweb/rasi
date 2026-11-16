@@ -23,11 +23,13 @@ import {
   Sparkles,
   Shield,
   Globe,
-  History
+  History,
+  ClipboardCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { contaProposteInAttesa } from '@/features/approvazioni/services/proposte.service'
 
 
 
@@ -37,8 +39,25 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  const { user, loading, signOut, userRole, isAdmin, isArtista, isTirocinante, canManageUsers } = useAuth()
+  const { user, loading, signOut, userRole, isAdmin, isArtista, isTirocinante, isStaff, canManageUsers } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [proposteInAttesa, setProposteInAttesa] = useState(0)
+
+  useEffect(() => {
+    if (!isStaff) {
+      setProposteInAttesa(0)
+      return
+    }
+    let attivo = true
+    contaProposteInAttesa().then(({ count }) => {
+      if (attivo) setProposteInAttesa(count)
+    }).catch(() => {
+      if (attivo) setProposteInAttesa(0)
+    })
+    return () => {
+      attivo = false
+    }
+  }, [isStaff, pathname])
 
   // Menu items di base disponibili a tutti
   const baseMenuItems = [
@@ -74,6 +93,14 @@ export default function DashboardLayout({
   
   if (isAdmin) {
     menuItems = [...menuItems, ...adminOnlyMenuItems]
+  }
+
+  if (isStaff) {
+    const opereIndex = menuItems.findIndex((item) => item.href === '/dashboard/opere')
+    const voce = { name: 'Approvazioni', href: '/dashboard/approvazioni', icon: ClipboardCheck }
+    menuItems = opereIndex === -1
+      ? [voce, ...menuItems]
+      : [...menuItems.slice(0, opereIndex + 1), voce, ...menuItems.slice(opereIndex + 1)]
   }
 
   const isMenuItemActive = (href: string) => {
@@ -207,7 +234,12 @@ export default function DashboardLayout({
                   }`}
                 >
                   <item.icon className="h-5 w-5" />
-                  {item.name}
+                  <span className="flex-1">{item.name}</span>
+                  {item.href === '/dashboard/approvazioni' && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-800">
+                      {proposteInAttesa}
+                    </span>
+                  )}
                 </Link>
               )
             })}

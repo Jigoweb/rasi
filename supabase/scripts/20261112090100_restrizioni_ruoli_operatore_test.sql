@@ -3,6 +3,8 @@
 --
 --   psql -v ON_ERROR_STOP=1 -f supabase/scripts/20261112090100_restrizioni_ruoli_operatore_test.sql
 --
+-- Dopo 20261113115053 la scrittura diretta di base e tirocinante è bloccata
+-- (va in coda). Qui il risultato atteso è 0 righe o 42501, non più 1.
 -- Per ciascun ruolo (operatore = pro, operatore_base, tirocinante) controlla:
 -- validazione, modifica di opere validate e da validare, eliminazione, episodi,
 -- partecipazioni e note, cast esterno, anagrafica artisti e dati riservati,
@@ -91,24 +93,25 @@ BEGIN
     PERFORM pg_temp.check(r.ruolo, 'get_user_role', r.ruolo, pg_temp.val('select public.get_user_role()::text'));
 
     -- opere
-    PERFORM pg_temp.check(r.ruolo, 'modifica opera da validare', '1',
+    PERFORM pg_temp.check(r.ruolo, 'modifica opera da validare', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.opere set titolo = titolo || %L where id = %L', '.', o_dav)));
     PERFORM pg_temp.check(r.ruolo, 'modifica opera validata', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.opere set titolo = titolo || %L where id = %L', '.', o_val)));
-    PERFORM pg_temp.check(r.ruolo, 'valida un''opera', CASE WHEN pro THEN '1' ELSE 'ERR:42501' END,
+    -- Dopo la fase 2b la RLS non lascia arrivare al trigger: l'UPDATE non tocca righe.
+    PERFORM pg_temp.check(r.ruolo, 'valida un''opera', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.opere set stato_validazione = %L where id = %L', 'validato', o_dav)));
     IF pro THEN
       -- riporta l'opera a da validare per i ruoli successivi
       PERFORM pg_temp.run(format('update public.opere set stato_validazione = %L where id = %L', 'da_validare', o_dav));
     END IF;
-    PERFORM pg_temp.check(r.ruolo, 'nuova opera con stato validato', CASE WHEN pro THEN 'validato' ELSE 'da_validare' END,
+    PERFORM pg_temp.check(r.ruolo, 'nuova opera con stato validato', CASE WHEN pro THEN 'validato' ELSE 'ERR:42501' END,
       pg_temp.val(format('insert into public.opere (titolo, tipo, stato_validazione) values (%L, %L, %L) returning stato_validazione::text',
         'Nuova ' || r.ruolo, 'film', 'validato')));
     PERFORM pg_temp.check(r.ruolo, 'elimina opera', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('delete from public.opere where titolo = %L', 'Nuova ' || r.ruolo)));
 
     -- episodi
-    PERFORM pg_temp.check(r.ruolo, 'modifica episodio opera da validare', '1',
+    PERFORM pg_temp.check(r.ruolo, 'modifica episodio opera da validare', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.episodi set titolo_episodio = %L where opera_id = %L', 'x', o_dav)));
     PERFORM pg_temp.check(r.ruolo, 'modifica episodio opera validata', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.episodi set titolo_episodio = %L where opera_id = %L', 'x', o_val)));
@@ -119,7 +122,7 @@ BEGIN
     -- partecipazioni e note
     PERFORM pg_temp.check(r.ruolo, 'modifica partecipazione opera validata', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.partecipazioni set personaggio = %L where id = %L', 'x', p_val)));
-    PERFORM pg_temp.check(r.ruolo, 'modifica partecipazione opera da validare', '1',
+    PERFORM pg_temp.check(r.ruolo, 'modifica partecipazione opera da validare', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.partecipazioni set personaggio = %L where id = %L', 'x', p_dav)));
     PERFORM pg_temp.check(r.ruolo, 'modifica nota opera validata', CASE WHEN pro THEN '1' ELSE '0' END,
       pg_temp.run(format('update public.partecipazioni_note set note = %L where partecipazione_id = %L', 'n', p_val)));
@@ -133,7 +136,7 @@ BEGIN
       pg_temp.run(format('update public.cast_esterno set personaggio = %L where opera_id = %L', 'x', o_val)));
     PERFORM pg_temp.check(r.ruolo, 'nuovo cast esterno opera validata', CASE WHEN pro THEN '1' ELSE 'ERR:42501' END,
       pg_temp.run(format('insert into public.cast_esterno (opera_id, nome) values (%L, %L)', o_val, 'Nuovo ' || r.ruolo)));
-    PERFORM pg_temp.check(r.ruolo, 'nuovo cast esterno opera da validare', '1',
+    PERFORM pg_temp.check(r.ruolo, 'nuovo cast esterno opera da validare', CASE WHEN pro THEN '1' ELSE 'ERR:42501' END,
       pg_temp.run(format('insert into public.cast_esterno (opera_id, nome) values (%L, %L)', o_dav, 'Nuovo ' || r.ruolo)));
     -- La conversione consuma la riga di cast esterno (la partecipazione esiste
     -- già, quindi non ne crea una nuova): si controlla che la riga sparisca.

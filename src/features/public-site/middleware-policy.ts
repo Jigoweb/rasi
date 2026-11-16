@@ -39,6 +39,13 @@ export function resolveMiddlewareRedirect(
       return "/dashboard/opere";
     }
     if (
+      pathname.startsWith("/dashboard/approvazioni") &&
+      role !== "admin" &&
+      role !== "operatore"
+    ) {
+      return "/dashboard";
+    }
+    if (
       pathname.startsWith("/dashboard/utenti") &&
       role !== "admin" &&
       role !== "operatore"
