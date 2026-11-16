@@ -45,6 +45,14 @@ export function resolveMiddlewareRedirect(
     ) {
       return "/dashboard";
     }
+    // Revisione delle modifiche di base e tirocinante: solo admin e Operatore pro.
+    if (
+      pathname.startsWith("/dashboard/approvazioni") &&
+      role !== "admin" &&
+      role !== "operatore"
+    ) {
+      return "/dashboard";
+    }
     if (pathname.startsWith("/dashboard/cms") && role !== "admin") {
       return "/dashboard";
     }

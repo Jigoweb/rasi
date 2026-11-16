@@ -32,6 +32,7 @@ import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { canEditOpera, canManageOperaCast } from '@/shared/lib/auth-permissions'
 import { CastEsternoPanel } from './components/cast-esterno-panel'
+import { ModificheDaApprovareBanner } from './components/modifiche-da-approvare-banner'
 import { CastImportActions } from './components/cast-import-actions'
 import { EpisodiImportActions } from './components/episodi-import-actions'
 import { EpisodiByStagione } from './components/episodi-by-stagione'
@@ -52,7 +53,7 @@ function parseCommaSeparatedAliases(value: string): string[] | null {
 export default function OperaDetailPage() {
   const params = useParams()
   const operaId = params.id as string
-  const { isAdmin, userRole, canValidateOpere, canReadBancaDati } = useAuth()
+  const { isAdmin, userRole, canValidateOpere, canReadBancaDati, isStaff } = useAuth()
 
   const [opera, setOpera] = useState<Opera | null>(null)
   // Operatore base e Tirocinante: modifiche solo su opere non validate
@@ -1126,6 +1127,8 @@ export default function OperaDetailPage() {
           {getStatoValidazioneBadge(opera.stato_validazione)}
         </div>
       </div>
+
+      {isStaff && <ModificheDaApprovareBanner operaId={operaId} refreshKey={opera.updated_at} />}
 
       {!canEditThisOpera && opera.stato_validazione === 'validato' && (
         <div

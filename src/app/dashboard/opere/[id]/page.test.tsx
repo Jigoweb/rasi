@@ -19,6 +19,10 @@ jest.mock('@/shared/contexts/auth-context', () => {
   return { useAuth: () => ({ userRole: mockRole, ...getRolePermissions(mockRole) }) }
 })
 
+jest.mock('@/features/approvazioni/services/approvazioni.service', () => ({
+  listModificheOpera: jest.fn(async () => ({ data: [], error: null })),
+}))
+
 jest.mock('@/features/opere/services/opere.service', () => ({
   getOperaById: jest.fn(async () => ({ data: { id: 'uuid-opera', codice_opera: 'OP001', titolo: 'Opera Test', titolo_originale: 'Originale', tipo: 'film', anno_produzione: 2020, imdb_tconst: null }, error: null })),
   PARTECIPAZIONI_PAGE_SIZE: 50,
