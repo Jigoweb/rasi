@@ -59,7 +59,7 @@ describe('upload programmazioni runner', () => {
     ;(supabaseModule.supabaseService as any).storage = originalStorage
   })
 
-  it('removes the uploaded file after a completed job', async () => {
+  it('keeps the uploaded file after a completed job (retention 60 days)', async () => {
     const patchCalls: QueryCall[] = []
     const removedPaths: string[] = []
     const csv = 'titolo,emittente\nFilm A,Netflix\n'
@@ -105,7 +105,7 @@ describe('upload programmazioni runner', () => {
       chunkSize: 500,
     })
 
-    assert.deepEqual(removedPaths, ['user-1/campagna-1/file.csv'])
+    assert.deepEqual(removedPaths, [])
   })
 
   it('removes the uploaded file after a terminal error', async () => {

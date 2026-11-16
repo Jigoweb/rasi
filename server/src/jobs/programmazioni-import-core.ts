@@ -4,8 +4,16 @@ import * as XLSX from 'xlsx'
 import { applyEpisodeNormalizationToPayload } from './episode-normalization.js'
 import { mergeYearFieldsIntoPayload, resolveYearPolicy, type YearFieldsPolicy } from '../lib/year-import.js'
 import { isAbsentMarker, isBlankValue } from '../lib/absent-data.js'
-import { excelFractionToHHMMSS, normalizeExcelTimeFractionCells } from '../lib/excel-time.js'
-import { applyTransform as applySharedTransform, isKnownTransform, repairMojibake, TEXT_REPAIR_FIELDS } from '../lib/transforms.js'
+import { normalizeExcelDateCells, normalizeExcelTimeFractionCells } from '../lib/excel-time.js'
+import {
+  applyTransform as applySharedTransform,
+  isKnownTransform,
+  parseIsoLikeDate,
+  parseTimeValue,
+  repairMojibake,
+  rescueDateTimeTransform,
+  TEXT_REPAIR_FIELDS,
+} from '../lib/transforms.js'
 
 export interface FieldRule {
   sources: string[]
@@ -85,7 +93,20 @@ const NUMERIC_FIELDS = new Set([
   'total_revenue',
 ])
 
-export function parseProgrammazioniFile(buffer: Buffer, fileName: string): Record<string, unknown>[] {
+export interface ParseProgrammazioniOptions {
+  /**
+   * Lettura come prima del 16/11/2026, senza riscrivere le celle data in ISO.
+   * Serve solo al riprocesso: import_row_uid è l'hash della riga letta, quindi
+   * per ritrovare le righe caricate prima di quella data va letta allo stesso modo.
+   */
+  legacyDates?: boolean
+}
+
+export function parseProgrammazioniFile(
+  buffer: Buffer,
+  fileName: string,
+  options: ParseProgrammazioniOptions = {}
+): Record<string, unknown>[] {
   const lower = fileName.toLowerCase()
 
   if (lower.endsWith('.csv')) {
@@ -100,10 +121,13 @@ export function parseProgrammazioniFile(buffer: Buffer, fileName: string): Recor
   }
 
   if (lower.match(/\.xlsx?$/)) {
-    const workbook = XLSX.read(buffer)
+    const workbook = XLSX.read(buffer, { cellNF: true })
     const worksheet = workbook.Sheets[workbook.SheetNames[0]]
     // Evita "1/0/00" da SheetJS su celle orario senza number-format (frazioni Excel).
     normalizeExcelTimeFractionCells(worksheet)
+    // Date e data+ora in ISO: con il formato del file arrivavano come "12/1/24"
+    // o "01/12/2024 19:30" e date/orari andavano persi o fraintesi.
+    if (!options.legacyDates) normalizeExcelDateCells(worksheet)
     // defval: evita che celle vuote sulla prima riga facciano sparire colonne header
     return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
       raw: false,
@@ -114,14 +138,36 @@ export function parseProgrammazioniFile(buffer: Buffer, fileName: string): Recor
   throw new Error('Formato file non supportato. Usa CSV o Excel.')
 }
 
+/**
+ * Valori presenti nel file ma non riconosciuti come data o orario: il campo
+ * resta vuoto. Il conteggio e qualche esempio finiscono nel report qualità
+ * dell'upload, così un formato nuovo non passa inosservato (orari Sky di
+ * novembre 2026, date PLEX).
+ */
+export interface UnparsedValuesCollector {
+  [field: string]: { count: number; esempi: string[] }
+}
+
+const UNPARSED_TRACKED_FIELDS = new Set(['data_trasmissione', 'data_inizio', 'data_fine', 'ora_inizio', 'ora_fine'])
+const UNPARSED_MAX_ESEMPI = 5
+
+function recordUnparsed(collector: UnparsedValuesCollector | undefined, field: string, raw: unknown) {
+  if (!collector || !UNPARSED_TRACKED_FIELDS.has(field)) return
+  const entry = (collector[field] ??= { count: 0, esempi: [] })
+  entry.count += 1
+  const sample = String(raw).slice(0, 60)
+  if (entry.esempi.length < UNPARSED_MAX_ESEMPI && !entry.esempi.includes(sample)) entry.esempi.push(sample)
+}
+
 export function buildProgrammazioniPayloads(
   rows: Record<string, unknown>[],
   snapshot: UploadMappingSnapshot,
   context: ProgrammazioneImportContext,
-  startRowIndex = 1
+  startRowIndex = 1,
+  unparsed?: UnparsedValuesCollector
 ): ProgrammazioneImportPayload[] {
   return rows
-    .map((row, index) => buildProgrammazionePayload(row, snapshot, context, startRowIndex + index))
+    .map((row, index) => buildProgrammazionePayload(row, snapshot, context, startRowIndex + index, unparsed))
     .filter((row): row is ProgrammazioneImportPayload => row !== null)
 }
 
@@ -129,7 +175,8 @@ function buildProgrammazionePayload(
   row: Record<string, unknown>,
   snapshot: UploadMappingSnapshot,
   context: ProgrammazioneImportContext,
-  rowIndex: number
+  rowIndex: number,
+  unparsed?: UnparsedValuesCollector
 ): ProgrammazioneImportPayload | null {
   const payload: Record<string, unknown> = {
     campagna_programmazione_id: context.campagnaProgrammazioneId,
@@ -138,7 +185,7 @@ function buildProgrammazionePayload(
   }
 
   if (snapshot.kind === 'apply_existing') {
-    applyConfiguredMapping(row, payload, snapshot.mapping)
+    applyConfiguredMapping(row, payload, snapshot.mapping, unparsed)
   } else {
     applyLegacyTemplate(row, payload)
   }
@@ -170,7 +217,8 @@ function buildProgrammazionePayload(
 function applyConfiguredMapping(
   row: Record<string, unknown>,
   payload: Record<string, unknown>,
-  config: ImportMappingConfig
+  config: ImportMappingConfig,
+  unparsed?: UnparsedValuesCollector
 ) {
   const reverseMap: Record<string, string> = {}
   for (const [source, target] of Object.entries(config.mapping ?? {})) {
@@ -193,9 +241,14 @@ function applyConfiguredMapping(
     }
 
     const cleaned = isAbsentMarker(rawValue) ? null : rawValue
-    const transformed = applyTransform(sourceCol ? config.transforms?.[sourceCol] : undefined, cleaned)
+    const transformed = rescueDateTimeTransform(
+      field,
+      applyTransform(sourceCol ? config.transforms?.[sourceCol] : undefined, cleaned),
+      cleaned
+    )
     const coerced = coerce(field, transformed)
     if (coerced !== undefined) payload[field] = coerced
+    else if (!isBlankValue(cleaned)) recordUnparsed(unparsed, field, cleaned)
   }
 }
 
@@ -209,7 +262,7 @@ function applyLegacyTemplate(row: Record<string, unknown>, payload: Record<strin
   }
 }
 
-function computeImportRowUid(
+export function computeImportRowUid(
   campagnaProgrammazioneId: string,
   rowIndex: number,
   row: Record<string, unknown>
@@ -273,8 +326,9 @@ function coerce(field: string, value: unknown): unknown {
     return coerceTime(value)
   }
   if (DATE_FIELDS.has(field)) {
-    const yearMonth = yearMonthToFirstDay(value)
-    if (yearMonth) return yearMonth
+    // ISO (anche con l'ora) e anno-mese; gli altri formati passano come prima.
+    const isoLike = parseIsoLikeDate(value) ?? yearMonthToFirstDay(value)
+    if (isoLike) return isoLike
   }
   if (INTEGER_FIELDS.has(field)) {
     const numberValue = Number(String(value).replace(',', '.'))
@@ -284,31 +338,18 @@ function coerce(field: string, value: unknown): unknown {
     const numberValue = Number(String(value).replace(',', '.'))
     return Number.isFinite(numberValue) ? numberValue : undefined
   }
-  const text = String(value).trim()
   // Riparazione automatica dei caratteri rotti sui campi di testo (stessa
-  // funzione del wizard): non dipende più da una scelta nel mapping.
-  return TEXT_REPAIR_FIELDS.has(field) ? repairMojibake(text) : text
+  // funzione del wizard), prima del trim: il trim toglie lo spazio non
+  // separabile che forma la «à» (C3 A0) e «città» restava «cittÃ».
+  const text = String(value)
+  return (TEXT_REPAIR_FIELDS.has(field) ? repairMojibake(text) : text).trim()
 }
 
 function coerceTime(value: unknown): string | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return excelFractionToHHMMSS(value) ?? undefined
-  }
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const h = value.getUTCHours()
-    const m = value.getUTCMinutes()
-    const s = value.getUTCSeconds()
-    return [h, m, s].map((n) => String(n).padStart(2, '0')).join(':')
-  }
-  const str = String(value).trim()
-  const match = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
-  if (!match) return undefined
-  let hours = parseInt(match[1], 10)
-  const minutes = parseInt(match[2], 10)
-  const seconds = match[3] ? parseInt(match[3], 10) : 0
-  if (minutes > 59 || seconds > 59) return undefined
-  if (hours >= 24) hours = hours % 24
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  // Stessa logica dell'app (validateTime): frazione Excel, HH:MM(:SS), HH.MM,
+  // AM/PM, data e ora insieme, HHMM. Prima solo HH:MM(:SS): gli orari Sky
+  // caricati a novembre 2026 sono andati persi.
+  return parseTimeValue(value) ?? undefined
 }
 
 /**

@@ -23,7 +23,9 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
 import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll'
-import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock, Edit } from 'lucide-react'
+import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock, Edit, FileUp } from 'lucide-react'
+import { useAuth } from '@/shared/contexts/auth-context'
+import { CorreggiDatiDialog } from './components/correggi-dati-dialog'
 
 export default function CampagnaDettaglioPage() {
   const params = useParams()
@@ -48,6 +50,9 @@ export default function CampagnaDettaglioPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
   const [isSavingMetadata, setIsSavingMetadata] = useState(false)
+  const [isCorreggiOpen, setIsCorreggiOpen] = useState(false)
+  // «Correggi dati dal file»: solo admin e Operatore pro (il worker lo verifica).
+  const { isStaff } = useAuth()
 
   const processatoBool = useMemo(() => {
     if (processato === 'true') return true
@@ -441,6 +446,11 @@ export default function CampagnaDettaglioPage() {
           <p className="text-gray-600">Programmazioni associate</p>
         </div>
         <div className="flex gap-2">
+          {isStaff && (
+            <Button variant="outline" onClick={() => setIsCorreggiOpen(true)} disabled={!campagna}>
+              <FileUp className="h-4 w-4 mr-2" /> Correggi dati dal file
+            </Button>
+          )}
           <Button variant="outline" onClick={openEditDialog} disabled={!campagna}>
             <Edit className="h-4 w-4 mr-2" /> Modifica dettagli
           </Button>
@@ -484,6 +494,19 @@ export default function CampagnaDettaglioPage() {
           </div>
         </CardContent>
       </Card>
+
+      {campagna && (
+        <CorreggiDatiDialog
+          open={isCorreggiOpen}
+          onOpenChange={setIsCorreggiOpen}
+          campagnaId={campagna.id}
+          campagnaNome={campagna.nome}
+          onApplied={() => {
+            void fetchFirstPage()
+            void fetchHealth()
+          }}
+        />
+      )}
 
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-md">

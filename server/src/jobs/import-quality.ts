@@ -14,6 +14,8 @@ export type ImportQualityWarningCode =
   | 'mojibake_suspected'
   | 'type_non_canonical'
   | 'non_work_row_suspected'
+  | 'date_unparsed'
+  | 'time_unparsed'
   | EpisodeNormalizationWarningCode
 
 export interface ImportQualityWarning {
@@ -32,6 +34,8 @@ export interface ImportQualitySummary {
   totalRows: number
   rowsWithWarnings: number
   warningCounts: Partial<Record<ImportQualityWarningCode, number>>
+  /** Valori di data/orario presenti nel file ma non riconosciuti, per campo, con esempi. */
+  valoriNonRiconosciuti?: Record<string, { count: number; esempi: string[] }>
 }
 
 const MIN_YEAR = 1888
@@ -210,4 +214,22 @@ function getEpisodeWarningMessage(code: EpisodeNormalizationWarningCode): string
     episode_compound_number_requires_review: 'Codice episodio emittente non canonico da revisionare',
   }
   return messages[code]
+}
+
+/**
+ * Aggiunge al report qualità le date e gli orari presenti nel file ma non
+ * riconosciuti (campo rimasto vuoto): conteggio in warningCounts più esempi.
+ */
+export function withUnparsedValues(
+  summary: ImportQualitySummary,
+  unparsed: Record<string, { count: number; esempi: string[] }>
+): ImportQualitySummary {
+  const fields = Object.keys(unparsed)
+  if (fields.length === 0) return summary
+  const warningCounts = { ...summary.warningCounts }
+  for (const field of fields) {
+    const code: ImportQualityWarningCode = field.startsWith('ora_') ? 'time_unparsed' : 'date_unparsed'
+    warningCounts[code] = (warningCounts[code] ?? 0) + unparsed[field].count
+  }
+  return { ...summary, warningCounts, valoriNonRiconosciuti: unparsed }
 }

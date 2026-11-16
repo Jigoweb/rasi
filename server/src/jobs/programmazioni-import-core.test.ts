@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import {
   buildProgrammazioniPayloads,
   parseProgrammazioniFile,
+  type UnparsedValuesCollector,
 } from './programmazioni-import-core.js'
 
 describe('programmazioni import core episode normalization', () => {
@@ -227,8 +228,10 @@ describe('programmazioni import — file misto PLEX (trasformazioni e date anno-
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, sheet, 'PLEX')
     const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+    // Le celle data diventano ISO; la lettura legacy (riprocesso) resta quella di prima.
+    assert.equal(parseProgrammazioniFile(buffer, 'PLEX AVOD 2024.xlsx', { legacyDates: true })[0]['Timestamp Month'], '2024-12')
     const parsed = parseProgrammazioniFile(buffer, 'PLEX AVOD 2024.xlsx')
-    assert.equal(parsed[0]['Timestamp Month'], '2024-12')
+    assert.equal(parsed[0]['Timestamp Month'], '2024-12-01')
     const payloads = buildProgrammazioniPayloads(
       parsed,
       {
@@ -243,5 +246,98 @@ describe('programmazioni import — file misto PLEX (trasformazioni e date anno-
       { campagnaProgrammazioneId: 'campagna-plex', emittenteId: 'emittente-plex' },
     )
     assert.equal(payloads[0].data_trasmissione, '2024-12-01')
+  })
+})
+
+describe('programmazioni import — date, orari e «à» finale (PLEX e Sky, novembre 2026)', () => {
+  const ctx = { campagnaProgrammazioneId: 'campagna-test', emittenteId: 'emittente-test' }
+  const apply = (
+    rows: Record<string, unknown>[],
+    mapping: Record<string, string>,
+    transforms?: Record<string, string>,
+    unparsed?: UnparsedValuesCollector,
+  ) =>
+    buildProgrammazioniPayloads(
+      rows,
+      { kind: 'apply_existing', mapping: { version: 1, colonne_rilevate: Object.keys(rows[0]), ultimo_upload: null, mapping, transforms } },
+      ctx,
+      1,
+      unparsed,
+    )
+
+  function xlsx(rows: unknown[][], formats: Record<string, string>): Buffer {
+    const sheet = XLSX.utils.aoa_to_sheet(rows)
+    for (const [addr, z] of Object.entries(formats)) {
+      sheet[addr].z = z
+      delete sheet[addr].w
+    }
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Foglio1')
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  }
+
+  it('eu_date_to_iso non svuota più la data se il valore è ISO, anno-mese o con anno a due cifre', () => {
+    const mapping = { data_trasmissione: 'data_trasmissione', titolo: 'titolo' }
+    const t = { data_trasmissione: 'eu_date_to_iso' }
+    const date = ['2024-12-01', '2024-12', '01/12/24', '01/12/2024', '2024-12-01 00:00:00']
+      .map((d) => apply([{ data_trasmissione: d, titolo: 'X' }], mapping, t)[0].data_trasmissione)
+    assert.deepEqual(date, ['2024-12-01', '2024-12-01', '2024-12-01', '2024-12-01', '2024-12-01'])
+  })
+
+  it('una vera cella data Excel con formato predefinito arriva in ISO (prima "12/1/24" e data vuota)', () => {
+    const buffer = xlsx([['data_trasmissione', 'titolo'], [45627, 'Late Spring']], { A2: 'm/d/yy' })
+    const parsed = parseProgrammazioniFile(buffer, 'PLEX FAST 2024.xlsx')
+    assert.equal(parsed[0].data_trasmissione, '2024-12-01')
+    const [row] = apply(parsed, { data_trasmissione: 'data_trasmissione', titolo: 'titolo' }, { data_trasmissione: 'eu_date_to_iso' })
+    assert.equal(row.data_trasmissione, '2024-12-01')
+  })
+
+  it('legge l\'orario Sky da celle data+ora, AM/PM, con il punto e HHMM', () => {
+    const buffer = xlsx(
+      [['Orario inizio trasmissione', 'Titolo trasmissione'], [45627.8125, 'A'], [0.25, 'B']],
+      { A2: 'dd/mm/yyyy hh:mm', A3: 'h:mm:ss AM/PM' },
+    )
+    const parsed = parseProgrammazioniFile(buffer, 'SKY_ATLANTIC_2024.xlsx')
+    const mapping = { 'Orario inizio trasmissione': 'ora_inizio', 'Titolo trasmissione': 'titolo' }
+    const fromFile = apply(parsed, mapping).map((r) => r.ora_inizio)
+    assert.deepEqual(fromFile, ['19:30:00', '06:00:00'])
+    const fromText = ['06.30', '8:30 PM', '12:15 AM', '2030', '01/12/2024 19:30', '25:10:00']
+      .map((v) => apply([{ 'Orario inizio trasmissione': v, 'Titolo trasmissione': 'X' }], mapping)[0].ora_inizio)
+    assert.deepEqual(fromText, ['06:30:00', '20:30:00', '00:15:00', '20:30:00', '19:30:00', '01:10:00'])
+  })
+
+  it('excel_fraction_to_time accetta anche l\'orario già formattato come testo', () => {
+    const [row] = apply(
+      [{ ora: '20:30:00', titolo: 'X' }],
+      { ora: 'ora_inizio', titolo: 'titolo' },
+      { ora: 'excel_fraction_to_time' },
+    )
+    assert.equal(row.ora_inizio, '20:30:00')
+  })
+
+  it('ripara la «à» finale anche dopo il trim (cittÃ\u00a0 → città)', () => {
+    const rows = [
+      { titolo: 'I padroni della cittÃ\u00a0', regia: 'X' },
+      { titolo: 'Allegri becchini... arriva TrinitÃ', regia: 'X' },
+      { titolo: 'BÃCH', regia: 'X' },
+    ]
+    const titoli = apply(rows, { titolo: 'titolo', regia: 'regia' }).map((r) => r.titolo)
+    assert.deepEqual(titoli, ['I padroni della città', 'Allegri becchini... arriva Trinità', 'BÃCH'])
+  })
+
+  it('segnala date e orari presenti nel file ma non riconosciuti', () => {
+    const unparsed: UnparsedValuesCollector = {}
+    const [row] = apply(
+      [{ data: 'dic-24', ora: 'sera', titolo: 'X' }],
+      { data: 'data_trasmissione', ora: 'ora_inizio', titolo: 'titolo' },
+      { data: 'eu_date_to_iso' },
+      unparsed,
+    )
+    assert.equal(row.data_trasmissione, undefined)
+    assert.equal(row.ora_inizio, undefined)
+    assert.deepEqual(unparsed, {
+      data_trasmissione: { count: 1, esempi: ['dic-24'] },
+      ora_inizio: { count: 1, esempi: ['sera'] },
+    })
   })
 })

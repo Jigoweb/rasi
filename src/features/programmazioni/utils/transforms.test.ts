@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform, isDateTargetField } from './transforms'
+import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform, isDateTargetField, parseIsoLikeDate, parseTimeValue, repairMojibake, rescueDateTimeTransform } from './transforms'
 
 describe('hhmmss_to_minutes', () => {
   it('converts HH:MM:SS to minutes (rounded)', () => {
@@ -351,5 +351,58 @@ describe('excel_fraction_to_time', () => {
 
   it('returns null for non-numeric', () => {
     expect(applyTransform('excel_fraction_to_time', 'foo')).toBeNull()
+  })
+})
+
+describe('date, orari e «à» finale (PLEX e Sky, novembre 2026)', () => {
+  it('eu_date_to_iso accetta anche anno a due cifre, ISO e anno-mese', () => {
+    expect(applyTransform('eu_date_to_iso', '01/12/24')).toBe('2024-12-01')
+    expect(applyTransform('eu_date_to_iso', '2024-12-01')).toBe('2024-12-01')
+    expect(applyTransform('eu_date_to_iso', '2024-12-01 19:30:00')).toBe('2024-12-01')
+    expect(applyTransform('eu_date_to_iso', '2024-12')).toBe('2024-12-01')
+    expect(applyTransform('eu_date_to_iso', 'dic-24')).toBeNull()
+  })
+
+  it('excel_fraction_to_time accetta l\'orario già formattato', () => {
+    expect(applyTransform('excel_fraction_to_time', 0.25)).toBe('06:00:00')
+    expect(applyTransform('excel_fraction_to_time', '20:30:00')).toBe('20:30:00')
+    expect(applyTransform('excel_fraction_to_time', '8:30 PM')).toBe('20:30:00')
+  })
+
+  it('parseTimeValue riconosce i formati degli orari', () => {
+    expect(parseTimeValue('06.30')).toBe('06:30:00')
+    expect(parseTimeValue('12:15 AM')).toBe('00:15:00')
+    expect(parseTimeValue('12:15 PM')).toBe('12:15:00')
+    expect(parseTimeValue('2030')).toBe('20:30:00')
+    expect(parseTimeValue('01/12/2024 19:30')).toBe('19:30:00')
+    expect(parseTimeValue('2024-12-01T19:30:05')).toBe('19:30:05')
+    expect(parseTimeValue('0.5')).toBe('12:00:00')
+    expect(parseTimeValue('01.12.2024')).toBeNull()
+    expect(parseTimeValue('19:75')).toBeNull()
+    expect(parseTimeValue('sera')).toBeNull()
+  })
+
+  it('parseIsoLikeDate riconosce solo date non ambigue', () => {
+    expect(parseIsoLikeDate('2024-12-01')).toBe('2024-12-01')
+    expect(parseIsoLikeDate('2024/12/1')).toBe('2024-12-01')
+    expect(parseIsoLikeDate('2024-12')).toBe('2024-12-01')
+    expect(parseIsoLikeDate('01/12/2024')).toBeNull()
+    expect(parseIsoLikeDate('2024-13-01')).toBeNull()
+  })
+
+  it('rescueDateTimeTransform usa il valore originale solo se è una data o un orario leggibile', () => {
+    expect(rescueDateTimeTransform('data_trasmissione', null, '2024-12')).toBe('2024-12-01')
+    expect(rescueDateTimeTransform('ora_inizio', null, '8:30 PM')).toBe('20:30:00')
+    expect(rescueDateTimeTransform('data_trasmissione', null, 'dic-24')).toBeNull()
+    expect(rescueDateTimeTransform('titolo', null, 'X')).toBeNull()
+    expect(rescueDateTimeTransform('data_trasmissione', '2024-01-02', '2024-12')).toBe('2024-01-02')
+  })
+
+  it('ripara la «à» finale persa dopo il trim, senza toccare maiuscole e nomi stranieri', () => {
+    expect(repairMojibake('I padroni della cittÃ')).toBe('I padroni della città')
+    expect(repairMojibake("L'ultima volontÃ.")).toBe("L'ultima volontà.")
+    expect(repairMojibake('Allegri becchini... arriva TrinitÃ (1972)')).toBe('Allegri becchini... arriva Trinità (1972)')
+    expect(repairMojibake('BÃCH')).toBe('BÃCH')
+    expect(repairMojibake('IRMÃ')).toBe('IRMÃ')
   })
 })

@@ -6,6 +6,8 @@ import { markStaleActiveJobsAsError, markStaleActiveUploadJobsAsError } from './
 import { individuazioneRouter } from './routes/individuazione.js'
 import { jobsRouter } from './routes/jobs.js'
 import { uploadJobsRouter, uploadProgrammazioniRouter } from './routes/upload-programmazioni.js'
+import { riprocessaCampiRouter } from './routes/riprocessa-campi.js'
+import { removeExpiredUploadFiles } from './jobs/upload-file-retention.js'
 
 const app = express()
 
@@ -27,6 +29,7 @@ app.use('/api/individuazione', individuazioneRouter)
 app.use('/api/jobs', jobsRouter)
 app.use('/api/upload-programmazioni', uploadProgrammazioniRouter)
 app.use('/api/upload-jobs', uploadJobsRouter)
+app.use('/api/riprocessa-campi', riprocessaCampiRouter)
 
 const server = app.listen(config.port, () => {
   console.log(`[rasi-worker] in ascolto sulla porta ${config.port}`)
@@ -64,6 +67,20 @@ const server = app.listen(config.port, () => {
   }
   const autoResumeTimer = setInterval(runAutoResume, 60 * 1000)
 
+  // File originali degli upload: conservati 60 giorni per poter correggere i
+  // dati senza ricaricarli, poi rimossi dal bucket. Una volta al giorno.
+  const runFileRetention = () => {
+    void removeExpiredUploadFiles()
+      .then((count) => {
+        if (count > 0) console.log(`[rasi-worker] conservazione file: ${count} file oltre 60 giorni rimossi`)
+      })
+      .catch((error) => {
+        console.error('[rasi-worker] conservazione file fallita', error)
+      })
+  }
+  runFileRetention()
+  const fileRetentionTimer = setInterval(runFileRetention, 24 * 60 * 60 * 1000)
+
   // Deploy Railway: SIGTERM poco prima dello stop del container. I job in
   // corso tornano in coda e il worker successivo li riprende da solo.
   let shuttingDown = false
@@ -72,6 +89,7 @@ const server = app.listen(config.port, () => {
     shuttingDown = true
     clearInterval(staleRecoveryTimer)
     clearInterval(autoResumeTimer)
+    clearInterval(fileRetentionTimer)
     server.close()
 
     // Codice di uscita convenzionale (128 + segnale): uno stop inatteso resta

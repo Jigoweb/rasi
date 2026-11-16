@@ -175,6 +175,65 @@ export async function pollUploadProgrammazioniJob(
   }
 }
 
+export interface RiprocessoEsito {
+  applicato: boolean
+  righe_file: number
+  righe_inviate: number
+  ritrovate: number
+  aggiornate: number
+  individuazioni_riallineate: number
+  lettura: 'attuale' | 'precedente'
+  cambi: { data_trasmissione: number; ora_inizio: number; ora_fine: number; titoli: number }
+  esempi: Array<{
+    titolo_attuale?: string | null
+    titolo_nuovo?: string | null
+    data_attuale?: string | null
+    data_nuova?: string | null
+    ora_attuale?: string | null
+    ora_nuova?: string | null
+  }>
+  valori_non_riconosciuti: Record<string, { count: number; esempi: string[] }>
+}
+
+/**
+ * «Correggi dati dal file»: il file (lo stesso del caricamento) è già nel
+ * bucket. Con `applica: false` il worker restituisce l'anteprima senza
+ * scrivere; con `applica: true` aggiorna data, orari e titoli.
+ */
+export async function riprocessaCampiDaFile(params: {
+  campagneProgrammazioneId: string
+  storagePath: string
+  fileName: string
+  applica: boolean
+}): Promise<{ data: RiprocessoEsito | null; error: string | null }> {
+  const workerUrl = getWorkerUrl()
+  if (!workerUrl) return { data: null, error: 'Worker non configurato' }
+  try {
+    const response = await fetch(`${workerUrl}/api/riprocessa-campi`, {
+      method: 'POST',
+      headers: await getAuthHeaders(),
+      body: JSON.stringify({
+        campagne_programmazione_id: params.campagneProgrammazioneId,
+        storage_path: params.storagePath,
+        file_name: params.fileName,
+        applica: params.applica,
+      }),
+    })
+    const payload = await response.json().catch(() => null)
+    if (!response.ok || !payload?.success) {
+      return { data: null, error: payload?.error || `Errore del worker (${response.status})` }
+    }
+    return { data: payload.data as RiprocessoEsito, error: null }
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Worker non raggiungibile' }
+  }
+}
+
+/** File caricato per l'anteprima e poi non usato: si toglie dal bucket. */
+export async function removeUploadedProgrammazioniFile(storagePath: string): Promise<void> {
+  await supabase.storage.from(UPLOAD_BUCKET).remove([storagePath])
+}
+
 async function getAuthHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession()
   const headers: HeadersInit = { 'Content-Type': 'application/json' }
