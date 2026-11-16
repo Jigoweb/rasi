@@ -106,14 +106,31 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Conta programmazioni totali (per la stima di progresso)
-    const { count: programmazioniTotali, error: countError } = await (supabaseServer as any)
-      .from('programmazioni')
-      .select('id', { count: 'exact', head: true })
-      .eq('campagna_programmazione_id', campagne_programmazione_id)
+    // Totale programmazioni (solo per la stima di progresso). Si legge il
+    // contatore mantenuto dai trigger: il COUNT esatto su campagne grandi
+    // appena individuate (es. PLEX FAST, 100.000 righe) supera lo
+    // statement_timeout di 8 s. Il conteggio resta come ripiego.
+    const { data: cpCount, error: cpCountError } = await (supabaseServer as any)
+      .from('campagne_programmazione')
+      .select('programmazioni_count')
+      .eq('id', campagne_programmazione_id)
+      .maybeSingle()
 
-    if (countError) {
-      return NextResponse.json({ success: false, error: countError.message }, { status: 500 })
+    if (cpCountError) {
+      return NextResponse.json({ success: false, error: cpCountError.message }, { status: 500 })
+    }
+
+    let programmazioniTotali: number | null = Number(cpCount?.programmazioni_count) || null
+    if (!programmazioniTotali) {
+      const { count, error: countError } = await (supabaseServer as any)
+        .from('programmazioni')
+        .select('id', { count: 'exact', head: true })
+        .eq('campagna_programmazione_id', campagne_programmazione_id)
+
+      if (countError) {
+        return NextResponse.json({ success: false, error: countError.message }, { status: 500 })
+      }
+      programmazioniTotali = count ?? 0
     }
 
     // Assicura stato 'in_corso' sulla campagna_individuazione (acquire ha già
