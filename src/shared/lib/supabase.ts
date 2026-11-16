@@ -39,6 +39,7 @@ export type Database = {
           is_rasi: boolean
           ambito: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita: string | null
+          sesso: string | null
           data_decesso: string | null
           documento_tipo: string | null
           documento_numero: string | null
@@ -76,6 +77,7 @@ export type Database = {
           is_rasi?: boolean
           ambito?: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita?: string | null
+          sesso?: string | null
           data_decesso?: string | null
           documento_tipo?: string | null
           documento_numero?: string | null
@@ -113,6 +115,7 @@ export type Database = {
           is_rasi?: boolean
           ambito?: Database["public"]["Enums"]["ambito_artista"] | null
           luogo_nascita?: string | null
+          sesso?: string | null
           data_decesso?: string | null
           documento_tipo?: string | null
           documento_numero?: string | null

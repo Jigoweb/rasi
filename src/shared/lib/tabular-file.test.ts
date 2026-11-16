@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import { parseTabularFile } from './tabular-file'
+import { decodeCsvText, parseTabularFile } from './tabular-file'
 
 function xlsxBuffer(matrix: (string | number)[][]): Buffer {
   const sheet = XLSX.utils.aoa_to_sheet(matrix)
@@ -29,5 +29,14 @@ describe('parseTabularFile', () => {
     const parsed = parseTabularFile('cast.xls', Buffer.from('a'))
     expect(parsed.ok).toBe(false)
     if (!parsed.ok) expect(parsed.error).toMatch(/xlsx o \.csv/)
+  })
+
+  it('legge i CSV salvati in Windows-1252/ISO-8859 (Excel italiano) senza rompere gli accenti', () => {
+    const latin1 = Buffer.from('cognome;nome\nBellè;Nicolò\n', 'latin1')
+    const result = parseTabularFile('contatti.csv', latin1)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.table.rows[0]).toEqual({ cognome: 'Bellè', nome: 'Nicolò' })
+    expect(decodeCsvText(Buffer.from('città', 'utf8'))).toBe('città')
   })
 })

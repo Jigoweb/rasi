@@ -11,6 +11,7 @@ import { useAuth } from '@/shared/contexts/auth-context'
 import { canManageArtistiContatti } from '@/shared/lib/auth-permissions'
 import {
   rowsToEdits,
+  artistiRasiAssentiDalFile,
   summarizeContattiCommit,
   type ContattiCatalogArtist,
   type ContattiCommitSummary,
@@ -134,6 +135,7 @@ export default function ContattiImportPage() {
   }
 
   const planned = summarizeContattiCommit(rows)
+  const assenti = artistiRasiAssentiDalFile(artisti, rows)
 
   return (
     <div className="space-y-6">
@@ -185,6 +187,29 @@ export default function ContattiImportPage() {
             <p>Conflitti mantenuti: {commitSummary.conflittiMantenuti}</p>
             <p>Righe saltate: {commitSummary.saltati}</p>
             <p>Righe invariate: {commitSummary.invariati}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {summary && assenti.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Artisti RASI non presenti nel file ({assenti.length})</CardTitle>
+            <CardDescription>
+              Nessuna riga del file corrisponde a questi artisti: i loro contatti non verranno aggiornati.
+              Nella lista artisti il filtro «Contatti mancanti» mostra chi è ancora senza email né telefono.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="max-h-64 columns-1 gap-6 overflow-y-auto text-sm sm:columns-2 lg:columns-3" aria-label="Artisti RASI non presenti nel file">
+              {assenti.map((artista) => (
+                <li key={artista.id}>
+                  <Link href={`/dashboard/artisti/${artista.id}`} className="hover:underline">
+                    {artista.cognome} {artista.nome}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}

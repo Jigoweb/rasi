@@ -1,4 +1,5 @@
 import { supabase } from '@/shared/lib/supabase-client'
+import { formatSessoLabel } from '@/features/artisti/lib/artista-display'
 import { flattenPartecipazioneNote, PARTECIPAZIONE_NOTE_EMBED, partecipazioneNoteText } from '@/features/opere/lib/partecipazione-note'
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -45,6 +46,7 @@ export const FULL_DATABASE_PARTECIPAZIONI_SELECT = `
             forma_giuridica,
             data_nascita,
             luogo_nascita,
+            sesso,
             stato,
             is_rasi,
             codice_paese,
@@ -193,6 +195,7 @@ export const formatFullDatabaseExport = (rows: any[]) => {
       'Stato Artista': artista?.stato || '',
       'Data Nascita': artista?.data_nascita || '',
       'Luogo Nascita': artista?.luogo_nascita || '',
+      'Sesso': formatSessoLabel(artista?.sesso),
       'Paese': artista?.codice_paese || '',
       'Territorio': artista?.territorio || '',
       'Inizio Mandato': artista?.data_inizio_mandato || '',

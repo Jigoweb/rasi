@@ -114,10 +114,34 @@ function asUint8Array(data: Buffer | Uint8Array): Uint8Array {
  */
 export function readTabularMatrix(filename: string, data: Buffer | Uint8Array): TabularMatrixResult {
   const lower = filename.trim().toLowerCase()
-  if (lower.endsWith('.csv')) return readCsvMatrix(Buffer.from(asUint8Array(data)).toString('utf8'))
+  if (lower.endsWith('.csv')) return readCsvMatrix(decodeCsvText(asUint8Array(data)))
   if (lower.endsWith('.xlsx')) return readXlsxMatrix(asUint8Array(data))
   return { ok: false, code: 'unsupported' }
 }
+
+/**
+ * Testo del CSV: UTF-8 se valido, altrimenti Windows-1252 (Excel italiano
+ * salva i CSV in questa codifica). Prima si leggeva sempre come UTF-8 e un
+ * file come quello dei contatti di Veronica (ISO-8859) diventava «Nicol�»:
+ * nomi non abbinati e indirizzi salvati con caratteri rotti.
+ */
+export function decodeCsvText(bytes: Uint8Array): string {
+  const buffer = Buffer.from(bytes)
+  const utf8 = buffer.toString('utf8')
+  // U+FFFD nel risultato senza la sequenza EF BF BD nel file = byte non UTF-8.
+  if (!utf8.includes('\uFFFD') || buffer.includes(UTF8_REPLACEMENT)) return utf8
+  let out = ''
+  for (const byte of buffer) out += CP1252_80_9F[byte - 0x80] ?? String.fromCharCode(byte)
+  return out
+}
+
+const UTF8_REPLACEMENT = Buffer.from([0xef, 0xbf, 0xbd])
+
+/** Windows-1252 per i byte 0x80–0x9F; gli altri coincidono con ISO-8859-1. */
+const CP1252_80_9F: ReadonlyArray<string | undefined> = [
+  '€', undefined, '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', undefined, 'Ž', undefined,
+  undefined, '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', undefined, 'ž', 'Ÿ',
+]
 
 function readCsvMatrix(text: string): TabularMatrixResult {
   const source = stripBom(text)

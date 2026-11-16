@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Database } from '@/shared/lib/supabase'
-import { AMBITO_LABELS, STATO_LABELS, STATO_OPTIONS, deriveAmbitoFromDiritti, formatStatoLabel, resolveAmbito, shouldShowFineMandato, type AmbitoArtista } from '@/features/artisti/lib/artista-display'
+import { AMBITO_LABELS, STATO_LABELS, STATO_OPTIONS, deriveAmbitoFromDiritti, formatSessoLabel, formatStatoLabel, resolveAmbito, SESSO_OPTIONS, shouldShowFineMandato, type AmbitoArtista } from '@/features/artisti/lib/artista-display'
 import { orderByDirittoLabel, orderDirittiLabels } from '@/features/artisti/lib/diritti-order'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage, FormDescription } from '@/shared/components/ui/form'
 import { Input } from '@/shared/components/ui/input'
@@ -16,6 +16,9 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { Badge } from '@/shared/components/ui/badge'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { CountryMultiSelect } from '@/shared/components/ui/country-multi-select'
+
+/** Valore Select per «non indicato» (Radix non accetta value vuoto). */
+const NON_INDICATO = '__non_indicato__'
 // Import diritti data - in Next.js, i file JSON in public devono essere caricati a runtime
 const loadDirittiData = async () => {
   try {
@@ -58,6 +61,7 @@ const artistaSchema = z.object({
   codice_fiscale: z.string().max(16, 'Max 16 caratteri').optional().or(z.literal('')),
   data_nascita: z.string().optional().or(z.literal('')),
   luogo_nascita: z.string().optional().or(z.literal('')),
+  sesso: z.enum(['M', 'F', 'X']).optional().or(z.literal('')),
 
   // Documento d'identità
   documento_tipo: z.string().optional().or(z.literal('')),
@@ -162,6 +166,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codice_fiscale: artista?.codice_fiscale || '',
       data_nascita: toDateInput(artista?.data_nascita),
       luogo_nascita: artista?.luogo_nascita || '',
+      sesso: (artista?.sesso as 'M' | 'F' | 'X' | null | undefined) || '',
       documento_tipo: artista?.documento_tipo || '',
       documento_numero: artista?.documento_numero || '',
       documento_data_rilascio: toDateInput(artista?.documento_data_rilascio),
@@ -279,6 +284,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codice_fiscale: data.codice_fiscale || null,
       data_nascita: data.data_nascita || null,
       luogo_nascita: data.luogo_nascita || null,
+      sesso: data.sesso || null,
       documento_tipo: data.documento_tipo || null,
       documento_numero: data.documento_numero || null,
       documento_data_rilascio: data.documento_data_rilascio || null,
@@ -446,6 +452,33 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
               <FormControl>
                 <Input {...field} value={field.value || ''} placeholder="Roma" />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          key="sesso"
+          control={form.control}
+          name="sesso"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Sesso</FormLabel>
+              <Select
+                onValueChange={(value) => field.onChange(value === NON_INDICATO ? '' : value)}
+                value={field.value || NON_INDICATO}
+              >
+                <FormControl>
+                  <SelectTrigger aria-label="Sesso">
+                    <SelectValue placeholder="Non indicato" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value={NON_INDICATO}>Non indicato</SelectItem>
+                  {SESSO_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <FormMessage />
             </FormItem>
           )}
@@ -1066,6 +1099,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       hasValue(formData.codice_fiscale) && { label: 'Codice Fiscale', value: formData.codice_fiscale },
       hasValue(formData.data_nascita) && { label: 'Data Nascita', value: formData.data_nascita },
       hasValue(formData.luogo_nascita) && { label: 'Luogo Nascita', value: formData.luogo_nascita },
+      hasValue(formData.sesso) && { label: 'Sesso', value: formatSessoLabel(formData.sesso) },
       hasValue(formData.documento_tipo) && { label: 'Documento', value: formData.documento_tipo },
       hasValue(formData.documento_numero) && { label: 'Numero documento', value: formData.documento_numero },
       hasValue(formData.documento_data_rilascio) && { label: 'Rilasciato il', value: formData.documento_data_rilascio },

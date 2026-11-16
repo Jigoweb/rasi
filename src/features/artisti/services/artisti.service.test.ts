@@ -1,5 +1,5 @@
 import { supabase } from '@/shared/lib/supabase-client'
-import { getArtisti, getArtistaById, getCodiciPaeseArtisti, getPartecipazioniByArtistaId, createArtista, updateArtista, ARTISTI_INCOMPLETE_OR, PARTECIPAZIONI_ARTISTA_SELECT } from './artisti.service'
+import { getArtisti, getArtistaById, getCodiciPaeseArtisti, getPartecipazioniByArtistaId, createArtista, updateArtista, ARTISTI_INCOMPLETE_OR, ARTISTI_CONTATTI_MANCANTI_OR, ARTISTI_CONTATTI_PRESENTI_OR, PARTECIPAZIONI_ARTISTA_SELECT } from './artisti.service'
 import type { TablesInsert, TablesUpdate } from '@/shared/lib/supabase'
 
 const mockSingle: jest.Mock = jest.fn()
@@ -159,6 +159,29 @@ describe('Artisti Service', () => {
       expect(mockOr).toHaveBeenCalledWith(
         'codice_paese.eq.FRA,codice_paese.like.FRA/%,codice_paese.like.%/FRA,codice_paese.like.%/FRA/%',
       )
+    })
+
+    it('filtra gli artisti senza contatti: né email né telefono (number o telefono)', async () => {
+      mockOrder.mockReturnValue({ eq: mockEq, or: mockOr, not: mockNot, is: mockIs, contains: mockContains })
+      mockOr.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ fieldFilters: [{ field: 'contatti', hasValue: false }] })
+
+      expect(mockOr).toHaveBeenCalledWith(ARTISTI_CONTATTI_MANCANTI_OR)
+      expect(ARTISTI_CONTATTI_MANCANTI_OR).toBe(
+        'and(or(contatti.is.null,contatti->>email.is.null,contatti->>email.eq.),' +
+          'or(contatti.is.null,contatti->>number.is.null,contatti->>number.eq.),' +
+          'or(contatti.is.null,contatti->>telefono.is.null,contatti->>telefono.eq.))',
+      )
+    })
+
+    it('filtra gli artisti con almeno un contatto', async () => {
+      mockOrder.mockReturnValue({ eq: mockEq, or: mockOr, not: mockNot, is: mockIs, contains: mockContains })
+      mockOr.mockResolvedValue({ data: [], error: null })
+
+      await getArtisti({ fieldFilters: [{ field: 'contatti', hasValue: true }] })
+
+      expect(mockOr).toHaveBeenCalledWith(ARTISTI_CONTATTI_PRESENTI_OR)
     })
   })
 

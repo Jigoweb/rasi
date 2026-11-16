@@ -95,6 +95,22 @@ export type ContattiCatalogArtist = {
   nome: string
   cognome: string
   codice_fiscale: string | null
+  /** Artista con mandato RASI (non esterno). */
+  is_rasi?: boolean | null
+}
+
+/**
+ * Artisti RASI che nessuna riga del file ha trovato (punto 17 delle richieste:
+ * «chi manca nel file dei contatti»). Ordinati per cognome e nome.
+ */
+export function artistiRasiAssentiDalFile(
+  artisti: ContattiCatalogArtist[],
+  rows: Array<{ artistaId: string | null }>,
+): ContattiCatalogArtist[] {
+  const trovati = new Set(rows.map((row) => row.artistaId).filter((id): id is string => Boolean(id)))
+  return artisti
+    .filter((artista) => artista.is_rasi && !trovati.has(artista.id))
+    .sort((a, b) => a.cognome.localeCompare(b.cognome, 'it') || a.nome.localeCompare(b.nome, 'it'))
 }
 
 export type ContattiArtist = {
@@ -105,6 +121,7 @@ export type ContattiArtist = {
   partita_iva: string | null
   contatti: unknown
   indirizzo: unknown
+  is_rasi?: boolean | null
   riservati?: {
     regime: string | null
     tassazione: string | null

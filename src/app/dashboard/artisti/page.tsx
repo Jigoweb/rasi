@@ -35,6 +35,7 @@ import {
   STATO_LABELS,
   STATO_OPTIONS,
   formatStatoLabel,
+  formatSessoLabel,
   type StatoIscrizione,
 } from '@/features/artisti/lib/artista-display'
 import { dirittiLabelsInOrdine } from '@/features/artisti/lib/diritti-order'
@@ -49,6 +50,7 @@ const ARTISTI_FIELD_LABELS: Record<string, string> = {
   imdb_nconst: 'IMDB nconst',
   data_nascita: 'Data nascita',
   luogo_nascita: 'Luogo nascita',
+  contatti: 'Contatti (email o telefono)',
   territorio: 'Territorio',
   diritti: 'Diritti',
   codice_paese: 'Paese',
@@ -81,7 +83,7 @@ function ArtistiFilterPopover({
   const [dirittiValue, setDirittiValue] = useState<string>('')
   const [paeseValue, setPaeseValue] = useState<string>('')
 
-  const hasValueFields = ['nome_arte', 'codice_fiscale', 'imdb_nconst', 'data_nascita', 'luogo_nascita'] as const
+  const hasValueFields = ['nome_arte', 'codice_fiscale', 'imdb_nconst', 'data_nascita', 'luogo_nascita', 'contatti'] as const
   type HasValueField = (typeof hasValueFields)[number]
 
   const resetValues = () => {
@@ -145,6 +147,7 @@ function ArtistiFilterPopover({
               <SelectItem value="imdb_nconst">IMDB nconst</SelectItem>
               <SelectItem value="data_nascita">Data nascita</SelectItem>
               <SelectItem value="luogo_nascita">Luogo nascita</SelectItem>
+              <SelectItem value="contatti">Contatti (email o telefono)</SelectItem>
               <SelectItem value="territorio">Territorio</SelectItem>
               <SelectItem value="diritti">Diritti</SelectItem>
               <SelectItem value="codice_paese">Paese</SelectItem>
@@ -430,6 +433,7 @@ export default function ArtistiPage() {
       }
       return `${ARTISTI_FIELD_LABELS[f.field]}: ${f.value}`
     }
+    if (f.field === 'contatti') return f.hasValue ? 'Con contatti' : 'Contatti mancanti'
     return `${ARTISTI_FIELD_LABELS[f.field]}: ${f.hasValue ? 'Valorizzato' : 'Non valorizzato'}`
   }
 
@@ -445,7 +449,7 @@ export default function ArtistiPage() {
       'Codice IPN', 'Nome', 'Cognome', 'Nome Arte', 'Ragione Sociale',
       'Codice Fiscale', 'Partita IVA', 'Forma Giuridica',
       'RASI', 'Tipologia', 'Ambito', 'Stato',
-      'Data Nascita', 'Luogo Nascita',
+      'Data Nascita', 'Luogo Nascita', 'Sesso',
       'Codice Paese', 'Territorio',
       'Data Inizio Mandato', 'Data Fine Mandato',
       'IMDB NConst',
@@ -477,6 +481,7 @@ export default function ArtistiPage() {
         csvCell(a.stato),
         csvCell(a.data_nascita),
         csvCell(a.luogo_nascita),
+        csvCell(formatSessoLabel(a.sesso)),
         csvCell(a.codice_paese),
         csvCell(a.territorio),
         csvCell(a.data_inizio_mandato),

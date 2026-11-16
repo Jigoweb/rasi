@@ -26,6 +26,7 @@ type ArtistRow = {
   partita_iva: string | null
   contatti: Json | null
   indirizzo: Json | null
+  is_rasi: boolean | null
 }
 
 type ReservedRow = {
@@ -75,7 +76,7 @@ async function loadArtists(client: Client): Promise<ContattiArtist[]> {
     fetchAll<ArtistRow>((from, to) =>
       client
         .from('artisti')
-        .select('id, nome, cognome, codice_fiscale, partita_iva, contatti, indirizzo')
+        .select('id, nome, cognome, codice_fiscale, partita_iva, contatti, indirizzo, is_rasi')
         .order('id')
         .range(from, to),
     ),
@@ -95,6 +96,7 @@ async function loadArtists(client: Client): Promise<ContattiArtist[]> {
       partita_iva: artist.partita_iva,
       contatti: artist.contatti,
       indirizzo: artist.indirizzo,
+      is_rasi: artist.is_rasi,
       riservati: extra
         ? {
             regime: extra.regime,
@@ -112,6 +114,7 @@ function catalogOf(artists: ContattiArtist[]): ContattiCatalogArtist[] {
     nome: artist.nome,
     cognome: artist.cognome,
     codice_fiscale: artist.codice_fiscale,
+    is_rasi: artist.is_rasi ?? null,
   }))
 }
 

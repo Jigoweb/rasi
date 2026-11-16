@@ -8,7 +8,7 @@ import {
 } from '@/features/opere/lib/partecipazione-note'
 
 export type ArtistaFieldFilter =
-  | { field: 'nome_arte' | 'codice_fiscale' | 'imdb_nconst' | 'data_nascita' | 'luogo_nascita'; hasValue: boolean }
+  | { field: 'nome_arte' | 'codice_fiscale' | 'imdb_nconst' | 'data_nascita' | 'luogo_nascita' | 'contatti'; hasValue: boolean }
   | { field: 'territorio'; value: 'WW' | 'WW-' | 'ITA' | 'ITA+' }
   | { field: 'diritti'; value: string }
   | { field: 'codice_paese'; value: string }
@@ -16,6 +16,18 @@ export type ArtistaFieldFilter =
   | { field: 'tipologia'; value: 'AIE' | 'PRODUTTORE' }
   | { field: 'ambito'; value: 'musica' | 'cinema' | 'entrambi' }
   | { field: 'ambito'; hasValue: boolean }
+
+/** Almeno un contatto: email, oppure telefono in `number` o `telefono`. */
+export const ARTISTI_CONTATTI_PRESENTI_OR =
+  'contatti->>email.neq.,contatti->>number.neq.,contatti->>telefono.neq.'
+
+/** Nessun contatto: email, `number` e `telefono` tutti vuoti o assenti (report «artisti senza contatti»). */
+export const ARTISTI_CONTATTI_MANCANTI_OR =
+  'and(' +
+  'or(contatti.is.null,contatti->>email.is.null,contatti->>email.eq.),' +
+  'or(contatti.is.null,contatti->>number.is.null,contatti->>number.eq.),' +
+  'or(contatti.is.null,contatti->>telefono.is.null,contatti->>telefono.eq.)' +
+  ')'
 
 /** Same OR used by dashboard Data Health incomplete artisti count */
 export const ARTISTI_INCOMPLETE_OR =
@@ -95,6 +107,12 @@ export const getArtisti = async (filters?: {
           case 'luogo_nascita':
             if (hasValue) query = query.not('luogo_nascita', 'is', null).neq('luogo_nascita', '')
             else query = query.or('luogo_nascita.is.null,luogo_nascita.eq.')
+            break
+          case 'contatti':
+            // Email o telefono. Il telefono sta in `number` (form staff) o in
+            // `telefono` (profilo artista e import contatti): vale l'uno o l'altro.
+            if (hasValue) query = query.or(ARTISTI_CONTATTI_PRESENTI_OR)
+            else query = query.or(ARTISTI_CONTATTI_MANCANTI_OR)
             break
         }
       }

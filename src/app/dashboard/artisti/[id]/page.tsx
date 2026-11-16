@@ -34,6 +34,7 @@ import { canManageArtistiContatti } from '@/shared/lib/auth-permissions'
 import { computeArtistaAlerts, etaAnni } from '@/features/artisti/lib/artista-alerts'
 import {
   AMBITO_LABELS,
+  formatSessoLabel,
   resolveAmbito,
   shouldShowFineMandato,
   type AmbitoArtista,
@@ -577,6 +578,14 @@ export default function ArtistaProfiloPage() {
                 Luogo di Nascita
               </div>
               <div className="font-medium">{artista.luogo_nascita || '—'}</div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center text-sm text-muted-foreground">
+                <User className="mr-2 h-4 w-4" />
+                Sesso
+              </div>
+              <div className="font-medium">{formatSessoLabel(artista.sesso) || 'Non indicato'}</div>
             </div>
 
             {(artista.stato === 'deceduto' || artista.data_decesso) && (
