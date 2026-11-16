@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx'
 import {
+  artistiRasiAssentiDalFile,
   buildArtistPatch,
   classifyContattiImport,
   parseContattiEdits,
@@ -454,5 +455,18 @@ describe('authorizeContattiImport', () => {
     expect(authorizeContattiImport({ app_metadata: { ruolo: 'operatore' }, user_metadata: {} })).toMatchObject({ ok: true })
     expect(authorizeContattiImport({ app_metadata: { ruolo: 'artista' }, user_metadata: { ruolo: 'admin' } })).toMatchObject({ ok: false, status: 403 })
     expect(authorizeContattiImport({ app_metadata: { ruolo: 'readonly' }, user_metadata: {} })).toMatchObject({ ok: false, status: 403 })
+  })
+})
+
+describe('artistiRasiAssentiDalFile', () => {
+  it('elenca solo gli artisti RASI che nessuna riga ha trovato, in ordine alfabetico', () => {
+    const artisti = [
+      { id: 'a1', nome: 'Mario', cognome: 'Rossi', codice_fiscale: null, is_rasi: true },
+      { id: 'a2', nome: 'Anna', cognome: 'Bianchi', codice_fiscale: null, is_rasi: true },
+      { id: 'a3', nome: 'Luca', cognome: 'Verdi', codice_fiscale: null, is_rasi: true },
+      { id: 'a4', nome: 'Esterno', cognome: 'Abate', codice_fiscale: null, is_rasi: false },
+    ]
+    const rows = [{ artistaId: 'a1' }, { artistaId: null }]
+    expect(artistiRasiAssentiDalFile(artisti, rows).map((a) => a.id)).toEqual(['a2', 'a3'])
   })
 })
