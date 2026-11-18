@@ -1,6 +1,11 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { resolveMiddlewareRedirect } from '@/features/public-site/middleware-policy'
+import {
+  middlewareUserFromClaims,
+  middlewareVerification,
+  resolveMiddlewareRedirect,
+  type MiddlewareUser,
+} from '@/features/public-site/middleware-policy'
 import { readAppMetadataArtistaId, readAppMetadataRole } from '@/shared/lib/auth-permissions'
 
 export async function middleware(request: NextRequest) {
@@ -27,21 +32,47 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh session (important: use getUser, not getSession)
-  const { data: { user } } = await supabase.auth.getUser()
-
   const pathname = request.nextUrl.pathname
-  const redirectTo = resolveMiddlewareRedirect(pathname, user
-    ? {
-        ruolo: readAppMetadataRole(user.app_metadata),
-        artistaId: readAppMetadataArtistaId(user.app_metadata),
+  const verification = middlewareVerification(pathname)
+
+  // Nessuna decisione di accesso: si rinnova solo il cookie in scadenza.
+  // La sessione letta dai cookie non è verificata e non autorizza.
+  if (!verification) {
+    await supabase.auth.getSession()
+    return supabaseResponse
+  }
+
+  let user: MiddlewareUser = null
+  if (verification === 'claims') {
+    // Presenza sessione. getClaims verifica la firma in locale quando il
+    // progetto usa una chiave asimmetrica (JWKS in cache). Con HS256
+    // ricontrolla la sessione su Auth. Non si usa user_metadata.
+    const { data } = await supabase.auth.getClaims()
+    user = middlewareUserFromClaims(data?.claims)
+  } else {
+    // I muri di ruolo leggono app_metadata dal record Auth, non dal claim:
+    // un cambio ruolo vale prima del refresh del JWT.
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    if (authUser) {
+      user = {
+        ruolo: readAppMetadataRole(authUser.app_metadata),
+        artistaId: readAppMetadataArtistaId(authUser.app_metadata),
       }
-    : null)
+    }
+  }
+
+  const redirectTo = resolveMiddlewareRedirect(pathname, user)
 
   if (redirectTo) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = redirectTo
-    return NextResponse.redirect(redirectUrl)
+    const redirectResponse = NextResponse.redirect(redirectUrl)
+    // Il refresh del JWT scrive i cookie su supabaseResponse. Vanno copiati,
+    // altrimenti il redirect perde la sessione appena ruotata.
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie)
+    })
+    return redirectResponse
   }
 
   return supabaseResponse
