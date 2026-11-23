@@ -12,7 +12,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { EmptyState, PageErrorState, PageLoadingState } from '@/shared/components/page-states'
 import { SearchInput } from '@/shared/components/search-input'
 import { clickableRowClassName, handleClickableRowKeyDown } from '@/shared/lib/clickable-row'
-import { MoreHorizontal, Eye, Download, Filter, Calendar } from 'lucide-react'
+import { MoreHorizontal, Eye, Download, Filter, Calendar, Plus } from 'lucide-react'
+import { useAuth } from '@/shared/contexts/auth-context'
+import { NuovaRipartizioneDialog } from '@/features/ripartizioni/components/nuova-ripartizione-dialog'
 import { RipartizioneStatusBadge } from '@/features/ripartizioni/components/RipartizioneStatusBadge'
 import { buildRipartizioniCsv } from '@/features/ripartizioni/lib/ripartizioni-csv'
 import {
@@ -24,6 +26,8 @@ type CampagnaRipartizione = Database['public']['Tables']['campagne_ripartizione'
 
 export default function RipartizioniPage() {
   const router = useRouter()
+  const { isStaff } = useAuth()
+  const [nuova, setNuova] = useState(false)
   const [campagne, setCampagne] = useState<CampagnaRipartizione[]>([])
   const [filtered, setFiltered] = useState<CampagnaRipartizione[]>([])
   const [loading, setLoading] = useState(true)
@@ -132,11 +136,25 @@ export default function RipartizioniPage() {
           <h1 className="text-3xl font-bold tracking-tight">Ripartizioni</h1>
           <p className="text-gray-600">Campagne di ripartizione dei diritti</p>
         </div>
-        <Button variant="outline" onClick={exportCsv}>
-          <Download className="h-4 w-4 mr-2" />
-          Esporta CSV
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {isStaff && (
+            <Button onClick={() => setNuova(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuova ripartizione
+            </Button>
+          )}
+          <Button variant="outline" onClick={exportCsv}>
+            <Download className="h-4 w-4 mr-2" />
+            Esporta CSV
+          </Button>
+        </div>
       </div>
+
+      <NuovaRipartizioneDialog
+        open={nuova}
+        onOpenChange={setNuova}
+        onSaved={(id) => router.push(`/dashboard/ripartizioni/${id}`)}
+      />
 
       {/* Filters */}
       <Card className="gap-4 py-4">

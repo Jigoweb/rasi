@@ -7,6 +7,8 @@ import { individuazioneRouter } from './routes/individuazione.js'
 import { jobsRouter } from './routes/jobs.js'
 import { uploadJobsRouter, uploadProgrammazioniRouter } from './routes/upload-programmazioni.js'
 import { riprocessaCampiRouter } from './routes/riprocessa-campi.js'
+import { ripartizioneRouter } from './routes/ripartizione.js'
+import { chiudiCalcoliInterrotti } from './jobs/ripartizione-runner.js'
 import { removeExpiredUploadFiles } from './jobs/upload-file-retention.js'
 
 const app = express()
@@ -30,6 +32,7 @@ app.use('/api/jobs', jobsRouter)
 app.use('/api/upload-programmazioni', uploadProgrammazioniRouter)
 app.use('/api/upload-jobs', uploadJobsRouter)
 app.use('/api/riprocessa-campi', riprocessaCampiRouter)
+app.use('/api/ripartizione', ripartizioneRouter)
 
 const server = app.listen(config.port, () => {
   console.log(`[rasi-worker] in ascolto sulla porta ${config.port}`)
@@ -50,6 +53,10 @@ const server = app.listen(config.port, () => {
   }
 
   runStaleRecovery()
+  // I calcoli di ripartizione non riprendono da soli: si chiudono in errore e si rilanciano.
+  void chiudiCalcoliInterrotti().then((n) => {
+    if (n > 0) console.log(`[rasi-worker] ${n} calcoli di ripartizione interrotti chiusi in errore`)
+  })
   // Periodico: i job upload possono bloccarsi senza riavvio del processo.
   const staleRecoveryTimer = setInterval(runStaleRecovery, 5 * 60 * 1000)
 
