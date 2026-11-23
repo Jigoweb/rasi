@@ -560,6 +560,10 @@ export type Database = {
           data_calcolo: string | null
           data_distribuzione: string | null
           descrizione: string | null
+          emittente_id: string | null
+          anno: number | null
+          modalita: string | null
+          parametri_id: string | null
           id: string
           importo_totale_disponibile: number
           nome: string
@@ -577,6 +581,10 @@ export type Database = {
           data_calcolo?: Json
           data_distribuzione?: string | null
           descrizione?: string | null
+          emittente_id?: string | null
+          anno?: number | null
+          modalita?: string | null
+          parametri_id?: string | null
           id?: string
           importo_totale_disponibile: number
           nome: string
@@ -594,6 +602,10 @@ export type Database = {
           data_calcolo?: Json
           data_distribuzione?: string | null
           descrizione?: string | null
+          emittente_id?: string | null
+          anno?: number | null
+          modalita?: string | null
+          parametri_id?: string | null
           id?: string
           importo_totale_disponibile?: number
           nome?: string
@@ -650,6 +662,7 @@ export type Database = {
           id: string
           mapping_import: Json | null
           metadati: Json | null
+          modalita_ripartizione: string | null
           nome: string
           paese: string | null
           tipo: Database["public"]["Enums"]["tipo_emittente"]
@@ -664,6 +677,7 @@ export type Database = {
           id?: string
           mapping_import?: Json | null
           metadati?: Json | null
+          modalita_ripartizione?: string | null
           nome: string
           paese?: string | null
           tipo: Database["public"]["Enums"]["tipo_emittente"]
@@ -678,6 +692,7 @@ export type Database = {
           id?: string
           mapping_import?: Json | null
           metadati?: Json | null
+          modalita_ripartizione?: string | null
           nome?: string
           paese?: string | null
           tipo?: Database["public"]["Enums"]["tipo_emittente"]
@@ -1456,10 +1471,119 @@ export type Database = {
           },
         ]
       }
+      campagne_ripartizione_sorgenti: {
+        Row: {
+          campagna_ripartizione_id: string
+          campagna_individuazione_id: string
+          created_at: string
+        }
+        Insert: {
+          campagna_ripartizione_id: string
+          campagna_individuazione_id: string
+          created_at?: string
+        }
+        Update: {
+          campagna_ripartizione_id?: string
+          campagna_individuazione_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campagne_ripartizione_sorgenti_campagna_ripartizione_id_fkey"
+            columns: ["campagna_ripartizione_id"]
+            isOneToOne: false
+            referencedRelation: "campagne_ripartizione"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campagne_ripartizione_sorgenti_campagna_individuazione_id_fkey"
+            columns: ["campagna_individuazione_id"]
+            isOneToOne: true
+            referencedRelation: "campagne_individuazione"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ripartizioni_righe: {
+        Row: {
+          id: number
+          campagna_ripartizione_id: string
+          individuazione_id: string | null
+          artista_id: string
+          opera_id: string | null
+          episodio_id: string | null
+          ruolo_id: string | null
+          categoria: string | null
+          esclusa: string | null
+          views_usate: number | null
+          views_assegnate: boolean
+          ricavi: number | null
+          quota_opera: number
+          prima: number
+          seconda: number
+          resto: number
+          bonus_direzione: number
+          integrazione_minimo: number
+          totale_prima_ricalcolo: number
+          importo: number
+          importo_finale: number
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "ripartizioni_righe_artista_id_fkey"
+            columns: ["artista_id"]
+            isOneToOne: false
+            referencedRelation: "artisti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ripartizioni_righe_opera_id_fkey"
+            columns: ["opera_id"]
+            isOneToOne: false
+            referencedRelation: "opere"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ripartizioni_righe_episodio_id_fkey"
+            columns: ["episodio_id"]
+            isOneToOne: false
+            referencedRelation: "episodi"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ripartizioni_righe_campagna_ripartizione_id_fkey"
+            columns: ["campagna_ripartizione_id"]
+            isOneToOne: false
+            referencedRelation: "campagne_ripartizione"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ripartizione_jobs: {
+        Row: {
+          id: string
+          campagna_ripartizione_id: string
+          stato: string
+          fase: string | null
+          righe_lette: number
+          righe_scritte: number
+          error: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       ruoli_tipologie: {
         Row: {
           attivo: boolean | null
           categoria: Database["public"]["Enums"]["categoria_ruolo"]
+          categoria_ripartizione: string | null
           codice: string
           created_at: string | null
           descrizione: string | null
@@ -1472,6 +1596,7 @@ export type Database = {
         Insert: {
           attivo?: boolean | null
           categoria: Database["public"]["Enums"]["categoria_ruolo"]
+          categoria_ripartizione?: string | null
           codice: string
           created_at?: string | null
           descrizione?: string | null
@@ -1484,6 +1609,7 @@ export type Database = {
         Update: {
           attivo?: boolean | null
           categoria?: Database["public"]["Enums"]["categoria_ruolo"]
+          categoria_ripartizione?: string | null
           codice?: string
           created_at?: string | null
           descrizione?: string | null
@@ -1597,6 +1723,19 @@ export type Database = {
           codice_ipn: string | null
           imdb_nconst: string | null
         }[]
+      }
+      salva_campagna_ripartizione: {
+        Args: {
+          p_id: string | null
+          p_nome: string
+          p_emittente_id: string | null
+          p_anno: number
+          p_fondo: number
+          p_modalita: string | null
+          p_sorgenti: string[]
+          p_descrizione?: string | null
+        }
+        Returns: string
       }
       lista_opere_da_approvare: {
         Args: Record<PropertyKey, never>

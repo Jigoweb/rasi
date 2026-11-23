@@ -125,6 +125,33 @@ BEGIN
   v := pg_temp.val(format('update public.campagne_ripartizione set stato = %L where id = %L returning 1', 'calcolata', cr));
   IF v <> 'ERR:42501' THEN v_fail := v_fail || ' pro revoca ' || v || ';'; END IF;
 
+  -- RPC di salvataggio: il pro crea una campagna con le sorgenti; l'individuazione già usata è rifiutata
+  PERFORM pg_temp.as_user(u_pro);
+  v := pg_temp.val(format('select public.salva_campagna_ripartizione(null, %L, %L, 2024, 10, null, array[%L]::uuid[])::text', 'Nuova', emit, ci));
+  IF v <> 'ERR:23505' THEN v_fail := v_fail || ' sorgente già usata accettata dalla RPC ' || v || ';'; END IF;
+  EXECUTE 'RESET ROLE';
+  DECLARE ci2 uuid := gen_random_uuid(); nuova uuid;
+  BEGIN
+    INSERT INTO public.campagne_individuazione (id, nome, emittente_id, campagne_programmazione_id, anno, stato)
+      VALUES (ci2, 'Individuazione rip test 2', emit, cp, 2024, 'completata');
+    PERFORM pg_temp.as_user(u_pro);
+    v := pg_temp.val(format('select public.salva_campagna_ripartizione(null, %L, %L, 2024, 10, %L, array[%L]::uuid[])::text', 'Nuova', emit, 'od_views', ci2));
+    IF v LIKE 'ERR:%' THEN v_fail := v_fail || ' pro crea ' || v || ';'; ELSE nuova := v::uuid; END IF;
+    IF nuova IS NOT NULL THEN
+      v := pg_temp.val(format('select count(*)::text from public.campagne_ripartizione_sorgenti where campagna_ripartizione_id = %L', nuova));
+      IF v <> '1' THEN v_fail := v_fail || ' sorgenti create=' || v || ';'; END IF;
+      v := pg_temp.val(format('select periodo_riferimento_fine::text from public.campagne_ripartizione where id = %L', nuova));
+      IF v <> '2024-12-31' THEN v_fail := v_fail || ' periodo=' || v || ';'; END IF;
+    END IF;
+    -- Una campagna approvata non si modifica
+    v := pg_temp.val(format('select public.salva_campagna_ripartizione(%L, %L, %L, 2024, 10, null, array[%L]::uuid[])::text', cr, 'X', emit, ci));
+    IF v <> 'ERR:42501' THEN v_fail := v_fail || ' modifica distribuita ' || v || ';'; END IF;
+    -- L'artista non usa la RPC
+    PERFORM pg_temp.as_user(u_art);
+    v := pg_temp.val(format('select public.salva_campagna_ripartizione(null, %L, %L, 2024, 10, null, array[%L]::uuid[])::text', 'Y', emit, ci2));
+    IF v <> 'ERR:42501' THEN v_fail := v_fail || ' artista crea ' || v || ';'; END IF;
+  END;
+
   -- Un solo job attivo per campagna
   EXECUTE 'RESET ROLE';
   INSERT INTO public.ripartizione_jobs (campagna_ripartizione_id, stato) VALUES (cr2, 'running');

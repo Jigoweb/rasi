@@ -15,6 +15,7 @@ const emittente: Emittente = {
   created_at: '2026-06-23T10:00:00.000Z',
   mapping_import: null,
   metadati: null,
+  modalita_ripartizione: null,
   updated_at: null,
 }
 

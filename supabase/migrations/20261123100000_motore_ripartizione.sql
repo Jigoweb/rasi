@@ -182,6 +182,109 @@ CREATE TRIGGER campagne_ripartizione_stato_guard
   BEFORE UPDATE ON public.campagne_ripartizione
   FOR EACH ROW EXECUTE FUNCTION public.campagne_ripartizione_stato_guard();
 
+-- 7b. Creazione e modifica di una campagna con le sue sorgenti (staff) --------------
+-- Cambiare fondo, modalità o sorgenti di una campagna già calcolata la riporta
+-- a «pianificata» e cancella i risultati: vanno ricalcolati.
+CREATE OR REPLACE FUNCTION public.salva_campagna_ripartizione(
+  p_id uuid,
+  p_nome text,
+  p_emittente_id uuid,
+  p_anno integer,
+  p_fondo numeric,
+  p_modalita text,
+  p_sorgenti uuid[],
+  p_descrizione text DEFAULT NULL
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id uuid := p_id;
+  v_stato public.stato_ripartizione;
+  v_non_completate integer;
+  v_gia_usata text;
+BEGIN
+  IF NOT public.is_staff() THEN
+    RAISE EXCEPTION 'Solo amministratori e Operatori pro gestiscono le ripartizioni' USING ERRCODE = '42501';
+  END IF;
+  IF p_nome IS NULL OR btrim(p_nome) = '' THEN
+    RAISE EXCEPTION 'Il nome è obbligatorio' USING ERRCODE = '22023';
+  END IF;
+  IF p_fondo IS NULL OR p_fondo <= 0 THEN
+    RAISE EXCEPTION 'Il fondo deve essere maggiore di zero' USING ERRCODE = '22023';
+  END IF;
+  IF p_modalita IS NOT NULL AND p_modalita NOT IN ('lineare', 'od_views', 'od_ricavi', 'od_utilizzazioni') THEN
+    RAISE EXCEPTION 'Modalità non valida' USING ERRCODE = '22023';
+  END IF;
+  IF p_anno IS NULL OR p_anno < 2000 OR p_anno > 2100 THEN
+    RAISE EXCEPTION 'Anno non valido' USING ERRCODE = '22023';
+  END IF;
+  IF p_sorgenti IS NULL OR cardinality(p_sorgenti) = 0 THEN
+    RAISE EXCEPTION 'Scegli almeno una campagna di individuazione' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT count(*) INTO v_non_completate
+  FROM unnest(p_sorgenti) s(id)
+  LEFT JOIN public.campagne_individuazione ci ON ci.id = s.id
+  WHERE ci.id IS NULL OR ci.stato <> 'completata';
+  IF v_non_completate > 0 THEN
+    RAISE EXCEPTION 'Si possono includere solo campagne di individuazione completate' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT string_agg(DISTINCT cr.nome, ', ') INTO v_gia_usata
+  FROM public.campagne_ripartizione_sorgenti s
+  JOIN public.campagne_ripartizione cr ON cr.id = s.campagna_ripartizione_id
+  WHERE s.campagna_individuazione_id = ANY (p_sorgenti)
+    AND s.campagna_ripartizione_id IS DISTINCT FROM v_id;
+  IF v_gia_usata IS NOT NULL THEN
+    RAISE EXCEPTION 'Alcune individuazioni sono già incluse in: %', v_gia_usata USING ERRCODE = '23505';
+  END IF;
+
+  IF v_id IS NULL THEN
+    INSERT INTO public.campagne_ripartizione (
+      nome, descrizione, periodo_riferimento_inizio, periodo_riferimento_fine, importo_totale_disponibile,
+      emittente_id, anno, modalita, stato, created_by
+    ) VALUES (
+      btrim(p_nome), p_descrizione, make_date(p_anno, 1, 1), make_date(p_anno, 12, 31), p_fondo,
+      p_emittente_id, p_anno, p_modalita, 'pianificata', auth.uid()
+    ) RETURNING id INTO v_id;
+  ELSE
+    SELECT stato INTO v_stato FROM public.campagne_ripartizione WHERE id = v_id FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Campagna non trovata' USING ERRCODE = 'P0002';
+    END IF;
+    IF v_stato IN ('approvata', 'distribuita') THEN
+      RAISE EXCEPTION 'La campagna è approvata: non si modifica' USING ERRCODE = '42501';
+    END IF;
+    UPDATE public.campagne_ripartizione SET
+      nome = btrim(p_nome),
+      descrizione = p_descrizione,
+      periodo_riferimento_inizio = make_date(p_anno, 1, 1),
+      periodo_riferimento_fine = make_date(p_anno, 12, 31),
+      importo_totale_disponibile = p_fondo,
+      emittente_id = p_emittente_id,
+      anno = p_anno,
+      modalita = p_modalita,
+      stato = 'pianificata',
+      updated_at = now()
+    WHERE id = v_id;
+    DELETE FROM public.ripartizioni_righe WHERE campagna_ripartizione_id = v_id;
+    DELETE FROM public.ripartizioni WHERE campagna_ripartizione_id = v_id;
+    DELETE FROM public.campagne_ripartizione_sorgenti WHERE campagna_ripartizione_id = v_id;
+  END IF;
+
+  INSERT INTO public.campagne_ripartizione_sorgenti (campagna_ripartizione_id, campagna_individuazione_id)
+  SELECT v_id, s.id FROM (SELECT DISTINCT unnest(p_sorgenti) AS id) s;
+
+  RETURN v_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.salva_campagna_ripartizione(uuid, text, uuid, integer, numeric, text, uuid[], text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.salva_campagna_ripartizione(uuid, text, uuid, integer, numeric, text, uuid[], text) TO authenticated, service_role;
+
 -- 8. RLS ------------------------------------------------------------------------------
 -- Campagne: l'artista vede quelle approvate o distribuite (prima: solo approvate,
 -- quindi le perdeva alla distribuzione).
