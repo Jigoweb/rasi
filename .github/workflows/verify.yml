@@ -51,3 +51,31 @@ jobs:
 
       - name: Worker test
         run: npm --prefix server test
+
+  staff-return-types:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rasi
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d rasi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Staff function return types
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/rasi
+        run: bash scripts/dev/check-staff-function-return-types.sh
