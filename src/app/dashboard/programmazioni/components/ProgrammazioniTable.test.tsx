@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import type { CampagnaProgrammazione } from '@/features/programmazioni/services/programmazioni.service'
 import ProgrammazioniTable from './ProgrammazioniTable'
+import type { UploadJobSnapshot } from '@/features/programmazioni/services/programmazioni-upload-worker.service'
 
 const pushMock = jest.fn()
 
@@ -126,5 +127,29 @@ describe('ProgrammazioniTable', () => {
 
     expect(onSelectionChange).toHaveBeenCalled()
     expect(pushMock).not.toHaveBeenCalled()
+  })
+
+  it('mostra il motivo di upload_error sotto lo stato', () => {
+    const uploadJob: UploadJobSnapshot = {
+      id: 'job-err',
+      campagna_programmazione_id: 'campagna-1',
+      stato: 'error',
+      fase: 'error',
+      righe_totali: 3000,
+      righe_processate: 2500,
+      righe_inserite: 2500,
+      righe_duplicate_saltate: 0,
+      current_chunk: 5,
+      total_chunks: 6,
+      error: 'Data o orario fuori intervallo (righe 2502–3001 del file)',
+      quality_report: null,
+      updated_at: '2026-06-23T11:59:00.000Z',
+    }
+
+    renderTable({
+      uploadJobMap: { 'campagna-1': uploadJob },
+    })
+
+    expect(screen.getAllByText('Data o orario fuori intervallo (righe 2502–3001 del file)').length).toBeGreaterThan(0)
   })
 })

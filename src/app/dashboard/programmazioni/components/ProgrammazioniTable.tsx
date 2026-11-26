@@ -280,6 +280,7 @@ export default function ProgrammazioniTable({
                           uploadProgress={uploadProgress}
                           deleteProgress={deleteProgress}
                         />
+                        <UploadErrorDetail rowState={rowState} />
                         <p className="mt-1 text-xs text-muted-foreground">{workflowStep.label}</p>
                       </TableCell>
                       <TableCell className="py-4">
@@ -372,6 +373,7 @@ export default function ProgrammazioniTable({
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <ProgrammazioneStatusBadge badge={rowState.badge} />
                       </div>
+                      <UploadErrorDetail rowState={rowState} />
                       <p className="mt-1 text-xs text-muted-foreground">{workflowStep.label}</p>
                       <div className="mt-3" onClick={(event) => event.stopPropagation()}>
                         <PrimaryWorkflowAction
@@ -404,6 +406,16 @@ export default function ProgrammazioniTable({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function UploadErrorDetail({ rowState }: { rowState: ProgrammazioneRowState }) {
+  if (rowState.badge !== 'upload_error' && rowState.badge !== 'error') return null
+  if (!rowState.blockingReason) return null
+  return (
+    <p className="mt-1 max-w-xs text-xs text-red-600 wrap-break-word dark:text-red-400">
+      {rowState.blockingReason}
+    </p>
   )
 }
 

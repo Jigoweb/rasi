@@ -1,12 +1,15 @@
 import { supabaseService } from '../supabase.js'
 import {
   buildProgrammazioniPayloads,
+  formatDateOrderConflict,
   parseProgrammazioniFile,
+  resolveDateOrders,
   type ProgrammazioneImportPayload,
   type UnparsedValuesCollector,
   type UploadMappingSnapshot,
 } from './programmazioni-import-core.js'
-import { summarizeImportQuality, withUnparsedValues } from './import-quality.js'
+import { summarizeImportQuality, withAmbiguousDates, withUnparsedValues } from './import-quality.js'
+import { humanizeUploadError } from './upload-error-message.js'
 import { patchUploadJob } from './upload-job-store.js'
 
 const BUCKET = 'programmazioni-uploads'
@@ -151,8 +154,14 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
     await patchUploadJob(jobId, {
       righe_totali: rows.length,
       total_chunks: totalChunks,
-      fase: 'inserting',
+      fase: 'validating',
     })
+    const dateOrders = resolveDateOrders(rows, mappingSnapshot)
+    if (dateOrders.conflicts.length > 0) {
+      throw new Error(formatDateOrderConflict(dateOrders.conflicts[0]))
+    }
+
+    await patchUploadJob(jobId, { fase: 'inserting' })
 
     let righeInserite = 0
     let righeDuplicateSaltate = 0
@@ -169,7 +178,8 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
           emittenteId,
         },
         offset + 1,
-        unparsed
+        unparsed,
+        dateOrders.orders,
       )
       qualityPayloads.push(...payloads)
 
@@ -183,8 +193,16 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
           })
           righeInserite += insertedExact ?? attempted
           righeDuplicateSaltate += duplicateSkippedExact ?? 0
-        } catch (error: any) {
-          throw new Error(`insert chunk ${offset / chunkSize + 1}: ${error.message}`)
+        } catch (error: unknown) {
+          const fileRowStart = offset + 2
+          const fileRowEnd = offset + chunk.length + 1
+          const original = error instanceof Error
+            ? error.message
+            : String((error as { message?: unknown })?.message ?? error)
+          const human = humanizeUploadError(error, { fileRowStart, fileRowEnd })
+          throw new Error(human === original
+            ? `insert chunk ${offset / chunkSize + 1}: ${original}`
+            : human)
         }
       }
 
@@ -197,7 +215,10 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
     }
 
     await releaseLock(campagneProgrammazioneId, userId, 'in_review')
-    const qualityReport = withUnparsedValues(summarizeImportQuality(qualityPayloads), unparsed)
+    const qualityReport = withAmbiguousDates(
+      withUnparsedValues(summarizeImportQuality(qualityPayloads), unparsed),
+      dateOrders.ambiguous,
+    )
     await patchUploadJob(jobId, {
       stato: 'completed',
       fase: 'completed',

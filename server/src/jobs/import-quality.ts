@@ -16,6 +16,7 @@ export type ImportQualityWarningCode =
   | 'non_work_row_suspected'
   | 'date_unparsed'
   | 'time_unparsed'
+  | 'date_ambigue'
   | EpisodeNormalizationWarningCode
 
 export interface ImportQualityWarning {
@@ -36,6 +37,8 @@ export interface ImportQualitySummary {
   warningCounts: Partial<Record<ImportQualityWarningCode, number>>
   /** Valori di data/orario presenti nel file ma non riconosciuti, per campo, con esempi. */
   valoriNonRiconosciuti?: Record<string, { count: number; esempi: string[] }>
+  /** Colonne di date testuali ambigue, interpretate come GG/MM/AAAA. */
+  date_ambigue?: Array<{ field: string; column: string; message: string }>
 }
 
 const MIN_YEAR = 1888
@@ -232,4 +235,20 @@ export function withUnparsedValues(
     warningCounts[code] = (warningCounts[code] ?? 0) + unparsed[field].count
   }
   return { ...summary, warningCounts, valoriNonRiconosciuti: unparsed }
+}
+
+/** Aggiunge gli avvisi sulle colonne di date ambigue interpretate come GG/MM. */
+export function withAmbiguousDates(
+  summary: ImportQualitySummary,
+  notices: Array<{ field: string; column: string; message: string }>,
+): ImportQualitySummary {
+  if (notices.length === 0) return summary
+  return {
+    ...summary,
+    date_ambigue: notices,
+    warningCounts: {
+      ...summary.warningCounts,
+      date_ambigue: notices.length,
+    },
+  }
 }

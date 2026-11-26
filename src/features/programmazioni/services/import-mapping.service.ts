@@ -10,7 +10,17 @@ import {
 } from '../utils/coercion'
 import { applyEpisodeNormalizationToPayload } from '../utils/episode-normalization'
 import { normalizeTitle, normalizeTitleStrict } from '../utils/title-normalize'
-import { applyTransform, isKnownTransform, rescueDateTimeTransform, type TransformName } from '../utils/transforms'
+import {
+  applyTransform,
+  detectSlashDateOrder,
+  findSlashDateConflict,
+  isKnownTransform,
+  isSlashDateText,
+  DATE_TARGET_FIELDS,
+  rescueDateTimeTransform,
+  type SlashDateOrder,
+  type TransformName,
+} from '../utils/transforms'
 import { isAbsentMarker, isBlankValue } from '../utils/absent-data'
 import { inferYearPolicyFromMapping } from '../utils/emittente-year-presets'
 import { mergeYearFieldsIntoPayload } from '../utils/year-policy'
@@ -437,6 +447,142 @@ export interface ApplyMappingContext {
   emittenteName?: string | null
 }
 
+export interface DateOrderConflict {
+  field: string
+  column: string
+  /** Riga del file, intestazione inclusa: indice della riga dati + 2. */
+  fileRow: number
+  example: string
+}
+
+export interface AmbiguousDateNotice {
+  field: string
+  column: string
+  message: string
+}
+
+export interface DateOrderResolution {
+  orders: Record<string, SlashDateOrder>
+  ambiguous: AmbiguousDateNotice[]
+  conflicts: DateOrderConflict[]
+}
+
+export type DateOrderInput =
+  | { kind: 'legacy_template' }
+  | {
+      kind: 'apply_existing'
+      mapping?: Record<string, string>
+      rules?: Record<string, FieldRule>
+      transforms?: Record<string, string | null | undefined>
+    }
+
+export function formatDateOrderConflict(conflict: DateOrderConflict): string {
+  return `Formato date in conflitto nella colonna «${conflict.column}» (riga ${conflict.fileRow} del file, esempio «${conflict.example}»). Il file mescola date in GG/MM/AAAA e MM/GG/AAAA.`
+}
+
+/**
+ * Stessa decisione del worker: per ogni colonna data senza transform esplicito
+ * l'ordine si legge sull'intero insieme di righe. `ambiguous` → GG/MM.
+ */
+export function resolveDateOrders(
+  rows: Record<string, unknown>[],
+  input: DateOrderInput,
+): DateOrderResolution {
+  const resolution: DateOrderResolution = { orders: {}, ambiguous: [], conflicts: [] }
+  if (input.kind === 'legacy_template') {
+    const columns = new Map<string, string>()
+    for (const row of rows) {
+      for (const column of Object.keys(row)) {
+        const field = normalizeKey(column)
+        if (DATE_TARGET_FIELDS.has(field) && !columns.has(field)) columns.set(field, column)
+      }
+    }
+    for (const [field, column] of columns) {
+      decideSlashColumn(valuesForLegacyField(rows, field), field, column, field, resolution)
+    }
+    return resolution
+  }
+
+  const transforms = input.transforms ?? {}
+  const columns = new Map<string, string>()
+  const consider = (source: string, field: string) => {
+    if (!DATE_TARGET_FIELDS.has(field) || columns.has(source)) return
+    const explicit = transforms[source]
+    if (typeof explicit === 'string' && explicit.trim() !== '') return
+    columns.set(source, field)
+  }
+  for (const [source, target] of Object.entries(input.mapping ?? {})) consider(source, target)
+  for (const [field, rule] of Object.entries(input.rules ?? {})) {
+    for (const source of rule.sources ?? []) consider(source, field)
+  }
+  for (const [source, field] of columns) {
+    decideSlashColumn(rows.map((row) => getRowValue(row, source)), source, source, field, resolution)
+  }
+  return resolution
+}
+
+function ordersOrThrow(
+  rows: Record<string, unknown>[],
+  input: DateOrderInput,
+): Record<string, SlashDateOrder> {
+  const resolution = resolveDateOrders(rows, input)
+  if (resolution.conflicts.length > 0) {
+    throw new Error(formatDateOrderConflict(resolution.conflicts[0]))
+  }
+  return resolution.orders
+}
+
+function valuesForLegacyField(rows: Record<string, unknown>[], field: string): unknown[] {
+  return rows.map((row) => {
+    for (const column of Object.keys(row)) {
+      if (normalizeKey(column) === field) return row[column]
+    }
+    return undefined
+  })
+}
+
+function decideSlashColumn(
+  values: unknown[],
+  key: string,
+  column: string,
+  field: string,
+  resolution: DateOrderResolution,
+) {
+  const order = detectSlashDateOrder(values)
+  if (order === 'conflict') {
+    const found = findSlashDateConflict(values)
+    resolution.conflicts.push({
+      field,
+      column,
+      fileRow: (found?.index ?? 0) + 2,
+      example: found?.example ?? '',
+    })
+    return
+  }
+  if (order === 'dmy' || order === 'mdy') {
+    resolution.orders[key] = order
+    return
+  }
+  if (!values.some((value) => isSlashDateText(value))) return
+  resolution.orders[key] = 'dmy'
+  resolution.ambiguous.push({
+    field,
+    column,
+    message: `Date ambigue nella colonna «${column}» (${field}): interpretate come GG/MM/AAAA.`,
+  })
+}
+
+function dateOrderFor(
+  sourceCol: string | null,
+  transforms: Record<string, string | null | undefined> | undefined,
+  dateOrders: Record<string, SlashDateOrder> | undefined,
+): SlashDateOrder | undefined {
+  if (!sourceCol || !dateOrders) return undefined
+  const explicit = transforms?.[sourceCol]
+  if (typeof explicit === 'string' && explicit.trim() !== '') return undefined
+  return dateOrders[sourceCol]
+}
+
 /**
  * Applica un mapping alle righe sorgente per costruire array di payload
  * pronti per `uploadProgrammazioni`.
@@ -454,7 +600,14 @@ export function applyMapping(
   rules?: Record<string, FieldRule>,
   transforms?: Record<string, TransformName>,
   yearFields?: YearFieldsPolicy,
+  dateOrders?: Record<string, SlashDateOrder>,
 ): ProgrammazionePayload[] {
+  const orders = dateOrders ?? ordersOrThrow(rows, {
+    kind: 'apply_existing',
+    mapping,
+    rules,
+    transforms,
+  })
   // Mappa inversa: campo template → colonna sorgente (l'ultima vince in caso di duplicati)
   const reverseMap: Record<string, string> = {}
   for (const [source, target] of Object.entries(mapping)) {
@@ -488,7 +641,7 @@ export function applyMapping(
       const transformName = isKnownTransform(rawName) ? rawName : null
       const cleaned = isAbsentMarker(rawValue) ? null : rawValue
       const transformed = rescueDateTimeTransform(field, applyTransform(transformName, cleaned), cleaned)
-      const coerced = coerce(field, transformed)
+      const coerced = coerce(field, transformed, dateOrderFor(sourceCol, transforms, orders))
       if (coerced !== undefined) {
         payload[field] = coerced
       }
@@ -544,8 +697,14 @@ export interface ApplyMappingV2Config {
 export function applyMappingWithTransforms(
   rows: Record<string, any>[],
   config: ApplyMappingV2Config,
-  context: ApplyMappingContext
+  context: ApplyMappingContext,
+  dateOrders?: Record<string, SlashDateOrder>,
 ): ProgrammazionePayload[] {
+  const orders = dateOrders ?? ordersOrThrow(rows, {
+    kind: 'apply_existing',
+    mapping: config.fields,
+    transforms: config.transforms,
+  })
   const reverseMap: Record<string, string> = {}
   for (const [source, target] of Object.entries(config.fields)) {
     if (target && TEMPLATE_FIELDS_SET.has(target)) reverseMap[target] = source
@@ -564,7 +723,7 @@ export function applyMappingWithTransforms(
       const rawName = config.transforms[sourceCol] || null
       const transformName = isKnownTransform(rawName) ? rawName : null
       const transformed = rescueDateTimeTransform(field, applyTransform(transformName, raw), raw)
-      const coerced = coerce(field, transformed)
+      const coerced = coerce(field, transformed, dateOrderFor(sourceCol, config.transforms, orders))
       if (coerced !== undefined && coerced !== null) payload[field] = coerced
     }
     // Normalize title-like fields after coercion.
@@ -673,8 +832,10 @@ export function validateImportRules(
  */
 export function buildLegacyPayload(
   rows: Record<string, any>[],
-  context: ApplyMappingContext
+  context: ApplyMappingContext,
+  dateOrders?: Record<string, SlashDateOrder>,
 ): ProgrammazionePayload[] {
+  const orders = dateOrders ?? ordersOrThrow(rows, { kind: 'legacy_template' })
   const result: ProgrammazionePayload[] = []
   for (const row of rows) {
     const payload: any = {
@@ -685,7 +846,8 @@ export function buildLegacyPayload(
     for (const key of Object.keys(row)) {
       const nk = normalizeKey(key)
       if (TEMPLATE_FIELDS_SET.has(nk)) {
-        const coerced = coerce(nk, row[key])
+        const order = DATE_TARGET_FIELDS.has(nk) ? orders[nk] : undefined
+        const coerced = coerce(nk, row[key], order)
         if (coerced !== undefined) payload[nk] = coerced
       }
     }

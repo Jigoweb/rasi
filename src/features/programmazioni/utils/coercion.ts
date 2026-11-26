@@ -3,7 +3,7 @@
  * Estratto da page.tsx per condividere la logica con import-mapping.service.
  */
 
-import { parseIsoLikeDate, parseTimeValue, repairMojibake, TEXT_REPAIR_FIELDS } from './transforms'
+import { parseIsoLikeDate, parseSlashDate, parseTimeValue, repairMojibake, TEXT_REPAIR_FIELDS, type SlashDateOrder } from './transforms'
 
 /**
  * Normalizza una chiave colonna (lowercase + trim).
@@ -83,43 +83,20 @@ export function yearMonthToFirstDay(value: unknown): string | null {
  * Valida una data in formati comuni (ISO, anno-mese, DD/MM/YY, DD/MM/YYYY, DD-MM-YY, DD-MM-YYYY)
  * e la normalizza a YYYY-MM-DD. Anni <=50 → 2000+, >50 → 1900+.
  */
-export function validateDate(dateStr: any): string | undefined {
-  if (!dateStr) return undefined
+export function validateDate(dateStr: any, dateOrder: SlashDateOrder = 'dmy'): string | undefined {
+  if (dateStr === undefined || dateStr === null || dateStr === '') return undefined
   const str = String(dateStr).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
+  if (str === '') return undefined
 
-  // ISO anche con l'ora (celle data+ora Excel) e anno-mese.
+  // ISO (anche con l'ora) e anno-mese. Le date testuali GG/MM o MM/GG
+  // diventano ISO; un testo non riconosciuto non viene inoltrato.
   const isoLike = parseIsoLikeDate(str)
   if (isoLike) return isoLike
 
   const yearMonth = yearMonthToFirstDay(str)
   if (yearMonth) return yearMonth
 
-  const slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
-  if (slashMatch) {
-    const day = slashMatch[1].padStart(2, '0')
-    const month = slashMatch[2].padStart(2, '0')
-    let year = slashMatch[3]
-    if (year.length === 2) {
-      const yearNum = parseInt(year)
-      year = yearNum > 50 ? `19${year}` : `20${year}`
-    }
-    return `${year}-${month}-${day}`
-  }
-
-  const dashMatch = str.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/)
-  if (dashMatch) {
-    const day = dashMatch[1].padStart(2, '0')
-    const month = dashMatch[2].padStart(2, '0')
-    let year = dashMatch[3]
-    if (year.length === 2) {
-      const yearNum = parseInt(year)
-      year = yearNum > 50 ? `19${year}` : `20${year}`
-    }
-    return `${year}-${month}-${day}`
-  }
-
-  return str
+  return parseSlashDate(str, dateOrder) ?? undefined
 }
 
 /**
@@ -131,7 +108,7 @@ export function validateDate(dateStr: any): string | undefined {
  * - Date: data_trasmissione, data_inizio, data_fine
  * - Altri: as-is
  */
-export function coerce(key: string, value: any): any {
+export function coerce(key: string, value: any, dateOrder?: SlashDateOrder): any {
   if (value === undefined || value === null || value === '') return undefined
   if (typeof value === 'string' && TEXT_REPAIR_FIELDS.has(key)) return repairMojibake(value)
   switch (key) {
@@ -172,7 +149,7 @@ export function coerce(key: string, value: any): any {
     case 'data_trasmissione':
     case 'data_inizio':
     case 'data_fine':
-      return validateDate(value)
+      return validateDate(value, dateOrder ?? 'dmy')
     default:
       return value
   }
