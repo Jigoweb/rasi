@@ -38,6 +38,12 @@ describe('validateDate', () => {
     expect(validateDate('2015-06-01')).toBe('2015-06-01')
     expect(validateDate('6/1/15')).toBe('2015-01-06')
   })
+  it('rispetta l\'ordine giorno/mese e non inoltra un testo non riconosciuto', () => {
+    expect(validateDate('02/01/2024', 'dmy')).toBe('2024-01-02')
+    expect(validateDate('02/01/2024', 'mdy')).toBe('2024-02-01')
+    expect(validateDate('non-una-data')).toBeUndefined()
+    expect(coerce('data_trasmissione', 'non-una-data')).toBeUndefined()
+  })
   it('anno-mese diventa il primo giorno del mese (report mensili, es. PLEX)', () => {
     expect(validateDate('2024-12')).toBe('2024-12-01')
     expect(validateDate('2024/3')).toBe('2024-03-01')

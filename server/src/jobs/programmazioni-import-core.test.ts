@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx'
 import {
   buildProgrammazioniPayloads,
   parseProgrammazioniFile,
+  resolveDateOrders,
   type UnparsedValuesCollector,
 } from './programmazioni-import-core.js'
 
@@ -339,5 +340,158 @@ describe('programmazioni import — date, orari e «à» finale (PLEX e Sky, nov
       data_trasmissione: { count: 1, esempi: ['dic-24'] },
       ora_inizio: { count: 1, esempi: ['sera'] },
     })
+  })
+})
+
+describe('programmazioni import — date testuali GG/MM/AAAA', () => {
+  const ctx = { campagnaProgrammazioneId: 'campagna-test', emittenteId: 'emittente-test' }
+
+  function textWorkbook(rows: unknown[][]): Buffer {
+    const sheet = XLSX.utils.aoa_to_sheet(rows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Foglio1')
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  }
+
+  function excelDateWorkbook(): Buffer {
+    const sheet = XLSX.utils.aoa_to_sheet([['data_trasmissione', 'titolo'], [45627, 'Late Spring']])
+    sheet.A2.z = 'm/d/yy'
+    delete sheet.A2.w
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Foglio1')
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  }
+
+  it('converte il testo GG/MM/AAAA in ISO nel percorso legacy_template', () => {
+    const buffer = textWorkbook([
+      ['data_trasmissione', 'titolo'],
+      ['01/01/2024', 'A'],
+      ['02/01/2024', 'B'],
+      ['13/01/2024', 'C'],
+    ])
+    const rows = parseProgrammazioniFile(buffer, '20-sintetico.xlsx')
+    const resolution = resolveDateOrders(rows, { kind: 'legacy_template' })
+    assert.equal(resolution.orders.data_trasmissione, 'dmy')
+    assert.equal(resolution.conflicts.length, 0)
+    const payloads = buildProgrammazioniPayloads(
+      rows,
+      { kind: 'legacy_template' },
+      ctx,
+      1,
+      undefined,
+      resolution.orders,
+    )
+    assert.deepEqual(payloads.map((row) => row.data_trasmissione), [
+      '2024-01-01',
+      '2024-01-02',
+      '2024-01-13',
+    ])
+  })
+
+  it('con un mapping eu_date_to_iso esplicito non cambia la conversione', () => {
+    const rows = [
+      { Data: '01/01/2024', Titolo: 'A' },
+      { Data: '02/01/2024', Titolo: 'B' },
+      { Data: '13/01/2024', Titolo: 'C' },
+    ]
+    const snapshot = {
+      kind: 'apply_existing' as const,
+      mapping: {
+        version: 1 as const,
+        colonne_rilevate: ['Data', 'Titolo'],
+        ultimo_upload: null,
+        mapping: { Data: 'data_trasmissione', Titolo: 'titolo' },
+        transforms: { Data: 'eu_date_to_iso' },
+      },
+    }
+    const resolution = resolveDateOrders(rows, snapshot)
+    assert.equal(resolution.orders.Data, undefined)
+    assert.equal(resolution.ambiguous.length, 0)
+    const payloads = buildProgrammazioniPayloads(rows, snapshot, ctx)
+    assert.deepEqual(payloads.map((row) => row.data_trasmissione), [
+      '2024-01-01',
+      '2024-01-02',
+      '2024-01-13',
+    ])
+  })
+
+  it('non modifica le date Excel vere già normalizzate in ISO', () => {
+    const rows = parseProgrammazioniFile(excelDateWorkbook(), 'date-vere.xlsx')
+    const resolution = resolveDateOrders(rows, { kind: 'legacy_template' })
+    assert.equal(resolution.orders.data_trasmissione, undefined)
+    assert.equal(resolution.ambiguous.length, 0)
+    const [row] = buildProgrammazioniPayloads(rows, { kind: 'legacy_template' }, ctx, 1, undefined, resolution.orders)
+    assert.equal(row.data_trasmissione, '2024-12-01')
+  })
+
+  it('usa MM/GG quando la colonna lo dimostra, anche sulle righe ambigue', () => {
+    const rows = [
+      { data_trasmissione: '01/13/2024', titolo: 'A' },
+      { data_trasmissione: '02/01/2024', titolo: 'B' },
+    ]
+    const resolution = resolveDateOrders(rows, { kind: 'legacy_template' })
+    assert.equal(resolution.orders.data_trasmissione, 'mdy')
+    const payloads = buildProgrammazioniPayloads(
+      rows,
+      { kind: 'legacy_template' },
+      ctx,
+      1,
+      undefined,
+      resolution.orders,
+    )
+    assert.deepEqual(payloads.map((row) => row.data_trasmissione), ['2024-01-13', '2024-02-01'])
+  })
+
+  it('se la colonna è ambigua usa GG/MM e prepara un avviso', () => {
+    const rows = [
+      { data_trasmissione: '01/02/2024', titolo: 'A' },
+      { data_trasmissione: '03/04/2024', titolo: 'B' },
+    ]
+    const resolution = resolveDateOrders(rows, { kind: 'legacy_template' })
+    assert.equal(resolution.orders.data_trasmissione, 'dmy')
+    assert.equal(resolution.ambiguous.length, 1)
+    assert.match(resolution.ambiguous[0].message, /GG\/MM/)
+    const payloads = buildProgrammazioniPayloads(
+      rows,
+      { kind: 'legacy_template' },
+      ctx,
+      1,
+      undefined,
+      resolution.orders,
+    )
+    assert.deepEqual(payloads.map((row) => row.data_trasmissione), ['2024-02-01', '2024-04-03'])
+  })
+
+  it('non mette nel payload una data-testo non riconosciuta', () => {
+    const unparsed: UnparsedValuesCollector = {}
+    const payloads = buildProgrammazioniPayloads(
+      [
+        { data_trasmissione: 'non-una-data', titolo: 'A' },
+        { data_trasmissione: '13/01/2024', titolo: 'B' },
+      ],
+      { kind: 'legacy_template' },
+      ctx,
+      1,
+      unparsed,
+      { data_trasmissione: 'dmy' },
+    )
+    assert.equal(payloads[0].data_trasmissione, undefined)
+    assert.equal(payloads[1].data_trasmissione, '2024-01-13')
+    assert.equal(unparsed.data_trasmissione.count, 1)
+    assert.deepEqual(unparsed.data_trasmissione.esempi, ['non-una-data'])
+  })
+
+  it('indica la riga del file (indice + 2) quando i formati sono in conflitto', () => {
+    const resolution = resolveDateOrders(
+      [
+        { data_trasmissione: '13/01/2024', titolo: 'A' },
+        { data_trasmissione: '01/13/2024', titolo: 'B' },
+      ],
+      { kind: 'legacy_template' },
+    )
+    assert.equal(resolution.conflicts.length, 1)
+    assert.equal(resolution.conflicts[0].column, 'data_trasmissione')
+    assert.equal(resolution.conflicts[0].fileRow, 3)
+    assert.equal(resolution.conflicts[0].example, '01/13/2024')
   })
 })

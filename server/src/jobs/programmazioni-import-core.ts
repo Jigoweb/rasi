@@ -7,12 +7,17 @@ import { isAbsentMarker, isBlankValue } from '../lib/absent-data.js'
 import { normalizeExcelDateCells, normalizeExcelTimeFractionCells } from '../lib/excel-time.js'
 import {
   applyTransform as applySharedTransform,
+  detectSlashDateOrder,
+  findSlashDateConflict,
   isKnownTransform,
+  isSlashDateText,
   parseIsoLikeDate,
+  parseSlashDate,
   parseTimeValue,
   repairMojibake,
   rescueDateTimeTransform,
   TEXT_REPAIR_FIELDS,
+  type SlashDateOrder,
 } from '../lib/transforms.js'
 
 export interface FieldRule {
@@ -164,10 +169,11 @@ export function buildProgrammazioniPayloads(
   snapshot: UploadMappingSnapshot,
   context: ProgrammazioneImportContext,
   startRowIndex = 1,
-  unparsed?: UnparsedValuesCollector
+  unparsed?: UnparsedValuesCollector,
+  dateOrders?: Record<string, SlashDateOrder>,
 ): ProgrammazioneImportPayload[] {
   return rows
-    .map((row, index) => buildProgrammazionePayload(row, snapshot, context, startRowIndex + index, unparsed))
+    .map((row, index) => buildProgrammazionePayload(row, snapshot, context, startRowIndex + index, unparsed, dateOrders))
     .filter((row): row is ProgrammazioneImportPayload => row !== null)
 }
 
@@ -176,7 +182,8 @@ function buildProgrammazionePayload(
   snapshot: UploadMappingSnapshot,
   context: ProgrammazioneImportContext,
   rowIndex: number,
-  unparsed?: UnparsedValuesCollector
+  unparsed?: UnparsedValuesCollector,
+  dateOrders?: Record<string, SlashDateOrder>,
 ): ProgrammazioneImportPayload | null {
   const payload: Record<string, unknown> = {
     campagna_programmazione_id: context.campagnaProgrammazioneId,
@@ -185,9 +192,9 @@ function buildProgrammazionePayload(
   }
 
   if (snapshot.kind === 'apply_existing') {
-    applyConfiguredMapping(row, payload, snapshot.mapping, unparsed)
+    applyConfiguredMapping(row, payload, snapshot.mapping, unparsed, dateOrders)
   } else {
-    applyLegacyTemplate(row, payload)
+    applyLegacyTemplate(row, payload, unparsed, dateOrders)
   }
 
   payload.titolo = normalizeTitle(String(payload.titolo ?? ''))
@@ -218,7 +225,8 @@ function applyConfiguredMapping(
   row: Record<string, unknown>,
   payload: Record<string, unknown>,
   config: ImportMappingConfig,
-  unparsed?: UnparsedValuesCollector
+  unparsed?: UnparsedValuesCollector,
+  dateOrders?: Record<string, SlashDateOrder>,
 ) {
   const reverseMap: Record<string, string> = {}
   for (const [source, target] of Object.entries(config.mapping ?? {})) {
@@ -246,20 +254,38 @@ function applyConfiguredMapping(
       applyTransform(sourceCol ? config.transforms?.[sourceCol] : undefined, cleaned),
       cleaned
     )
-    const coerced = coerce(field, transformed)
+    const coerced = coerce(field, transformed, dateOrderFor(sourceCol, config.transforms, dateOrders))
     if (coerced !== undefined) payload[field] = coerced
     else if (!isBlankValue(cleaned)) recordUnparsed(unparsed, field, cleaned)
   }
 }
 
-function applyLegacyTemplate(row: Record<string, unknown>, payload: Record<string, unknown>) {
+function applyLegacyTemplate(
+  row: Record<string, unknown>,
+  payload: Record<string, unknown>,
+  unparsed?: UnparsedValuesCollector,
+  dateOrders?: Record<string, SlashDateOrder>,
+) {
   for (const key of Object.keys(row)) {
     const normalizedKey = normalizeKey(key)
     if (TEMPLATE_FIELDS_SET.has(normalizedKey)) {
-      const coerced = coerce(normalizedKey, row[key])
+      const order = DATE_FIELDS.has(normalizedKey) ? dateOrders?.[normalizedKey] : undefined
+      const coerced = coerce(normalizedKey, row[key], order)
       if (coerced !== undefined) payload[normalizedKey] = coerced
+      else if (!isBlankValue(row[key])) recordUnparsed(unparsed, normalizedKey, row[key])
     }
   }
+}
+
+function dateOrderFor(
+  sourceCol: string | null,
+  transforms: Record<string, string> | undefined,
+  dateOrders: Record<string, SlashDateOrder> | undefined,
+): SlashDateOrder | undefined {
+  if (!sourceCol || !dateOrders) return undefined
+  const explicit = transforms?.[sourceCol]
+  if (typeof explicit === 'string' && explicit.trim() !== '') return undefined
+  return dateOrders[sourceCol]
 }
 
 export function computeImportRowUid(
@@ -305,6 +331,113 @@ function resolveFieldValueWithSource(
 
 const DATE_FIELDS = new Set(['data_trasmissione', 'data_inizio', 'data_fine'])
 
+export interface DateOrderConflict {
+  field: string
+  column: string
+  /** Riga del file, intestazione inclusa: indice della riga dati + 2. */
+  fileRow: number
+  example: string
+}
+
+export interface AmbiguousDateNotice {
+  field: string
+  column: string
+  message: string
+}
+
+export interface DateOrderResolution {
+  /** Chiave di lookup: campo normalizzato (legacy) o colonna sorgente (mapping). */
+  orders: Record<string, SlashDateOrder>
+  ambiguous: AmbiguousDateNotice[]
+  conflicts: DateOrderConflict[]
+}
+
+export function formatDateOrderConflict(conflict: DateOrderConflict): string {
+  return `Formato date in conflitto nella colonna «${conflict.column}» (riga ${conflict.fileRow} del file, esempio «${conflict.example}»). Il file mescola date in GG/MM/AAAA e MM/GG/AAAA.`
+}
+
+/**
+ * Per ogni colonna sorgente mappata su una data, senza transform esplicito,
+ * decide l'ordine giorno/mese sull'intero file. `ambiguous` diventa GG/MM
+ * con un avviso; `conflict` va segnalato prima di inserire.
+ */
+export function resolveDateOrders(
+  rows: Record<string, unknown>[],
+  snapshot: UploadMappingSnapshot,
+): DateOrderResolution {
+  const resolution: DateOrderResolution = { orders: {}, ambiguous: [], conflicts: [] }
+  if (snapshot.kind === 'legacy_template') {
+    const columns = new Map<string, string>()
+    for (const row of rows) {
+      for (const column of Object.keys(row)) {
+        const field = normalizeKey(column)
+        if (DATE_FIELDS.has(field) && !columns.has(field)) columns.set(field, column)
+      }
+    }
+    for (const [field, column] of columns) {
+      decideSlashColumn(valuesForLegacyField(rows, field), field, column, field, resolution)
+    }
+    return resolution
+  }
+
+  const transforms = snapshot.mapping.transforms ?? {}
+  const columns = new Map<string, string>()
+  const consider = (source: string, field: string) => {
+    if (!DATE_FIELDS.has(field) || columns.has(source)) return
+    const explicit = transforms[source]
+    if (typeof explicit === 'string' && explicit.trim() !== '') return
+    columns.set(source, field)
+  }
+  for (const [source, target] of Object.entries(snapshot.mapping.mapping ?? {})) consider(source, target)
+  for (const [field, rule] of Object.entries(snapshot.mapping.rules ?? {})) {
+    for (const source of rule.sources ?? []) consider(source, field)
+  }
+  for (const [source, field] of columns) {
+    decideSlashColumn(rows.map((row) => getRowValue(row, source)), source, source, field, resolution)
+  }
+  return resolution
+}
+
+function valuesForLegacyField(rows: Record<string, unknown>[], field: string): unknown[] {
+  return rows.map((row) => {
+    for (const column of Object.keys(row)) {
+      if (normalizeKey(column) === field) return row[column]
+    }
+    return undefined
+  })
+}
+
+function decideSlashColumn(
+  values: unknown[],
+  key: string,
+  column: string,
+  field: string,
+  resolution: DateOrderResolution,
+) {
+  const order = detectSlashDateOrder(values)
+  if (order === 'conflict') {
+    const found = findSlashDateConflict(values)
+    resolution.conflicts.push({
+      field,
+      column,
+      fileRow: (found?.index ?? 0) + 2,
+      example: found?.example ?? '',
+    })
+    return
+  }
+  if (order === 'dmy' || order === 'mdy') {
+    resolution.orders[key] = order
+    return
+  }
+  if (!values.some((value) => isSlashDateText(value))) return
+  resolution.orders[key] = 'dmy'
+  resolution.ambiguous.push({
+    field,
+    column,
+    message: `Date ambigue nella colonna «${column}» (${field}): interpretate come GG/MM/AAAA.`,
+  })
+}
+
 /**
  * Anno-mese (`2024-12`, `2024/12`) → primo giorno del mese. I report mensili
  * delle piattaforme (es. PLEX «Timestamp Month») indicano il periodo: prima il
@@ -320,15 +453,17 @@ export function yearMonthToFirstDay(value: unknown): string | null {
   return `${match[1]}-${String(month).padStart(2, '0')}-01`
 }
 
-function coerce(field: string, value: unknown): unknown {
+function coerce(field: string, value: unknown, dateOrder?: SlashDateOrder): unknown {
   if (value === null || value === undefined || value === '') return undefined
   if (field === 'ora_inizio' || field === 'ora_fine') {
     return coerceTime(value)
   }
   if (DATE_FIELDS.has(field)) {
-    // ISO (anche con l'ora) e anno-mese; gli altri formati passano come prima.
+    // ISO (anche con l'ora) e anno-mese restano come sono. Le date testuali
+    // GG/MM o MM/GG diventano ISO; un testo non riconosciuto non va nel payload.
     const isoLike = parseIsoLikeDate(value) ?? yearMonthToFirstDay(value)
     if (isoLike) return isoLike
+    return parseSlashDate(value, dateOrder ?? 'dmy') ?? undefined
   }
   if (INTEGER_FIELDS.has(field)) {
     const numberValue = Number(String(value).replace(',', '.'))

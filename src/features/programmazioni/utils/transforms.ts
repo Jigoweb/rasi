@@ -227,6 +227,91 @@ export function parseIsoLikeDate(value: unknown): string | null {
   return null
 }
 
+export type SlashDateOrder = 'dmy' | 'mdy'
+
+const SLASH_DATE_RX =
+  /^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})(?:[ T]\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d+)?)?$/
+
+interface SlashDateParts {
+  a: number
+  b: number
+  year: string
+  raw: string
+}
+
+function slashDateParts(value: unknown): SlashDateParts | null {
+  if (typeof value !== 'string') return null
+  const raw = value.trim()
+  const match = raw.match(SLASH_DATE_RX)
+  if (!match) return null
+  return { a: Number(match[1]), b: Number(match[2]), year: match[3], raw }
+}
+
+/**
+ * Ordine giorno/mese di una colonna di date testuali (GG/MM o MM/GG).
+ * Un componente > 12 fissa l'ordine; se compaiono entrambi, il file è in conflitto.
+ * Senza una prova del genere il risultato è `ambiguous` (anche se non ci sono date).
+ */
+export function detectSlashDateOrder(values: unknown[]): SlashDateOrder | 'ambiguous' | 'conflict' {
+  let dmy = false
+  let mdy = false
+  for (const value of values) {
+    const parts = slashDateParts(value)
+    if (!parts) continue
+    if (parts.a > 12 && parts.b <= 12) dmy = true
+    else if (parts.b > 12 && parts.a <= 12) mdy = true
+  }
+  if (dmy && mdy) return 'conflict'
+  if (dmy) return 'dmy'
+  if (mdy) return 'mdy'
+  return 'ambiguous'
+}
+
+/** Prima data che contraddice l'ordine già dimostrato dalla colonna. */
+export function findSlashDateConflict(values: unknown[]): { index: number; example: string } | null {
+  let dmy = false
+  let mdy = false
+  for (let index = 0; index < values.length; index += 1) {
+    const parts = slashDateParts(values[index])
+    if (!parts) continue
+    if (parts.a > 12 && parts.b <= 12) {
+      if (mdy) return { index, example: parts.raw }
+      dmy = true
+    } else if (parts.b > 12 && parts.a <= 12) {
+      if (dmy) return { index, example: parts.raw }
+      mdy = true
+    }
+  }
+  return null
+}
+
+/** Data testuale con giorno e mese separati da / o - (non una data ISO). */
+export function isSlashDateText(value: unknown): boolean {
+  return slashDateParts(value) !== null
+}
+
+function isRealUtcDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+/**
+ * Data testuale GG/MM o MM/GG → `YYYY-MM-DD`.
+ * Accetta anni a 2 e 4 cifre, separatori `/` e `-`, e un orario finale da ignorare.
+ * Una data di calendario impossibile restituisce null.
+ */
+export function parseSlashDate(value: unknown, order: SlashDateOrder): string | null {
+  const parts = slashDateParts(value)
+  if (!parts) return null
+  const day = order === 'dmy' ? parts.a : parts.b
+  const month = order === 'dmy' ? parts.b : parts.a
+  const yearNum = Number(parts.year)
+  const year = parts.year.length === 2 ? (yearNum > 50 ? 1900 + yearNum : 2000 + yearNum) : yearNum
+  if (!isRealUtcDate(year, month, day)) return null
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
 /** Campi template di testo su cui la riparazione dei caratteri è automatica. */
 export const TEXT_REPAIR_FIELDS: ReadonlySet<string> = new Set([
   'titolo', 'titolo_originale', 'titolo_episodio', 'titolo_episodio_originale',

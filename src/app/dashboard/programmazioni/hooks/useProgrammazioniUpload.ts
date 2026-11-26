@@ -4,7 +4,9 @@ import {
   buildLegacyPayload,
   decideUploadPath,
   detectColumns,
+  formatDateOrderConflict,
   readAllRows,
+  resolveDateOrders,
   saveMapping,
   type ColumnDiff,
   type ImportMappingConfig,
@@ -142,6 +144,9 @@ export function useProgrammazioniUpload({
 
       if (result.job) {
         applyUploadJobSnapshot(result.job, fallbackTotal)
+        if (result.job.stato === 'error') {
+          notifyError('Caricamento non riuscito', result.job.error)
+        }
       } else {
         setUploadError(result.error || 'Errore polling upload programmazioni')
         clearUploadProgress(job.campagna_programmazione_id)
@@ -294,6 +299,20 @@ export function useProgrammazioniUpload({
         emittenteId: campagna.emittente_id,
         emittenteName: (campagna as { emittente?: { nome?: string } }).emittente?.nome ?? null,
       }
+      const dateResolution = resolveDateOrders(
+        parsedRows,
+        uploadDecision.kind === 'apply_existing'
+          ? {
+              kind: 'apply_existing',
+              mapping: uploadDecision.mapping.mapping,
+              rules: uploadDecision.mapping.rules,
+              transforms: uploadDecision.mapping.transforms,
+            }
+          : { kind: 'legacy_template' },
+      )
+      if (dateResolution.conflicts.length > 0) {
+        throw new Error(formatDateOrderConflict(dateResolution.conflicts[0]))
+      }
       const buildAll = (rows: ImportRow[]): ProgrammazionePayload[] => {
         if (uploadDecision.kind === 'apply_existing') {
           return applyMapping(
@@ -303,9 +322,10 @@ export function useProgrammazioniUpload({
             uploadDecision.mapping.rules,
             uploadDecision.mapping.transforms,
             uploadDecision.mapping.year_fields,
+            dateResolution.orders,
           )
         }
-        return buildLegacyPayload(rows, ctx)
+        return buildLegacyPayload(rows, ctx, dateResolution.orders)
       }
       const chunkSize = 500
       for (let i = 0; i < parsedRows.length; i += chunkSize) {

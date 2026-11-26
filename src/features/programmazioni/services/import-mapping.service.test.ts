@@ -591,3 +591,60 @@ describe('distinctRuleResults', () => {
     expect(episodio.empty).toBe(2)
   })
 })
+
+describe('date testuali GG/MM e MM/GG', () => {
+  const ctx = { campagnaProgrammazioneId: 'c1', emittenteId: 'e1' }
+
+  it('converte il testo GG/MM/AAAA nel percorso legacy', () => {
+    const out = buildLegacyPayload([
+      { titolo: 'A', data_trasmissione: '01/01/2024' },
+      { titolo: 'B', data_trasmissione: '02/01/2024' },
+      { titolo: 'C', data_trasmissione: '13/01/2024' },
+    ], ctx)
+    expect(out.map(row => row.data_trasmissione)).toEqual(['2024-01-01', '2024-01-02', '2024-01-13'])
+  })
+
+  it('usa MM/GG quando la colonna lo dimostra', () => {
+    const out = buildLegacyPayload([
+      { titolo: 'A', data_trasmissione: '01/13/2024' },
+      { titolo: 'B', data_trasmissione: '02/01/2024' },
+    ], ctx)
+    expect(out.map(row => row.data_trasmissione)).toEqual(['2024-01-13', '2024-02-01'])
+  })
+
+  it('applica un ordine già deciso anche su un blocco di sole date ambigue', () => {
+    const out = buildLegacyPayload(
+      [{ titolo: 'A', data_trasmissione: '02/01/2024' }],
+      ctx,
+      { data_trasmissione: 'mdy' },
+    )
+    expect(out[0].data_trasmissione).toBe('2024-02-01')
+  })
+
+  it('non inoltra una data-testo non riconosciuta', () => {
+    const out = buildLegacyPayload([{ titolo: 'A', data_trasmissione: 'non-una-data' }], ctx)
+    expect(out[0].data_trasmissione).toBeUndefined()
+  })
+
+  it('rifiuta un file che mescola GG/MM e MM/GG prima di produrre payload', () => {
+    expect(() => buildLegacyPayload([
+      { titolo: 'A', data_trasmissione: '13/01/2024' },
+      { titolo: 'B', data_trasmissione: '01/13/2024' },
+    ], ctx)).toThrow(/riga 3 del file/)
+  })
+
+  it('con eu_date_to_iso esplicito non cambia la conversione', () => {
+    const out = applyMapping(
+      [
+        { Data: '01/01/2024', Titolo: 'A' },
+        { Data: '02/01/2024', Titolo: 'B' },
+        { Data: '13/01/2024', Titolo: 'C' },
+      ],
+      { Data: 'data_trasmissione', Titolo: 'titolo' },
+      ctx,
+      undefined,
+      { Data: 'eu_date_to_iso' },
+    )
+    expect(out.map(row => row.data_trasmissione)).toEqual(['2024-01-01', '2024-01-02', '2024-01-13'])
+  })
+})

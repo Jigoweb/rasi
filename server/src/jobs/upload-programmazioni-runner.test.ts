@@ -244,6 +244,147 @@ describe('upload programmazioni runner', () => {
       duration_placeholder: 1,
     })
   })
+
+  function csvBuffer(csv: string) {
+    const encoded = new TextEncoder().encode(csv)
+    return encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength)
+  }
+
+  it('un conflitto di formato date mette il job in errore senza upsert', async () => {
+    const patchCalls: QueryCall[] = []
+    let upserts = 0
+    const csv = 'titolo,data_trasmissione\nA,13/01/2024\nB,01/13/2024\n'
+
+    ;(supabaseModule.supabaseService as any).rpc = async () => ({ data: { success: true }, error: null })
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      if (table === 'upload_jobs') return createPatchQuery(patchCalls)
+      if (table === 'programmazioni') {
+        upserts += 1
+        return createUpsertQuery([])
+      }
+      throw new Error(`Unexpected table ${table}`)
+    }
+    ;(supabaseModule.supabaseService as any).storage = {
+      from: () => ({
+        download: async () => ({ data: { arrayBuffer: async () => csvBuffer(csv) }, error: null }),
+        remove: async () => ({ error: null }),
+      }),
+    }
+
+    await runner.runUploadProgrammazioniJob({
+      jobId: 'job-conflict',
+      campagneProgrammazioneId: 'campagna-1',
+      userId: 'user-1',
+      emittenteId: 'emittente-1',
+      storagePath: 'user-1/campagna-1/conflitto.csv',
+      fileName: 'conflitto.csv',
+      mappingSnapshot: { kind: 'legacy_template' },
+      chunkSize: 500,
+    })
+
+    assert.equal(upserts, 0)
+    const errorPatch = patchCalls.find((call) =>
+      call.method === 'update' && (call.args[0] as { stato?: string }).stato === 'error'
+    )
+    assert.ok(errorPatch)
+    const message = (errorPatch.args[0] as { error: string }).error
+    assert.match(message, /colonna «data_trasmissione»/)
+    assert.match(message, /riga 3 del file/)
+    assert.match(message, /01\/13\/2024/)
+    assert.equal(
+      patchCalls.some((call) => call.method === 'update' && (call.args[0] as { fase?: string }).fase === 'validating'),
+      true,
+    )
+  })
+
+  it('traduce un 22008 dell\'upsert con l\'intervallo di righe del file', async () => {
+    const patchCalls: QueryCall[] = []
+    let upserts = 0
+    const lines = ['titolo,data_trasmissione']
+    for (let i = 0; i < 3000; i += 1) lines.push(`Film ${i},2024-01-01`)
+    const csv = lines.join('\n') + '\n'
+
+    ;(supabaseModule.supabaseService as any).rpc = async () => ({ data: { success: true }, error: null })
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      if (table === 'upload_jobs') return createPatchQuery(patchCalls)
+      if (table === 'programmazioni') {
+        return {
+          upsert: () => {
+            upserts += 1
+            if (upserts === 6) {
+              return {
+                error: { code: '22008', message: 'date/time field value out of range: "13/01/2024"' },
+              }
+            }
+            return { error: null }
+          },
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    }
+    ;(supabaseModule.supabaseService as any).storage = {
+      from: () => ({
+        download: async () => ({ data: { arrayBuffer: async () => csvBuffer(csv) }, error: null }),
+        remove: async () => ({ error: null }),
+      }),
+    }
+
+    await runner.runUploadProgrammazioniJob({
+      jobId: 'job-22008',
+      campagneProgrammazioneId: 'campagna-1',
+      userId: 'user-1',
+      emittenteId: 'emittente-1',
+      storagePath: 'user-1/campagna-1/date.csv',
+      fileName: 'date.csv',
+      mappingSnapshot: { kind: 'legacy_template' },
+      chunkSize: 500,
+    })
+
+    const errorPatch = patchCalls.find((call) =>
+      call.method === 'update' && (call.args[0] as { stato?: string }).stato === 'error'
+    )
+    assert.ok(errorPatch)
+    const message = (errorPatch.args[0] as { error: string }).error
+    assert.match(message, /righe 2502–3001/)
+    assert.match(message, /date\/time field value out of range/)
+  })
+
+  it('salva nel report qualità l\'avviso sulle date ambigue interpretate come GG/MM', async () => {
+    const patchCalls: QueryCall[] = []
+    const csv = 'titolo,data_trasmissione\nFilm,01/02/2024\n'
+
+    ;(supabaseModule.supabaseService as any).rpc = async () => ({ data: { success: true }, error: null })
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      if (table === 'upload_jobs') return createPatchQuery(patchCalls)
+      if (table === 'programmazioni') return createUpsertQuery([])
+      throw new Error(`Unexpected table ${table}`)
+    }
+    ;(supabaseModule.supabaseService as any).storage = {
+      from: () => ({
+        download: async () => ({ data: { arrayBuffer: async () => csvBuffer(csv) }, error: null }),
+        remove: async () => ({ error: null }),
+      }),
+    }
+
+    await runner.runUploadProgrammazioniJob({
+      jobId: 'job-ambiguous',
+      campagneProgrammazioneId: 'campagna-1',
+      userId: 'user-1',
+      emittenteId: 'emittente-1',
+      storagePath: 'user-1/campagna-1/ambigue.csv',
+      fileName: 'ambigue.csv',
+      mappingSnapshot: { kind: 'legacy_template' },
+      chunkSize: 500,
+    })
+
+    const qualityPatch = patchCalls.find((call) =>
+      call.method === 'update' && Boolean((call.args[0] as { quality_report?: unknown }).quality_report)
+    )
+    assert.ok(qualityPatch)
+    const report = (qualityPatch.args[0] as { quality_report: { date_ambigue?: { column: string }[] } }).quality_report
+    assert.equal(report.date_ambigue?.length, 1)
+    assert.equal(report.date_ambigue?.[0].column, 'data_trasmissione')
+  })
 })
 
 describe('upsertChunkWithRetry', () => {

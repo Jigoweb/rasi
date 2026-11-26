@@ -1,5 +1,5 @@
 // Jest globals — project uses Jest, not Vitest as plan suggested
-import { applyTransform, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform, isDateTargetField, parseIsoLikeDate, parseTimeValue, repairMojibake, rescueDateTimeTransform } from './transforms'
+import { applyTransform, detectSlashDateOrder, isKnownTransform, TRANSFORMS, TRANSFORM_LABELS, transformsForField, suggestDateTransform, isDateTargetField, parseIsoLikeDate, parseSlashDate, parseTimeValue, repairMojibake, rescueDateTimeTransform } from './transforms'
 
 describe('hhmmss_to_minutes', () => {
   it('converts HH:MM:SS to minutes (rounded)', () => {
@@ -404,5 +404,21 @@ describe('date, orari e «à» finale (PLEX e Sky, novembre 2026)', () => {
     expect(repairMojibake('Allegri becchini... arriva TrinitÃ (1972)')).toBe('Allegri becchini... arriva Trinità (1972)')
     expect(repairMojibake('BÃCH')).toBe('BÃCH')
     expect(repairMojibake('IRMÃ')).toBe('IRMÃ')
+  })
+})
+
+describe('detectSlashDateOrder', () => {
+  it('riconosce GG/MM, MM/GG, il caso ambiguo e il conflitto', () => {
+    expect(detectSlashDateOrder(['01/01/2024', '13/01/2024'])).toBe('dmy')
+    expect(detectSlashDateOrder(['01/13/2024'])).toBe('mdy')
+    expect(detectSlashDateOrder(['01/02/2024'])).toBe('ambiguous')
+    expect(detectSlashDateOrder(['13/01/2024', '01/13/2024'])).toBe('conflict')
+  })
+})
+
+describe('parseSlashDate', () => {
+  it('converte 13/01/2024 in GG/MM e non scambia 02/01/2024 con febbraio', () => {
+    expect(parseSlashDate('13/01/2024', 'dmy')).toBe('2024-01-13')
+    expect(parseSlashDate('02/01/2024', 'dmy')).toBe('2024-01-02')
   })
 })
