@@ -451,7 +451,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
             <FormItem>
               <FormLabel>Luogo di Nascita</FormLabel>
               <FormControl>
-                <Input {...field} value={field.value || ''} placeholder="Roma" />
+                <Input {...field} value={field.value || ''} placeholder="Comune di nascita" />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -792,7 +792,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
               <FormItem className="md:col-span-2">
                 <FormLabel>Via</FormLabel>
                 <FormControl>
-                  <Input {...field} value={field.value || ''} placeholder="Via Roma" />
+                  <Input {...field} value={field.value || ''} placeholder="Via / piazza (non indicata)" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -806,7 +806,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
               <FormItem>
                 <FormLabel>Civico</FormLabel>
                 <FormControl>
-                  <Input {...field} value={field.value || ''} placeholder="123" />
+                  <Input {...field} value={field.value || ''} placeholder="N." />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -822,7 +822,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
               <FormItem>
                 <FormLabel>CAP</FormLabel>
                 <FormControl>
-                  <Input {...field} value={field.value || ''} placeholder="00100" maxLength={5} />
+                  <Input {...field} value={field.value || ''} placeholder="CAP" maxLength={5} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -836,7 +836,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
               <FormItem>
                 <FormLabel>Città</FormLabel>
                 <FormControl>
-                  <Input {...field} value={field.value || ''} placeholder="Roma" />
+                  <Input {...field} value={field.value || ''} placeholder="Città" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -850,7 +850,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
               <FormItem>
                 <FormLabel>Provincia</FormLabel>
                 <FormControl>
-                  <Input {...field} value={field.value || ''} placeholder="RM" maxLength={2} />
+                  <Input {...field} value={field.value || ''} placeholder="Sigla" maxLength={2} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

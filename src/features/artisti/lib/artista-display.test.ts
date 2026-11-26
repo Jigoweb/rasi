@@ -3,6 +3,7 @@ import {
   deriveAmbitoFromDiritti,
   formatAmbitoLabel,
   formatDirittiCompact,
+  formatIndirizzoResidenza,
   formatPaeseOption,
   isPartecipazioneInVerifica,
   paesiOptionsInUso,
@@ -151,5 +152,17 @@ describe('artista-display', () => {
       expect(isPartecipazioneInVerifica(undefined)).toBe(false)
       expect(isPartecipazioneInVerifica({})).toBe(false)
     })
+  })
+})
+
+describe('formatIndirizzoResidenza', () => {
+  it('compone la residenza su una riga', () => {
+    expect(formatIndirizzoResidenza({ via: 'Via Verdi', civico: '10', cap: '20100', citta: 'Milano', provincia: 'MI' }))
+      .toBe('Via Verdi 10, 20100 Milano (MI)')
+  })
+
+  it('restituisce stringa vuota se non c’è residenza', () => {
+    expect(formatIndirizzoResidenza(null)).toBe('')
+    expect(formatIndirizzoResidenza({ via: '', citta: '  ' })).toBe('')
   })
 })

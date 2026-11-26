@@ -191,3 +191,20 @@ export const SESSO_OPTIONS: { value: 'M' | 'F'; label: string }[] = [
 export function formatSessoLabel(sesso: string | null | undefined): string {
   return SESSO_OPTIONS.find((option) => option.value === sesso)?.label ?? ''
 }
+
+/**
+ * Residenza dell'artista (colonna artisti.indirizzo, jsonb) su una riga.
+ * Stringa vuota se non c'è nessun dato: la UI mostra «Non presente».
+ */
+export function formatIndirizzoResidenza(indirizzo: unknown): string {
+  if (!indirizzo || typeof indirizzo !== 'object') return ''
+  const record = indirizzo as Record<string, unknown>
+  const clean = (value: unknown) => (typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '')
+  const viaCivico = [clean(record.via), clean(record.civico)].filter(Boolean).join(' ')
+  const capCitta = [clean(record.cap), clean(record.citta)].filter(Boolean).join(' ')
+  const provincia = clean(record.provincia)
+  return [viaCivico, capCitta, provincia ? `(${provincia})` : '']
+    .filter(Boolean)
+    .join(', ')
+    .replace(', (', ' (')
+}
