@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getArtisti, getCodiciPaeseArtisti, getPartecipazioniCountByArtistaId, deleteArtista, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
+import { getArtisti, getCodiciPaeseArtisti, type ArtistaFieldFilter } from '@/features/artisti/services/artisti.service'
+import { EliminaArtistaDialog } from '@/features/artisti/components/elimina-artista-dialog'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Button } from '@/shared/components/ui/button'
@@ -16,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { canManageArtistiContatti } from '@/shared/lib/auth-permissions'
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, AlertTriangle, Loader2, Filter, X } from 'lucide-react'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, X } from 'lucide-react'
 import { SearchInput } from '@/shared/components/search-input'
 import { createArtista, updateArtista } from '@/features/artisti/services/artisti.service'
 import { cercaCastEsternoPerArtista } from '@/features/artisti/services/artista-scheda.service'
@@ -285,9 +286,6 @@ export default function ArtistiPage() {
   // Delete confirmation states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [artistToDelete, setArtistToDelete] = useState<Artista | null>(null)
-  const [deleteCheckStatus, setDeleteCheckStatus] = useState<'idle' | 'checking' | 'can_delete' | 'has_partecipazioni'>('idle')
-  const [partecipazioniCount, setPartecipazioniCount] = useState(0)
-  const [isDeleting, setIsDeleting] = useState(false)
   
   const loadPaesiInUso = useCallback(async () => {
     const { data, error } = await getCodiciPaeseArtisti()
@@ -537,51 +535,15 @@ export default function ArtistiPage() {
     setShowForm(true)
   }
 
-  const openDeleteDialog = async (artista: Artista) => {
+  const openDeleteDialog = (artista: Artista) => {
     setArtistToDelete(artista)
-    setDeleteCheckStatus('checking')
     setShowDeleteDialog(true)
-    
-    // Check if artist has participations
-    const { count, error } = await getPartecipazioniCountByArtistaId(artista.id)
-    
-    if (error) {
-      console.error('Error checking partecipazioni:', error)
-      setDeleteCheckStatus('idle')
-      return
-    }
-    
-    setPartecipazioniCount(count)
-    setDeleteCheckStatus(count > 0 ? 'has_partecipazioni' : 'can_delete')
   }
 
-  const handleDeleteArtista = async () => {
-    if (!artistToDelete) return
-    
-    setIsDeleting(true)
-    
-    const { error } = await deleteArtista(artistToDelete.id)
-    
-    if (error) {
-      console.error('Error deleting artista:', error)
-      setIsDeleting(false)
-      return
-    }
-    
-    // Refresh list and close dialog
+  const handleArtistaDeleted = async () => {
+    setArtistToDelete(null)
     await fetchArtisti()
     await loadPaesiInUso()
-    setShowDeleteDialog(false)
-    setArtistToDelete(null)
-    setDeleteCheckStatus('idle')
-    setIsDeleting(false)
-  }
-
-  const closeDeleteDialog = () => {
-    setShowDeleteDialog(false)
-    setArtistToDelete(null)
-    setDeleteCheckStatus('idle')
-    setPartecipazioniCount(0)
   }
 
   return (
@@ -1119,78 +1081,15 @@ export default function ArtistiPage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={closeDeleteDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              Conferma Eliminazione
-            </DialogTitle>
-            <DialogDescription>
-              {artistToDelete && (
-                <>Stai per eliminare l&apos;artista <strong>{artistToDelete.nome} {artistToDelete.cognome}</strong></>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4">
-            {deleteCheckStatus === 'checking' && (
-              <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Verifica partecipazioni in corso...
-              </div>
-            )}
-
-            {deleteCheckStatus === 'has_partecipazioni' && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-yellow-800">Impossibile eliminare</p>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      Questo artista ha <strong>{partecipazioniCount} partecipazion{partecipazioniCount === 1 ? 'e' : 'i'}</strong> associate. 
-                      Rimuovi prima tutte le partecipazioni dalla pagina di dettaglio dell&apos;artista.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {deleteCheckStatus === 'can_delete' && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-700">
-                  Questa azione è irreversibile. Tutti i dati dell&apos;artista verranno eliminati permanentemente.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeDeleteDialog}>
-              Annulla
-            </Button>
-            {deleteCheckStatus === 'can_delete' && (
-              <Button 
-                variant="destructive" 
-                onClick={handleDeleteArtista}
-                disabled={isDeleting}
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Eliminazione...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Elimina Artista
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EliminaArtistaDialog
+        artista={artistToDelete}
+        open={showDeleteDialog}
+        onOpenChange={open => {
+          setShowDeleteDialog(open)
+          if (!open) setArtistToDelete(null)
+        }}
+        onDeleted={handleArtistaDeleted}
+      />
     </div>
   )
 }

@@ -19,15 +19,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/shared/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
-import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, AlertTriangle, Music, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, MoreHorizontal, Edit, Trash2, Eye, Download, Filter, Film, Tv, FileText, X, Database as DatabaseIcon, Loader2, AlertCircle, CheckCircle2, Music, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form'
 import { Checkbox } from '@/shared/components/ui/checkbox'
-import { createOpera, updateOpera, getOperaById, getPartecipazioniCountByOperaId, deleteOpera, getOpereForExport, formatOpereForExport, getIndividuazioniByOperaId, deleteIndividuazioniByOperaId, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
+import { EliminaOperaDialog } from '@/features/opere/components/elimina-opera-dialog'
+import { createOpera, updateOpera, getOperaById, getOpereForExport, formatOpereForExport, OPERE_INCOMPLETE_OR } from '@/features/opere/services/opere.service'
 import { useExportProcess } from '@/shared/contexts/export-process-context'
 import * as XLSX from 'xlsx'
 import { getTitleById, mapImdbToOpera, mapImdbTypeToOperaTipo } from '@/features/opere/services/external/imdb.service'
 import { operaHaEpisodi, TIPO_OPERA_LABELS, type TipoOpera } from '@/shared/lib/opere-utils'
-import { notifyError, notifySuccess } from '@/shared/lib/toast'
+import { notifyError } from '@/shared/lib/toast'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { canEditOpera } from '@/shared/lib/auth-permissions'
 
@@ -299,11 +300,6 @@ export default function OperePage() {
   // Delete confirmation states
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [operaToDelete, setOperaToDelete] = useState<Opera | null>(null)
-  const [deleteCheckStatus, setDeleteCheckStatus] = useState<'idle' | 'checking' | 'can_delete' | 'has_partecipazioni' | 'has_individuazioni'>('idle')
-  const [partecipazioniCount, setPartecipazioniCount] = useState(0)
-  const [individuazioniCount, setIndividuazioniCount] = useState(0)
-  const [deleteIndividuazioniToo, setDeleteIndividuazioniToo] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
 
   const { startExport } = useExportProcess()
   const requestIdRef = useRef(0)
@@ -643,85 +639,9 @@ export default function OperePage() {
     setShowForm(true)
   }
 
-  const openDeleteDialog = async (opera: Opera) => {
+  const openDeleteDialog = (opera: Opera) => {
     setOperaToDelete(opera)
-    setDeleteCheckStatus('checking')
-    setIndividuazioniCount(0)
-    setDeleteIndividuazioniToo(false)
     setShowDeleteDialog(true)
-
-    // Check if opera has participations
-    const { count, error } = await getPartecipazioniCountByOperaId(opera.id)
-
-    if (error) {
-      console.error('Error checking partecipazioni:', error)
-      setDeleteCheckStatus('idle')
-      return
-    }
-
-    if (count > 0) {
-      setPartecipazioniCount(count)
-      setDeleteCheckStatus('has_partecipazioni')
-      return
-    }
-
-    // No partecipazioni: check for residual individuazioni (blocked by FK opera_id RESTRICT)
-    const { data: indData, error: indError } = await getIndividuazioniByOperaId(opera.id)
-    if (indError) {
-      console.error('Error checking individuazioni:', indError)
-      notifyError('Impossibile verificare le individuazioni collegate', indError)
-      setDeleteCheckStatus('can_delete')
-      return
-    }
-    const indCount = indData?.length ?? 0
-    setIndividuazioniCount(indCount)
-    setDeleteCheckStatus(indCount > 0 ? 'has_individuazioni' : 'can_delete')
-  }
-
-  const handleDeleteOpera = async () => {
-    if (!operaToDelete) return
-
-    setIsDeleting(true)
-
-    // If there are residual individuazioni and user confirmed deletion, remove them first
-    if (deleteIndividuazioniToo && individuazioniCount > 0) {
-      const { error: indError } = await deleteIndividuazioniByOperaId(operaToDelete.id)
-      if (indError) {
-        console.error('Error deleting individuazioni:', indError)
-        notifyError('Eliminazione individuazioni collegate non riuscita', indError)
-        setIsDeleting(false)
-        return
-      }
-    }
-
-    const { error } = await deleteOpera(operaToDelete.id)
-
-    if (error) {
-      console.error('Error deleting opera:', error)
-      notifyError('Eliminazione opera non riuscita', error)
-      setIsDeleting(false)
-      return
-    }
-
-    notifySuccess('Opera eliminata')
-
-    // Refresh list and close dialog
-    await fetchOpere()
-    setShowDeleteDialog(false)
-    setOperaToDelete(null)
-    setDeleteCheckStatus('idle')
-    setIndividuazioniCount(0)
-    setDeleteIndividuazioniToo(false)
-    setIsDeleting(false)
-  }
-
-  const closeDeleteDialog = () => {
-    setShowDeleteDialog(false)
-    setOperaToDelete(null)
-    setDeleteCheckStatus('idle')
-    setPartecipazioniCount(0)
-    setIndividuazioniCount(0)
-    setDeleteIndividuazioniToo(false)
   }
 
   const onSubmit = async (values: z.infer<typeof schema>) => {
@@ -1481,111 +1401,18 @@ export default function OperePage() {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={closeDeleteDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-red-500" />
-              Conferma Eliminazione
-            </DialogTitle>
-            <DialogDescription>
-              {operaToDelete && (
-                <>Stai per eliminare l&apos;opera <strong>&quot;{operaToDelete.titolo}&quot;</strong></>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="py-4">
-            {deleteCheckStatus === 'checking' && (
-              <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Verifica partecipazioni in corso...
-              </div>
-            )}
-
-            {deleteCheckStatus === 'has_partecipazioni' && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-yellow-800">Impossibile eliminare</p>
-                    <p className="text-sm text-yellow-700 mt-1">
-                      Questa opera ha <strong>{partecipazioniCount} partecipazion{partecipazioniCount === 1 ? 'e' : 'i'}</strong> associate. 
-                      Rimuovi prima tutte le partecipazioni dalla pagina di dettaglio dell&apos;opera.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {deleteCheckStatus === 'has_individuazioni' && (
-              <div className="space-y-3">
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-sm text-red-700">
-                    Questa azione è irreversibile. Tutti i dati dell&apos;opera verranno eliminati permanentemente.
-                  </p>
-                </div>
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium text-orange-800">Presenti individuazioni storiche</p>
-                      <p className="text-sm text-orange-700 mt-1">
-                        Quest&apos;opera è presente in{' '}
-                        <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> di campagne precedenti.
-                        Le individuazioni verranno mantenute con tutti i dati dello snapshot, ma perderanno il collegamento all&apos;opera nel catalogo.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 pl-1">
-                  <Checkbox
-                    id="delete-individuazioni"
-                    checked={deleteIndividuazioniToo}
-                    onCheckedChange={(v) => setDeleteIndividuazioniToo(!!v)}
-                  />
-                  <label htmlFor="delete-individuazioni" className="text-sm text-gray-700 cursor-pointer leading-snug">
-                    Elimina anche le <strong>{individuazioniCount} individuazion{individuazioniCount === 1 ? 'e' : 'i'}</strong> residue (opzionale)
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {deleteCheckStatus === 'can_delete' && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-700">
-                  Questa azione è irreversibile. Tutti i dati dell&apos;opera verranno eliminati permanentemente, inclusi eventuali episodi associati.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeDeleteDialog}>
-              Annulla
-            </Button>
-            {(deleteCheckStatus === 'can_delete' || deleteCheckStatus === 'has_individuazioni') && (
-              <Button
-                variant="destructive"
-                onClick={handleDeleteOpera}
-                disabled={isDeleting}
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Eliminazione...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Elimina Opera
-                  </>
-                )}
-              </Button>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EliminaOperaDialog
+        opera={operaToDelete}
+        open={showDeleteDialog}
+        onOpenChange={open => {
+          setShowDeleteDialog(open)
+          if (!open) setOperaToDelete(null)
+        }}
+        onDeleted={async () => {
+          setOperaToDelete(null)
+          await fetchOpere()
+        }}
+      />
 
       {opere.length > PAGE_SIZE ? <FloatingScrollUpButton /> : null}
     </div>

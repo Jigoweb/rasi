@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { EliminaArtistaDialog } from '@/features/artisti/components/elimina-artista-dialog'
 import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import { getArtistaById, getPartecipazioniByArtistaId, updatePartecipazione, deletePartecipazione, deletePartecipazioniMultiple, updateArtista } from '@/features/artisti/services/artisti.service';
 import { getRuoliTipologie, getIndividuazioniByPartecipazioneId, deleteIndividuazioniByPartecipazioneId, getIndividuazioniByPartecipazioneIds, deleteIndividuazioniByPartecipazioneIds } from '@/features/opere/services/opere.service';
@@ -85,6 +86,8 @@ export default function ArtistaProfiloPage() {
   const params = useParams()
   const artistaId = params.id as string
   const { isAdmin, userRole, canWriteOutsideOpere } = useAuth()
+  const router = useRouter()
+  const [showEliminaArtistaDialog, setShowEliminaArtistaDialog] = useState(false)
   const canSeeDatiRiservati = canManageArtistiContatti(userRole)
 
   const [artista, setArtista] = useState<Artista | null>(null)
@@ -1000,6 +1003,31 @@ export default function ArtistaProfiloPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Zona eliminazione: in fondo alla scheda, solo amministratori */}
+      {isAdmin && (
+        <Card className="border-red-200">
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-red-700">Elimina artista</p>
+              <p className="text-sm text-muted-foreground">
+                Rimuove l&apos;artista dalla banca dati. Potrai scegliere se mantenere o eliminare le partecipazioni.
+              </p>
+            </div>
+            <Button variant="destructive" onClick={() => setShowEliminaArtistaDialog(true)}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Elimina artista
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <EliminaArtistaDialog
+        artista={artista}
+        open={showEliminaArtistaDialog}
+        onOpenChange={setShowEliminaArtistaDialog}
+        onDeleted={() => router.push('/dashboard/artisti')}
+      />
 
       {/* Edit Partecipazione Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>

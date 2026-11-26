@@ -275,17 +275,53 @@ export const getPartecipazioniCountByArtistaId = async (artistaId: string) => {
   return { count: count ?? 0, error }
 }
 
-/**
- * Deletes an artist by ID.
- * Note: This will fail if the artist has associated participations due to FK constraints.
- */
-export const deleteArtista = async (id: string) => {
-  const { error } = await supabase
-    .from('artisti')
-    .delete()
-    .eq('id', id)
+export type DeleteArtistaPartecipazioniMode = 'mantieni' | 'elimina'
 
-  return { error }
+export interface DeleteArtistaResult {
+  success: boolean
+  error?: string
+  error_code?: 'FORBIDDEN' | 'NOT_FOUND' | 'HAS_INDIVIDUAZIONI' | string
+  individuazioni_count?: number
+  ripartizioni_count?: number
+  partecipazioni_eliminate?: number
+  cast_esterno_creati?: number
+}
+
+/**
+ * Elimina un artista dalla banca dati (RPC delete_artista_safe, solo admin).
+ * - 'mantieni': le partecipazioni diventano cast esterno delle opere
+ * - 'elimina': le partecipazioni vengono eliminate
+ * Restituisce sempre un errore leggibile (prima la DELETE diretta falliva in
+ * silenzio per vincoli o permessi).
+ */
+export const deleteArtista = async (
+  id: string,
+  partecipazioni: DeleteArtistaPartecipazioniMode = 'elimina'
+): Promise<{ data: DeleteArtistaResult | null; error: Error | null }> => {
+  const { data, error } = await (supabase as any).rpc('delete_artista_safe', {
+    p_artista_id: id,
+    p_partecipazioni: partecipazioni,
+  })
+  if (error) {
+    return { data: null, error: new Error(error.message || 'Eliminazione artista non riuscita') }
+  }
+
+  const result = data as DeleteArtistaResult | null
+  if (!result?.success) {
+    return { data: result, error: new Error(describeDeleteArtistaError(result)) }
+  }
+  return { data: result, error: null }
+}
+
+export function describeDeleteArtistaError(result: DeleteArtistaResult | null): string {
+  if (result?.error_code === 'HAS_INDIVIDUAZIONI') {
+    const parts = [
+      result.individuazioni_count ? `${result.individuazioni_count} individuazioni` : null,
+      result.ripartizioni_count ? `${result.ripartizioni_count} ripartizioni` : null,
+    ].filter(Boolean)
+    return `L'artista ha ${parts.join(' e ')} collegate: non può essere eliminato finché esistono.`
+  }
+  return result?.error || 'Eliminazione artista non riuscita'
 }
 
 // Re-export partecipazioni functions from opere service for convenience

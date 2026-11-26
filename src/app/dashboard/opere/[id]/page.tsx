@@ -5,7 +5,8 @@ import { useInitialPageLoad } from '@/shared/hooks/useInitialPageLoad'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
+import { EliminaOperaDialog } from '@/features/opere/components/elimina-opera-dialog'
 import Link from 'next/link'
 import { Database } from '@/shared/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -54,6 +55,8 @@ export default function OperaDetailPage() {
   const params = useParams()
   const operaId = params.id as string
   const { isAdmin, userRole, canValidateOpere, canReadBancaDati, isStaff } = useAuth()
+  const router = useRouter()
+  const [showEliminaOperaDialog, setShowEliminaOperaDialog] = useState(false)
 
   const [opera, setOpera] = useState<Opera | null>(null)
   // Operatore base e Tirocinante: modifiche solo su opere non validate
@@ -1732,7 +1735,31 @@ export default function OperaDetailPage() {
         linkArtisti={canReadBancaDati}
       />
 
-      
+      {/* Zona eliminazione: in fondo alla scheda opera (staff) */}
+      {isStaff && (
+        <Card className="border-red-200">
+          <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-medium text-red-700">Elimina opera</p>
+              <p className="text-sm text-muted-foreground">
+                Rimuove l&apos;opera dalla banca dati con episodi, alias, cast esterno e partecipazioni.
+              </p>
+            </div>
+            <Button variant="destructive" onClick={() => setShowEliminaOperaDialog(true)}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Elimina opera
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <EliminaOperaDialog
+        opera={opera}
+        open={showEliminaOperaDialog}
+        onOpenChange={setShowEliminaOperaDialog}
+        onDeleted={() => router.push('/dashboard/opere')}
+      />
+
       {/* Export Dialog */}
       <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
         <DialogContent className="sm:max-w-md">
