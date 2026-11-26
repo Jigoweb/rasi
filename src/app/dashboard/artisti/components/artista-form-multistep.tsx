@@ -16,6 +16,7 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { Badge } from '@/shared/components/ui/badge'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { CountryMultiSelect } from '@/shared/components/ui/country-multi-select'
+import { normalizeCodiciPaese, parseCodicePaeseColumn } from '@/shared/lib/paesi'
 
 /** Valore Select per «non indicato» (Radix non accetta value vuoto). */
 const NON_INDICATO = '__non_indicato__'
@@ -193,7 +194,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       ragione_sociale: artista?.ragione_sociale || '',
       forma_giuridica: artista?.forma_giuridica || '',
       partita_iva: artista?.partita_iva ? String(artista.partita_iva) : '',
-      codice_paese: artista?.codice_paese ? artista.codice_paese.split('/').filter(Boolean) : [],
+      codice_paese: parseCodicePaeseColumn(artista?.codice_paese),
       componente_stabile_gruppo_orchestra: artista?.componente_stabile_gruppo_orchestra || '',
       diritti_attivi: [],
     },
@@ -315,7 +316,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       ragione_sociale: data.ragione_sociale || null,
       forma_giuridica: data.forma_giuridica || null,
       partita_iva: data.partita_iva?.trim() ? data.partita_iva.trim() : null,
-      codice_paese: data.codice_paese && data.codice_paese.length > 0 ? data.codice_paese.join('/') : null,
+      codice_paese: data.codice_paese && data.codice_paese.length > 0 ? normalizeCodiciPaese(data.codice_paese).join('/') : null,
       componente_stabile_gruppo_orchestra: data.componente_stabile_gruppo_orchestra || null,
       diritti_attivi: (data.diritti_attivi && data.diritti_attivi.length > 0) ? data.diritti_attivi : null,
     }

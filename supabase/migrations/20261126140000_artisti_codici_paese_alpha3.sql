@@ -1,0 +1,165 @@
+-- Codici paese degli artisti: alcuni import hanno salvato codici ISO alpha-2
+-- (JP, ES, RO) accanto agli alpha-3 della lista ufficiale. In maschera JP e
+-- JPN comparivano come due paesi e i codici fuori lista non si potevano
+-- togliere. Qui si converte alpha-2 -> alpha-3 e si eliminano i doppioni,
+-- mantenendo l'ordine. I codici che non sono paesi (EU, EUROPA) restano: in
+-- maschera ora sono visibili come «non ISO» e rimovibili.
+-- Stessa mappa di src/shared/lib/paesi.ts (ALPHA2_TO_ALPHA3).
+
+WITH mappa(alpha2, alpha3) AS (
+  VALUES
+    ('IT', 'ITA'),
+    ('FR', 'FRA'),
+    ('DE', 'DEU'),
+    ('GB', 'GBR'),
+    ('UK', 'GBR'),
+    ('ES', 'ESP'),
+    ('US', 'USA'),
+    ('CA', 'CAN'),
+    ('AU', 'AUS'),
+    ('BE', 'BEL'),
+    ('NL', 'NLD'),
+    ('CH', 'CHE'),
+    ('AT', 'AUT'),
+    ('SE', 'SWE'),
+    ('NO', 'NOR'),
+    ('DK', 'DNK'),
+    ('FI', 'FIN'),
+    ('PL', 'POL'),
+    ('PT', 'PRT'),
+    ('GR', 'GRC'),
+    ('IE', 'IRL'),
+    ('CZ', 'CZE'),
+    ('HU', 'HUN'),
+    ('RO', 'ROU'),
+    ('BG', 'BGR'),
+    ('HR', 'HRV'),
+    ('AL', 'ALB'),
+    ('SK', 'SVK'),
+    ('SI', 'SVN'),
+    ('EE', 'EST'),
+    ('LV', 'LVA'),
+    ('LT', 'LTU'),
+    ('JP', 'JPN'),
+    ('CN', 'CHN'),
+    ('KR', 'KOR'),
+    ('IN', 'IND'),
+    ('BR', 'BRA'),
+    ('AR', 'ARG'),
+    ('MX', 'MEX'),
+    ('RU', 'RUS'),
+    ('TR', 'TUR'),
+    ('ZA', 'ZAF'),
+    ('EG', 'EGY'),
+    ('IL', 'ISR'),
+    ('AE', 'ARE'),
+    ('SA', 'SAU'),
+    ('NZ', 'NZL'),
+    ('SG', 'SGP'),
+    ('MY', 'MYS'),
+    ('TH', 'THA'),
+    ('ID', 'IDN'),
+    ('PH', 'PHL'),
+    ('VN', 'VNM'),
+    ('UA', 'UKR'),
+    ('BY', 'BLR'),
+    ('MD', 'MDA'),
+    ('GE', 'GEO'),
+    ('AM', 'ARM'),
+    ('AZ', 'AZE'),
+    ('KZ', 'KAZ'),
+    ('UZ', 'UZB'),
+    ('CL', 'CHL'),
+    ('CO', 'COL'),
+    ('PE', 'PER'),
+    ('VE', 'VEN'),
+    ('EC', 'ECU'),
+    ('BO', 'BOL'),
+    ('PY', 'PRY'),
+    ('UY', 'URY'),
+    ('CR', 'CRI'),
+    ('PA', 'PAN'),
+    ('GT', 'GTM'),
+    ('HN', 'HND'),
+    ('NI', 'NIC'),
+    ('SV', 'SLV'),
+    ('CU', 'CUB'),
+    ('DO', 'DOM'),
+    ('JM', 'JAM'),
+    ('HT', 'HTI'),
+    ('TT', 'TTO'),
+    ('MA', 'MAR'),
+    ('TN', 'TUN'),
+    ('DZ', 'DZA'),
+    ('LY', 'LBY'),
+    ('SD', 'SDN'),
+    ('ET', 'ETH'),
+    ('KE', 'KEN'),
+    ('TZ', 'TZA'),
+    ('UG', 'UGA'),
+    ('GH', 'GHA'),
+    ('NG', 'NGA'),
+    ('SN', 'SEN'),
+    ('CI', 'CIV'),
+    ('CM', 'CMR'),
+    ('AO', 'AGO'),
+    ('MZ', 'MOZ'),
+    ('MG', 'MDG'),
+    ('MU', 'MUS'),
+    ('SC', 'SYC'),
+    ('PK', 'PAK'),
+    ('BD', 'BGD'),
+    ('LK', 'LKA'),
+    ('MM', 'MMR'),
+    ('KH', 'KHM'),
+    ('LA', 'LAO'),
+    ('MN', 'MNG'),
+    ('NP', 'NPL'),
+    ('BT', 'BTN'),
+    ('AF', 'AFG'),
+    ('IR', 'IRN'),
+    ('IQ', 'IRQ'),
+    ('JO', 'JOR'),
+    ('LB', 'LBN'),
+    ('SY', 'SYR'),
+    ('YE', 'YEM'),
+    ('OM', 'OMN'),
+    ('KW', 'KWT'),
+    ('QA', 'QAT'),
+    ('BH', 'BHR'),
+    ('LU', 'LUX'),
+    ('MT', 'MLT'),
+    ('CY', 'CYP'),
+    ('IS', 'ISL'),
+    ('LI', 'LIE'),
+    ('MC', 'MCO'),
+    ('SM', 'SMR'),
+    ('VA', 'VAT'),
+    ('AD', 'AND')
+),
+token AS (
+  SELECT
+    a.id,
+    t.ord,
+    COALESCE(m.alpha3, UPPER(BTRIM(t.codice))) AS codice
+  FROM public.artisti a
+  CROSS JOIN LATERAL unnest(string_to_array(a.codice_paese, '/')) WITH ORDINALITY AS t(codice, ord)
+  LEFT JOIN mappa m ON m.alpha2 = UPPER(BTRIM(t.codice))
+  WHERE a.codice_paese IS NOT NULL
+    AND BTRIM(t.codice) <> ''
+),
+primo AS (
+  SELECT id, codice, MIN(ord) AS ord
+  FROM token
+  GROUP BY id, codice
+),
+normalizzato AS (
+  SELECT id, string_agg(codice, '/' ORDER BY ord) AS codice_paese
+  FROM primo
+  GROUP BY id
+)
+UPDATE public.artisti a
+SET codice_paese = n.codice_paese
+FROM normalizzato n
+WHERE a.id = n.id
+  AND a.codice_paese IS DISTINCT FROM n.codice_paese;
