@@ -367,12 +367,13 @@ export interface DeleteCampagnaProgrammazioneInfo {
 interface DeleteCampagnaProgrammazioneRpcResult {
   success: boolean
   error?: string
-  error_code?: 'AUTH_REQUIRED' | 'NOT_FOUND' | 'LOCKED_BY_OTHER' | 'HAS_INDIVIDUAZIONE' | string
+  error_code?: 'AUTH_REQUIRED' | 'NOT_FOUND' | 'LOCKED_BY_OTHER' | string
   campagna_individuazione_nome?: string
   individuazione_runs?: number
   individuazioni_count?: number
   deleted_programmazioni?: number
   deleted_campaign_jobs?: number
+  individuazione_runs_mantenute?: number
 }
 
 /**
@@ -380,13 +381,16 @@ interface DeleteCampagnaProgrammazioneRpcResult {
  */
 export const getDeleteCampagnaProgrammazioneInfo = async (campagnaId: string): Promise<{ data: DeleteCampagnaProgrammazioneInfo | null; error: any }> => {
   try {
-    // Count programmazioni associate
-    const { count: programmazioni_count, error: progError } = await supabase
-      .from('programmazioni')
-      .select('*', { count: 'exact', head: true })
-      .eq('campagna_programmazione_id', campagnaId)
+    // Contatore mantenuto dai trigger: un COUNT(*) sulle programmazioni va in
+    // statement timeout sulle campagne grandi.
+    const { data: campagnaRow, error: progError } = await (supabase as any)
+      .from('campagne_programmazione')
+      .select('programmazioni_count')
+      .eq('id', campagnaId)
+      .maybeSingle()
 
     if (progError) throw progError
+    const programmazioni_count = Number(campagnaRow?.programmazioni_count ?? 0)
 
     // Check if one or more campagne individuazione exist. `maybeSingle()` fails
     // once multi-run individuazione creates multiple rows for the same campaign.
@@ -431,42 +435,56 @@ export const getDeleteCampagnaProgrammazioneInfo = async (campagnaId: string): P
   }
 }
 
+const DELETE_PROGRAMMAZIONI_BATCH_SIZE = 2000
+const DELETE_PROGRAMMAZIONI_MAX_BATCHES = 1000
+
+interface DeleteProgrammazioniBatchResult {
+  success: boolean
+  error?: string
+  error_code?: string
+  deleted?: number
+  done?: boolean
+}
+
 /**
- * Elimina una campagna programmazione
- * - Scenario 'empty' o 'has_data': cancella direttamente (programmazioni hanno CASCADE)
- * - Scenario 'has_individuazione': ritorna errore - deve prima cancellare la campagna individuazione
+ * Elimina una campagna programmazione.
+ * - Le programmazioni vengono eliminate a blocchi (una sola DELETE superava lo
+ *   statement timeout sulle campagne grandi).
+ * - Le individuazioni collegate restano in piattaforma: perdono solo il
+ *   collegamento alla riga di programmazione e alla campagna eliminata.
  */
-export const deleteCampagnaProgrammazione = async (campagnaId: string): Promise<{ data: any; error: any; blocked?: boolean; blockReason?: string }> => {
-  // Prima verifica lo scenario
-  const { data: info, error: infoError } = await getDeleteCampagnaProgrammazioneInfo(campagnaId)
-  
-  if (infoError) {
-    return { data: null, error: infoError }
-  }
-
-  if (!info) {
-    return { data: null, error: new Error('Campagna non trovata') }
-  }
-
-  // Scenario 1.3: Blocca se esiste campagna individuazione
-  if (info.scenario === 'has_individuazione') {
-    const extraRuns = (info.campagna_individuazione_count || 0) > 1
-      ? ` e altre ${(info.campagna_individuazione_count || 0) - 1} run`
-      : ''
-    return {
-      data: null,
-      error: null,
-      blocked: true,
-      blockReason: `Esiste una campagna di individuazione collegata ("${info.campagna_individuazione_nome}"${extraRuns}) con ${info.individuazioni_count?.toLocaleString()} individuazioni. Devi prima eliminarla dalla pagina Individuazioni.`
-    }
-  }
-
+export const deleteCampagnaProgrammazione = async (
+  campagnaId: string,
+  options?: { onProgress?: (deleted: number) => void }
+): Promise<{ data: any; error: any; blocked?: boolean; blockReason?: string }> => {
   const {
     data: { session },
   } = await supabase.auth.getSession()
   const userId = session?.user?.id
   if (!userId) {
     return { data: null, error: new Error('Utente non autenticato') }
+  }
+
+  let deletedTotal = 0
+  for (let batch = 0; batch < DELETE_PROGRAMMAZIONI_MAX_BATCHES; batch += 1) {
+    const { data: batchData, error: batchError } = await (supabase as any).rpc('delete_programmazioni_batch', {
+      p_campagna_programmazione_id: campagnaId,
+      p_user_id: userId,
+      p_limit: DELETE_PROGRAMMAZIONI_BATCH_SIZE,
+    })
+    if (batchError) return { data: null, error: batchError }
+
+    const batchResult = batchData as DeleteProgrammazioniBatchResult | null
+    if (!batchResult?.success) {
+      if (batchResult?.error_code === 'LOCKED_BY_OTHER') {
+        return { data: null, error: null, blocked: true, blockReason: batchResult.error }
+      }
+      return { data: null, error: new Error(batchResult?.error || 'Errore eliminazione programmazioni') }
+    }
+
+    deletedTotal += batchResult.deleted ?? 0
+    options?.onProgress?.(deletedTotal)
+    if (batchResult.done || !batchResult.deleted) break
   }
 
   const { data, error } = await (supabase as any).rpc('delete_campagna_programmazione_safe', {
@@ -478,22 +496,16 @@ export const deleteCampagnaProgrammazione = async (campagnaId: string): Promise<
 
   const result = data as DeleteCampagnaProgrammazioneRpcResult | null
   if (!result?.success) {
-    if (result?.error_code === 'HAS_INDIVIDUAZIONE') {
-      const extraRuns = (result.individuazione_runs || 0) > 1
-        ? ` e altre ${(result.individuazione_runs || 0) - 1} run`
-        : ''
-      return {
-        data: null,
-        error: null,
-        blocked: true,
-        blockReason: `Esiste una campagna di individuazione collegata ("${result.campagna_individuazione_nome}"${extraRuns}) con ${result.individuazioni_count?.toLocaleString()} individuazioni. Devi prima eliminarla dalla pagina Individuazioni.`
-      }
+    if (result?.error_code === 'LOCKED_BY_OTHER') {
+      return { data: null, error: null, blocked: true, blockReason: result.error }
     }
-
     return { data: null, error: new Error(result?.error || 'Errore eliminazione campagna programmazione') }
   }
 
-  return { data, error }
+  return {
+    data: { ...result, deleted_programmazioni: deletedTotal + (result.deleted_programmazioni ?? 0) },
+    error: null,
+  }
 }
 
 export const getCampagnaProgrammazioneById = async (id: string) => {

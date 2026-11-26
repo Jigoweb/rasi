@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -55,7 +54,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '
 import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { Popover, PopoverContent, PopoverTrigger } from '@/shared/components/ui/popover'
-import { Search, Plus, Trash2, Eye, Download, Filter, Calendar, Tv, Radio, CheckCircle, XCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react'
+import { Search, Plus, Trash2, Download, Filter, Calendar, Tv, Radio, CheckCircle, Loader2, X, Sparkles, Info, Users, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react'
 import { notifyError, notifySuccess } from '@/shared/lib/toast'
 import { useAuth } from '@/shared/contexts/auth-context'
 
@@ -130,7 +129,6 @@ const formSchema = z.object({
 })
 
 export default function ProgrammazioniPage() {
-  const router = useRouter()
   // Operatore base: programmazioni in sola lettura (la RLS blocca comunque le scritture).
   const { canWriteOutsideOpere } = useAuth()
   const [currentTab, setCurrentTab] = useState<'programmazioni' | 'emittenti'>('programmazioni')
@@ -1284,26 +1282,32 @@ export default function ProgrammazioniPage() {
                 </div>
               )}
 
-              {/* Scenario 1.3: Ha individuazione collegata - BLOCCO */}
+              {/* Scenario 1.3: Ha individuazione collegata - le individuazioni restano */}
               {deleteInfo.scenario === 'has_individuazione' && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-red-600">
-                    <XCircle className="h-5 w-5" />
-                    <p className="font-medium">Eliminazione non consentita</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-amber-600">
+                    <Info className="h-5 w-5" />
+                    <p className="font-medium">Campagna con individuazioni collegate</p>
                   </div>
-                  <p className="text-sm text-red-700">
-                    Questa campagna ha una <strong>campagna di individuazione collegata</strong>:
+                  <p className="text-sm text-amber-700">
+                    Verranno eliminate le <strong>{deleteInfo.programmazioni_count.toLocaleString()}</strong> programmazioni
+                    della campagna. La campagna di individuazione collegata <strong>resta in piattaforma</strong>:
                   </p>
                   <div className="bg-white/60 rounded p-3 space-y-1">
                     <p className="text-sm font-medium text-foreground">
                       {deleteInfo.campagna_individuazione_nome}
+                      {(deleteInfo.campagna_individuazione_count || 0) > 1
+                        ? ` e altre ${(deleteInfo.campagna_individuazione_count || 0) - 1} run`
+                        : ''}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {deleteInfo.individuazioni_count?.toLocaleString()} individuazioni create
+                      {deleteInfo.individuazioni_count?.toLocaleString()} individuazioni mantenute
                     </p>
                   </div>
-                  <p className="text-sm text-red-700">
-                    Per eliminare questa campagna, devi prima eliminare la campagna di individuazione dalla pagina <strong>Individuazioni</strong>.
+                  <p className="text-xs text-amber-700">
+                    Le individuazioni conservano titolo, date, opera, artista e ruolo. Non sarà più possibile
+                    riprendere o rilanciare quell&apos;individuazione, e gli alert episodi collegati alle righe eliminate
+                    non saranno più disponibili.
                   </p>
                 </div>
               )}
@@ -1318,7 +1322,7 @@ export default function ProgrammazioniPage() {
             <Button variant="outline" onClick={closeDeleteDialog} disabled={isDeletingCampagna}>
               Annulla
             </Button>
-            {deleteInfo?.scenario !== 'has_individuazione' && (
+            {deleteInfo && (
               <Button 
                 variant="destructive" 
                 onClick={confirmDelete}
@@ -1335,15 +1339,6 @@ export default function ProgrammazioniPage() {
                     Elimina Campagna
                   </>
                 )}
-              </Button>
-            )}
-            {deleteInfo?.scenario === 'has_individuazione' && (
-              <Button onClick={() => {
-                closeDeleteDialog()
-                router.push('/dashboard/individuazioni')
-              }}>
-                <Eye className="mr-2 h-4 w-4" />
-                Vai a Individuazioni
               </Button>
             )}
           </DialogFooter>
@@ -1371,11 +1366,11 @@ export default function ProgrammazioniPage() {
           ) : (
             <div className="py-2 space-y-3">
               {bulkDeleteItems.map((item) => {
-                const blocked = item.info?.scenario === 'has_individuazione'
+                const hasIndividuazione = item.info?.scenario === 'has_individuazione'
                 return (
                   <div
                     key={item.campagna.id}
-                    className={`rounded-lg border p-3 ${blocked ? 'border-red-200 bg-red-50' : 'bg-muted/40'}`}
+                    className={`rounded-lg border p-3 ${hasIndividuazione ? 'border-amber-200 bg-amber-50' : 'bg-muted/40'}`}
                   >
                     <p className="text-sm font-medium">{item.campagna.nome}</p>
                     {item.error && (
@@ -1389,9 +1384,10 @@ export default function ProgrammazioniPage() {
                         {item.info.programmazioni_count.toLocaleString()} programmazioni verranno eliminate
                       </p>
                     )}
-                    {blocked && (
-                      <p className="mt-1 text-xs text-red-700">
-                        Bloccata: ha individuazioni collegate
+                    {hasIndividuazione && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        {item.info?.programmazioni_count.toLocaleString()} programmazioni verranno eliminate;
+                        {' '}{item.info?.individuazioni_count?.toLocaleString() ?? 0} individuazioni restano in piattaforma
                         {item.info?.campagna_individuazione_nome
                           ? ` (${item.info.campagna_individuazione_nome})`
                           : ''}
@@ -1413,7 +1409,7 @@ export default function ProgrammazioniPage() {
               disabled={
                 isLoadingBulkDeleteInfo
                 || isBulkDeleting
-                || bulkDeleteItems.every(item => !item.info || item.info.scenario === 'has_individuazione')
+                || bulkDeleteItems.every(item => !item.info)
               }
             >
               {isBulkDeleting ? (

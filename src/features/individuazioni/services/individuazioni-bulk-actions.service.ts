@@ -26,7 +26,11 @@ export function canDeleteCampagnaIndividuazione(
   campagna: CampagnaIndividuazione,
   isProcessing?: (campagneProgrammazioneId: string) => boolean,
 ): boolean {
-  if (campagna.stato === 'in_corso' && isProcessing?.(campagna.campagne_programmazione_id)) {
+  if (
+    campagna.stato === 'in_corso'
+    && campagna.campagne_programmazione_id
+    && isProcessing?.(campagna.campagne_programmazione_id)
+  ) {
     return false
   }
   return true
@@ -63,9 +67,13 @@ export function classifyIndividuazioniBulkSelection(
 
     const progress = progressMap?.[campagna.id]
     const canResume = canResumeCampagnaIndividuazione(campagna, progress, now)
-    const startOk = canStartProcess
-      ? canStartProcess(campagna.campagne_programmazione_id)
-      : !isProcessing?.(campagna.campagne_programmazione_id)
+    // Senza campagna di programmazione (eliminata) non si può riprendere.
+    const campagneProgrammazioneId = campagna.campagne_programmazione_id
+    const startOk = !campagneProgrammazioneId
+      ? false
+      : canStartProcess
+        ? canStartProcess(campagneProgrammazioneId)
+        : !isProcessing?.(campagneProgrammazioneId)
     if (canResume && startOk) {
       resumable.push(campagna)
     }

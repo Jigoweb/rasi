@@ -15,7 +15,7 @@ describe('formatIndividuazioniForExport', () => {
       stato: 'validato',
     }])).toMatchObject([{
       titolo: 'Film',
-      artista: 'Mario Rossi',
+      artista: 'Rossi, Mario',
       opera_matchata: 'Film Catalogo',
       opera_titolo_originale: 'Catalogue Film',
       codice_opera: 'OP-1',

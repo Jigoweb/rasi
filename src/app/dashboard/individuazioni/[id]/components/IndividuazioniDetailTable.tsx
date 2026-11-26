@@ -36,6 +36,7 @@ import type {
   IndividuazioneSortDirection,
   IndividuazioneStatus,
 } from '@/features/individuazioni/services/individuazioni.service'
+import { formatArtistaIndividuazione } from '@/features/individuazioni/utils/artista-display'
 
 interface IndividuazioniDetailTableProps {
   individuazioni: Individuazione[]
@@ -480,9 +481,7 @@ function StatusBadge({ stato }: { stato: string | undefined }) {
 }
 
 function getArtistaDisplay(ind: Individuazione) {
-  if (!ind.artisti) return '-'
-  const nome = ind.artisti.nome_arte || `${ind.artisti.nome} ${ind.artisti.cognome}`.trim()
-  return nome || '-'
+  return formatArtistaIndividuazione(ind.artisti)
 }
 
 function getEpisodeDisplay(ind: Individuazione) {

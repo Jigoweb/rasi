@@ -41,6 +41,7 @@ import IndividuazioneStatusConfirmDialog, {
 import IndividuazioniDetailTable from './components/IndividuazioniDetailTable'
 import { useIndividuazioneDetail } from './hooks/useIndividuazioneDetail'
 import { notifyError, notifyInfo, notifySuccess } from '@/shared/lib/toast'
+import { formatArtistaIndividuazione } from '@/features/individuazioni/utils/artista-display'
 
 type PendingStatusAction = {
   source: 'drawer' | 'bulk'
@@ -653,8 +654,5 @@ function buildScopeContext(campagnaId: string, individuazione: Individuazione): 
 }
 
 function getArtistaDisplayFromIndividuazione(individuazione: Individuazione) {
-  if (!individuazione.artisti) return 'Artista'
-  return individuazione.artisti.nome_arte
-    || `${individuazione.artisti.nome} ${individuazione.artisti.cognome}`.trim()
-    || 'Artista'
+  return formatArtistaIndividuazione(individuazione.artisti, 'Artista')
 }

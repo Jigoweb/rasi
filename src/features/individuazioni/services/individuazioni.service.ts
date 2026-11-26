@@ -53,7 +53,8 @@ export interface CampagnaIndividuazione {
   nome: string
   descrizione?: string | null
   emittente_id: string
-  campagne_programmazione_id: string
+  /** NULL se la campagna di programmazione è stata eliminata mantenendo le individuazioni */
+  campagne_programmazione_id: string | null
   anno: number
   configurazione_matching?: unknown
   stato: 'bozza' | 'in_corso' | 'completata' | 'archiviata'
@@ -83,7 +84,8 @@ export interface CampagnaIndividuazioneMetadataPayload {
 export interface Individuazione {
   id: string
   campagna_individuazioni_id: string
-  programmazione_id: string
+  /** NULL se la programmazione è stata eliminata: l'individuazione resta con i suoi dati */
+  programmazione_id: string | null
   partecipazione_id: string
   artista_id: string
   ruolo_id: string
@@ -574,12 +576,22 @@ export const getCampagnaIndividuazioneEpisodeAlertSummary = async (
   }
 }
 
+export const EPISODE_ALERTS_PAGE_SIZE = 100
+
+/**
+ * Una pagina della coda revisione alert episodi. L'RPC completa
+ * (get_individuazione_episode_alerts) va in statement timeout sulle campagne
+ * con migliaia di alert, quindi si legge sempre a pagine.
+ */
 export const getCampagnaIndividuazioneEpisodeAlerts = async (
-  campagnaId: string
+  campagnaId: string,
+  options?: { limit?: number; offset?: number }
 ): Promise<{ data: IndividuazioneEpisodeAlert[]; error: unknown }> => {
   const rpcClient = supabase as unknown as SupabaseRpcClient
-  const { data, error } = await rpcClient.rpc('get_individuazione_episode_alerts', {
+  const { data, error } = await rpcClient.rpc('get_individuazione_episode_alerts_page', {
     p_campagna_id: campagnaId,
+    p_limit: options?.limit ?? EPISODE_ALERTS_PAGE_SIZE,
+    p_offset: options?.offset ?? 0,
   })
 
   return {
@@ -670,12 +682,12 @@ export type {
 
 export interface DeleteCampagnaIndividuazioneInfo {
   individuazioni_count: number
-  campagne_programmazione_id: string
+  campagne_programmazione_id: string | null
   campagne_programmazione_nome?: string
 }
 
 type DeleteCampagnaInfoRow = {
-  campagne_programmazione_id: string
+  campagne_programmazione_id: string | null
   campagne_programmazione?: { nome?: string | null } | null
 }
 

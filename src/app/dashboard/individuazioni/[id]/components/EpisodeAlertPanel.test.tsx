@@ -3,6 +3,7 @@ import EpisodeAlertPanel from './EpisodeAlertPanel'
 import { getCampagnaIndividuazioneEpisodeAlerts } from '@/features/individuazioni/services/individuazioni.service'
 
 jest.mock('@/features/individuazioni/services/individuazioni.service', () => ({
+  EPISODE_ALERTS_PAGE_SIZE: 100,
   getCampagnaIndividuazioneEpisodeAlerts: jest.fn(),
 }))
 
@@ -49,7 +50,7 @@ describe('EpisodeAlertPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Apri coda revisione/i }))
 
     await waitFor(() => {
-      expect(getCampagnaIndividuazioneEpisodeAlerts).toHaveBeenCalledWith('campagna-1')
+      expect(getCampagnaIndividuazioneEpisodeAlerts).toHaveBeenCalledWith('campagna-1', { limit: 100, offset: 0 })
     })
 
     expect(await screen.findByText('MOZART IN THE JUNGLE')).toBeInTheDocument()

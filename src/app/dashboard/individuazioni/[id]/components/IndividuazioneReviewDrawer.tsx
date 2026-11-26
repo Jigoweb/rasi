@@ -40,6 +40,7 @@ import {
   normalizeMatchScore,
 } from '@/features/individuazioni/utils/individuazioni-detail'
 import IndividuazioneStatusDropdown from './IndividuazioneStatusDropdown'
+import { formatArtistaIndividuazione } from '@/features/individuazioni/utils/artista-display'
 
 interface IndividuazioneReviewDrawerProps {
   open: boolean
@@ -469,10 +470,7 @@ function getSignalSurfaceClass(tone: SignalTone) {
 }
 
 function getArtistaDisplay(individuazione: Individuazione | null | undefined) {
-  if (!individuazione?.artisti) return '-'
-  const nome = individuazione.artisti.nome_arte
-    || `${individuazione.artisti.nome} ${individuazione.artisti.cognome}`.trim()
-  return nome || '-'
+  return formatArtistaIndividuazione(individuazione?.artisti)
 }
 
 function getMatchScoreBandLabelFromScore(score: number) {

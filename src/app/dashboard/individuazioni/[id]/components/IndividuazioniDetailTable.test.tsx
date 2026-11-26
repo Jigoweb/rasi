@@ -79,9 +79,9 @@ describe('IndividuazioniDetailTable', () => {
 
     expect(screen.getByText('Film della sera')).toBeInTheDocument()
     expect(screen.getByText('S2E8: Stranger Things 2: "Chapter Eight: The Mind Flayer"')).toBeInTheDocument()
-    expect(screen.getByText('Mario R')).toBeInTheDocument()
+    expect(screen.getByText('Rossi, Mario - Mario R')).toBeInTheDocument()
     expect(screen.getByText('Opera matchata')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Apri scheda artista Mario R' })).toHaveAttribute('href', '/dashboard/artisti/artista-1')
+    expect(screen.getByRole('link', { name: 'Apri scheda artista Rossi, Mario - Mario R' })).toHaveAttribute('href', '/dashboard/artisti/artista-1')
     expect(screen.getByRole('link', { name: 'Apri scheda opera Opera matchata' })).toHaveAttribute('href', '/dashboard/opere/opera-1')
     expect(screen.getByText('80%')).toBeInTheDocument()
     expect(screen.getByText('normalizzato')).toBeInTheDocument()

@@ -69,11 +69,12 @@ export function useIndividuazioniList({
   }, [loadingProgressMap])
 
   const handleResume = useCallback(async (campagna: CampagnaIndividuazione) => {
-    if (!canStartProcess(campagna.campagne_programmazione_id)) return
+    const campagneProgrammazioneId = campagna.campagne_programmazione_id
+    if (!campagneProgrammazioneId || !canStartProcess(campagneProgrammazioneId)) return
     setResumingId(campagna.id)
     try {
       await resumeById(
-        campagna.campagne_programmazione_id,
+        campagneProgrammazioneId,
         campagna.campagne_programmazione?.nome ?? campagna.nome,
         campagna.id
       )

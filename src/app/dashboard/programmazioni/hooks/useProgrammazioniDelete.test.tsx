@@ -80,7 +80,7 @@ describe('useProgrammazioniDelete', () => {
     expect(result.current.isDeleteDialogOpen).toBe(false)
   })
 
-  it('loads bulk delete info and deletes only non-blocked campaigns', async () => {
+  it('deletes campaigns with individuazioni too (individuazioni are kept server-side)', async () => {
     let campagne = [campagna({ id: 'ok' }), campagna({ id: 'blocked', nome: 'Bloccata' })]
     const updateCampagne: Dispatch<SetStateAction<CampagnaProgrammazione[]>> = jest.fn((next) => {
       campagne = typeof next === 'function' ? next(campagne) : next
@@ -112,10 +112,11 @@ describe('useProgrammazioniDelete', () => {
       await result.current.confirmBulkDelete()
     })
 
-    expect(deleteCampagnaProgrammazione).toHaveBeenCalledTimes(1)
+    expect(deleteCampagnaProgrammazione).toHaveBeenCalledTimes(2)
     expect(deleteCampagnaProgrammazione).toHaveBeenCalledWith('ok')
-    expect(campagne.map(c => c.id)).toEqual(['blocked'])
-    expect(onDeleted).toHaveBeenCalledWith(['ok'])
+    expect(deleteCampagnaProgrammazione).toHaveBeenCalledWith('blocked')
+    expect(campagne).toEqual([])
+    expect(onDeleted).toHaveBeenCalledWith(expect.arrayContaining(['ok', 'blocked']))
     expect(result.current.isBulkDeleteDialogOpen).toBe(false)
   })
 })

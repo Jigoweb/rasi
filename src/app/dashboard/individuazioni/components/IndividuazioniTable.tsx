@@ -323,7 +323,7 @@ export default function IndividuazioniTable({
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={!canStartProcess(campagna.campagne_programmazione_id) || resumingId === campagna.id}
+                            disabled={!campagna.campagne_programmazione_id || !canStartProcess(campagna.campagne_programmazione_id) || resumingId === campagna.id}
                             onClick={() => onResume(campagna)}
                             className="gap-1.5 border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
                           >
@@ -432,7 +432,7 @@ export default function IndividuazioniTable({
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={!canStartProcess(campagna.campagne_programmazione_id) || resumingId === campagna.id}
+                          disabled={!campagna.campagne_programmazione_id || !canStartProcess(campagna.campagne_programmazione_id) || resumingId === campagna.id}
                           onClick={() => onResume(campagna)}
                           className="gap-1.5 border-yellow-500 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400"
                         >

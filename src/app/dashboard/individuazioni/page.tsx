@@ -164,10 +164,11 @@ export default function IndividuazioniPage() {
       // Avvio in parallelo (come bulk su Programmazioni): ogni job va sul worker
       // e finisce nel toast floating, senza attendere il completamento in serie.
       for (const campagna of selected) {
-        if (!canStartProcess(campagna.campagne_programmazione_id)) continue
+        const campagneProgrammazioneId = campagna.campagne_programmazione_id
+        if (!campagneProgrammazioneId || !canStartProcess(campagneProgrammazioneId)) continue
         started += 1
         void resumeById(
-          campagna.campagne_programmazione_id,
+          campagneProgrammazioneId,
           campagna.campagne_programmazione?.nome ?? campagna.nome,
           campagna.id,
         )

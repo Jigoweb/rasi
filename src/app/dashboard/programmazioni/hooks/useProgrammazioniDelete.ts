@@ -77,8 +77,16 @@ export function useProgrammazioniDelete({ updateCampagne, onDeleted }: UseProgra
 
       updateCampagne(prev => prev.filter(c => c.id !== campagnaToDelete.id))
       onDeleted?.([campagnaToDelete.id])
+      const keptIndividuazioni = deleteInfo?.scenario === 'has_individuazione'
+        ? deleteInfo.individuazioni_count ?? 0
+        : 0
       closeDeleteDialog()
-      notifySuccess('Campagna eliminata')
+      notifySuccess(
+        'Campagna eliminata',
+        keptIndividuazioni > 0
+          ? `${keptIndividuazioni.toLocaleString('it-IT')} individuazioni restano disponibili in piattaforma.`
+          : undefined
+      )
     } catch (error) {
       console.error('Error deleting campagna:', error)
       notifyError('Eliminazione campagna non riuscita', error)
@@ -125,7 +133,7 @@ export function useProgrammazioniDelete({ updateCampagne, onDeleted }: UseProgra
   }
 
   const confirmBulkDelete = async () => {
-    const deletable = bulkDeleteItems.filter(item => item.info && item.info.scenario !== 'has_individuazione')
+    const deletable = bulkDeleteItems.filter(item => item.info)
     if (deletable.length === 0) return
 
     setIsBulkDeleting(true)

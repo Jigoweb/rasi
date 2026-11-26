@@ -417,7 +417,7 @@ export type Database = {
       campagne_individuazione: {
         Row: {
           anno: number
-          campagne_programmazione_id: string
+          campagne_programmazione_id: string | null
           configurazione_matching: Json
           created_at: string | null
           created_by: string | null
@@ -776,7 +776,7 @@ export type Database = {
           processato: boolean | null
           processato_il: string | null
           production: string | null
-          programmazione_id: string
+          programmazione_id: string | null
           punteggio_matching: number
           regia: string | null
           retail_price: number | null

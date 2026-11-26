@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, Film, Loader2, Tv } from 'lucide-react'
 import {
+  EPISODE_ALERTS_PAGE_SIZE,
   getCampagnaIndividuazioneEpisodeAlerts,
   type IndividuazioneEpisodeAlert,
   type IndividuazioneEpisodeAlertSummary,
@@ -31,6 +32,8 @@ export default function EpisodeAlertPanel({
   const [expanded, setExpanded] = useState(false)
   const [alerts, setAlerts] = useState<IndividuazioneEpisodeAlert[] | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -40,15 +43,17 @@ export default function EpisodeAlertPanel({
     setLoading(true)
     setError(null)
 
-    void getCampagnaIndividuazioneEpisodeAlerts(campagnaId)
+    void getCampagnaIndividuazioneEpisodeAlerts(campagnaId, { limit: EPISODE_ALERTS_PAGE_SIZE, offset: 0 })
       .then(({ data, error: loadError }) => {
         if (cancelled) return
         if (loadError) {
           setError('Impossibile caricare il dettaglio degli alert episodi.')
           setAlerts([])
+          setHasMore(false)
           return
         }
         setAlerts(data)
+        setHasMore(data.length >= EPISODE_ALERTS_PAGE_SIZE)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -58,6 +63,26 @@ export default function EpisodeAlertPanel({
       cancelled = true
     }
   }, [expanded, alerts, campagnaId])
+
+  async function loadMoreAlerts() {
+    if (!alerts || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const { data, error: loadError } = await getCampagnaIndividuazioneEpisodeAlerts(campagnaId, {
+        limit: EPISODE_ALERTS_PAGE_SIZE,
+        offset: alerts.length,
+      })
+      if (loadError) {
+        setError('Impossibile caricare altri alert episodi.')
+        return
+      }
+      setError(null)
+      setAlerts(prev => [...(prev ?? []), ...data])
+      setHasMore(data.length >= EPISODE_ALERTS_PAGE_SIZE)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   if (!summary || summary.totale === 0) return null
 
@@ -122,7 +147,7 @@ export default function EpisodeAlertPanel({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Caricamento alert...
               </div>
-            ) : error ? (
+            ) : error && (!alerts || alerts.length === 0) ? (
               <div className="flex items-start gap-2 px-4 py-4 text-sm text-amber-950">
                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>{error}</span>
@@ -132,11 +157,37 @@ export default function EpisodeAlertPanel({
                 Nessun dettaglio alert disponibile.
               </div>
             ) : (
-              <ul className="divide-y divide-amber-100">
-                {alerts.map(alert => (
-                  <EpisodeAlertRow key={alert.id} alert={alert} />
-                ))}
-              </ul>
+              <>
+                <ul className="divide-y divide-amber-100">
+                  {alerts.map(alert => (
+                    <EpisodeAlertRow key={alert.id} alert={alert} />
+                  ))}
+                </ul>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-amber-100 px-4 py-3 text-xs text-amber-900">
+                  <span>
+                    {formatNumber(alerts.length)} di {formatNumber(summary.totale)} alert mostrati
+                  </span>
+                  {error && (
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {error}
+                    </span>
+                  )}
+                  {hasMore && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="border-amber-300 bg-white"
+                      onClick={() => void loadMoreAlerts()}
+                      disabled={loadingMore}
+                    >
+                      {loadingMore && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+                      Carica altri alert
+                    </Button>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}

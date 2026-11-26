@@ -7,6 +7,7 @@ import {
   extractMatchingSignalFlags,
   formatSignalFlag,
 } from '@/features/individuazioni/utils/matching-signal-codes'
+import { formatArtistaIndividuazione } from '@/features/individuazioni/utils/artista-display'
 
 export interface ExportProgress {
   fetched: number
@@ -433,7 +434,7 @@ export const formatIndividuazioniForExport = (individuazioni: any[]) => {
       views: ind.views ?? '',
       total_net_ad_revenue: ind.total_net_ad_revenue ?? '',
       total_revenue: ind.total_revenue ?? '',
-      artista: ind.artisti ? (ind.artisti.nome_arte || `${ind.artisti.nome || ''} ${ind.artisti.cognome || ''}`.trim()) : '',
+      artista: formatArtistaIndividuazione(ind.artisti, ''),
       opera_matchata: ind.opere?.titolo || '',
       opera_titolo_originale: ind.opere?.titolo_originale || '',
       codice_opera: ind.opere?.codice_opera || '',
