@@ -61,7 +61,7 @@ const artistaSchema = z.object({
   codice_fiscale: z.string().max(16, 'Max 16 caratteri').optional().or(z.literal('')),
   data_nascita: z.string().optional().or(z.literal('')),
   luogo_nascita: z.string().optional().or(z.literal('')),
-  sesso: z.enum(['M', 'F', 'X']).optional().or(z.literal('')),
+  sesso: z.enum(['M', 'F']).optional().or(z.literal('')),
 
   // Documento d'identità
   documento_tipo: z.string().optional().or(z.literal('')),
@@ -166,7 +166,7 @@ export function ArtistaFormMultistep({ mode, artista, onSubmit, onCancel }: Arti
       codice_fiscale: artista?.codice_fiscale || '',
       data_nascita: toDateInput(artista?.data_nascita),
       luogo_nascita: artista?.luogo_nascita || '',
-      sesso: (artista?.sesso as 'M' | 'F' | 'X' | null | undefined) || '',
+      sesso: artista?.sesso === 'M' || artista?.sesso === 'F' ? artista.sesso : '',
       documento_tipo: artista?.documento_tipo || '',
       documento_numero: artista?.documento_numero || '',
       documento_data_rilascio: toDateInput(artista?.documento_data_rilascio),

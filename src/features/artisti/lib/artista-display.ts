@@ -179,11 +179,13 @@ export function isPartecipazioneInVerifica(
   return opera.stato_validazione !== 'validato'
 }
 
-/** Sesso dell'artista (colonna artisti.sesso, migration 20261116140000). */
-export const SESSO_OPTIONS: { value: 'M' | 'F' | 'X'; label: string }[] = [
-  { value: 'F', label: 'Femminile' },
-  { value: 'M', label: 'Maschile' },
-  { value: 'X', label: 'Altro' },
+/**
+ * Sesso dell'artista (colonna artisti.sesso). SCAPR lo vuole solo come M / F,
+ * quindi in maschera, scheda ed export si mostra la sigla.
+ */
+export const SESSO_OPTIONS: { value: 'M' | 'F'; label: string }[] = [
+  { value: 'M', label: 'M' },
+  { value: 'F', label: 'F' },
 ]
 
 export function formatSessoLabel(sesso: string | null | undefined): string {
