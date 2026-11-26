@@ -12,7 +12,7 @@ import {
 } from '@/features/programmazioni/services/data-health-policy.service'
 import { formatProgrammazioneYears } from '@/features/programmazioni/utils/year-display'
 import { describeProgrammazioniHealthError } from '@/features/programmazioni/utils/health-error'
-import { getErrorMessage } from '@/shared/lib/toast'
+import { getErrorMessage, notifyError, notifySuccess } from '@/shared/lib/toast'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Button } from '@/shared/components/ui/button'
@@ -23,7 +23,19 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { DashboardBreadcrumbs } from '@/shared/components/dashboard-breadcrumbs'
 import { FloatingScrollUpButton } from '@/shared/components/floating-scroll-up-button'
 import { useInfiniteScroll } from '@/shared/hooks/useInfiniteScroll'
-import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock, Edit, FileUp } from 'lucide-react'
+import { Calendar, Tv, Filter, Loader2, ArrowLeft, AlertCircle, CheckCircle2, Clock, Download, Edit, FileUp } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
+import {
+  buildProgrammazioniExportFileName,
+  fetchAllProgrammazioniForExport,
+  formatProgrammazioniForExport,
+} from '@/features/programmazioni/services/programmazioni-export.service'
 import { useAuth } from '@/shared/contexts/auth-context'
 import { CorreggiDatiDialog } from './components/correggi-dati-dialog'
 
@@ -51,6 +63,7 @@ export default function CampagnaDettaglioPage() {
   const [editDraft, setEditDraft] = useState({ nome: '', descrizione: '' })
   const [isSavingMetadata, setIsSavingMetadata] = useState(false)
   const [isCorreggiOpen, setIsCorreggiOpen] = useState(false)
+  const [exportProgress, setExportProgress] = useState<number | null>(null)
   // «Correggi dati dal file»: solo admin e Operatore pro (il worker lo verifica).
   const { isStaff } = useAuth()
 
@@ -262,6 +275,33 @@ export default function CampagnaDettaglioPage() {
     }
   }
 
+  async function handleExport(format: 'xlsx' | 'csv') {
+    if (!campagna || exportProgress !== null) return
+    setExportProgress(0)
+    try {
+      const { data, error } = await fetchAllProgrammazioniForExport(campagna.id, {
+        onProgress: fetched => setExportProgress(fetched),
+      })
+      if (error) throw error
+      if (data.length === 0) {
+        notifyError('Nessuna programmazione da scaricare')
+        return
+      }
+      const formatted = formatProgrammazioniForExport(data)
+      const worksheet = XLSX.utils.json_to_sheet(formatted)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Programmazione')
+      const fileName = buildProgrammazioniExportFileName(campagna.nome)
+      XLSX.writeFile(workbook, `${fileName}.${format}`, { bookType: format })
+      notifySuccess('Programmazione scaricata', `${data.length.toLocaleString('it-IT')} righe`)
+    } catch (error) {
+      console.error('Errore export programmazione:', error)
+      notifyError('Download programmazione non riuscito', error)
+    } finally {
+      setExportProgress(null)
+    }
+  }
+
   const renderProgrammazioneCell = (row: ProgrammazioneRow, column: ProgrammazioniTableColumn) => {
     switch (column.key) {
       case 'processato':
@@ -451,6 +491,26 @@ export default function CampagnaDettaglioPage() {
               <FileUp className="h-4 w-4 mr-2" /> Correggi dati dal file
             </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={!campagna || exportProgress !== null}>
+                {exportProgress !== null ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {exportProgress > 0 ? `${exportProgress.toLocaleString('it-IT')} righe...` : 'Preparazione...'}
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4 mr-2" /> Scarica programmazione
+                  </>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => void handleExport('xlsx')}>Excel (.xlsx)</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void handleExport('csv')}>CSV (.csv)</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" onClick={openEditDialog} disabled={!campagna}>
             <Edit className="h-4 w-4 mr-2" /> Modifica dettagli
           </Button>
