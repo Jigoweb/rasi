@@ -33,6 +33,8 @@ interface UploadProgrammazioniDialogProps {
   onDismissUploadError: () => void
   uploadProgress: Record<string, { done: number; total: number }>
   isUploadReady: boolean
+  /** Avvisi GG/MM del template RASI, visibili prima della conferma. */
+  dateWarnings?: string[]
   onUploadDatabase: () => void
   onClose: () => void
 }
@@ -56,6 +58,7 @@ export default function UploadProgrammazioniDialog({
   onDismissUploadError,
   uploadProgress,
   isUploadReady,
+  dateWarnings = [],
   onUploadDatabase,
   onClose,
 }: UploadProgrammazioniDialogProps) {
@@ -233,6 +236,14 @@ export default function UploadProgrammazioniDialog({
 
             {(dropError || headerError) && (
               <div className="mt-3 text-sm text-red-600">{dropError || headerError}</div>
+            )}
+
+            {dateWarnings.length > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="status">
+                {dateWarnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </div>
             )}
 
             {isUploading && selectedCampagna && selectedProgress && (

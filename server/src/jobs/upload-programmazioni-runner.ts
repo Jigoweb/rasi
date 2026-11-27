@@ -1,7 +1,7 @@
 import { supabaseService } from '../supabase.js'
 import {
   buildProgrammazioniPayloads,
-  formatDateOrderConflict,
+  dateOrderBlockMessage,
   parseProgrammazioniFile,
   resolveDateOrders,
   type ProgrammazioneImportPayload,
@@ -157,9 +157,8 @@ export async function runUploadProgrammazioniJob(opts: RunUploadOptions): Promis
       fase: 'validating',
     })
     const dateOrders = resolveDateOrders(rows, mappingSnapshot)
-    if (dateOrders.conflicts.length > 0) {
-      throw new Error(formatDateOrderConflict(dateOrders.conflicts[0]))
-    }
+    const dateBlock = dateOrderBlockMessage(dateOrders, mappingSnapshot.kind)
+    if (dateBlock) throw new Error(dateBlock)
 
     await patchUploadJob(jobId, { fase: 'inserting' })
 

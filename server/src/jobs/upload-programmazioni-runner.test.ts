@@ -385,6 +385,83 @@ describe('upload programmazioni runner', () => {
     assert.equal(report.date_ambigue?.length, 1)
     assert.equal(report.date_ambigue?.[0].column, 'data_trasmissione')
   })
+
+  function applyExistingSnapshot(mapping: Record<string, string>, transforms?: Record<string, string>) {
+    return {
+      kind: 'apply_existing' as const,
+      mapping: {
+        version: 1 as const,
+        colonne_rilevate: Object.keys(mapping),
+        ultimo_upload: null,
+        mapping,
+        transforms,
+      },
+    }
+  }
+
+  async function runMappedCsv(csv: string, fileName: string) {
+    const patchCalls: QueryCall[] = []
+    const upserts: unknown[] = []
+    ;(supabaseModule.supabaseService as any).rpc = async () => ({ data: { success: true }, error: null })
+    ;(supabaseModule.supabaseService as any).from = (table: string) => {
+      if (table === 'upload_jobs') return createPatchQuery(patchCalls)
+      if (table === 'programmazioni') {
+        return {
+          upsert: (rows: unknown) => {
+            upserts.push(rows)
+            return { error: null }
+          },
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    }
+    ;(supabaseModule.supabaseService as any).storage = {
+      from: () => ({
+        download: async () => ({ data: { arrayBuffer: async () => csvBuffer(csv) }, error: null }),
+        remove: async () => ({ error: null }),
+      }),
+    }
+    await runner.runUploadProgrammazioniJob({
+      jobId: 'job-apply',
+      campagneProgrammazioneId: 'campagna-1',
+      userId: 'user-1',
+      emittenteId: 'emittente-1',
+      storagePath: `user-1/campagna-1/${fileName}`,
+      fileName,
+      mappingSnapshot: applyExistingSnapshot({ Data: 'data_trasmissione', titolo: 'titolo' }),
+      chunkSize: 500,
+    })
+    const errorPatch = patchCalls.find((call) =>
+      call.method === 'update' && (call.args[0] as { stato?: string }).stato === 'error'
+    )
+    return { upserts, errorPatch }
+  }
+
+  it('apply_existing: un conflitto di formato blocca prima di ogni insert', async () => {
+    const { upserts, errorPatch } = await runMappedCsv(
+      'titolo,Data\nA,13/01/2024\nB,01/13/2024\n',
+      'conflitto.csv',
+    )
+    assert.equal(upserts.length, 0)
+    assert.ok(errorPatch)
+    const message = (errorPatch.args[0] as { error: string }).error
+    assert.match(message, /colonna «Data»/)
+    assert.match(message, /01\/13\/2024/)
+  })
+
+  it('apply_existing: una colonna tutta ambigua blocca prima di ogni insert', async () => {
+    const { upserts, errorPatch } = await runMappedCsv(
+      'titolo,Data\nA,1/1/2024\nB,4/1/2024\nC,7/1/2024\nD,10/1/2024\n',
+      'ambigua.csv',
+    )
+    assert.equal(upserts.length, 0)
+    assert.ok(errorPatch)
+    const message = (errorPatch.args[0] as { error: string }).error
+    assert.match(message, /colonna «Data»/)
+    assert.match(message, /Data EU/)
+    assert.match(message, /Data US/)
+    assert.match(message, /1\/1\/2024/)
+  })
 })
 
 describe('upsertChunkWithRetry', () => {

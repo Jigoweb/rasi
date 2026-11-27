@@ -278,6 +278,7 @@ export default function ProgrammazioniPage() {
     mappingWizardOpen,
     mappingWizardInitial,
     formatWarning,
+    dateWarnings,
     setUploadError,
     setFormatWarning,
     setMappingWizardOpen,
@@ -1184,6 +1185,7 @@ export default function ProgrammazioniPage() {
         onDismissUploadError={() => setUploadError(null)}
         uploadProgress={uploadProgress}
         isUploadReady={isUploadReady}
+        dateWarnings={dateWarnings}
         onUploadDatabase={handleUploadDatabase}
         onClose={handleCloseModal}
       />

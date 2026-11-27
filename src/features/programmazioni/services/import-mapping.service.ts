@@ -480,9 +480,29 @@ export function formatDateOrderConflict(conflict: DateOrderConflict): string {
   return `Formato date in conflitto nella colonna «${conflict.column}» (riga ${conflict.fileRow} del file, esempio «${conflict.example}»). Il file mescola date in GG/MM/AAAA e MM/GG/AAAA.`
 }
 
+export function formatAmbiguousDateBlock(column: string, example: string): string {
+  const sample = example ? ` (es. «${example}»)` : ''
+  return `Le date nella colonna «${column}» possono essere sia GG/MM che MM/GG${sample}. Imposta nel mapping la trasformazione "Data EU" o "Data US" e ricarica.`
+}
+
+/**
+ * Messaggio che impedisce l'inserimento. Il template RASI resta GG/MM:
+ * l'ambiguità lì è un avviso, non un blocco.
+ */
+export function dateOrderBlockMessage(
+  resolution: DateOrderResolution,
+  kind: DateOrderInput['kind'],
+): string | null {
+  if (resolution.conflicts.length > 0) return formatDateOrderConflict(resolution.conflicts[0])
+  if (kind === 'apply_existing' && resolution.ambiguous.length > 0) return resolution.ambiguous[0].message
+  return null
+}
+
 /**
  * Stessa decisione del worker: per ogni colonna data senza transform esplicito
- * l'ordine si legge sull'intero insieme di righe. `ambiguous` → GG/MM.
+ * l'ordine si legge sull'intero insieme di righe. Nel template RASI `ambiguous`
+ * diventa GG/MM con un avviso. In un mapping salvato una colonna tutta ambigua
+ * non viene indovinata.
  */
 export function resolveDateOrders(
   rows: Record<string, unknown>[],
@@ -498,7 +518,7 @@ export function resolveDateOrders(
       }
     }
     for (const [field, column] of columns) {
-      decideSlashColumn(valuesForLegacyField(rows, field), field, column, field, resolution)
+      decideSlashColumn(valuesForLegacyField(rows, field), field, column, field, resolution, false)
     }
     return resolution
   }
@@ -516,7 +536,7 @@ export function resolveDateOrders(
     for (const source of rule.sources ?? []) consider(source, field)
   }
   for (const [source, field] of columns) {
-    decideSlashColumn(rows.map((row) => getRowValue(row, source)), source, source, field, resolution)
+    decideSlashColumn(rows.map((row) => getRowValue(row, source)), source, source, field, resolution, true)
   }
   return resolution
 }
@@ -526,9 +546,8 @@ function ordersOrThrow(
   input: DateOrderInput,
 ): Record<string, SlashDateOrder> {
   const resolution = resolveDateOrders(rows, input)
-  if (resolution.conflicts.length > 0) {
-    throw new Error(formatDateOrderConflict(resolution.conflicts[0]))
-  }
+  const block = dateOrderBlockMessage(resolution, input.kind)
+  if (block) throw new Error(block)
   return resolution.orders
 }
 
@@ -541,12 +560,20 @@ function valuesForLegacyField(rows: Record<string, unknown>[], field: string): u
   })
 }
 
+function firstSlashExample(values: unknown[]): string {
+  for (const value of values) {
+    if (isSlashDateText(value)) return String(value).trim()
+  }
+  return ''
+}
+
 function decideSlashColumn(
   values: unknown[],
   key: string,
   column: string,
   field: string,
   resolution: DateOrderResolution,
+  blockIfAmbiguous: boolean,
 ) {
   const order = detectSlashDateOrder(values)
   if (order === 'conflict') {
@@ -564,6 +591,14 @@ function decideSlashColumn(
     return
   }
   if (!values.some((value) => isSlashDateText(value))) return
+  if (blockIfAmbiguous) {
+    resolution.ambiguous.push({
+      field,
+      column,
+      message: formatAmbiguousDateBlock(column, firstSlashExample(values)),
+    })
+    return
+  }
   resolution.orders[key] = 'dmy'
   resolution.ambiguous.push({
     field,

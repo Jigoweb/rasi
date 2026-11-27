@@ -73,4 +73,81 @@ describe('riprocesso campi: correzione dei dati già caricati dallo stesso file'
     assert.equal(riga.ora_inizio, undefined)
     assert.equal(riga.titolo, 'X')
   })
+
+  it('decide MM/GG sull\'intero file, anche sul blocco che da solo sarebbe ambiguo', () => {
+    const rows = [
+      { Data: '01/13/2024', Titolo: 'A' },
+      { Data: '02/01/2024', Titolo: 'B' },
+    ]
+    const snap = {
+      kind: 'apply_existing' as const,
+      mapping: {
+        version: 1 as const,
+        colonne_rilevate: ['Data', 'Titolo'],
+        ultimo_upload: null,
+        mapping: { Data: 'data_trasmissione', Titolo: 'titolo' },
+      },
+    }
+    const righe = buildRiprocessoRighe(rows, rows, snap, 'cp-1', 'e-1')
+    assert.deepEqual(righe.map((riga) => riga.data_trasmissione), ['2024-01-13', '2024-02-01'])
+
+    const soloAmbigua = buildRiprocessoRighe(
+      [rows[1]],
+      [rows[1]],
+      snap,
+      'cp-1',
+      'e-1',
+      undefined,
+      { Data: 'mdy' },
+    )
+    assert.equal(soloAmbigua[0].data_trasmissione, '2024-02-01')
+  })
+
+  it('blocca un file apply_existing con formati in conflitto o date tutte ambigue', () => {
+    const snap = {
+      kind: 'apply_existing' as const,
+      mapping: {
+        version: 1 as const,
+        colonne_rilevate: ['Data', 'Titolo'],
+        ultimo_upload: null,
+        mapping: { Data: 'data_trasmissione', Titolo: 'titolo' },
+      },
+    }
+    assert.throws(
+      () => buildRiprocessoRighe(
+        [
+          { Data: '13/01/2024', Titolo: 'A' },
+          { Data: '01/13/2024', Titolo: 'B' },
+        ],
+        [
+          { Data: '13/01/2024', Titolo: 'A' },
+          { Data: '01/13/2024', Titolo: 'B' },
+        ],
+        snap,
+        'cp-1',
+        'e-1',
+      ),
+      /GG\/MM\/AAAA e MM\/GG\/AAAA/,
+    )
+    assert.throws(
+      () => buildRiprocessoRighe(
+        [
+          { Data: '1/1/2024', Titolo: 'A' },
+          { Data: '4/1/2024', Titolo: 'B' },
+          { Data: '7/1/2024', Titolo: 'C' },
+          { Data: '10/1/2024', Titolo: 'D' },
+        ],
+        [
+          { Data: '1/1/2024', Titolo: 'A' },
+          { Data: '4/1/2024', Titolo: 'B' },
+          { Data: '7/1/2024', Titolo: 'C' },
+          { Data: '10/1/2024', Titolo: 'D' },
+        ],
+        snap,
+        'cp-1',
+        'e-1',
+      ),
+      /Data EU/,
+    )
+  })
 })

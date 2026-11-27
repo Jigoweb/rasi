@@ -121,4 +121,38 @@ describe('UploadProgrammazioniDialog', () => {
     expect(onFileSelected).not.toHaveBeenCalled()
     expect(screen.getByText(/Formato non supportato/)).toBeInTheDocument()
   })
+
+  it('mostra l\'avviso sulle date ambigue prima della conferma', () => {
+    const file = new File(['a'], 'template.csv', { type: 'text/csv' })
+    render(
+      <UploadProgrammazioniDialog
+        open
+        onOpenChange={jest.fn()}
+        step={2}
+        isResumingUpload
+        detailsForm={<div />}
+        selectedCampagna={campagna}
+        selectedFile={file}
+        fileInputRef={{ current: null }}
+        onFileUpload={jest.fn()}
+        onFileSelected={jest.fn()}
+        isPreparingUpload={false}
+        isUploading={false}
+        parsedRowCount={2}
+        headerError={null}
+        uploadError={null}
+        onDismissUploadError={jest.fn()}
+        uploadProgress={{}}
+        isUploadReady
+        dateWarnings={[
+          'Date ambigue nella colonna «data_trasmissione» (data_trasmissione): interpretate come GG/MM/AAAA.',
+        ]}
+        onUploadDatabase={jest.fn()}
+        onClose={jest.fn()}
+      />
+    )
+
+    expect(screen.getByRole('status')).toHaveTextContent(/GG\/MM\/AAAA/)
+    expect(screen.getByRole('button', { name: 'Upload dati database' })).toBeEnabled()
+  })
 })

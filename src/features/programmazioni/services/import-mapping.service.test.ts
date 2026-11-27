@@ -647,4 +647,30 @@ describe('date testuali GG/MM e MM/GG', () => {
     )
     expect(out.map(row => row.data_trasmissione)).toEqual(['2024-01-01', '2024-01-02', '2024-01-13'])
   })
+
+  it('applyMapping senza transform usa GG/MM quando un giorno è > 12', () => {
+    const out = applyMapping(
+      [
+        { 'Data Inizio': '02/01/2018', Titolo: 'A' },
+        { 'Data Inizio': '10/02/2018', Titolo: 'B' },
+        { 'Data Inizio': '13/01/2018', Titolo: 'C' },
+      ],
+      { 'Data Inizio': 'data_trasmissione', Titolo: 'titolo' },
+      ctx,
+    )
+    expect(out.map(row => row.data_trasmissione)).toEqual(['2018-01-02', '2018-02-10', '2018-01-13'])
+  })
+
+  it('applyMapping senza transform blocca una colonna tutta ambigua', () => {
+    expect(() => applyMapping(
+      [
+        { Data: '1/1/2024', Titolo: 'A' },
+        { Data: '4/1/2024', Titolo: 'B' },
+        { Data: '7/1/2024', Titolo: 'C' },
+        { Data: '10/1/2024', Titolo: 'D' },
+      ],
+      { Data: 'data_inizio', Titolo: 'titolo' },
+      ctx,
+    )).toThrow(/Data EU/)
+  })
 })
