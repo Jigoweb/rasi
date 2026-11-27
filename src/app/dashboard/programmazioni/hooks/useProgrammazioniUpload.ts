@@ -4,11 +4,12 @@ import {
   buildLegacyPayload,
   decideUploadPath,
   detectColumns,
-  formatDateOrderConflict,
+  dateOrderBlockMessage,
   readAllRows,
   resolveDateOrders,
   saveMapping,
   type ColumnDiff,
+  type DateOrderInput,
   type ImportMappingConfig,
   type UploadDecision,
 } from '@/features/programmazioni/services/import-mapping.service'
@@ -67,6 +68,7 @@ export function useProgrammazioniUpload({
     diff: ColumnDiff
     mappedRemoved: string[]
   } | null>(null)
+  const [dateWarnings, setDateWarnings] = useState<string[]>([])
 
   const resetUploadState = () => {
     setSelectedFile(null)
@@ -80,7 +82,41 @@ export function useProgrammazioniUpload({
     setMappingWizardOpen(false)
     setMappingWizardInitial(null)
     setFormatWarning(null)
+    setDateWarnings([])
     setIsPreparingUpload(false)
+  }
+
+  const dateInputFor = (decision: UploadDecision): DateOrderInput | null => {
+    if (decision.kind === 'legacy_template') return { kind: 'legacy_template' }
+    if (decision.kind === 'apply_existing') {
+      return {
+        kind: 'apply_existing',
+        mapping: decision.mapping.mapping,
+        rules: decision.mapping.rules,
+        transforms: decision.mapping.transforms,
+      }
+    }
+    return null
+  }
+
+  const applyDateGuidance = async (file: File, knownRows: ImportRow[], decision: UploadDecision) => {
+    const input = dateInputFor(decision)
+    if (!input) {
+      setDateWarnings([])
+      return
+    }
+    const rows = knownRows.length > 0 ? knownRows : await readAllRows(file)
+    const resolution = resolveDateOrders(rows, input)
+    const block = dateOrderBlockMessage(resolution, input.kind)
+    if (block) {
+      setDateWarnings([])
+      setHeaderError(block)
+      setIsUploadReady(false)
+      return
+    }
+    setDateWarnings(resolution.ambiguous.map((notice) => notice.message))
+    setHeaderError(null)
+    setIsUploadReady(true)
   }
 
   const clearUploadProgress = (campagnaId: string) => {
@@ -159,6 +195,7 @@ export function useProgrammazioniUpload({
 
     setIsPreparingUpload(true)
     setSelectedFile(file)
+    setDateWarnings([])
 
     try {
       const workerMode = getIndividuazioneRuntimeMode() === 'worker'
@@ -197,8 +234,7 @@ export function useProgrammazioniUpload({
           mappedRemoved: decision.mappedRemoved,
         })
       } else {
-        setHeaderError(null)
-        setIsUploadReady(true)
+        await applyDateGuidance(file, rows, decision)
       }
     } catch (error) {
       console.error('Error uploading file:', error)
@@ -219,17 +255,21 @@ export function useProgrammazioniUpload({
     if (!selectedCampagna) return
     const { error } = await saveMapping(selectedCampagna.emittente_id, config)
     if (error) throw new Error(error.message ?? 'Errore salvataggio mapping')
-    setUploadDecision({ kind: 'apply_existing', mapping: config })
-    setIsUploadReady(true)
+    const decision: UploadDecision = { kind: 'apply_existing', mapping: config }
+    setUploadDecision(decision)
+    if (selectedFile) await applyDateGuidance(selectedFile, parsedRows, decision)
+    else setIsUploadReady(true)
     await refreshEmittenti()
     setMappingWizardOpen(false)
   }
 
-  const proceedDespiteFormatChange = () => {
+  const proceedDespiteFormatChange = async () => {
     if (!formatWarning) return
-    setUploadDecision({ kind: 'apply_existing', mapping: formatWarning.mapping })
-    setIsUploadReady(true)
+    const decision: UploadDecision = { kind: 'apply_existing', mapping: formatWarning.mapping }
+    setUploadDecision(decision)
     setFormatWarning(null)
+    if (selectedFile) await applyDateGuidance(selectedFile, parsedRows, decision)
+    else setIsUploadReady(true)
   }
 
   const updateMappingFromWarning = () => {
@@ -242,7 +282,7 @@ export function useProgrammazioniUpload({
   const handleUploadDatabase = async () => {
     const workerMode = getIndividuazioneRuntimeMode() === 'worker'
     const campagna = selectedCampagna
-    if (!campagna || !uploadDecision) return
+    if (!campagna || !uploadDecision || headerError) return
     if (workerMode && !selectedFile) return
     if (!workerMode && parsedRows.length === 0) return
 
@@ -299,20 +339,18 @@ export function useProgrammazioniUpload({
         emittenteId: campagna.emittente_id,
         emittenteName: (campagna as { emittente?: { nome?: string } }).emittente?.nome ?? null,
       }
-      const dateResolution = resolveDateOrders(
-        parsedRows,
-        uploadDecision.kind === 'apply_existing'
-          ? {
-              kind: 'apply_existing',
-              mapping: uploadDecision.mapping.mapping,
-              rules: uploadDecision.mapping.rules,
-              transforms: uploadDecision.mapping.transforms,
-            }
-          : { kind: 'legacy_template' },
-      )
-      if (dateResolution.conflicts.length > 0) {
-        throw new Error(formatDateOrderConflict(dateResolution.conflicts[0]))
-      }
+      const dateInput: DateOrderInput = uploadDecision.kind === 'apply_existing'
+        ? {
+            kind: 'apply_existing',
+            mapping: uploadDecision.mapping.mapping,
+            rules: uploadDecision.mapping.rules,
+            transforms: uploadDecision.mapping.transforms,
+          }
+        : { kind: 'legacy_template' }
+      const dateResolution = resolveDateOrders(parsedRows, dateInput)
+      const dateBlock = dateOrderBlockMessage(dateResolution, dateInput.kind)
+      if (dateBlock) throw new Error(dateBlock)
+      setDateWarnings(dateResolution.ambiguous.map((notice) => notice.message))
       const buildAll = (rows: ImportRow[]): ProgrammazionePayload[] => {
         if (uploadDecision.kind === 'apply_existing') {
           return applyMapping(
@@ -397,6 +435,7 @@ export function useProgrammazioniUpload({
     mappingWizardOpen,
     mappingWizardInitial,
     formatWarning,
+    dateWarnings,
     setSelectedFile,
     setUploadError,
     setFormatWarning,

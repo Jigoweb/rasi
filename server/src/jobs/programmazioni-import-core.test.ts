@@ -494,4 +494,72 @@ describe('programmazioni import — date testuali GG/MM/AAAA', () => {
     assert.equal(resolution.conflicts[0].fileRow, 3)
     assert.equal(resolution.conflicts[0].example, '01/13/2024')
   })
+
+  function applyExisting(mapping: Record<string, string>, transforms?: Record<string, string>) {
+    return {
+      kind: 'apply_existing' as const,
+      mapping: {
+        version: 1 as const,
+        colonne_rilevate: Object.keys(mapping),
+        ultimo_upload: null,
+        mapping,
+        transforms,
+      },
+    }
+  }
+
+  it('apply_existing senza transform: un giorno > 12 fissa GG/MM (PrimaFila)', () => {
+    const rows = [
+      { 'Data Inizio': '02/01/2018', Titolo: 'A' },
+      { 'Data Inizio': '10/02/2018', Titolo: 'B' },
+      { 'Data Inizio': '13/01/2018', Titolo: 'C' },
+    ]
+    const snapshot = applyExisting({ 'Data Inizio': 'data_trasmissione', Titolo: 'titolo' })
+    const resolution = resolveDateOrders(rows, snapshot)
+    assert.equal(resolution.orders['Data Inizio'], 'dmy')
+    assert.equal(resolution.ambiguous.length, 0)
+    assert.equal(resolution.conflicts.length, 0)
+    const payloads = buildProgrammazioniPayloads(rows, snapshot, ctx, 1, undefined, resolution.orders)
+    assert.deepEqual(payloads.map((row) => row.data_trasmissione), [
+      '2018-01-02',
+      '2018-02-10',
+      '2018-01-13',
+    ])
+  })
+
+  it('apply_existing: data_inizio senza transform e data_fine in eu_date_to_iso (INFINITY)', () => {
+    const rows = [
+      { data_inizio: '02/01/2024', data_fine: '31/01/2024', titolo: 'A' },
+      { data_inizio: '01/04/2024', data_fine: '30/04/2024', titolo: 'B' },
+      { data_inizio: '13/01/2024', data_fine: '31/12/2024', titolo: 'C' },
+    ]
+    const snapshot = applyExisting(
+      { data_inizio: 'data_inizio', data_fine: 'data_fine', titolo: 'titolo' },
+      { data_fine: 'eu_date_to_iso' },
+    )
+    const resolution = resolveDateOrders(rows, snapshot)
+    assert.equal(resolution.orders.data_inizio, 'dmy')
+    assert.equal(resolution.orders.data_fine, undefined)
+    assert.equal(resolution.ambiguous.length, 0)
+    const payloads = buildProgrammazioniPayloads(rows, snapshot, ctx, 1, undefined, resolution.orders)
+    assert.deepEqual(payloads.map((row) => row.data_inizio), ['2024-01-02', '2024-04-01', '2024-01-13'])
+    assert.deepEqual(payloads.map((row) => row.data_fine), ['2024-01-31', '2024-04-30', '2024-12-31'])
+  })
+
+  it('apply_existing: una colonna tutta ambigua non viene letta come GG/MM', () => {
+    const rows = [
+      { Data: '1/1/2024', Titolo: 'A' },
+      { Data: '4/1/2024', Titolo: 'B' },
+      { Data: '7/1/2024', Titolo: 'C' },
+      { Data: '10/1/2024', Titolo: 'D' },
+    ]
+    const snapshot = applyExisting({ Data: 'data_inizio', Titolo: 'titolo' })
+    const resolution = resolveDateOrders(rows, snapshot)
+    assert.equal(resolution.orders.Data, undefined)
+    assert.equal(resolution.conflicts.length, 0)
+    assert.equal(resolution.ambiguous.length, 1)
+    assert.match(resolution.ambiguous[0].message, /Data EU/)
+    assert.match(resolution.ambiguous[0].message, /Data US/)
+    assert.match(resolution.ambiguous[0].message, /1\/1\/2024/)
+  })
 })

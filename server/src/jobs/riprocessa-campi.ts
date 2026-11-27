@@ -2,11 +2,14 @@ import { supabaseService } from '../supabase.js'
 import {
   buildProgrammazioniPayloads,
   computeImportRowUid,
+  dateOrderBlockMessage,
   parseProgrammazioniFile,
+  resolveDateOrders,
   type ProgrammazioneImportPayload,
   type UnparsedValuesCollector,
   type UploadMappingSnapshot,
 } from './programmazioni-import-core.js'
+import type { SlashDateOrder } from '../lib/transforms.js'
 
 /**
  * «Correggi dati dal file»: ricarica lo stesso file di una campagna già caricata
@@ -56,19 +59,32 @@ export interface RiprocessoEsito {
  * nuova. Solo date ISO e orari HH:MM:SS validi (un valore non riconosciuto non
  * svuota quello attuale); i testi vuoti non vengono inviati.
  */
+/** Decisione sull'intero file. Conflitti e colonne tutte ambigue in un mapping salvato bloccano. */
+export function requiredDateOrders(
+  rows: Record<string, unknown>[],
+  snapshot: UploadMappingSnapshot,
+): Record<string, SlashDateOrder> {
+  const resolution = resolveDateOrders(rows, snapshot)
+  const block = dateOrderBlockMessage(resolution, snapshot.kind)
+  if (block) throw new Error(block)
+  return resolution.orders
+}
+
 export function buildRiprocessoRighe(
   rowsNuove: Record<string, unknown>[],
   rowsPerUid: Record<string, unknown>[],
   snapshot: UploadMappingSnapshot,
   campagnaProgrammazioneId: string,
   emittenteId: string,
-  unparsed?: UnparsedValuesCollector
+  unparsed?: UnparsedValuesCollector,
+  dateOrders?: Record<string, SlashDateOrder>,
 ): RiprocessoRiga[] {
+  const orders = dateOrders ?? requiredDateOrders(rowsNuove, snapshot)
   const out: RiprocessoRiga[] = []
   const context = { campagnaProgrammazioneId, emittenteId }
   rowsNuove.forEach((row, index) => {
     const rowIndex = index + 1
-    const [payload] = buildProgrammazioniPayloads([row], snapshot, context, rowIndex, unparsed) as Array<
+    const [payload] = buildProgrammazioniPayloads([row], snapshot, context, rowIndex, unparsed, orders) as Array<
       ProgrammazioneImportPayload | undefined
     >
     if (!payload) return
@@ -153,10 +169,12 @@ export async function runRiprocessoCampi(params: {
 
   const rowsNuove = parseProgrammazioniFile(buffer, fileName)
   const rowsPrecedenti = parseProgrammazioniFile(buffer, fileName, { legacyDates: true })
+  const dateOrders = requiredDateOrders(rowsNuove, snapshot)
 
   // Quale lettura ritrova le righe? Prova sul primo blocco.
+  // L'ordine delle date è quello dell'intero file, non del solo blocco.
   const campione = (rows: Record<string, unknown>[]) =>
-    buildRiprocessoRighe(rowsNuove.slice(0, CHUNK), rows.slice(0, CHUNK), snapshot, campagnaId, emittenteId)
+    buildRiprocessoRighe(rowsNuove.slice(0, CHUNK), rows.slice(0, CHUNK), snapshot, campagnaId, emittenteId, undefined, dateOrders)
   const [provaAttuale, provaPrecedente] = await Promise.all([
     chiamaRpc(campagnaId, campione(rowsNuove), false),
     chiamaRpc(campagnaId, campione(rowsPrecedenti), false),
@@ -171,7 +189,8 @@ export async function runRiprocessoCampi(params: {
     snapshot,
     campagnaId,
     emittenteId,
-    unparsed
+    unparsed,
+    dateOrders,
   )
 
   const esito: RiprocessoEsito = {
